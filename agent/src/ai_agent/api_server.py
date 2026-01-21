@@ -1251,6 +1251,409 @@ def create_app() -> Sanic:
                 status=500,
             )
 
+    # Run agent with SSE streaming
+    @app.post("/agents/<agent_name>/run/stream")
+    async def run_agent_stream(request: Request, agent_name: str):
+        """
+        Run a specific agent with Server-Sent Events (SSE) streaming.
+
+        Returns real-time events as the agent executes, including:
+        - agent_started: Agent execution has begun
+        - tool_started: A tool call is starting
+        - tool_completed: A tool call has finished
+        - text_delta: Streaming text output (optional)
+        - agent_completed: Final result
+
+        Request body (same as /agents/<agent_name>/run):
+        {
+            "message": "Your task description",
+            "context": {},
+            "max_turns": 10,
+            "timeout": 300
+        }
+
+        Response: SSE stream with events in format:
+        event: <event_type>
+        data: <json_data>
+        """
+        import json
+        import time
+
+        from sanic.response import ResponseStream
+
+        registry = get_agent_registry()
+
+        # Resolve per-request team config if provided (best-effort, don't fail if unavailable)
+        team_config = None
+        auth_identity = None
+        if config.use_config_service:
+            team_token = request.headers.get("X-IncidentFox-Team-Token")
+            if team_token:
+                try:
+                    from .core.config_service import get_config_service_client
+
+                    client = get_config_service_client()
+                    team_config = client.fetch_effective_config(team_token=team_token)
+                    auth_identity = client.fetch_auth_identity(team_token=team_token)
+                except Exception as e:
+                    logger.warning(
+                        "stream_config_fetch_failed",
+                        error=str(e),
+                        agent_name=agent_name,
+                    )
+                    # Continue without team config - use default agent
+
+        # Get the agent
+        runner = registry.get_runner(
+            agent_name,
+            team_config_hash=(
+                str(hash(team_config.model_dump_json())) if team_config else None
+            ),
+            factory_kwargs={"team_config": team_config} if team_config else None,
+        )
+
+        if not runner:
+            return response.json(
+                {
+                    "error": f"Agent '{agent_name}' not found",
+                    "available_agents": registry.list_agents(),
+                },
+                status=404,
+            )
+
+        try:
+            data = request.json
+            message = data.get("message")
+            context_data = data.get("context", {})
+            timeout = data.get("timeout", 300)
+            max_turns = data.get("max_turns", 20)
+            # Support conversation chaining - if provided, continues from previous response
+            previous_response_id = data.get("previous_response_id")
+
+            if not message:
+                return response.json(
+                    {"error": "Missing 'message' in request body"},
+                    status=400,
+                )
+
+            async def stream_events(response_stream):
+                """Generator that yields SSE events during agent execution."""
+                from agents import Runner
+
+                from .core.stream_events import (
+                    EventStreamRegistry,
+                    set_current_stream_id,
+                )
+
+                start_time = time.time()
+                correlation_id = request.ctx.correlation_id
+                tool_calls_count = 0
+                # Track response_id for chaining follow-up queries
+                current_response_id = previous_response_id
+
+                # Helper to format SSE event
+                def sse_event(event_type: str, data: dict) -> str:
+                    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+                # Create event stream for sub-agent event propagation
+                stream_id = correlation_id
+                subagent_queue = EventStreamRegistry.create_stream(stream_id)
+                set_current_stream_id(stream_id)
+
+                try:
+                    # Send agent_started event
+                    await response_stream.write(
+                        sse_event(
+                            "agent_started",
+                            {
+                                "agent": agent_name,
+                                "correlation_id": correlation_id,
+                                "timestamp": datetime.utcnow().isoformat(),
+                            },
+                        )
+                    )
+
+                    # Set execution context if available
+                    if auth_identity and team_config:
+                        from .core.execution_context import set_execution_context
+
+                        set_execution_context(
+                            org_id=auth_identity.org_id,
+                            team_node_id=auth_identity.team_node_id,
+                            team_config=(
+                                team_config.model_dump()
+                                if hasattr(team_config, "model_dump")
+                                else team_config
+                            ),
+                        )
+
+                    # Use OpenAI Agents SDK streaming
+                    sdk_runner = Runner()
+                    base_agent = runner.agent
+
+                    logger.info(
+                        "starting_streamed_agent_execution",
+                        agent_name=agent_name,
+                        message_preview=message[:100],
+                        max_turns=max_turns,
+                        correlation_id=correlation_id,
+                        stream_id=stream_id,
+                        has_previous_response_id=current_response_id is not None,
+                    )
+
+                    # Run with streaming - pass previous_response_id for chaining
+                    if current_response_id:
+                        result = sdk_runner.run_streamed(
+                            base_agent,
+                            message,
+                            max_turns=max_turns,
+                            previous_response_id=current_response_id,
+                        )
+                    else:
+                        result = sdk_runner.run_streamed(
+                            base_agent,
+                            message,
+                            max_turns=max_turns,
+                        )
+
+                    # Helper to drain sub-agent events
+                    async def drain_subagent_events():
+                        """Drain any pending sub-agent events to the SSE stream."""
+                        while not subagent_queue.empty():
+                            try:
+                                event = subagent_queue.get_nowait()
+                                # Format sub-agent event for SSE
+                                event_data = {
+                                    "agent": event.agent_name,
+                                    "parent_agent": event.parent_agent,
+                                    "depth": event.depth,
+                                    "timestamp": event.timestamp,
+                                    **event.data,
+                                }
+                                await response_stream.write(
+                                    sse_event(event.event_type, event_data)
+                                )
+                            except Exception:
+                                break
+
+                    # Stream events as they arrive
+                    async for event in result.stream_events():
+                        # Drain any sub-agent events that have accumulated
+                        await drain_subagent_events()
+                        event_type = getattr(event, "type", "unknown")
+
+                        # Handle different event types
+                        if event_type == "run_item_stream_event":
+                            item = getattr(event, "item", None)
+                            if item:
+                                item_type = getattr(item, "type", "unknown")
+
+                                # Tool call started
+                                if item_type == "tool_call_item":
+                                    raw_item = getattr(item, "raw_item", None)
+                                    tool_name = getattr(
+                                        raw_item, "name", None
+                                    ) or getattr(item, "name", "unknown")
+                                    tool_args = None
+                                    if raw_item and hasattr(raw_item, "arguments"):
+                                        try:
+                                            tool_args = json.loads(raw_item.arguments)
+                                        except Exception:
+                                            tool_args = {
+                                                "raw": str(raw_item.arguments)[:200]
+                                            }
+
+                                    tool_calls_count += 1
+                                    await response_stream.write(
+                                        sse_event(
+                                            "tool_started",
+                                            {
+                                                "tool": tool_name,
+                                                "input": tool_args,
+                                                "sequence": tool_calls_count,
+                                                "timestamp": datetime.utcnow().isoformat(),
+                                            },
+                                        )
+                                    )
+
+                                # Tool output received
+                                elif item_type == "tool_call_output_item":
+                                    output = getattr(item, "output", None)
+                                    await response_stream.write(
+                                        sse_event(
+                                            "tool_completed",
+                                            {
+                                                "output_preview": (
+                                                    str(output)[:500]
+                                                    if output
+                                                    else None
+                                                ),
+                                                "sequence": tool_calls_count,
+                                                "timestamp": datetime.utcnow().isoformat(),
+                                            },
+                                        )
+                                    )
+
+                                # Message output
+                                elif item_type == "message_output_item":
+                                    content = getattr(item, "content", None)
+                                    if content:
+                                        await response_stream.write(
+                                            sse_event(
+                                                "message",
+                                                {
+                                                    "content_preview": str(content)[
+                                                        :500
+                                                    ],
+                                                    "timestamp": datetime.utcnow().isoformat(),
+                                                },
+                                            )
+                                        )
+
+                        elif event_type == "agent_updated_stream_event":
+                            new_agent = getattr(event, "new_agent", None)
+                            if new_agent:
+                                await response_stream.write(
+                                    sse_event(
+                                        "agent_handoff",
+                                        {
+                                            "new_agent": getattr(
+                                                new_agent, "name", "unknown"
+                                            ),
+                                            "timestamp": datetime.utcnow().isoformat(),
+                                        },
+                                    )
+                                )
+
+                    # Drain any remaining sub-agent events
+                    await drain_subagent_events()
+
+                    # Get final output
+                    duration = time.time() - start_time
+                    final_output = getattr(result, "final_output", None) or getattr(
+                        result, "output", None
+                    )
+
+                    # Convert output to JSON-serializable format
+                    def _jsonable(v):
+                        if v is None or isinstance(v, (str, int, float, bool)):
+                            return v
+                        if isinstance(v, (list, tuple)):
+                            return [_jsonable(x) for x in v]
+                        if isinstance(v, dict):
+                            return {str(k): _jsonable(val) for k, val in v.items()}
+                        if dataclasses.is_dataclass(v):
+                            return _jsonable(dataclasses.asdict(v))
+                        model_dump = getattr(v, "model_dump", None)
+                        if callable(model_dump):
+                            return _jsonable(model_dump())
+                        return str(v)
+
+                    # Get last_response_id from result for chaining follow-up queries
+                    last_response_id = getattr(result, "last_response_id", None)
+
+                    # Send final result with last_response_id for follow-up queries
+                    await response_stream.write(
+                        sse_event(
+                            "agent_completed",
+                            {
+                                "success": True,
+                                "output": _jsonable(final_output),
+                                "duration_seconds": round(duration, 2),
+                                "tool_calls_count": tool_calls_count,
+                                "correlation_id": correlation_id,
+                                "last_response_id": last_response_id,  # For chaining follow-up queries
+                                "timestamp": datetime.utcnow().isoformat(),
+                            },
+                        )
+                    )
+
+                    logger.info(
+                        "streamed_agent_execution_completed",
+                        agent_name=agent_name,
+                        duration_seconds=round(duration, 2),
+                        tool_calls_count=tool_calls_count,
+                        correlation_id=correlation_id,
+                    )
+
+                except asyncio.TimeoutError:
+                    duration = time.time() - start_time
+                    await response_stream.write(
+                        sse_event(
+                            "agent_completed",
+                            {
+                                "success": False,
+                                "error": f"Agent timed out after {timeout}s",
+                                "duration_seconds": round(duration, 2),
+                                "correlation_id": correlation_id,
+                                "last_response_id": current_response_id,  # For retry
+                                "timestamp": datetime.utcnow().isoformat(),
+                            },
+                        )
+                    )
+
+                except Exception as e:
+                    duration = time.time() - start_time
+                    logger.error(
+                        "streamed_agent_execution_failed",
+                        agent_name=agent_name,
+                        error=str(e),
+                        correlation_id=correlation_id,
+                        exc_info=True,
+                    )
+                    await response_stream.write(
+                        sse_event(
+                            "agent_completed",
+                            {
+                                "success": False,
+                                "error": str(e),
+                                "duration_seconds": round(duration, 2),
+                                "correlation_id": correlation_id,
+                                "last_response_id": current_response_id,  # For retry
+                                "timestamp": datetime.utcnow().isoformat(),
+                            },
+                        )
+                    )
+
+                finally:
+                    # Clean up stream registry
+                    EventStreamRegistry.close_stream(stream_id)
+                    set_current_stream_id(None)
+
+                    # Clear execution context
+                    if auth_identity and team_config:
+                        from .core.execution_context import clear_execution_context
+
+                        clear_execution_context()
+
+            # Return SSE response
+            return ResponseStream(
+                stream_events,
+                content_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",  # Disable nginx buffering
+                },
+            )
+
+        except Exception as e:
+            logger.error(
+                "stream_endpoint_error",
+                agent_name=agent_name,
+                error=str(e),
+                correlation_id=request.ctx.correlation_id,
+                exc_info=True,
+            )
+            return response.json(
+                {
+                    "error": str(e),
+                    "agent": agent_name,
+                    "correlation_id": request.ctx.correlation_id,
+                },
+                status=500,
+            )
+
     # Get agent info
     @app.get("/agents/<agent_name>")
     async def get_agent_info(request: Request, agent_name: str) -> JSONResponse:
@@ -1294,6 +1697,44 @@ def create_app() -> Sanic:
             }
 
         return response.json(config_info)
+
+    @app.post("/api/v1/config/reload")
+    async def reload_config_endpoint(request: Request) -> JSONResponse:
+        """
+        Hot-reload configuration from .env file without container restart.
+
+        This is useful after updating integration settings (K8S_ENABLED, etc.)
+        to apply changes without recreating the container.
+        """
+        from .core.config import reload_config
+
+        try:
+            new_config = reload_config()
+
+            logger.info(
+                "config_reloaded",
+                k8s_enabled=new_config.kubernetes.enabled,
+                environment=new_config.environment,
+            )
+
+            return response.json(
+                {
+                    "success": True,
+                    "message": "Configuration reloaded",
+                    "config": {
+                        "environment": new_config.environment,
+                        "k8s_enabled": new_config.kubernetes.enabled,
+                        "openai_model": new_config.openai.model,
+                    },
+                }
+            )
+
+        except Exception as e:
+            logger.error("config_reload_failed", error=str(e))
+            return response.json(
+                {"success": False, "error": str(e)},
+                status=500,
+            )
 
     # Tools catalog
     @app.get("/api/v1/tools/catalog")

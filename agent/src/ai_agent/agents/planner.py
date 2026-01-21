@@ -36,10 +36,16 @@ from datetime import UTC, datetime
 from typing import Any
 
 from agents import Agent, ModelSettings, Runner, function_tool
+from agents.stream_events import RunItemStreamEvent
 from pydantic import BaseModel, Field
 
 from ..core.config import get_config
 from ..core.logging import get_logger
+from ..core.stream_events import (
+    EventStreamRegistry,
+    get_current_stream_id,
+    set_current_stream_id,
+)
 from ..prompts.agent_capabilities import AGENT_CAPABILITIES
 from ..prompts.planner_prompt import build_planner_system_prompt
 
@@ -78,6 +84,10 @@ def _run_agent_in_thread(
     and we can't nest asyncio.run() calls. By running in a new thread, we get a fresh
     event loop that can execute the child agent.
 
+    If there's an active stream (via thread-local stream_id), this function will
+    use streaming mode and forward events to the EventStreamRegistry, enabling
+    nested agent visibility in the CLI.
+
     Args:
         agent: The agent to run
         query: The query/task for the agent
@@ -86,16 +96,35 @@ def _run_agent_in_thread(
     """
     result_holder = {"result": None, "error": None}
 
+    # Capture stream_id from parent thread for event propagation
+    parent_stream_id = get_current_stream_id()
+    agent_name = getattr(agent, "name", "unknown")
+
     def run_in_new_loop():
         try:
             # Create a completely new event loop for this thread
             new_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(new_loop)
+
+            # Propagate stream_id to this thread
+            if parent_stream_id:
+                set_current_stream_id(parent_stream_id)
+
             try:
-                # Run the agent with explicit max_turns
-                result = new_loop.run_until_complete(
-                    Runner.run(agent, query, max_turns=max_turns)
-                )
+                if parent_stream_id and EventStreamRegistry.stream_exists(
+                    parent_stream_id
+                ):
+                    # Streaming mode - emit events to the registry
+                    result = new_loop.run_until_complete(
+                        _run_agent_streamed(
+                            agent, query, max_turns, parent_stream_id, agent_name
+                        )
+                    )
+                else:
+                    # Non-streaming mode - original behavior
+                    result = new_loop.run_until_complete(
+                        Runner.run(agent, query, max_turns=max_turns)
+                    )
                 result_holder["result"] = result
             finally:
                 new_loop.close()
@@ -116,6 +145,128 @@ def _run_agent_in_thread(
         raise result_holder["error"]
 
     return result_holder["result"]
+
+
+async def _run_agent_streamed(
+    agent, query: str, max_turns: int, stream_id: str, agent_name: str
+) -> Any:
+    """
+    Run an agent in streaming mode and emit events to the registry.
+
+    This enables nested agent visibility - events from sub-agents are
+    forwarded to the main SSE stream.
+    """
+    # Push this agent onto the stack for nesting context
+    EventStreamRegistry.push_agent(stream_id, agent_name)
+
+    # Emit subagent started event
+    EventStreamRegistry.emit_event(
+        stream_id=stream_id,
+        event_type="subagent_started",
+        agent_name=agent_name,
+        data={"query_preview": query[:200] if query else ""},
+    )
+
+    tool_sequence = 0
+
+    try:
+        result = Runner.run_streamed(agent, query, max_turns=max_turns)
+
+        async for event in result.stream_events():
+            if isinstance(event, RunItemStreamEvent):
+                item = event.item
+
+                # Handle tool call events
+                if hasattr(item, "type"):
+                    if item.type == "tool_call_item":
+                        tool_sequence += 1
+                        # Tool name is in raw_item.name or item.name
+                        raw_item = getattr(item, "raw_item", None)
+                        tool_name = getattr(raw_item, "name", None) or getattr(
+                            item, "name", "unknown"
+                        )
+                        tool_input = ""
+                        if raw_item and hasattr(raw_item, "arguments"):
+                            tool_input = raw_item.arguments
+
+                        # Try to parse input preview
+                        input_preview = ""
+                        if tool_input:
+                            try:
+                                import json as json_mod
+
+                                parsed = json_mod.loads(tool_input)
+                                if isinstance(parsed, dict):
+                                    pairs = [
+                                        f"{k}={repr(v)[:30]}"
+                                        for k, v in list(parsed.items())[:2]
+                                    ]
+                                    input_preview = ", ".join(pairs)
+                            except Exception:
+                                input_preview = str(tool_input)[:50]
+
+                        EventStreamRegistry.emit_event(
+                            stream_id=stream_id,
+                            event_type="tool_started",
+                            agent_name=agent_name,
+                            data={
+                                "tool": tool_name,
+                                "sequence": tool_sequence,
+                                "input_preview": input_preview,
+                            },
+                        )
+
+                    elif item.type == "tool_call_output_item":
+                        output_preview = ""
+                        output = getattr(item, "output", None)
+                        if output:
+                            if isinstance(output, str):
+                                # Use 500 chars to capture full config_required JSON
+                                output_preview = output[:500]
+                            else:
+                                output_preview = str(output)[:500]
+
+                        EventStreamRegistry.emit_event(
+                            stream_id=stream_id,
+                            event_type="tool_completed",
+                            agent_name=agent_name,
+                            data={
+                                "sequence": tool_sequence,
+                                "output_preview": output_preview,
+                            },
+                        )
+
+        # After streaming completes, result.final_output is available
+        # Emit subagent completed event
+        output = result.final_output
+        output_preview = ""
+        if output:
+            if isinstance(output, str):
+                output_preview = output[:200]
+            else:
+                output_preview = str(output)[:200]
+
+        EventStreamRegistry.emit_event(
+            stream_id=stream_id,
+            event_type="subagent_completed",
+            agent_name=agent_name,
+            data={"output_preview": output_preview, "success": True},
+        )
+
+        return result
+
+    except Exception as e:
+        EventStreamRegistry.emit_event(
+            stream_id=stream_id,
+            event_type="subagent_completed",
+            agent_name=agent_name,
+            data={"error": str(e), "success": False},
+        )
+        raise
+
+    finally:
+        # Pop this agent from the stack
+        EventStreamRegistry.pop_agent(stream_id)
 
 
 # =============================================================================

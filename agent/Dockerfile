@@ -18,9 +18,11 @@ RUN pip install --no-cache-dir poetry==1.7.1
 COPY pyproject.toml poetry.lock ./
 
 # Configure Poetry and install dependencies (including langfuse for tracing, github for CI tools, snowflake for SRE)
+# Also install AWS CLI for EKS authentication (aws eks get-token)
 RUN poetry config virtualenvs.create false \
     && poetry install --no-root --only main --extras "langfuse github slack snowflake" \
-    && pip install --no-cache-dir --upgrade "jaraco.context>=6.1.0" "starlette>=0.49.1"
+    && pip install --no-cache-dir --upgrade "jaraco.context>=6.1.0" "starlette>=0.49.1" \
+    && pip install --no-cache-dir awscli
 
 # Copy application code
 COPY src/ ./src/

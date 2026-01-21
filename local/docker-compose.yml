@@ -72,7 +72,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -84,11 +84,13 @@ services:
   agent:
     image: ${INCIDENTFOX_REGISTRY:-incidentfox}/agent:${INCIDENTFOX_VERSION:-latest}
     container_name: incidentfox-agent
+    env_file:
+      - .env
     environment:
       # Required: OpenAI
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required - add it to .env}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      # Only set OPENAI_BASE_URL if you're using a custom endpoint (LiteLLM, Azure, etc.)
       # Config service integration
       USE_CONFIG_SERVICE: "true"
       CONFIG_BASE_URL: http://config-service:8080
@@ -100,7 +102,7 @@ services:
       LOG_FORMAT: console
       ENVIRONMENT: development
       # Optional integrations (from .env)
-      K8S__ENABLED: ${K8S_ENABLED:-false}
+      K8S_ENABLED: ${K8S_ENABLED:-false}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
@@ -161,11 +163,12 @@ services:
         condition: service_healthy
     volumes:
       # Mount kubeconfig for K8s tools (if K8S_ENABLED=true)
-      - ${HOME}/.kube:/home/app/.kube:ro
+      # Container HOME is /home/appuser, so mount there
+      - ${HOME}/.kube:/home/appuser/.kube:ro
       # Mount AWS credentials (if AWS tools needed)
-      - ${HOME}/.aws:/home/app/.aws:ro
+      - ${HOME}/.aws:/home/appuser/.aws:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 10s
       timeout: 5s
       retries: 5

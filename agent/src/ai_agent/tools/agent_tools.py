@@ -14,6 +14,7 @@ from agents import function_tool
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
 from ..core.logging import get_logger
+from .human_interaction import ask_human
 
 logger = get_logger(__name__)
 
@@ -255,4 +256,4 @@ def record_learning(
 
 def get_agent_tools() -> list:
     """Get all meta-agent tools."""
-    return [think, web_search, llm_call, record_learning]
+    return [think, web_search, llm_call, record_learning, ask_human]

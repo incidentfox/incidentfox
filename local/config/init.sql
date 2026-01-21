@@ -57,37 +57,37 @@ CREATE INDEX ix_team_tokens_token_hash ON team_tokens(token_hash);
 
 -- Org admin tokens
 CREATE TABLE org_admin_tokens (
-    token_id VARCHAR(64) NOT NULL,
     org_id VARCHAR(64) NOT NULL,
+    token_id VARCHAR(128) NOT NULL,
     token_hash TEXT NOT NULL,
-    name VARCHAR(256),
-    created_by VARCHAR(256),
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    last_used_at TIMESTAMP WITH TIME ZONE,
+    issued_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    revoked_at TIMESTAMP WITH TIME ZONE,
+    issued_by VARCHAR(128),
     expires_at TIMESTAMP WITH TIME ZONE,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    PRIMARY KEY (token_id)
+    last_used_at TIMESTAMP WITH TIME ZONE,
+    label VARCHAR(256),
+    PRIMARY KEY (org_id, token_id)
 );
-CREATE INDEX ix_org_admin_tokens_org_id ON org_admin_tokens(org_id);
-CREATE INDEX ix_org_admin_tokens_token_hash ON org_admin_tokens(token_hash);
+CREATE INDEX ix_org_admin_tokens_org ON org_admin_tokens(org_id);
+CREATE UNIQUE INDEX ux_org_admin_tokens_token_id ON org_admin_tokens(token_id);
 
 -- Token audit log
 CREATE TABLE token_audit (
     id BIGSERIAL PRIMARY KEY,
-    token_id VARCHAR(64) NOT NULL,
     org_id VARCHAR(64) NOT NULL,
-    team_node_id VARCHAR(128),
+    team_node_id VARCHAR(128) NOT NULL,
+    token_id VARCHAR(128) NOT NULL,
     event_type VARCHAR(32) NOT NULL,
+    event_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    actor VARCHAR(128),
+    details JSONB,
     ip_address VARCHAR(64),
-    user_agent TEXT,
-    endpoint VARCHAR(256),
-    success BOOLEAN NOT NULL,
-    error_message TEXT,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    user_agent VARCHAR(512)
 );
+CREATE INDEX ix_token_audit_org_team ON token_audit(org_id, team_node_id);
 CREATE INDEX ix_token_audit_token_id ON token_audit(token_id);
-CREATE INDEX ix_token_audit_org_id ON token_audit(org_id);
-CREATE INDEX ix_token_audit_created_at ON token_audit(created_at);
+CREATE INDEX ix_token_audit_event_at ON token_audit(event_at);
+CREATE INDEX ix_token_audit_event_type ON token_audit(event_type);
 
 -- Config audit log
 CREATE TABLE node_config_audit (
@@ -150,14 +150,36 @@ CREATE INDEX ix_agent_sessions_status ON agent_sessions(status);
 -- Security policies
 CREATE TABLE security_policies (
     org_id VARCHAR(64) PRIMARY KEY,
-    require_mfa BOOLEAN NOT NULL DEFAULT FALSE,
-    session_timeout_minutes INTEGER,
-    allowed_ip_ranges JSONB,
     token_expiry_days INTEGER,
-    require_approval_for_config_changes BOOLEAN NOT NULL DEFAULT FALSE,
+    token_warn_before_days INTEGER,
+    token_revoke_inactive_days INTEGER,
+    locked_settings JSONB NOT NULL DEFAULT '[]',
+    max_values JSONB NOT NULL DEFAULT '{}',
+    required_settings JSONB NOT NULL DEFAULT '[]',
+    allowed_values JSONB NOT NULL DEFAULT '{}',
+    require_approval_for_prompts BOOLEAN NOT NULL DEFAULT FALSE,
+    require_approval_for_tools BOOLEAN NOT NULL DEFAULT FALSE,
+    log_all_changes BOOLEAN NOT NULL DEFAULT TRUE,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_by VARCHAR(256)
 );
+
+-- Integration schemas (global definitions)
+CREATE TABLE integration_schemas (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    category VARCHAR(64) NOT NULL,
+    description TEXT NOT NULL,
+    docs_url VARCHAR(512),
+    icon_url VARCHAR(512),
+    display_order INTEGER NOT NULL DEFAULT 999,
+    featured BOOLEAN NOT NULL DEFAULT FALSE,
+    fields JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ix_integration_schemas_category ON integration_schemas(category);
+CREATE INDEX ix_integration_schemas_featured ON integration_schemas(featured);
 
 -- SSO configs
 CREATE TABLE sso_configs (
@@ -264,6 +286,136 @@ CREATE TABLE impersonation_jtis (
 CREATE INDEX ix_impersonation_jtis_org_team ON impersonation_jtis(org_id, team_node_id);
 CREATE INDEX ix_impersonation_jtis_expires_at ON impersonation_jtis(expires_at);
 
+-- Team output configs
+CREATE TABLE team_output_configs (
+    org_id VARCHAR(64) NOT NULL,
+    team_node_id VARCHAR(128) NOT NULL,
+    default_destinations JSONB DEFAULT '[]',
+    trigger_overrides JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_by VARCHAR(128),
+    PRIMARY KEY (org_id, team_node_id),
+    FOREIGN KEY (org_id, team_node_id) REFERENCES org_nodes(org_id, node_id) ON DELETE CASCADE
+);
+
+-- Integrations (connected external services)
+CREATE TABLE integrations (
+    org_id VARCHAR(64) NOT NULL,
+    integration_id VARCHAR(64) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'not_configured',
+    display_name VARCHAR(256),
+    config JSONB NOT NULL DEFAULT '{}',
+    last_checked_at TIMESTAMP WITH TIME ZONE,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (org_id, integration_id)
+);
+
+-- Template applications (which teams use which templates)
+CREATE TABLE template_applications (
+    id VARCHAR(64) PRIMARY KEY,
+    template_id VARCHAR(64) NOT NULL,
+    team_node_id VARCHAR(128) NOT NULL,
+    applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    applied_by VARCHAR(128),
+    template_version VARCHAR(20) NOT NULL,
+    has_customizations BOOLEAN NOT NULL DEFAULT FALSE,
+    customization_summary JSONB,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    deactivated_at TIMESTAMP WITH TIME ZONE,
+    FOREIGN KEY (template_id) REFERENCES templates(template_id) ON DELETE CASCADE
+);
+CREATE INDEX ix_template_applications_template_id ON template_applications(template_id);
+CREATE INDEX ix_template_applications_team_node_id ON template_applications(team_node_id);
+
+-- Template analytics
+CREATE TABLE template_analytics (
+    id VARCHAR(64) PRIMARY KEY,
+    template_id VARCHAR(64) NOT NULL,
+    team_node_id VARCHAR(128) NOT NULL,
+    first_agent_run_at TIMESTAMP WITH TIME ZONE,
+    total_agent_runs INTEGER NOT NULL DEFAULT 0,
+    avg_agent_success_rate INTEGER,
+    last_used_at TIMESTAMP WITH TIME ZONE,
+    user_rating INTEGER,
+    user_feedback TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (template_id) REFERENCES templates(template_id) ON DELETE CASCADE
+);
+CREATE INDEX ix_template_analytics_template_id ON template_analytics(template_id);
+
+-- Node configurations (hierarchical config storage)
+CREATE TABLE node_configurations (
+    id VARCHAR(64) PRIMARY KEY,
+    org_id VARCHAR(64) NOT NULL,
+    node_id VARCHAR(128) NOT NULL,
+    node_type VARCHAR(32) NOT NULL,
+    config_json JSONB NOT NULL DEFAULT '{}',
+    effective_config_json JSONB,
+    effective_config_computed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_by VARCHAR(128),
+    version INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (org_id, node_id)
+);
+CREATE INDEX ix_node_configurations_org_id ON node_configurations(org_id);
+
+-- Config field definitions (metadata about config fields)
+CREATE TABLE config_field_definitions (
+    id VARCHAR(64) PRIMARY KEY,
+    path VARCHAR(512) NOT NULL UNIQUE,
+    field_type VARCHAR(32) NOT NULL,
+    required BOOLEAN NOT NULL DEFAULT FALSE,
+    default_value JSONB,
+    locked_at_level VARCHAR(32),
+    requires_approval BOOLEAN NOT NULL DEFAULT FALSE,
+    display_name VARCHAR(128),
+    description TEXT,
+    example_value JSONB,
+    placeholder VARCHAR(256),
+    validation_regex VARCHAR(512),
+    min_value FLOAT,
+    max_value FLOAT,
+    allowed_values JSONB,
+    category VARCHAR(64),
+    subcategory VARCHAR(64),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ix_config_field_definitions_category ON config_field_definitions(category);
+
+-- Config validation status
+CREATE TABLE config_validation_status (
+    id VARCHAR(64) PRIMARY KEY,
+    org_id VARCHAR(64) NOT NULL,
+    node_id VARCHAR(128) NOT NULL,
+    missing_required_fields JSONB NOT NULL DEFAULT '[]',
+    validation_errors JSONB NOT NULL DEFAULT '[]',
+    is_valid BOOLEAN NOT NULL DEFAULT FALSE,
+    validated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    UNIQUE (org_id, node_id)
+);
+
+-- Config change history
+CREATE TABLE config_change_history (
+    id VARCHAR(64) PRIMARY KEY,
+    org_id VARCHAR(64) NOT NULL,
+    node_id VARCHAR(128) NOT NULL,
+    previous_config JSONB,
+    new_config JSONB NOT NULL,
+    change_diff JSONB,
+    changed_by VARCHAR(128),
+    changed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    change_reason TEXT,
+    version INTEGER NOT NULL
+);
+CREATE INDEX ix_config_change_history_org_node ON config_change_history(org_id, node_id);
+
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- SEED DATA FOR LOCAL DEVELOPMENT
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -330,6 +482,13 @@ INSERT INTO node_configs (org_id, node_id, config_json, version, updated_by) VAL
 -- Create org settings (telemetry disabled for local)
 INSERT INTO org_settings (org_id, telemetry_enabled, usage_analytics_enabled, error_reporting_enabled, feature_flags, updated_by) VALUES
     ('local', false, false, false, '{}', 'init.sql');
+
+-- Mark alembic migration as complete (prevents alembic from trying to re-create tables)
+CREATE TABLE alembic_version (
+    version_num VARCHAR(32) NOT NULL,
+    CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+);
+INSERT INTO alembic_version (version_num) VALUES ('20260111_initial');
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- NOTE: Team token will be generated by 'make seed' using config_service script

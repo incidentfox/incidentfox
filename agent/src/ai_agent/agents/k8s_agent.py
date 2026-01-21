@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from ..core.config import get_config
 from ..core.logging import get_logger
-from ..tools.agent_tools import llm_call, web_search
+from ..tools.agent_tools import ask_human, llm_call, web_search
 from ..tools.kubernetes import (
     describe_deployment,
     describe_pod,
@@ -14,6 +14,8 @@ from ..tools.kubernetes import (
     get_pod_events,
     get_pod_logs,
     get_pod_resource_usage,
+    get_pod_resources,
+    list_namespaces,
     list_pods,
 )
 from ..tools.thinking import think
@@ -29,12 +31,16 @@ def _load_k8s_tools():
         think,
         llm_call,
         web_search,
+        ask_human,
+        # Cluster tools
+        list_namespaces,
         # Pod tools
         get_pod_logs,
         describe_pod,
         list_pods,
         get_pod_events,
         get_pod_resource_usage,
+        get_pod_resources,
         # Deployment tools
         describe_deployment,
         get_deployment_history,
@@ -76,6 +82,10 @@ class K8sAnalysis(BaseModel):
     issues_found: list[str] = Field(description="List of issues identified")
     recommendations: list[str] = Field(description="Recommended actions")
     requires_manual_intervention: bool = Field(default=False)
+    resource_metrics: dict | None = Field(
+        default=None,
+        description="Resource metrics data if queried (CPU/memory usage, requests, limits)",
+    )
 
 
 def create_k8s_agent(
@@ -139,12 +149,16 @@ You are a specialized Kubernetes investigator. Your job is to diagnose pod, depl
 
 ## YOUR TOOLS
 
+**Cluster Discovery:**
+- `list_namespaces` - List all namespaces in the cluster (useful when namespace is unknown)
+
 **Pod Investigation:**
 - `list_pods` - See all pods and their status (START HERE)
 - `get_pod_events` - K8s events: scheduling, crashes, restarts (CHECK SECOND)
 - `get_pod_logs` - Container stdout/stderr (CHECK THIRD if needed)
-- `get_pod_resource_usage` - CPU/memory metrics
-- `describe_pod` - Full pod spec and status
+- `get_pod_resource_usage` - CPU/memory usage (requires metrics-server)
+- `get_pod_resources` - Combined allocation (requests/limits) AND usage side-by-side
+- `describe_pod` - Full pod spec and status (includes resource allocation)
 
 **Workload Investigation:**
 - `describe_deployment` - Deployment status, replicas, strategy
@@ -184,6 +198,62 @@ You are a specialized Kubernetes investigator. Your job is to diagnose pod, depl
 | Evicted | events | Node resource pressure |
 | ContainerCreating stuck | events | Image pull slow, init container stuck |
 
+## ERROR HANDLING - CRITICAL
+
+When a tool returns an error, you MUST classify it before deciding what to do next.
+
+### NON-RETRYABLE ERRORS (USE ask_human TOOL)
+
+These errors will NEVER resolve by retrying. You MUST use the `ask_human` tool to ask the user to fix the issue:
+
+| Error Pattern | Meaning | What To Do |
+|--------------|---------|------------|
+| 401 Unauthorized | Invalid/expired credentials | USE `ask_human` to ask user to fix credentials |
+| 403 Forbidden | No permission for this action | USE `ask_human` to ask user to regenerate/fix credentials |
+| "system:anonymous" | Auth not working, treated as anonymous | USE `ask_human` to ask user to fix kubeconfig |
+| 404 Not Found | Resource doesn't exist | STOP (unless you suspect a typo in the name) |
+| "config_required": true | Integration not configured | USE `ask_human` to ask user to enable K8S_ENABLED |
+| "permission denied" | RBAC/auth issue | USE `ask_human` to ask user to fix permissions |
+
+**When you hit a 401/403/auth error:**
+1. **STOP IMMEDIATELY** - Do NOT retry the same or similar operations
+2. **Do NOT try different namespaces** - If it's 403, changing namespace won't help
+3. **Do NOT try different resources** - The problem is auth/permission, not the resource
+4. **USE `ask_human` tool** to ask the user to fix the issue and tell you when done
+
+**Example: Using ask_human for 403 error:**
+```python
+ask_human(
+    question="Kubernetes returned 403 Forbidden. Your credentials appear to be invalid or expired.",
+    context="I was trying to list pods in the default namespace but received a permission denied error. This usually means the kubeconfig token has expired.",
+    action_required="Please regenerate your kubeconfig credentials (e.g., `aws eks update-kubeconfig --name <cluster> --region <region>` for EKS) and tell me when done.",
+    response_type="action_done"
+)
+```
+
+After the user confirms they've fixed the issue, RETRY the original operation.
+
+### RETRYABLE ERRORS (May retry once)
+
+| Error Pattern | Meaning | What To Do |
+|--------------|---------|------------|
+| 429 Too Many Requests | Rate limited | Wait briefly, retry once |
+| 500/502/503/504 | Server error | Retry once |
+| Timeout | Slow response | Retry once |
+| Connection refused | Service temporarily down | Retry once |
+
+### CONFIGURATION REQUIRED RESPONSES
+
+If any tool returns `"config_required": true`, this means Kubernetes is NOT configured:
+
+```json
+{"config_required": true, "integration": "kubernetes", "message": "..."}
+```
+
+Your response should be:
+- Summary: "Kubernetes integration is not configured"
+- Recommendations: "Enable K8S_ENABLED=true in .env and ensure kubeconfig exists"
+
 ## NAMESPACE AWARENESS
 
 Always be aware of which namespace you're operating in:
@@ -214,7 +284,22 @@ List of identified problems with evidence.
 Be specific in recommendations:
 - `kubectl delete pod <name> -n <namespace>` not just "delete the pod"
 - `kubectl patch deployment <name> -p '{"spec":...}'` with actual JSON
-- Resource limit changes with specific values"""
+- Resource limit changes with specific values
+
+### Resource Metrics (when queried)
+If you retrieved resource data (CPU, memory), include the actual numbers in `resource_metrics`:
+```json
+{
+  "pod_name": "example-pod",
+  "cpu_usage": "50m",
+  "cpu_requests": "100m",
+  "cpu_limits": "500m",
+  "memory_usage": "128Mi",
+  "memory_requests": "256Mi",
+  "memory_limits": "512Mi"
+}
+```
+Always include the raw data so users can see the actual values."""
     )
 
     # Build final system prompt with role-based sections
@@ -259,5 +344,7 @@ Be specific in recommendations:
             max_tokens=max_tokens,
         ),
         tools=tools,
-        output_type=K8sAnalysis,
+        # Note: Removed output_type=K8sAnalysis to allow flexible responses
+        # that include actual resource data (CPU/memory numbers) from tools.
+        # Strict JSON schema doesn't support dict types needed for metrics.
     )

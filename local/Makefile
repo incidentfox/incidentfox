@@ -172,7 +172,7 @@ cli:
 		exit 1; \
 	fi
 	@echo "$(BLUE)🦊 Starting IncidentFox CLI...$(NC)"
-	@set -a && . ./.env && set +a && python -m incidentfox_cli
+	@set -a && . ./.env && set +a && python3 -m incidentfox_cli
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Utilities
@@ -206,3 +206,34 @@ test-health:
 	@echo ""
 	@echo "Agent:"
 	@curl -s http://localhost:8081/health | python3 -m json.tool
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Development with local source
+# ─────────────────────────────────────────────────────────────────────────────
+dev-build:
+	@echo "$(BLUE)🔨 Building agent from local source...$(NC)"
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml build agent
+
+dev-start: dev-build
+	@echo "$(BLUE)🚀 Starting with local agent build...$(NC)"
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up -d
+	@echo ""
+	@echo "$(YELLOW)⏳ Waiting for services to be healthy...$(NC)"
+	@sleep 10
+	@$(DOCKER_COMPOSE) ps
+	@echo ""
+	@echo "$(GREEN)✅ Dev environment ready with local agent build$(NC)"
+
+dev-restart:
+	@echo "$(BLUE)🔄 Restarting agent with local build...$(NC)"
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up -d --build agent
+	@sleep 5
+	@echo "$(GREEN)✅ Agent restarted$(NC)"
+
+test-stream:
+	@echo "$(BLUE)Testing SSE streaming endpoint...$(NC)"
+	@TOKEN=$$(grep '^TEAM_TOKEN=' .env | cut -d= -f2); \
+	curl -N -X POST http://localhost:8081/agents/planner/run/stream \
+		-H "Content-Type: application/json" \
+		-H "X-IncidentFox-Team-Token: $$TOKEN" \
+		-d '{"message": "Hello, what can you help with?", "context": {}, "max_turns": 3, "timeout": 30}'

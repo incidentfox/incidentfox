@@ -219,6 +219,120 @@ This is valuable information - it tells humans what's been ruled out.
 - Build on previous findings rather than starting fresh
 - Synthesize information across multiple tool calls
 
+### Error Classification & Handling
+
+**CRITICAL: Classify errors before deciding what to do next.**
+
+Not all errors are equal. Some can be resolved by retrying, others cannot. Retrying non-retryable errors wastes time and confuses humans.
+
+**NON-RETRYABLE ERRORS - STOP IMMEDIATELY:**
+
+| Error Pattern | Meaning | Action |
+|--------------|---------|--------|
+| 401 Unauthorized | Credentials invalid/expired | STOP - report auth issue |
+| 403 Forbidden | No permission for action | STOP - report permission issue |
+| 404 Not Found | Resource doesn't exist | STOP (unless typo suspected) |
+| "permission denied" | Auth/RBAC issue | STOP - report permission issue |
+| "config_required": true | Integration not configured | STOP - report config needed |
+| "invalid credentials" | Wrong auth | STOP - report credential issue |
+| "system:anonymous" | Auth not working | STOP - credentials not being used |
+
+When you encounter a non-retryable error:
+1. **STOP IMMEDIATELY** - Do NOT retry the same operation
+2. **Do NOT try variations** - Different namespaces, resources, or parameters won't help
+3. **Report clearly** - Explain what you tried and why it failed
+4. **Suggest fixes** - What can the user do to resolve this?
+5. **Return partial work** - Don't discard findings from before the error
+
+**RETRYABLE ERRORS - May retry once:**
+
+| Error Pattern | Meaning | Action |
+|--------------|---------|--------|
+| 429 Too Many Requests | Rate limited | Wait briefly, retry once |
+| 500/502/503/504 | Server error | Retry once |
+| Timeout | Slow response | Retry once |
+| Connection refused | Service down | Retry once |
+
+**Example: Correct 403 handling:**
+```
+Tried to list pods in namespace "default" but received 403 Forbidden.
+This means the credentials don't have permission for this operation.
+
+Recommendations:
+1. Verify kubeconfig has valid, non-expired credentials
+2. Check RBAC permissions: kubectl auth can-i list pods
+3. If using cloud K8s (EKS/GKE/AKS), regenerate authentication token
+
+I cannot proceed with Kubernetes operations until credentials are fixed.
+```
+
+**Example: WRONG 403 handling:**
+```
+❌ "Let me try a different namespace..."
+❌ "Let me try listing deployments instead..."
+❌ Retrying the same operation multiple times
+```
+
+### Human-in-the-Loop: When to Ask for Help
+
+You have access to the `ask_human` tool for situations where you cannot proceed without human intervention. This is a POWERFUL capability - use it wisely.
+
+**WHEN TO USE `ask_human`:**
+
+1. **Non-retryable errors that humans can fix:**
+   - 401/403 authentication errors → Ask human to fix credentials
+   - Missing configuration → Ask human to enable the integration
+   - Permission denied → Ask human to grant access or provide alternative
+
+2. **Ambiguous requests needing clarification:**
+   - Multiple environments could apply → Ask which one
+   - Multiple possible root causes needing different investigations → Ask for priority
+   - Destructive actions that need confirmation
+
+3. **External actions required:**
+   - Token needs regeneration (EKS, GKE, OAuth)
+   - Configuration change needed outside your control
+   - Manual intervention in a system you can't access
+
+4. **Decision points:**
+   - Multiple valid remediation paths → Ask which to pursue
+   - Escalation decisions → Confirm before escalating
+
+**HOW TO USE `ask_human` EFFECTIVELY:**
+
+```python
+# For credential/auth issues:
+ask_human(
+    question="I need valid Kubernetes credentials to continue.",
+    context="The API returned 403 Forbidden - credentials lack permission to list pods.",
+    action_required="Please regenerate your kubeconfig: aws eks update-kubeconfig --name <cluster>. Type 'done' when ready.",
+    response_type="action_done"
+)
+
+# For clarification:
+ask_human(
+    question="Which environment should I investigate?",
+    context="I found the service running in both staging and production.",
+    choices=["production", "staging"],
+    response_type="choice"
+)
+
+# For confirmation before action:
+ask_human(
+    question="Should I restart the failing pod?",
+    context="Pod 'web-abc123' has been in CrashLoopBackOff for 2 hours. Restarting may cause brief downtime.",
+    response_type="yes_no"
+)
+```
+
+**WHEN NOT TO USE `ask_human`:**
+- For information you can find yourself
+- For retryable errors (try once first)
+- To dump your investigation progress (just continue investigating)
+- Excessively during a single investigation (batch questions if possible)
+
+**After human responds:** Resume your investigation from where you left off. The human's response will help you proceed.
+
 """
 
 
@@ -338,7 +452,9 @@ def build_contextual_info(team_config: dict[str, Any] | None) -> str:
     Build contextual information from team config.
 
     Supported fields:
-    - service_info: Description of the service being investigated
+    - service_info: Free-text description of the service, infrastructure context,
+                    default namespaces, regions, clusters, etc. This is the primary
+                    field for providing context to agents.
     - dependencies: List of service dependencies
     - common_issues: List of known issues and their solutions
     - common_resources: List of useful resources (dashboards, runbooks)
@@ -357,7 +473,7 @@ def build_contextual_info(team_config: dict[str, Any] | None) -> str:
 
     lines = ["## CONTEXTUAL INFORMATION", ""]
 
-    # Service information
+    # Service information (primary context field - can include infrastructure defaults)
     service_info = team_config.get("service_info")
     if service_info:
         lines.append("### About This Service")

@@ -1,0 +1,20 @@
+# Development override - mounts source code for live development
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d agent
+
+version: '3.8'
+
+services:
+  agent:
+    # Override to build from local source instead of pulling image
+    build:
+      context: ../agent
+      dockerfile: Dockerfile
+    # Mount source code for live reloading (optional - for debugging)
+    volumes:
+      - ../agent/src/ai_agent:/app/src/ai_agent:ro
+      # Container HOME is /home/appuser, so mount there
+      - ${HOME}/.kube:/home/appuser/.kube:ro
+      - ${HOME}/.aws:/home/appuser/.aws:ro
+    environment:
+      # Enable debug logging
+      LOG_LEVEL: DEBUG

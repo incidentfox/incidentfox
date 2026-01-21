@@ -55,6 +55,8 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
                 get_pod_events,
                 get_pod_logs,
                 get_pod_resource_usage,
+                get_pod_resources,
+                list_namespaces,
                 list_pods,
             )
 
@@ -63,14 +65,16 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
                     get_pod_logs,
                     describe_pod,
                     list_pods,
+                    list_namespaces,
                     get_pod_events,
                     describe_deployment,
                     get_deployment_history,
                     describe_service,
                     get_pod_resource_usage,
+                    get_pod_resources,
                 ]
             )
-            logger.debug("k8s_tools_loaded", count=8)
+            logger.debug("k8s_tools_loaded", count=10)
         except Exception as e:
             logger.warning("k8s_tools_load_failed", error=str(e))
 
