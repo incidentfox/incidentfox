@@ -6,8 +6,6 @@
 
 IncidentFox is an AI SRE / AI On-Call engineer that integrates with your observability stack, infrastructure, and collaboration tools to automatically investigate incidents, find root causes, and suggest fixes.
 
-🌐 **Try it live:** [ui.incidentfox.ai](https://ui.incidentfox.ai) | 📧 **Enterprise & On-Premise:** [founders@incidentfox.ai](mailto:founders@incidentfox.ai)
-
 <p align="center">
   <img src="https://github.com/user-attachments/assets/b6892fe8-0a19-40f9-9d86-465aa3387108" width="600" alt="Slack Investigation">
   <br>
@@ -15,7 +13,7 @@ IncidentFox is an AI SRE / AI On-Call engineer that integrates with your observa
 </p>
 
 <p align="center">
-  <video src="https://github.com/user-attachments/assets/3a46b0f2-c7e9-40b2-ba7a-9f64420e8b56" width="700" controls autoplay loop muted></video>
+  <video src="https://github.com/user-attachments/assets/d7dfedf0-e814-4772-b6c4-daf6d5d11901" width="700" controls autoplay loop muted></video>
   <br>
   <em>Local CLI for terminal-native developers</em>
 </p>
