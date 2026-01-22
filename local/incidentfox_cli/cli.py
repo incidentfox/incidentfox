@@ -1386,6 +1386,656 @@ def _build_nested_dict(key: str, value) -> dict:
     return result
 
 
+# =============================================================================
+# MCP Server Commands
+# =============================================================================
+
+
+async def handle_mcp_command(
+    args: str,
+    config_client: ConfigServiceClient,
+    session: PromptSession,
+) -> None:
+    """
+    Handle /mcp commands for MCP server management.
+
+    Subcommands:
+        /mcp                 List all MCP servers
+        /mcp add             Add a new MCP server (interactive)
+        /mcp enable <id>     Enable an MCP server
+        /mcp disable <id>    Disable an MCP server
+        /mcp delete <id>     Delete an MCP server
+        /mcp preview         Preview MCP tools before adding
+        /mcp tools <id>      Show tools from a specific MCP
+    """
+    args = args.strip()
+
+    # /mcp (no args) - list MCP servers
+    if not args:
+        await display_mcp_list(config_client)
+        return
+
+    # Parse subcommand
+    parts = args.split(None, 1)
+    subcmd = parts[0].lower()
+    subargs = parts[1] if len(parts) > 1 else ""
+
+    if subcmd == "add":
+        await add_mcp_interactive(config_client, session)
+
+    elif subcmd == "enable":
+        if not subargs:
+            console.print("[yellow]Usage: /mcp enable <mcp_id>[/yellow]")
+            return
+        mcp_id = subargs.strip()
+        result = config_client.enable_mcp(mcp_id)
+        if result.get("success"):
+            console.print(f"[green]✓ Enabled MCP '{mcp_id}'[/green]")
+        else:
+            console.print(f"[red]Failed: {result.get('error')}[/red]")
+
+    elif subcmd == "disable":
+        if not subargs:
+            console.print("[yellow]Usage: /mcp disable <mcp_id>[/yellow]")
+            return
+        mcp_id = subargs.strip()
+        result = config_client.disable_mcp(mcp_id)
+        if result.get("success"):
+            console.print(f"[green]✓ Disabled MCP '{mcp_id}'[/green]")
+        else:
+            console.print(f"[red]Failed: {result.get('error')}[/red]")
+
+    elif subcmd == "delete":
+        if not subargs:
+            console.print("[yellow]Usage: /mcp delete <mcp_id>[/yellow]")
+            return
+        mcp_id = subargs.strip()
+        confirm = await session.prompt_async(
+            f"Delete MCP '{mcp_id}'? This cannot be undone. [y/N]: "
+        )
+        if confirm.lower() in ("y", "yes"):
+            result = config_client.delete_mcp(mcp_id)
+            if result.get("success"):
+                console.print(f"[green]✓ Deleted MCP '{mcp_id}'[/green]")
+            else:
+                console.print(f"[red]Failed: {result.get('error')}[/red]")
+        else:
+            console.print("[dim]Cancelled[/dim]")
+
+    elif subcmd == "preview":
+        await preview_mcp_interactive(config_client, session)
+
+    elif subcmd == "tools":
+        if not subargs:
+            console.print("[yellow]Usage: /mcp tools <mcp_id>[/yellow]")
+            return
+        mcp_id = subargs.strip()
+        await display_mcp_tools(config_client, mcp_id)
+
+    else:
+        # Show help
+        console.print("[cyan]MCP Server Commands:[/cyan]")
+        console.print("  [green]/mcp[/green]                 List all MCP servers")
+        console.print("  [green]/mcp add[/green]             Add a new MCP server (interactive)")
+        console.print("  [green]/mcp enable <id>[/green]     Enable an MCP server")
+        console.print("  [green]/mcp disable <id>[/green]    Disable an MCP server")
+        console.print("  [green]/mcp delete <id>[/green]     Delete an MCP server")
+        console.print("  [green]/mcp preview[/green]         Preview MCP tools before adding")
+        console.print("  [green]/mcp tools <id>[/green]      Show tools from a specific MCP")
+
+
+async def display_mcp_list(config_client: ConfigServiceClient) -> None:
+    """Display list of configured MCP servers."""
+    mcps = config_client.get_mcp_servers()
+
+    if not mcps:
+        console.print("[yellow]No MCP servers configured[/yellow]")
+        console.print("[dim]Use '/mcp add' to add one[/dim]")
+        return
+
+    table = Table(title="MCP Servers", show_header=True)
+    table.add_column("ID", style="cyan")
+    table.add_column("Name", style="white")
+    table.add_column("Status", style="green")
+    table.add_column("Command", style="dim")
+
+    for mcp_id, cfg in mcps.items():
+        if not isinstance(cfg, dict):
+            continue
+        name = cfg.get("name", mcp_id)
+        enabled = cfg.get("enabled", True)
+        status = "[green]✓ enabled[/green]" if enabled else "[dim]disabled[/dim]"
+        command = cfg.get("command", "")
+        args = cfg.get("args", [])
+        cmd_str = f"{command} {' '.join(args[:2])}..." if len(args) > 2 else f"{command} {' '.join(args)}"
+
+        table.add_row(mcp_id, name, status, cmd_str[:40])
+
+    console.print(table)
+    console.print("\n[dim]Use '/mcp tools <id>' to see available tools[/dim]")
+
+
+async def add_mcp_interactive(
+    config_client: ConfigServiceClient, session: PromptSession
+) -> None:
+    """Interactive wizard to add a new MCP server."""
+    console.print("\n[bold cyan]Add MCP Server[/bold cyan]")
+    console.print("[dim]This wizard will help you configure a new MCP server.[/dim]\n")
+
+    # Get MCP ID
+    mcp_id = await session.prompt_async("MCP ID (e.g., github-mcp): ")
+    mcp_id = mcp_id.strip().lower().replace(" ", "-")
+    if not mcp_id:
+        console.print("[red]MCP ID is required[/red]")
+        return
+
+    # Check if already exists
+    existing = config_client.get_mcp_servers()
+    if mcp_id in existing:
+        console.print(f"[yellow]MCP '{mcp_id}' already exists[/yellow]")
+        overwrite = await session.prompt_async("Overwrite? [y/N]: ")
+        if overwrite.lower() not in ("y", "yes"):
+            console.print("[dim]Cancelled[/dim]")
+            return
+
+    # Get display name
+    name = await session.prompt_async(f"Display name [{mcp_id}]: ")
+    name = name.strip() or mcp_id
+
+    # Get command
+    console.print("\n[dim]Common commands: npx, uvx, python, node[/dim]")
+    command = await session.prompt_async("Command (e.g., npx): ")
+    command = command.strip()
+    if not command:
+        console.print("[red]Command is required[/red]")
+        return
+
+    # Get arguments
+    console.print("\n[dim]Enter arguments separated by spaces[/dim]")
+    console.print("[dim]Example: -y @modelcontextprotocol/server-github[/dim]")
+    args_str = await session.prompt_async("Arguments: ")
+    args = args_str.strip().split() if args_str.strip() else []
+
+    # Get environment variables
+    console.print("\n[dim]Environment variables (format: KEY=value, empty line to finish)[/dim]")
+    console.print("[dim]Use ${var} for secrets configured in the UI[/dim]")
+    env_vars: dict[str, str] = {}
+    while True:
+        env_line = await session.prompt_async("Env var (or Enter to skip): ")
+        env_line = env_line.strip()
+        if not env_line:
+            break
+        if "=" in env_line:
+            key, value = env_line.split("=", 1)
+            env_vars[key.strip()] = value.strip()
+        else:
+            console.print("[yellow]Format: KEY=value[/yellow]")
+
+    # Preview before adding
+    console.print("\n[dim]Previewing MCP server...[/dim]")
+    preview_result = config_client.preview_mcp(name, command, args, env_vars)
+
+    if preview_result.get("success"):
+        tool_count = preview_result.get("tool_count", 0)
+        console.print(f"[green]✓ Connection successful! Found {tool_count} tools[/green]")
+
+        # Show some tools
+        tools = preview_result.get("tools", [])[:5]
+        if tools:
+            console.print("\n[cyan]Available tools (first 5):[/cyan]")
+            for tool in tools:
+                tool_name = tool.get("name", "unknown")
+                tool_desc = tool.get("description", "")[:60]
+                console.print(f"  • {tool_name}: [dim]{tool_desc}[/dim]")
+            if tool_count > 5:
+                console.print(f"  [dim]... and {tool_count - 5} more[/dim]")
+
+        # Show warnings
+        warnings = preview_result.get("warnings", [])
+        for warning in warnings:
+            console.print(f"[yellow]⚠ {warning}[/yellow]")
+    else:
+        error = preview_result.get("error", "Unknown error")
+        console.print(f"[red]✗ Preview failed: {error}[/red]")
+        console.print("[yellow]The MCP may still work - continue anyway?[/yellow]")
+
+    # Confirm add
+    confirm = await session.prompt_async("\nAdd this MCP server? [Y/n]: ")
+    if confirm.lower() in ("n", "no"):
+        console.print("[dim]Cancelled[/dim]")
+        return
+
+    # Add the MCP
+    result = config_client.add_mcp_server(
+        mcp_id=mcp_id,
+        command=command,
+        args=args,
+        env_vars=env_vars,
+        name=name,
+    )
+
+    if result.get("success"):
+        console.print(f"\n[green]✓ Added MCP '{mcp_id}' successfully![/green]")
+        console.print("[dim]Use '/agents reload' to make it available to agents[/dim]")
+    else:
+        console.print(f"[red]Failed to add MCP: {result.get('error')}[/red]")
+
+
+async def preview_mcp_interactive(
+    config_client: ConfigServiceClient, session: PromptSession
+) -> None:
+    """Preview an MCP server without adding it."""
+    console.print("\n[bold cyan]Preview MCP Server[/bold cyan]")
+    console.print("[dim]Test an MCP configuration to see available tools.[/dim]\n")
+
+    command = await session.prompt_async("Command (e.g., npx): ")
+    command = command.strip()
+    if not command:
+        console.print("[red]Command is required[/red]")
+        return
+
+    args_str = await session.prompt_async("Arguments: ")
+    args = args_str.strip().split() if args_str.strip() else []
+
+    console.print("\n[dim]Connecting to MCP server...[/dim]")
+    result = config_client.preview_mcp("preview", command, args, {})
+
+    if result.get("success"):
+        tool_count = result.get("tool_count", 0)
+        console.print(f"[green]✓ Found {tool_count} tools[/green]\n")
+
+        tools = result.get("tools", [])
+        if tools:
+            table = Table(title="Available Tools", show_header=True)
+            table.add_column("Name", style="cyan")
+            table.add_column("Description", style="white")
+
+            for tool in tools:
+                table.add_row(
+                    tool.get("name", ""),
+                    tool.get("description", "")[:60] + ("..." if len(tool.get("description", "")) > 60 else ""),
+                )
+            console.print(table)
+    else:
+        console.print(f"[red]✗ Failed: {result.get('error')}[/red]")
+
+
+async def display_mcp_tools(config_client: ConfigServiceClient, mcp_id: str) -> None:
+    """Display tools from a specific MCP server."""
+    mcps = config_client.get_mcp_servers()
+    mcp_cfg = mcps.get(mcp_id)
+
+    if not mcp_cfg:
+        console.print(f"[yellow]MCP '{mcp_id}' not found[/yellow]")
+        console.print(f"[dim]Available: {', '.join(mcps.keys())}[/dim]")
+        return
+
+    if not mcp_cfg.get("enabled", True):
+        console.print(f"[yellow]MCP '{mcp_id}' is disabled[/yellow]")
+        return
+
+    # Preview to get tools
+    console.print(f"[dim]Fetching tools from '{mcp_id}'...[/dim]")
+    result = config_client.preview_mcp(
+        mcp_cfg.get("name", mcp_id),
+        mcp_cfg.get("command", ""),
+        mcp_cfg.get("args", []),
+        mcp_cfg.get("env_vars", {}),
+    )
+
+    if result.get("success"):
+        tools = result.get("tools", [])
+        if tools:
+            table = Table(title=f"Tools from {mcp_id}", show_header=True)
+            table.add_column("Name", style="cyan")
+            table.add_column("Description", style="white")
+
+            for tool in tools:
+                table.add_row(
+                    tool.get("name", ""),
+                    tool.get("description", "")[:60],
+                )
+            console.print(table)
+        else:
+            console.print("[yellow]No tools found[/yellow]")
+    else:
+        console.print(f"[red]Failed to fetch tools: {result.get('error')}[/red]")
+
+
+# =============================================================================
+# A2A Remote Agent Commands
+# =============================================================================
+
+
+async def handle_a2a_command(
+    args: str,
+    config_client: ConfigServiceClient,
+    session: PromptSession,
+) -> None:
+    """
+    Handle /a2a commands for remote A2A agent management.
+
+    Subcommands:
+        /a2a                 List all remote agents
+        /a2a add             Add a new remote agent (interactive)
+        /a2a enable <id>     Enable a remote agent
+        /a2a disable <id>    Disable a remote agent
+        /a2a delete <id>     Delete a remote agent
+        /a2a test            Test connection to an A2A endpoint
+        /a2a info <id>       Show details of a remote agent
+    """
+    args = args.strip()
+
+    # /a2a (no args) - list remote agents
+    if not args:
+        await display_a2a_list(config_client)
+        return
+
+    # Parse subcommand
+    parts = args.split(None, 1)
+    subcmd = parts[0].lower()
+    subargs = parts[1] if len(parts) > 1 else ""
+
+    if subcmd == "add":
+        await add_a2a_interactive(config_client, session)
+
+    elif subcmd == "enable":
+        if not subargs:
+            console.print("[yellow]Usage: /a2a enable <agent_id>[/yellow]")
+            return
+        agent_id = subargs.strip()
+        result = config_client.enable_remote_agent(agent_id)
+        if result.get("success"):
+            console.print(f"[green]✓ Enabled remote agent '{agent_id}'[/green]")
+        else:
+            console.print(f"[red]Failed: {result.get('error')}[/red]")
+
+    elif subcmd == "disable":
+        if not subargs:
+            console.print("[yellow]Usage: /a2a disable <agent_id>[/yellow]")
+            return
+        agent_id = subargs.strip()
+        result = config_client.disable_remote_agent(agent_id)
+        if result.get("success"):
+            console.print(f"[green]✓ Disabled remote agent '{agent_id}'[/green]")
+        else:
+            console.print(f"[red]Failed: {result.get('error')}[/red]")
+
+    elif subcmd == "delete":
+        if not subargs:
+            console.print("[yellow]Usage: /a2a delete <agent_id>[/yellow]")
+            return
+        agent_id = subargs.strip()
+        confirm = await session.prompt_async(
+            f"Delete remote agent '{agent_id}'? This cannot be undone. [y/N]: "
+        )
+        if confirm.lower() in ("y", "yes"):
+            result = config_client.delete_remote_agent(agent_id)
+            if result.get("success"):
+                console.print(f"[green]✓ Deleted remote agent '{agent_id}'[/green]")
+            else:
+                console.print(f"[red]Failed: {result.get('error')}[/red]")
+        else:
+            console.print("[dim]Cancelled[/dim]")
+
+    elif subcmd == "test":
+        await test_a2a_interactive(config_client, session)
+
+    elif subcmd == "info":
+        if not subargs:
+            console.print("[yellow]Usage: /a2a info <agent_id>[/yellow]")
+            return
+        agent_id = subargs.strip()
+        await display_a2a_info(config_client, agent_id)
+
+    else:
+        # Show help
+        console.print("[cyan]A2A Remote Agent Commands:[/cyan]")
+        console.print("  [green]/a2a[/green]                 List all remote agents")
+        console.print("  [green]/a2a add[/green]             Add a new remote agent (interactive)")
+        console.print("  [green]/a2a enable <id>[/green]     Enable a remote agent")
+        console.print("  [green]/a2a disable <id>[/green]    Disable a remote agent")
+        console.print("  [green]/a2a delete <id>[/green]     Delete a remote agent")
+        console.print("  [green]/a2a test[/green]            Test connection to an A2A endpoint")
+        console.print("  [green]/a2a info <id>[/green]       Show details of a remote agent")
+
+
+async def display_a2a_list(config_client: ConfigServiceClient) -> None:
+    """Display list of configured remote A2A agents."""
+    agents = config_client.get_remote_agents()
+
+    if not agents:
+        console.print("[yellow]No remote agents configured[/yellow]")
+        console.print("[dim]Use '/a2a add' to add one[/dim]")
+        return
+
+    table = Table(title="Remote A2A Agents", show_header=True)
+    table.add_column("ID", style="cyan")
+    table.add_column("Name", style="white")
+    table.add_column("Status", style="green")
+    table.add_column("URL", style="dim")
+    table.add_column("Auth", style="dim")
+
+    for agent_id, cfg in agents.items():
+        if not isinstance(cfg, dict):
+            continue
+        name = cfg.get("name", agent_id)
+        enabled = cfg.get("enabled", True)
+        status = "[green]✓ enabled[/green]" if enabled else "[dim]disabled[/dim]"
+        url = cfg.get("url", "")
+        # Truncate URL for display
+        url_display = url[:35] + "..." if len(url) > 38 else url
+        auth_type = cfg.get("auth", {}).get("type", "none")
+
+        table.add_row(agent_id, name, status, url_display, auth_type)
+
+    console.print(table)
+    console.print("\n[dim]Use '/a2a info <id>' to see full details[/dim]")
+
+
+async def add_a2a_interactive(
+    config_client: ConfigServiceClient, session: PromptSession
+) -> None:
+    """Interactive wizard to add a new remote A2A agent."""
+    console.print("\n[bold cyan]Add Remote A2A Agent[/bold cyan]")
+    console.print("[dim]This wizard will help you configure a remote agent.[/dim]\n")
+
+    # Get agent ID
+    agent_id = await session.prompt_async("Agent ID (e.g., security-scanner): ")
+    agent_id = agent_id.strip().lower().replace(" ", "-")
+    if not agent_id:
+        console.print("[red]Agent ID is required[/red]")
+        return
+
+    # Check if already exists
+    existing = config_client.get_remote_agents()
+    if agent_id in existing:
+        console.print(f"[yellow]Agent '{agent_id}' already exists[/yellow]")
+        overwrite = await session.prompt_async("Overwrite? [y/N]: ")
+        if overwrite.lower() not in ("y", "yes"):
+            console.print("[dim]Cancelled[/dim]")
+            return
+
+    # Get display name
+    name = await session.prompt_async(f"Display name [{agent_id}]: ")
+    name = name.strip() or agent_id
+
+    # Get URL
+    console.print("\n[dim]Enter the full A2A endpoint URL[/dim]")
+    url = await session.prompt_async("URL (e.g., https://agent.example.com/api/a2a): ")
+    url = url.strip()
+    if not url:
+        console.print("[red]URL is required[/red]")
+        return
+
+    # Get description
+    description = await session.prompt_async("Description (optional): ")
+    description = description.strip()
+
+    # Get authentication type
+    console.print("\n[cyan]Authentication type:[/cyan]")
+    console.print("  1. none   - No authentication")
+    console.print("  2. bearer - Bearer token")
+    console.print("  3. apikey - API key (header or query)")
+    console.print("  4. oauth2 - OAuth2 client credentials")
+
+    auth_choice = await session.prompt_async("Choose auth type [1]: ")
+    auth_choice = auth_choice.strip() or "1"
+
+    auth_config: dict[str, str] = {}
+    auth_type = "none"
+
+    if auth_choice == "2" or auth_choice.lower() == "bearer":
+        auth_type = "bearer"
+        token = await session.prompt_async("Bearer token: ")
+        auth_config["token"] = token.strip()
+
+    elif auth_choice == "3" or auth_choice.lower() == "apikey":
+        auth_type = "apikey"
+        api_key = await session.prompt_async("API key: ")
+        auth_config["api_key"] = api_key.strip()
+
+        location = await session.prompt_async("Location (header/query) [header]: ")
+        auth_config["location"] = location.strip() or "header"
+
+        key_name = await session.prompt_async("Header/param name [X-API-Key]: ")
+        auth_config["key_name"] = key_name.strip() or "X-API-Key"
+
+    elif auth_choice == "4" or auth_choice.lower() == "oauth2":
+        auth_type = "oauth2"
+        token_url = await session.prompt_async("Token URL: ")
+        auth_config["token_url"] = token_url.strip()
+
+        client_id = await session.prompt_async("Client ID: ")
+        auth_config["client_id"] = client_id.strip()
+
+        client_secret = await session.prompt_async("Client secret: ")
+        auth_config["client_secret"] = client_secret.strip()
+
+        scope = await session.prompt_async("Scope (optional): ")
+        if scope.strip():
+            auth_config["scope"] = scope.strip()
+
+    # Get timeout
+    timeout_str = await session.prompt_async("Timeout in seconds [300]: ")
+    try:
+        timeout = int(timeout_str.strip()) if timeout_str.strip() else 300
+    except ValueError:
+        timeout = 300
+
+    # Test connection
+    console.print("\n[dim]Testing connection...[/dim]")
+    test_result = config_client.test_remote_agent(url, {"type": auth_type, **auth_config})
+
+    if test_result.get("success"):
+        console.print("[green]✓ Connection successful![/green]")
+        agent_info = test_result.get("agentInfo", {})
+        if agent_info:
+            console.print(f"  Agent name: {agent_info.get('name', 'unknown')}")
+            console.print(f"  Version: {agent_info.get('version', 'unknown')}")
+    else:
+        console.print(f"[yellow]⚠ Connection test failed: {test_result.get('message')}[/yellow]")
+        console.print("[yellow]The agent may still work - continue anyway?[/yellow]")
+
+    # Confirm add
+    confirm = await session.prompt_async("\nAdd this remote agent? [Y/n]: ")
+    if confirm.lower() in ("n", "no"):
+        console.print("[dim]Cancelled[/dim]")
+        return
+
+    # Add the agent
+    result = config_client.add_remote_agent(
+        agent_id=agent_id,
+        name=name,
+        url=url,
+        auth_type=auth_type,
+        auth_config=auth_config,
+        description=description or None,
+        timeout=timeout,
+    )
+
+    if result.get("success"):
+        console.print(f"\n[green]✓ Added remote agent '{agent_id}' successfully![/green]")
+        console.print("[dim]Use '/agents reload' to make it available[/dim]")
+    else:
+        console.print(f"[red]Failed to add agent: {result.get('error')}[/red]")
+
+
+async def test_a2a_interactive(
+    config_client: ConfigServiceClient, session: PromptSession
+) -> None:
+    """Test connection to an A2A endpoint without adding it."""
+    console.print("\n[bold cyan]Test A2A Connection[/bold cyan]\n")
+
+    url = await session.prompt_async("A2A endpoint URL: ")
+    url = url.strip()
+    if not url:
+        console.print("[red]URL is required[/red]")
+        return
+
+    console.print("\n[cyan]Authentication type:[/cyan]")
+    console.print("  1. none   - No authentication")
+    console.print("  2. bearer - Bearer token")
+
+    auth_choice = await session.prompt_async("Choose auth type [1]: ")
+    auth_choice = auth_choice.strip() or "1"
+
+    auth_config: dict[str, str] = {"type": "none"}
+
+    if auth_choice == "2" or auth_choice.lower() == "bearer":
+        token = await session.prompt_async("Bearer token: ")
+        auth_config = {"type": "bearer", "token": token.strip()}
+
+    console.print("\n[dim]Testing connection...[/dim]")
+    result = config_client.test_remote_agent(url, auth_config)
+
+    if result.get("success"):
+        console.print("[green]✓ Connection successful![/green]")
+        agent_info = result.get("agentInfo", {})
+        if agent_info:
+            console.print(f"\n[cyan]Agent Info:[/cyan]")
+            console.print(f"  Name: {agent_info.get('name', 'unknown')}")
+            console.print(f"  Description: {agent_info.get('description', 'N/A')}")
+            console.print(f"  Version: {agent_info.get('version', 'unknown')}")
+            skills = agent_info.get("skills", [])
+            if skills:
+                console.print(f"  Skills: {len(skills)}")
+                for skill in skills[:3]:
+                    console.print(f"    • {skill.get('name', 'unnamed')}")
+    else:
+        console.print(f"[red]✗ Connection failed: {result.get('message')}[/red]")
+
+
+async def display_a2a_info(config_client: ConfigServiceClient, agent_id: str) -> None:
+    """Display detailed info about a remote agent."""
+    agents = config_client.get_remote_agents()
+    cfg = agents.get(agent_id)
+
+    if not cfg:
+        console.print(f"[yellow]Remote agent '{agent_id}' not found[/yellow]")
+        console.print(f"[dim]Available: {', '.join(agents.keys())}[/dim]")
+        return
+
+    console.print(f"\n[bold cyan]Remote Agent: {agent_id}[/bold cyan]\n")
+    console.print(f"[green]Name:[/green] {cfg.get('name', agent_id)}")
+    console.print(f"[green]URL:[/green] {cfg.get('url', 'N/A')}")
+    console.print(f"[green]Type:[/green] {cfg.get('type', 'a2a')}")
+    console.print(f"[green]Enabled:[/green] {cfg.get('enabled', True)}")
+    console.print(f"[green]Timeout:[/green] {cfg.get('timeout', 300)}s")
+
+    if cfg.get("description"):
+        console.print(f"[green]Description:[/green] {cfg.get('description')}")
+
+    auth = cfg.get("auth", {})
+    console.print(f"\n[cyan]Authentication:[/cyan]")
+    console.print(f"  Type: {auth.get('type', 'none')}")
+    if auth.get("type") == "apikey":
+        console.print(f"  Location: {auth.get('location', 'header')}")
+        console.print(f"  Key name: {auth.get('key_name', 'X-API-Key')}")
+    elif auth.get("type") == "oauth2":
+        console.print(f"  Token URL: {auth.get('token_url', 'N/A')}")
+
+
 async def run_repl(
     client: AgentClient, config_client: ConfigServiceClient, agent_name: str
 ):
@@ -1459,6 +2109,18 @@ async def run_repl(
                 if result:  # Returns new agent name if switched
                     agent_name = result
                     session_response_id = None
+                continue
+
+            # /mcp command group
+            if cmd == "/mcp" or cmd.startswith("/mcp "):
+                mcp_args = prompt[4:].strip() if len(prompt) > 4 else ""
+                await handle_mcp_command(mcp_args, config_client, session)
+                continue
+
+            # /a2a command group
+            if cmd == "/a2a" or cmd.startswith("/a2a "):
+                a2a_args = prompt[4:].strip() if len(prompt) > 4 else ""
+                await handle_a2a_command(a2a_args, config_client, session)
                 continue
 
             if cmd == "/clear":
@@ -2455,6 +3117,38 @@ def display_help():
 - `/agents config planner set model.temperature 0.5`
 - `/agents config k8s_agent set timeout_seconds 180`
 - `/agents config planner set enabled false`
+
+## MCP Servers
+
+| Command | Description |
+|---------|-------------|
+| `/mcp` | List all MCP servers |
+| `/mcp add` | Add a new MCP server (interactive wizard) |
+| `/mcp enable <id>` | Enable an MCP server |
+| `/mcp disable <id>` | Disable an MCP server |
+| `/mcp delete <id>` | Delete an MCP server |
+| `/mcp preview` | Preview MCP tools before adding |
+| `/mcp tools <id>` | Show tools from a specific MCP |
+
+**Examples**:
+- `/mcp add` - Starts interactive wizard to add GitHub MCP, filesystem MCP, etc.
+- `/mcp tools github-mcp` - Shows all tools available from the GitHub MCP
+
+## Remote Agents (A2A)
+
+| Command | Description |
+|---------|-------------|
+| `/a2a` | List all remote A2A agents |
+| `/a2a add` | Add a new remote agent (interactive wizard) |
+| `/a2a enable <id>` | Enable a remote agent |
+| `/a2a disable <id>` | Disable a remote agent |
+| `/a2a delete <id>` | Delete a remote agent |
+| `/a2a test` | Test connection to an A2A endpoint |
+| `/a2a info <id>` | Show details of a remote agent |
+
+**Examples**:
+- `/a2a add` - Starts interactive wizard with URL, auth config
+- `/a2a test` - Test an A2A endpoint before adding
 
 ## Knowledge Base (RAG)
 

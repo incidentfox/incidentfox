@@ -468,3 +468,254 @@ class ConfigServiceClient:
         return self.update_config(
             full_patch, reason or f"Updated {agent_name} config via CLI"
         )
+
+    # =========================================================================
+    # MCP Server Management
+    # =========================================================================
+
+    def get_mcp_servers(self) -> Dict[str, Any]:
+        """
+        Get all configured MCP servers from effective config.
+
+        Returns:
+            Dict of mcp_id -> mcp_config
+        """
+        config = self.get_effective_config()
+        if config and "error" not in config:
+            return config.get("config", {}).get("mcp_servers", {})
+        return {}
+
+    def add_mcp_server(
+        self,
+        mcp_id: str,
+        command: str,
+        args: List[str],
+        env_vars: Dict[str, str] | None = None,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> Dict[str, Any]:
+        """
+        Add a new MCP server configuration.
+
+        Args:
+            mcp_id: Unique identifier for the MCP (e.g., "github-mcp")
+            command: Command to run (e.g., "npx", "uvx")
+            args: Command arguments
+            env_vars: Environment variables (supports ${var} substitution)
+            name: Display name
+            description: Description
+
+        Returns:
+            Result dict with success status
+        """
+        mcp_config: Dict[str, Any] = {
+            "enabled": True,
+            "command": command,
+            "args": args,
+            "env_vars": env_vars or {},
+            "enabled_tools": ["*"],  # Enable all tools by default
+        }
+        if name:
+            mcp_config["name"] = name
+        if description:
+            mcp_config["description"] = description
+
+        patch = {"mcp_servers": {mcp_id: mcp_config}}
+        return self.update_config(patch, f"Added MCP '{mcp_id}' via CLI")
+
+    def update_mcp_server(
+        self, mcp_id: str, mcp_patch: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Update an existing MCP server configuration.
+
+        Args:
+            mcp_id: MCP server identifier
+            mcp_patch: Configuration updates
+
+        Returns:
+            Result dict with success status
+        """
+        patch = {"mcp_servers": {mcp_id: mcp_patch}}
+        return self.update_config(patch, f"Updated MCP '{mcp_id}' via CLI")
+
+    def enable_mcp(self, mcp_id: str) -> Dict[str, Any]:
+        """Enable an MCP server."""
+        return self.update_mcp_server(mcp_id, {"enabled": True})
+
+    def disable_mcp(self, mcp_id: str) -> Dict[str, Any]:
+        """Disable an MCP server."""
+        return self.update_mcp_server(mcp_id, {"enabled": False})
+
+    def delete_mcp(self, mcp_id: str) -> Dict[str, Any]:
+        """
+        Delete an MCP server by setting it to null (removes from team config).
+
+        Note: This only removes the team-level override. If the MCP is defined
+        at org level, it will still be inherited.
+        """
+        patch = {"mcp_servers": {mcp_id: None}}
+        return self.update_config(patch, f"Deleted MCP '{mcp_id}' via CLI")
+
+    def preview_mcp(
+        self,
+        name: str,
+        command: str,
+        args: List[str],
+        env_vars: Dict[str, str] | None = None,
+    ) -> Dict[str, Any]:
+        """
+        Preview an MCP server before adding (discovers available tools).
+
+        Args:
+            name: Display name for the MCP
+            command: Command to run
+            args: Command arguments
+            env_vars: Environment variables
+
+        Returns:
+            Dict with success, tools list, tool_count, or error
+        """
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.post(
+                    f"{self.base_url}/api/v1/team/mcp-servers/preview",
+                    headers=self._headers(),
+                    json={
+                        "name": name,
+                        "command": command,
+                        "args": args,
+                        "env_vars": env_vars or {},
+                    },
+                )
+                if resp.status_code == 200:
+                    return resp.json()
+                else:
+                    error_detail = resp.text[:500]
+                    try:
+                        error_json = resp.json()
+                        error_detail = error_json.get("detail", error_detail)
+                    except Exception:
+                        pass
+                    return {
+                        "success": False,
+                        "error": f"HTTP {resp.status_code}: {error_detail}",
+                    }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # =========================================================================
+    # A2A Remote Agent Management
+    # =========================================================================
+
+    def get_remote_agents(self) -> Dict[str, Any]:
+        """
+        Get all configured remote A2A agents from effective config.
+
+        Returns:
+            Dict of agent_id -> agent_config
+        """
+        config = self.get_effective_config()
+        if config and "error" not in config:
+            return config.get("config", {}).get("remote_agents", {})
+        return {}
+
+    def add_remote_agent(
+        self,
+        agent_id: str,
+        name: str,
+        url: str,
+        auth_type: str = "none",
+        auth_config: Dict[str, Any] | None = None,
+        description: str | None = None,
+        timeout: int = 300,
+    ) -> Dict[str, Any]:
+        """
+        Add a new remote A2A agent.
+
+        Args:
+            agent_id: Unique identifier (e.g., "security-scanner")
+            name: Display name
+            url: A2A endpoint URL
+            auth_type: Authentication type ("none", "bearer", "apikey", "oauth2")
+            auth_config: Authentication configuration (token, api_key, etc.)
+            description: Agent description
+            timeout: Request timeout in seconds
+
+        Returns:
+            Result dict with success status
+        """
+        agent_config: Dict[str, Any] = {
+            "name": name,
+            "type": "a2a",
+            "url": url,
+            "auth": {"type": auth_type, **(auth_config or {})},
+            "timeout": timeout,
+            "enabled": True,
+        }
+        if description:
+            agent_config["description"] = description
+
+        patch = {"remote_agents": {agent_id: agent_config}}
+        return self.update_config(patch, f"Added remote agent '{agent_id}' via CLI")
+
+    def update_remote_agent(
+        self, agent_id: str, agent_patch: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Update an existing remote agent configuration.
+
+        Args:
+            agent_id: Remote agent identifier
+            agent_patch: Configuration updates
+
+        Returns:
+            Result dict with success status
+        """
+        patch = {"remote_agents": {agent_id: agent_patch}}
+        return self.update_config(patch, f"Updated remote agent '{agent_id}' via CLI")
+
+    def enable_remote_agent(self, agent_id: str) -> Dict[str, Any]:
+        """Enable a remote agent."""
+        return self.update_remote_agent(agent_id, {"enabled": True})
+
+    def disable_remote_agent(self, agent_id: str) -> Dict[str, Any]:
+        """Disable a remote agent."""
+        return self.update_remote_agent(agent_id, {"enabled": False})
+
+    def delete_remote_agent(self, agent_id: str) -> Dict[str, Any]:
+        """
+        Delete a remote agent by setting it to null.
+
+        Note: This only removes the team-level config.
+        """
+        patch = {"remote_agents": {agent_id: None}}
+        return self.update_config(patch, f"Deleted remote agent '{agent_id}' via CLI")
+
+    def test_remote_agent(self, url: str, auth_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Test connection to a remote A2A agent.
+
+        Args:
+            url: A2A endpoint URL
+            auth_config: Authentication configuration
+
+        Returns:
+            Dict with success, message, and optionally agentInfo
+        """
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                resp = client.post(
+                    f"{self.base_url}/api/a2a/test",
+                    headers=self._headers(),
+                    json={"url": url, "auth": auth_config},
+                )
+                if resp.status_code == 200:
+                    return resp.json()
+                else:
+                    return {
+                        "success": False,
+                        "message": f"HTTP {resp.status_code}: {resp.text[:200]}",
+                    }
+        except Exception as e:
+            return {"success": False, "message": str(e)}
