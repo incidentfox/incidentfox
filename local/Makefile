@@ -2,9 +2,12 @@
 # IncidentFox Local Development
 # ═══════════════════════════════════════════════════════════════════════════════
 
-.PHONY: help setup start stop restart logs status cli clean seed ui build run quickstart
+.PHONY: help setup start stop restart logs status cli clean clean-all seed ui build run quickstart venv
 
 DOCKER_COMPOSE = docker compose
+VENV = .venv
+PYTHON = $(VENV)/bin/python
+PIP = $(VENV)/bin/pip
 
 # Colors for output
 BLUE := \033[0;34m
@@ -78,6 +81,16 @@ setup:
 	@echo "   4. Run: make cli"
 	@echo ""
 
+# Ensure venv exists and CLI is installed
+$(VENV)/bin/python: pyproject.toml
+	@echo "$(BLUE)🐍 Setting up Python environment...$(NC)"
+	@python3 -m venv $(VENV)
+	@$(PIP) install --upgrade pip -q
+	@$(PIP) install -e . -q
+	@echo "$(GREEN)✅ Python environment ready$(NC)"
+
+venv: $(VENV)/bin/python
+
 seed:
 	@echo "$(BLUE)🌱 Generating team token...$(NC)"
 	@if ! $(DOCKER_COMPOSE) ps config-service | grep -q "running"; then \
@@ -105,7 +118,7 @@ seed:
 # ─────────────────────────────────────────────────────────────────────────────
 # Quick Start Commands
 # ─────────────────────────────────────────────────────────────────────────────
-quickstart:
+quickstart: $(VENV)/bin/python
 	@echo "$(BLUE)╔════════════════════════════════════════════════════════════════╗$(NC)"
 	@echo "$(BLUE)║           IncidentFox Quick Start                              ║$(NC)"
 	@echo "$(BLUE)╚════════════════════════════════════════════════════════════════╝$(NC)"
@@ -171,9 +184,9 @@ quickstart:
 	@echo "$(GREEN)✅ Setup complete! Starting CLI...$(NC)"
 	@echo ""
 	@# Step 5: Launch CLI
-	@set -a && . ./.env && set +a && python3 -m incidentfox_cli
+	@set -a && . ./.env && set +a && $(PYTHON) -m incidentfox_cli
 
-run:
+run: $(VENV)/bin/python
 	@echo "$(BLUE)🚀 Starting IncidentFox...$(NC)"
 	@# Check prerequisites
 	@if [ ! -f .env ]; then \
@@ -211,7 +224,7 @@ run:
 	fi
 	@# Launch CLI
 	@echo "$(BLUE)🦊 Starting CLI...$(NC)"
-	@set -a && . ./.env && set +a && python3 -m incidentfox_cli
+	@set -a && . ./.env && set +a && $(PYTHON) -m incidentfox_cli
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Services
@@ -294,7 +307,7 @@ status:
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────────────────────────────────────
-cli:
+cli: $(VENV)/bin/python
 	@if [ -z "$$(grep '^TEAM_TOKEN=' .env 2>/dev/null | cut -d= -f2)" ]; then \
 		echo "$(RED)❌ TEAM_TOKEN not set in .env$(NC)"; \
 		echo "$(YELLOW)   Run 'make seed' first$(NC)"; \
@@ -306,7 +319,7 @@ cli:
 		exit 1; \
 	fi
 	@echo "$(BLUE)🦊 Starting IncidentFox CLI...$(NC)"
-	@set -a && . ./.env && set +a && python3 -m incidentfox_cli
+	@set -a && . ./.env && set +a && $(PYTHON) -m incidentfox_cli
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Utilities
@@ -321,6 +334,11 @@ clean:
 	@echo "$(BLUE)🧹 Cleaning up...$(NC)"
 	$(DOCKER_COMPOSE) --profile ui down -v --remove-orphans
 	@echo "$(GREEN)✅ Removed containers and volumes$(NC)"
+
+clean-all: clean
+	@echo "$(BLUE)🧹 Removing Python virtual environment...$(NC)"
+	@rm -rf $(VENV)
+	@echo "$(GREEN)✅ Removed .venv$(NC)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Development helpers
