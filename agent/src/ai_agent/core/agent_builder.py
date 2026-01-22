@@ -606,7 +606,10 @@ def _create_agent_tool(agent_id: str, agent: Agent, max_turns: int) -> Callable:
             result = _run_agent_in_thread(agent, query, max_turns)
             # Check if result is a partial work summary (dict with status="incomplete")
             if isinstance(result, dict) and result.get("status") == "incomplete":
-                logger.info(f"{agent_id}_agent_partial_results", findings=len(result.get("findings", [])))
+                logger.info(
+                    f"{agent_id}_agent_partial_results",
+                    findings=len(result.get("findings", [])),
+                )
                 return json.dumps(result)
             if hasattr(result, "final_output"):
                 if hasattr(result.final_output, "model_dump_json"):

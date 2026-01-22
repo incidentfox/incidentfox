@@ -182,7 +182,11 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
                             from agents import Runner
 
                             # Run sub-agent in a new thread with its own event loop
-                            result_holder = {"result": None, "error": None, "partial": False}
+                            result_holder = {
+                                "result": None,
+                                "error": None,
+                                "partial": False,
+                            }
 
                             def run_in_new_loop():
                                 try:
@@ -202,7 +206,9 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
                                             agent=sub_name,
                                             max_turns=10,
                                         )
-                                        summary = summarize_partial_work(e, query, sub_name)
+                                        summary = summarize_partial_work(
+                                            e, query, sub_name
+                                        )
                                         result_holder["result"] = summary
                                         result_holder["partial"] = True
                                     finally:
@@ -217,17 +223,31 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
                             thread.join(timeout=300)  # 5 minute timeout
 
                             if thread.is_alive():
-                                return json.dumps({"error": f"{sub_name} timed out", "agent": sub_name})
+                                return json.dumps(
+                                    {
+                                        "error": f"{sub_name} timed out",
+                                        "agent": sub_name,
+                                    }
+                                )
 
                             if result_holder["error"]:
                                 return json.dumps(
-                                    {"error": str(result_holder["error"]), "agent": sub_name}
+                                    {
+                                        "error": str(result_holder["error"]),
+                                        "agent": sub_name,
+                                    }
                                 )
 
                             # Check if result is a partial work summary
                             result = result_holder["result"]
-                            if isinstance(result, dict) and result.get("status") == "incomplete":
-                                logger.info(f"{sub_name}_agent_partial_results", findings=len(result.get("findings", [])))
+                            if (
+                                isinstance(result, dict)
+                                and result.get("status") == "incomplete"
+                            ):
+                                logger.info(
+                                    f"{sub_name}_agent_partial_results",
+                                    findings=len(result.get("findings", [])),
+                                )
                                 return json.dumps(result)
 
                             # Extract output from result

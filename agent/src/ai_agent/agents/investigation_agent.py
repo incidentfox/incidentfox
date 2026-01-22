@@ -484,7 +484,10 @@ def _create_subagent_tools(team_config=None):
                 result = _run_agent_in_thread(github_agent, full_query, max_turns=10)
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
-                    logger.info("github_agent_partial_results", findings=len(result.get("findings", [])))
+                    logger.info(
+                        "github_agent_partial_results",
+                        findings=len(result.get("findings", [])),
+                    )
                     return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
@@ -531,7 +534,10 @@ def _create_subagent_tools(team_config=None):
                 result = _run_agent_in_thread(k8s_agent, full_query, max_turns=15)
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
-                    logger.info("k8s_agent_partial_results", findings=len(result.get("findings", [])))
+                    logger.info(
+                        "k8s_agent_partial_results",
+                        findings=len(result.get("findings", [])),
+                    )
                     return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
@@ -578,7 +584,10 @@ def _create_subagent_tools(team_config=None):
                 result = _run_agent_in_thread(aws_agent, full_query)
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
-                    logger.info("aws_agent_partial_results", findings=len(result.get("findings", [])))
+                    logger.info(
+                        "aws_agent_partial_results",
+                        findings=len(result.get("findings", [])),
+                    )
                     return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
@@ -626,7 +635,10 @@ def _create_subagent_tools(team_config=None):
                 result = _run_agent_in_thread(metrics_agent, full_query)
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
-                    logger.info("metrics_agent_partial_results", findings=len(result.get("findings", [])))
+                    logger.info(
+                        "metrics_agent_partial_results",
+                        findings=len(result.get("findings", [])),
+                    )
                     return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
@@ -680,7 +692,10 @@ def _create_subagent_tools(team_config=None):
                 )
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
-                    logger.info("log_analysis_agent_partial_results", findings=len(result.get("findings", [])))
+                    logger.info(
+                        "log_analysis_agent_partial_results",
+                        findings=len(result.get("findings", [])),
+                    )
                     return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None

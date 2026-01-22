@@ -473,7 +473,10 @@ def create_agent_tools(team_config=None):
                 )
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
-                    logger.info("investigation_agent_partial_results", findings=len(result.get("findings", [])))
+                    logger.info(
+                        "investigation_agent_partial_results",
+                        findings=len(result.get("findings", [])),
+                    )
                     return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
@@ -533,7 +536,10 @@ def create_agent_tools(team_config=None):
                 )
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
-                    logger.info("coding_agent_partial_results", findings=len(result.get("findings", [])))
+                    logger.info(
+                        "coding_agent_partial_results",
+                        findings=len(result.get("findings", [])),
+                    )
                     return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
@@ -588,7 +594,10 @@ def create_agent_tools(team_config=None):
                 )
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
-                    logger.info("writeup_agent_partial_results", findings=len(result.get("findings", [])))
+                    logger.info(
+                        "writeup_agent_partial_results",
+                        findings=len(result.get("findings", [])),
+                    )
                     return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
