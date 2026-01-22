@@ -1,6 +1,6 @@
 """Code analysis, bug fixing, and code generation agent."""
 
-from agents import Agent, ModelSettings
+from agents import Agent, ModelSettings, Tool, function_tool
 from pydantic import BaseModel, Field
 
 from ..core.config import get_config
@@ -69,7 +69,20 @@ def _load_coding_tools():
     # Note: GitHub tools moved to dedicated github_agent.py
     # Coding agent focuses on local code analysis and testing
 
-    return tools
+    # Wrap plain functions into Tool objects for SDK compatibility
+    wrapped = []
+    for t in tools:
+        if isinstance(t, Tool) or hasattr(t, "name"):
+            wrapped.append(t)
+        else:
+            try:
+                wrapped.append(function_tool(t, strict_mode=False))
+            except TypeError:
+                wrapped.append(function_tool(t))
+            except Exception as e:
+                logger.warning("tool_wrap_failed", tool=getattr(t, "__name__", str(t)), error=str(e))
+                wrapped.append(t)
+    return wrapped
 
 
 class CodeChange(BaseModel):

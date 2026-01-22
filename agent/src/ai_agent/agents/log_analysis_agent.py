@@ -1,6 +1,6 @@
 """Log Analysis Agent - Partition-first log investigation specialist."""
 
-from agents import Agent, ModelSettings
+from agents import Agent, ModelSettings, Tool, function_tool
 from pydantic import BaseModel, Field
 
 from ..core.config import get_config
@@ -138,7 +138,20 @@ def _load_log_analysis_tools():
     except Exception as e:
         logger.warning("log_analysis_tools_load_failed", error=str(e))
 
-    return tools
+    # Wrap plain functions into Tool objects for SDK compatibility
+    wrapped = []
+    for t in tools:
+        if isinstance(t, Tool) or hasattr(t, "name"):
+            wrapped.append(t)
+        else:
+            try:
+                wrapped.append(function_tool(t, strict_mode=False))
+            except TypeError:
+                wrapped.append(function_tool(t))
+            except Exception as e:
+                logger.warning("tool_wrap_failed", tool=getattr(t, "__name__", str(t)), error=str(e))
+                wrapped.append(t)
+    return wrapped
 
 
 # =============================================================================
