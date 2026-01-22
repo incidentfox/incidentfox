@@ -4,9 +4,15 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm ci
-# Explicitly install platform-specific native binaries for linux/amd64
-# These are needed because package-lock.json may be generated on a different platform
-RUN npm install @next/swc-linux-x64-gnu lightningcss-linux-x64-gnu @tailwindcss/oxide-linux-x64-gnu --no-save || true
+
+# Install platform-specific native binaries based on target architecture
+# TARGETARCH is automatically set by Docker during multi-platform builds (amd64 or arm64)
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+      npm install @next/swc-linux-x64-gnu lightningcss-linux-x64-gnu @tailwindcss/oxide-linux-x64-gnu --no-save || true; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+      npm install @next/swc-linux-arm64-gnu lightningcss-linux-arm64-gnu @tailwindcss/oxide-linux-arm64-gnu --no-save || true; \
+    fi
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
