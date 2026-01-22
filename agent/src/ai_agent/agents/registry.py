@@ -5,10 +5,12 @@ This module creates agents dynamically based on team configuration.
 """
 
 from agents import Agent
+from agents.exceptions import MaxTurnsExceeded
 
 from ..core.agent_runner import get_agent_registry
 from ..core.config import get_config
 from ..core.logging import get_logger
+from ..core.partial_work import summarize_partial_work
 from ..integrations.a2a.agent_wrapper import get_remote_agents_for_team
 from .aws_agent import create_aws_agent
 from .base import TaskContext
@@ -180,7 +182,7 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
                             from agents import Runner
 
                             # Run sub-agent in a new thread with its own event loop
-                            result_holder = {"result": None, "error": None}
+                            result_holder = {"result": None, "error": None, "partial": False}
 
                             def run_in_new_loop():
                                 try:
@@ -193,6 +195,16 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
                                             )
                                         )
                                         result_holder["result"] = result
+                                    except MaxTurnsExceeded as e:
+                                        # Capture partial work instead of losing it
+                                        logger.warning(
+                                            "subagent_max_turns_exceeded",
+                                            agent=sub_name,
+                                            max_turns=10,
+                                        )
+                                        summary = summarize_partial_work(e, query, sub_name)
+                                        result_holder["result"] = summary
+                                        result_holder["partial"] = True
                                     finally:
                                         new_loop.close()
                                 except Exception as e:
@@ -205,15 +217,20 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
                             thread.join(timeout=300)  # 5 minute timeout
 
                             if thread.is_alive():
-                                return json.dumps({"error": f"{sub_name} timed out"})
+                                return json.dumps({"error": f"{sub_name} timed out", "agent": sub_name})
 
                             if result_holder["error"]:
                                 return json.dumps(
-                                    {"error": str(result_holder["error"])}
+                                    {"error": str(result_holder["error"]), "agent": sub_name}
                                 )
 
-                            # Extract output from result
+                            # Check if result is a partial work summary
                             result = result_holder["result"]
+                            if isinstance(result, dict) and result.get("status") == "incomplete":
+                                logger.info(f"{sub_name}_agent_partial_results", findings=len(result.get("findings", [])))
+                                return json.dumps(result)
+
+                            # Extract output from result
                             output = getattr(result, "final_output", None) or getattr(
                                 result, "output", None
                             )
@@ -233,7 +250,7 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
 
                     # Set the function name and docstring dynamically
                     call_sub_agent.__name__ = f"call_{sub_name}"
-                    call_sub_agent.__doc__ = f"Delegate task to {sub_name} agent. The agent will handle the request and return results."
+                    call_sub_agent.__doc__ = f"Delegate task to {sub_name} agent. The agent will handle the request and return results. If max turns exceeded, returns partial findings with status='incomplete'."
 
                     return call_sub_agent
 

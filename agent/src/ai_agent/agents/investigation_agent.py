@@ -30,11 +30,13 @@ import threading
 from typing import Any
 
 from agents import Agent, ModelSettings, Runner, function_tool
+from agents.exceptions import MaxTurnsExceeded
 from agents.stream_events import RunItemStreamEvent
 from pydantic import BaseModel, Field
 
 from ..core.config import get_config
 from ..core.logging import get_logger
+from ..core.partial_work import summarize_partial_work
 from ..core.stream_events import (
     EventStreamRegistry,
     get_current_stream_id,
@@ -102,13 +104,19 @@ def _run_agent_in_thread(
     use streaming mode and forward events to the EventStreamRegistry, enabling
     nested agent visibility in the CLI.
 
+    If the agent hits MaxTurnsExceeded, partial work is captured and summarized
+    using an LLM, and a partial result is returned instead of raising an exception.
+
     Args:
         agent: The agent to run
         query: The query/task for the agent
         timeout: Max time in seconds to wait
         max_turns: Max LLM turns for the child agent
+
+    Returns:
+        The agent result, or a partial work summary dict if max_turns was exceeded
     """
-    result_holder = {"result": None, "error": None}
+    result_holder = {"result": None, "error": None, "partial": False}
 
     # Capture stream_id from parent thread for event propagation
     parent_stream_id = get_current_stream_id()
@@ -139,6 +147,16 @@ def _run_agent_in_thread(
                         Runner.run(agent, query, max_turns=max_turns)
                     )
                 result_holder["result"] = result
+            except MaxTurnsExceeded as e:
+                # Capture partial work instead of losing it
+                logger.warning(
+                    "subagent_max_turns_exceeded",
+                    agent=agent_name,
+                    max_turns=max_turns,
+                )
+                summary = summarize_partial_work(e, query, agent_name)
+                result_holder["result"] = summary
+                result_holder["partial"] = True
             finally:
                 new_loop.close()
         except Exception as e:
@@ -453,6 +471,7 @@ def _create_subagent_tools(team_config=None):
 
             Returns:
                 JSON with recent_changes, related_prs, related_issues, recommendations
+                If max turns exceeded, returns partial findings with status="incomplete"
             """
             try:
                 logger.info("calling_github_agent", query=query[:100])
@@ -463,6 +482,10 @@ def _create_subagent_tools(team_config=None):
                     parts.append(f"\n\n## Prior Findings\n{context}")
                 full_query = "".join(parts)
                 result = _run_agent_in_thread(github_agent, full_query, max_turns=10)
+                # Check if result is a partial work summary (dict with status="incomplete")
+                if isinstance(result, dict) and result.get("status") == "incomplete":
+                    logger.info("github_agent_partial_results", findings=len(result.get("findings", [])))
+                    return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
                 )
@@ -497,6 +520,7 @@ def _create_subagent_tools(team_config=None):
 
             Returns:
                 JSON with pod_status, issues_found, recommendations
+                If max turns exceeded, returns partial findings with status="incomplete"
             """
             try:
                 logger.info("calling_k8s_agent", query=query[:100], namespace=namespace)
@@ -505,6 +529,10 @@ def _create_subagent_tools(team_config=None):
                     parts.append(f"\n\n## Prior Findings\n{context}")
                 full_query = "".join(parts)
                 result = _run_agent_in_thread(k8s_agent, full_query, max_turns=15)
+                # Check if result is a partial work summary (dict with status="incomplete")
+                if isinstance(result, dict) and result.get("status") == "incomplete":
+                    logger.info("k8s_agent_partial_results", findings=len(result.get("findings", [])))
+                    return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
                 )
@@ -539,6 +567,7 @@ def _create_subagent_tools(team_config=None):
 
             Returns:
                 JSON with resource_status, issues_found, recommendations
+                If max turns exceeded, returns partial findings with status="incomplete"
             """
             try:
                 logger.info("calling_aws_agent", query=query[:100], region=region)
@@ -547,6 +576,10 @@ def _create_subagent_tools(team_config=None):
                     parts.append(f"\n\n## Prior Findings\n{context}")
                 full_query = "".join(parts)
                 result = _run_agent_in_thread(aws_agent, full_query)
+                # Check if result is a partial work summary (dict with status="incomplete")
+                if isinstance(result, dict) and result.get("status") == "incomplete":
+                    logger.info("aws_agent_partial_results", findings=len(result.get("findings", [])))
+                    return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
                 )
@@ -580,6 +613,7 @@ def _create_subagent_tools(team_config=None):
 
             Returns:
                 JSON with anomalies_found, correlations, recommendations
+                If max turns exceeded, returns partial findings with status="incomplete"
             """
             try:
                 logger.info(
@@ -590,6 +624,10 @@ def _create_subagent_tools(team_config=None):
                     parts.append(f"\n\n## Prior Findings\n{context}")
                 full_query = "".join(parts)
                 result = _run_agent_in_thread(metrics_agent, full_query)
+                # Check if result is a partial work summary (dict with status="incomplete")
+                if isinstance(result, dict) and result.get("status") == "incomplete":
+                    logger.info("metrics_agent_partial_results", findings=len(result.get("findings", [])))
+                    return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
                 )
@@ -624,6 +662,7 @@ def _create_subagent_tools(team_config=None):
 
             Returns:
                 JSON with error_patterns, timeline, root_causes, recommendations
+                If max turns exceeded, returns partial findings with status="incomplete"
             """
             try:
                 logger.info(
@@ -639,6 +678,10 @@ def _create_subagent_tools(team_config=None):
                 result = _run_agent_in_thread(
                     log_analysis_agent, full_query, max_turns=15
                 )
+                # Check if result is a partial work summary (dict with status="incomplete")
+                if isinstance(result, dict) and result.get("status") == "incomplete":
+                    logger.info("log_analysis_agent_partial_results", findings=len(result.get("findings", [])))
+                    return json.dumps(result)
                 output = getattr(result, "final_output", None) or getattr(
                     result, "output", None
                 )

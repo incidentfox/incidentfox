@@ -22,9 +22,11 @@ from collections.abc import Callable
 from typing import Any
 
 from agents import Agent, ModelSettings, Runner, function_tool
+from agents.exceptions import MaxTurnsExceeded
 from pydantic import BaseModel, Field
 
 from .logging import get_logger
+from .partial_work import summarize_partial_work
 
 logger = get_logger(__name__)
 
@@ -534,8 +536,17 @@ def build_agent_from_config(
 
 
 def _run_agent_in_thread(agent: Agent, query: str, max_turns: int = 25) -> Any:
-    """Run an agent in a separate thread with its own event loop."""
-    result_holder = {"result": None, "error": None}
+    """
+    Run an agent in a separate thread with its own event loop.
+
+    If the agent hits MaxTurnsExceeded, partial work is captured and summarized
+    using an LLM, and a partial result is returned instead of raising an exception.
+
+    Returns:
+        The agent result, or a partial work summary dict if max_turns was exceeded
+    """
+    result_holder = {"result": None, "error": None, "partial": False}
+    agent_name = getattr(agent, "name", "unknown")
 
     def run_in_new_loop():
         try:
@@ -546,6 +557,16 @@ def _run_agent_in_thread(agent: Agent, query: str, max_turns: int = 25) -> Any:
                     Runner.run(agent, query, max_turns=max_turns)
                 )
                 result_holder["result"] = result
+            except MaxTurnsExceeded as e:
+                # Capture partial work instead of losing it
+                logger.warning(
+                    "subagent_max_turns_exceeded",
+                    agent=agent_name,
+                    max_turns=max_turns,
+                )
+                summary = summarize_partial_work(e, query, agent_name)
+                result_holder["result"] = summary
+                result_holder["partial"] = True
             finally:
                 new_loop.close()
         except Exception as e:
@@ -579,32 +600,38 @@ def _create_agent_tool(agent_id: str, agent: Agent, max_turns: int) -> Callable:
 
         Returns:
             JSON with the agent's findings and recommendations
+            If max turns exceeded, returns partial findings with status="incomplete"
         """
         try:
             result = _run_agent_in_thread(agent, query, max_turns)
+            # Check if result is a partial work summary (dict with status="incomplete")
+            if isinstance(result, dict) and result.get("status") == "incomplete":
+                logger.info(f"{agent_id}_agent_partial_results", findings=len(result.get("findings", [])))
+                return json.dumps(result)
             if hasattr(result, "final_output"):
                 if hasattr(result.final_output, "model_dump_json"):
                     return result.final_output.model_dump_json()
                 return json.dumps({"result": str(result.final_output)})
             return json.dumps({"result": str(result)})
         except Exception as e:
-            return json.dumps({"error": str(e)})
+            return json.dumps({"error": str(e), "agent": f"{agent_id}_agent"})
 
     # Rename the tool based on agent
     call_agent.__name__ = f"call_{agent_id}_agent"
     call_agent.__doc__ = f"""
     Call the {agent.name} to investigate.
-    
+
     This agent specializes in: {agent_id}
-    
+
     Send a natural language query describing what you need investigated.
     The agent will use its tools and return findings.
-    
+
     Args:
         query: Natural language investigation request
-    
+
     Returns:
         JSON with findings, recommendations, and confidence
+        If max turns exceeded, returns partial findings with status="incomplete"
     """
 
     return call_agent
