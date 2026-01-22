@@ -1,9 +1,11 @@
 """GitHub integration tools."""
 
 import base64
+import json
 import os
 from typing import Any
 
+from ..core.config_required import make_config_required_response
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -39,16 +41,26 @@ def _get_github_client():
         from github import Github
 
         config = _get_github_config()
-        return Github(config["token"])
+        # Add timeout to prevent hanging on slow API calls
+        return Github(config["token"], timeout=30)
     except ImportError:
         raise ToolExecutionError(
             "github", "PyGithub not installed. Install with: poetry add PyGithub"
         )
 
 
+def _github_config_required_response(tool_name: str) -> str:
+    """Create config_required response for GitHub tools."""
+    return make_config_required_response(
+        integration="github",
+        tool=tool_name,
+        missing_config=["GITHUB_TOKEN"],
+    )
+
+
 def search_github_code(
     query: str, org: str | None = None, repo: str | None = None, max_results: int = 10
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | str:
     """
     Search code across GitHub repositories.
 
@@ -59,7 +71,7 @@ def search_github_code(
         max_results: Maximum results to return
 
     Returns:
-        List of code matches
+        List of code matches or config_required response
     """
     try:
         g = _get_github_client()
@@ -90,9 +102,13 @@ def search_github_code(
         logger.info("github_search_completed", query=query, results=len(matches))
         return matches
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="search_github_code")
+        return _github_config_required_response("search_github_code")
+
     except Exception as e:
         logger.error("github_search_failed", error=str(e), query=query)
-        raise ToolExecutionError("search_github_code", str(e), e)
+        return json.dumps({"error": str(e), "query": query})
 
 
 def read_github_file(repo: str, file_path: str, ref: str = "main") -> str:
@@ -105,7 +121,7 @@ def read_github_file(repo: str, file_path: str, ref: str = "main") -> str:
         ref: Branch/tag/commit (default: "main")
 
     Returns:
-        File contents
+        File contents or config_required response
     """
     try:
         g = _get_github_client()
@@ -113,21 +129,25 @@ def read_github_file(repo: str, file_path: str, ref: str = "main") -> str:
         file_content = repository.get_contents(file_path, ref=ref)
 
         if isinstance(file_content, list):
-            return {"error": f"{file_path} is a directory"}
+            return json.dumps({"error": f"{file_path} is a directory"})
 
         content = base64.b64decode(file_content.content).decode("utf-8")
 
         logger.info("github_file_read", repo=repo, file=file_path, size=len(content))
         return content
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="read_github_file")
+        return _github_config_required_response("read_github_file")
+
     except Exception as e:
         logger.error("github_read_failed", error=str(e), repo=repo, file=file_path)
-        raise ToolExecutionError("read_github_file", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo, "file": file_path})
 
 
 def create_pull_request(
     repo: str, title: str, head: str, base: str, body: str
-) -> dict[str, Any]:
+) -> dict[str, Any] | str:
     """
     Create a pull request.
 
@@ -139,7 +159,7 @@ def create_pull_request(
         body: PR description
 
     Returns:
-        Created PR info
+        Created PR info or config_required response
     """
     try:
         g = _get_github_client()
@@ -156,14 +176,18 @@ def create_pull_request(
             "created_at": str(pr.created_at),
         }
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="create_pull_request")
+        return _github_config_required_response("create_pull_request")
+
     except Exception as e:
         logger.error("github_pr_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("create_pull_request", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo})
 
 
 def list_pull_requests(
     repo: str, state: str = "open", max_results: int = 10
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | str:
     """
     List pull requests in a repository.
 
@@ -173,7 +197,7 @@ def list_pull_requests(
         max_results: Maximum PRs to return
 
     Returns:
-        List of PRs
+        List of PRs or config_required response
     """
     try:
         g = _get_github_client()
@@ -199,9 +223,13 @@ def list_pull_requests(
         logger.info("github_prs_listed", repo=repo, count=len(pr_list))
         return pr_list
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="list_pull_requests")
+        return _github_config_required_response("list_pull_requests")
+
     except Exception as e:
         logger.error("github_list_prs_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("list_pull_requests", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo})
 
 
 # ============================================================================
@@ -211,7 +239,7 @@ def list_pull_requests(
 
 def merge_pull_request(
     repo: str, pr_number: int, merge_method: str = "merge"
-) -> dict[str, Any]:
+) -> dict[str, Any] | str:
     """
     Merge a pull request.
 
@@ -221,7 +249,7 @@ def merge_pull_request(
         merge_method: Merge method (merge, squash, rebase)
 
     Returns:
-        Merge result with merged status and sha
+        Merge result with merged status and sha or config_required response
     """
     try:
         g = _get_github_client()
@@ -232,9 +260,13 @@ def merge_pull_request(
         logger.info("github_pr_merged", repo=repo, pr_number=pr_number)
         return {"ok": True, "merged": result.merged, "sha": result.sha}
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="merge_pull_request")
+        return _github_config_required_response("merge_pull_request")
+
     except Exception as e:
         logger.error("github_merge_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("merge_pull_request", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
 def github_create_issue(
@@ -243,7 +275,7 @@ def github_create_issue(
     body: str = "",
     labels: list[str] | None = None,
     assignees: list[str] | None = None,
-) -> dict[str, Any]:
+) -> dict[str, Any] | str:
     """
     Create a new issue.
 
@@ -255,7 +287,7 @@ def github_create_issue(
         assignees: List of assignee usernames
 
     Returns:
-        Created issue info
+        Created issue info or config_required response
     """
     try:
         g = _get_github_client()
@@ -272,9 +304,13 @@ def github_create_issue(
             "state": issue.state,
         }
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_create_issue")
+        return _github_config_required_response("github_create_issue")
+
     except Exception as e:
         logger.error("github_issue_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("github_create_issue", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo})
 
 
 def list_issues(
@@ -282,7 +318,7 @@ def list_issues(
     state: str = "open",
     labels: list[str] | None = None,
     max_results: int = 20,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | str:
     """
     List issues in a repository.
 
@@ -293,7 +329,7 @@ def list_issues(
         max_results: Maximum issues to return
 
     Returns:
-        List of issues
+        List of issues or config_required response
     """
     try:
         g = _get_github_client()
@@ -323,14 +359,18 @@ def list_issues(
         logger.info("github_issues_listed", repo=repo, count=len(issue_list))
         return issue_list
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="list_issues")
+        return _github_config_required_response("list_issues")
+
     except Exception as e:
         logger.error("github_list_issues_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("list_issues", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo})
 
 
 def close_issue(
     repo: str, issue_number: int, comment: str | None = None
-) -> dict[str, Any]:
+) -> dict[str, Any] | str:
     """
     Close an issue.
 
@@ -340,7 +380,7 @@ def close_issue(
         comment: Optional closing comment
 
     Returns:
-        Closed issue info
+        Closed issue info or config_required response
     """
     try:
         g = _get_github_client()
@@ -354,14 +394,18 @@ def close_issue(
         logger.info("github_issue_closed", repo=repo, issue_number=issue_number)
         return {"ok": True, "number": issue_number, "closed": True}
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="close_issue")
+        return _github_config_required_response("close_issue")
+
     except Exception as e:
         logger.error("github_close_issue_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("close_issue", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo, "issue_number": issue_number})
 
 
 def create_branch(
     repo: str, branch_name: str, source_branch: str = "main"
-) -> dict[str, Any]:
+) -> dict[str, Any] | str:
     """
     Create a new branch.
 
@@ -371,7 +415,7 @@ def create_branch(
         source_branch: Branch to create from (default: main)
 
     Returns:
-        Created branch info
+        Created branch info or config_required response
     """
     try:
         g = _get_github_client()
@@ -389,12 +433,16 @@ def create_branch(
             "sha": source.commit.sha,
         }
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="create_branch")
+        return _github_config_required_response("create_branch")
+
     except Exception as e:
         logger.error("github_create_branch_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("create_branch", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo, "branch": branch_name})
 
 
-def list_branches(repo: str, max_results: int = 30) -> list[dict[str, Any]]:
+def list_branches(repo: str, max_results: int = 30) -> list[dict[str, Any]] | str:
     """
     List branches in a repository.
 
@@ -403,7 +451,7 @@ def list_branches(repo: str, max_results: int = 30) -> list[dict[str, Any]]:
         max_results: Maximum branches to return
 
     Returns:
-        List of branches
+        List of branches or config_required response
     """
     try:
         g = _get_github_client()
@@ -425,14 +473,18 @@ def list_branches(repo: str, max_results: int = 30) -> list[dict[str, Any]]:
         logger.info("github_branches_listed", repo=repo, count=len(branch_list))
         return branch_list
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="list_branches")
+        return _github_config_required_response("list_branches")
+
     except Exception as e:
         logger.error("github_list_branches_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("list_branches", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo})
 
 
 def list_files(
     repo: str, path: str = "", ref: str | None = None
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | str:
     """
     List files in a repository directory.
 
@@ -442,7 +494,7 @@ def list_files(
         ref: Branch/tag/commit
 
     Returns:
-        List of files and directories
+        List of files and directories or config_required response
     """
     try:
         g = _get_github_client()
@@ -476,12 +528,16 @@ def list_files(
         logger.info("github_files_listed", repo=repo, path=path, count=len(file_list))
         return file_list
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="list_files")
+        return _github_config_required_response("list_files")
+
     except Exception as e:
         logger.error("github_list_files_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("list_files", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo, "path": path})
 
 
-def get_repo_info(repo: str) -> dict[str, Any]:
+def get_repo_info(repo: str) -> dict[str, Any] | str:
     """
     Get repository information.
 
@@ -489,7 +545,7 @@ def get_repo_info(repo: str) -> dict[str, Any]:
         repo: Repository (format: "owner/repo")
 
     Returns:
-        Repository info including name, description, URLs, etc.
+        Repository info including name, description, URLs, etc. or config_required response
     """
     try:
         g = _get_github_client()
@@ -511,14 +567,18 @@ def get_repo_info(repo: str) -> dict[str, Any]:
             "open_issues": r.open_issues_count,
         }
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="get_repo_info")
+        return _github_config_required_response("get_repo_info")
+
     except Exception as e:
         logger.error("github_get_repo_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("get_repo_info", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo})
 
 
 def trigger_workflow(
     repo: str, workflow_id: str, ref: str = "main", inputs: dict[str, str] | None = None
-) -> dict[str, Any]:
+) -> dict[str, Any] | str:
     """
     Trigger a GitHub Actions workflow.
 
@@ -529,7 +589,7 @@ def trigger_workflow(
         inputs: Workflow input parameters
 
     Returns:
-        Trigger result
+        Trigger result or config_required response
     """
     try:
         g = _get_github_client()
@@ -542,9 +602,13 @@ def trigger_workflow(
         )
         return {"ok": result, "workflow_id": workflow_id, "ref": ref}
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="trigger_workflow")
+        return _github_config_required_response("trigger_workflow")
+
     except Exception as e:
         logger.error("github_trigger_workflow_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("trigger_workflow", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo, "workflow_id": workflow_id})
 
 
 def list_workflow_runs(
@@ -552,7 +616,7 @@ def list_workflow_runs(
     workflow_id: str | None = None,
     status: str | None = None,
     max_results: int = 10,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | str:
     """
     List recent workflow runs.
 
@@ -563,7 +627,7 @@ def list_workflow_runs(
         max_results: Maximum runs to return
 
     Returns:
-        List of workflow runs
+        List of workflow runs or config_required response
     """
     try:
         g = _get_github_client()
@@ -598,12 +662,16 @@ def list_workflow_runs(
         logger.info("github_workflow_runs_listed", repo=repo, count=len(run_list))
         return run_list
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="list_workflow_runs")
+        return _github_config_required_response("list_workflow_runs")
+
     except Exception as e:
         logger.error("github_list_runs_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("list_workflow_runs", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo})
 
 
-def github_get_pr(repo: str, pr_number: int) -> dict[str, Any]:
+def github_get_pr(repo: str, pr_number: int) -> dict[str, Any] | str:
     """
     Get details of a specific pull request.
 
@@ -612,7 +680,7 @@ def github_get_pr(repo: str, pr_number: int) -> dict[str, Any]:
         pr_number: PR number
 
     Returns:
-        Pull request details
+        Pull request details or config_required response
     """
     try:
         g = _get_github_client()
@@ -638,11 +706,15 @@ def github_get_pr(repo: str, pr_number: int) -> dict[str, Any]:
             "assignees": [a.login for a in pr.assignees],
         }
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_get_pr")
+        return _github_config_required_response("github_get_pr")
+
     except Exception as e:
         logger.error(
             "github_get_pr_failed", error=str(e), repo=repo, pr_number=pr_number
         )
-        raise ToolExecutionError("github_get_pr", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
 def github_search_commits_by_timerange(
@@ -651,7 +723,7 @@ def github_search_commits_by_timerange(
     until: str | None = None,
     author: str | None = None,
     max_results: int = 50,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | str:
     """
     Search commits in a repository by time range.
 
@@ -663,7 +735,7 @@ def github_search_commits_by_timerange(
         max_results: Maximum commits to return
 
     Returns:
-        List of commits
+        List of commits or config_required response
     """
     try:
         from datetime import datetime
@@ -701,14 +773,18 @@ def github_search_commits_by_timerange(
         logger.info("github_commits_searched", repo=repo, count=len(commit_list))
         return commit_list
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_search_commits_by_timerange")
+        return _github_config_required_response("github_search_commits_by_timerange")
+
     except Exception as e:
         logger.error("github_search_commits_failed", error=str(e), repo=repo)
-        raise ToolExecutionError("github_search_commits_by_timerange", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo})
 
 
 def github_list_pr_commits(
     repo: str, pr_number: int, max_results: int = 100
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | str:
     """
     List all commits in a pull request.
 
@@ -718,7 +794,7 @@ def github_list_pr_commits(
         max_results: Maximum commits to return
 
     Returns:
-        List of commits in the PR
+        List of commits in the PR or config_required response
     """
     try:
         g = _get_github_client()
@@ -765,6 +841,10 @@ def github_list_pr_commits(
         )
         return commit_list
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_list_pr_commits")
+        return _github_config_required_response("github_list_pr_commits")
+
     except Exception as e:
         logger.error(
             "github_list_pr_commits_failed",
@@ -772,12 +852,12 @@ def github_list_pr_commits(
             repo=repo,
             pr_number=pr_number,
         )
-        raise ToolExecutionError("github_list_pr_commits", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
 def github_create_pr_review(
     repo: str, pr_number: int, body: str, event: str = "COMMENT"
-) -> dict[str, Any]:
+) -> dict[str, Any] | str:
     """
     Create a review on a pull request.
 
@@ -788,7 +868,7 @@ def github_create_pr_review(
         event: Review event - "COMMENT", "APPROVE", "REQUEST_CHANGES"
 
     Returns:
-        Created review info
+        Created review info or config_required response
     """
     try:
         g = _get_github_client()
@@ -815,6 +895,10 @@ def github_create_pr_review(
             "url": review.html_url,
         }
 
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_create_pr_review")
+        return _github_config_required_response("github_create_pr_review")
+
     except Exception as e:
         logger.error(
             "github_create_pr_review_failed",
@@ -822,7 +906,7 @@ def github_create_pr_review(
             repo=repo,
             pr_number=pr_number,
         )
-        raise ToolExecutionError("github_create_pr_review", str(e), e)
+        return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
 # List of all GitHub tools for registration

@@ -11,6 +11,7 @@ import uuid
 import httpx
 from agents import function_tool
 
+from ..core.config_required import make_config_required_response
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
 from ..core.logging import get_logger
@@ -123,15 +124,13 @@ def web_search(query: str, max_results: int = 5) -> str:
     if not tavily_key:
         tavily_key = os.getenv("TAVILY_API_KEY")
 
-    # 3. If still not found, return error
+    # 3. If still not found, return config_required response
     if not tavily_key:
-        logger.warning("tavily_not_configured", query=query)
-        return json.dumps(
-            {
-                "query": query,
-                "error": "Web search not configured. Please configure the Tavily integration.",
-                "results": [],
-            }
+        logger.warning("tavily_not_configured", tool="web_search")
+        return make_config_required_response(
+            integration="tavily",
+            tool="web_search",
+            missing_config=["TAVILY_API_KEY"],
         )
 
     # Call Tavily API

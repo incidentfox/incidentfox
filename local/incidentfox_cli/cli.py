@@ -2598,6 +2598,12 @@ INTEGRATIONS = {
         "optional": ["RAPTOR_DEFAULT_TREE"],
         "env_hint": "RAPTOR_URL=http://localhost:8000",
     },
+    # Search
+    "tavily": {
+        "name": "Tavily (Web Search)",
+        "required": ["TAVILY_API_KEY"],
+        "env_hint": "TAVILY_API_KEY=tvly-...",
+    },
 }
 
 

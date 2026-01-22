@@ -8,11 +8,21 @@ import boto3
 from agents import function_tool
 from botocore.exceptions import ClientError, NoCredentialsError
 
+from ..core.config_required import make_config_required_response
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
 from ..core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _aws_config_required_response(tool_name: str) -> str:
+    """Create config_required response for AWS tools."""
+    return make_config_required_response(
+        integration="aws",
+        tool=tool_name,
+        missing_config=["AWS credentials (access key, secret key, or IAM role)"],
+    )
 
 
 def _get_aws_session(region: str = "us-east-1"):
@@ -87,6 +97,9 @@ def describe_ec2_instance(instance_id: str, region: str = "us-east-1") -> str:
         }
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="describe_ec2_instance")
+        return _aws_config_required_response("describe_ec2_instance")
     except ClientError as e:
         logger.error(
             "failed_to_describe_ec2_instance", error=str(e), instance_id=instance_id
@@ -158,6 +171,9 @@ def get_cloudwatch_logs(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="get_cloudwatch_logs")
+        return _aws_config_required_response("get_cloudwatch_logs")
     except ClientError as e:
         logger.error("failed_to_get_cloudwatch_logs", error=str(e), log_group=log_group)
         return json.dumps({"error": str(e), "log_group": log_group})
@@ -193,6 +209,9 @@ def describe_lambda_function(function_name: str, region: str = "us-east-1") -> s
         }
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="describe_lambda_function")
+        return _aws_config_required_response("describe_lambda_function")
     except ClientError as e:
         logger.error("failed_to_describe_lambda", error=str(e), function=function_name)
         return json.dumps({"error": str(e), "function_name": function_name})
@@ -234,6 +253,9 @@ def get_rds_instance_status(db_instance_id: str, region: str = "us-east-1") -> s
         }
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="get_rds_instance_status")
+        return _aws_config_required_response("get_rds_instance_status")
     except ClientError as e:
         logger.error(
             "failed_to_get_rds_status", error=str(e), db_instance=db_instance_id
@@ -310,6 +332,9 @@ def query_cloudwatch_insights(
             {"error": "Query timeout", "query_id": query_id, "log_group": log_group}
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="query_cloudwatch_insights")
+        return _aws_config_required_response("query_cloudwatch_insights")
     except ClientError as e:
         logger.error("failed_to_query_insights", error=str(e), log_group=log_group)
         return json.dumps({"error": str(e), "log_group": log_group})
@@ -377,6 +402,9 @@ def get_cloudwatch_metrics(
         }
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="get_cloudwatch_metrics")
+        return _aws_config_required_response("get_cloudwatch_metrics")
     except ClientError as e:
         logger.error("failed_to_get_metrics", error=str(e), metric=metric_name)
         return json.dumps(
@@ -437,6 +465,9 @@ def list_ecs_tasks(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="list_ecs_tasks")
+        return _aws_config_required_response("list_ecs_tasks")
     except ClientError as e:
         logger.error("failed_to_list_ecs_tasks", error=str(e), cluster=cluster)
         return json.dumps({"error": str(e), "cluster": cluster, "service": service})
@@ -511,6 +542,9 @@ def aws_cost_explorer(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="aws_cost_explorer")
+        return _aws_config_required_response("aws_cost_explorer")
     except ClientError as e:
         logger.error("failed_to_get_cost_explorer", error=str(e))
         return json.dumps({"error": str(e)})
@@ -568,6 +602,9 @@ def aws_trusted_advisor(region: str = "us-east-1") -> str:
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="aws_trusted_advisor")
+        return _aws_config_required_response("aws_trusted_advisor")
     except ClientError as e:
         logger.error("failed_to_get_trusted_advisor", error=str(e))
         return json.dumps(
@@ -634,6 +671,9 @@ def ec2_describe_instances(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="ec2_describe_instances")
+        return _aws_config_required_response("ec2_describe_instances")
     except ClientError as e:
         logger.error("failed_to_describe_instances", error=str(e), region=region)
         return json.dumps({"error": str(e), "region": region})
@@ -694,6 +734,9 @@ def ec2_describe_volumes(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="ec2_describe_volumes")
+        return _aws_config_required_response("ec2_describe_volumes")
     except ClientError as e:
         logger.error("failed_to_describe_volumes", error=str(e), region=region)
         return json.dumps({"error": str(e), "region": region})
@@ -758,6 +801,9 @@ def ec2_describe_snapshots(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="ec2_describe_snapshots")
+        return _aws_config_required_response("ec2_describe_snapshots")
     except ClientError as e:
         logger.error("failed_to_describe_snapshots", error=str(e), region=region)
         return json.dumps({"error": str(e), "region": region})
@@ -808,6 +854,9 @@ def ec2_rightsizing_recommendations(region: str = "us-east-1") -> str:
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="ec2_rightsizing_recommendations")
+        return _aws_config_required_response("ec2_rightsizing_recommendations")
     except ClientError as e:
         logger.error("failed_to_get_rightsizing", error=str(e), region=region)
         return json.dumps(
@@ -868,6 +917,9 @@ def rds_describe_db_instances(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="rds_describe_db_instances")
+        return _aws_config_required_response("rds_describe_db_instances")
     except ClientError as e:
         logger.error("failed_to_describe_rds_instances", error=str(e), region=region)
         return json.dumps({"error": str(e), "region": region})
@@ -927,6 +979,9 @@ def rds_describe_db_snapshots(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="rds_describe_db_snapshots")
+        return _aws_config_required_response("rds_describe_db_snapshots")
     except ClientError as e:
         logger.error("failed_to_describe_rds_snapshots", error=str(e), region=region)
         return json.dumps({"error": str(e), "region": region})
@@ -973,6 +1028,9 @@ def s3_list_buckets() -> str:
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="s3_list_buckets")
+        return _aws_config_required_response("s3_list_buckets")
     except ClientError as e:
         logger.error("failed_to_list_s3_buckets", error=str(e))
         return json.dumps({"error": str(e)})
@@ -1055,6 +1113,9 @@ def s3_get_bucket_metrics(bucket_name: str) -> str:
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="s3_get_bucket_metrics")
+        return _aws_config_required_response("s3_get_bucket_metrics")
     except ClientError as e:
         logger.error("failed_to_get_bucket_metrics", error=str(e), bucket=bucket_name)
         return json.dumps({"error": str(e), "bucket_name": bucket_name})
@@ -1127,6 +1188,9 @@ def s3_storage_class_analysis(bucket_name: str, max_keys: int = 1000) -> str:
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="s3_storage_class_analysis")
+        return _aws_config_required_response("s3_storage_class_analysis")
     except ClientError as e:
         logger.error(
             "failed_to_analyze_storage_class", error=str(e), bucket=bucket_name
@@ -1177,6 +1241,9 @@ def lambda_list_functions(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="lambda_list_functions")
+        return _aws_config_required_response("lambda_list_functions")
     except ClientError as e:
         logger.error("failed_to_list_lambda_functions", error=str(e), region=region)
         return json.dumps({"error": str(e), "region": region})
@@ -1269,6 +1336,9 @@ def lambda_cost_analysis(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="lambda_cost_analysis")
+        return _aws_config_required_response("lambda_cost_analysis")
     except ClientError as e:
         logger.error(
             "failed_to_analyze_lambda_cost", error=str(e), function=function_name
@@ -1319,6 +1389,9 @@ def elasticache_describe_clusters(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="elasticache_describe_clusters")
+        return _aws_config_required_response("elasticache_describe_clusters")
     except ClientError as e:
         logger.error("failed_to_describe_elasticache", error=str(e), region=region)
         return json.dumps({"error": str(e), "region": region})
@@ -1365,6 +1438,9 @@ def aws_backup_describe_vaults(region: str = "us-east-1") -> str:
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="aws_backup_describe_vaults")
+        return _aws_config_required_response("aws_backup_describe_vaults")
     except ClientError as e:
         logger.error("failed_to_describe_backup_vaults", error=str(e), region=region)
         return json.dumps({"error": str(e), "region": region})
@@ -1422,6 +1498,9 @@ def aws_backup_get_recovery_point(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="aws_backup_get_recovery_point")
+        return _aws_config_required_response("aws_backup_get_recovery_point")
     except ClientError as e:
         logger.error(
             "failed_to_get_recovery_point",
@@ -1474,6 +1553,9 @@ def aws_backup_start_restore(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="aws_backup_start_restore")
+        return _aws_config_required_response("aws_backup_start_restore")
     except ClientError as e:
         logger.error(
             "failed_to_start_restore", error=str(e), recovery_point=recovery_point_arn
@@ -1534,6 +1616,9 @@ def rds_restore_db_from_snapshot(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="rds_restore_db_from_snapshot")
+        return _aws_config_required_response("rds_restore_db_from_snapshot")
     except ClientError as e:
         logger.error("failed_to_restore_rds", error=str(e), snapshot=db_snapshot_id)
         return json.dumps({"error": str(e), "db_snapshot_id": db_snapshot_id})
@@ -1588,6 +1673,9 @@ def s3_list_bucket_versions(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="s3_list_bucket_versions")
+        return _aws_config_required_response("s3_list_bucket_versions")
     except ClientError as e:
         logger.error("failed_to_list_bucket_versions", error=str(e), bucket=bucket_name)
         return json.dumps({"error": str(e), "bucket_name": bucket_name})
@@ -1666,6 +1754,9 @@ def s3_restore_object(
                 }
             )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="s3_restore_object")
+        return _aws_config_required_response("s3_restore_object")
     except ClientError as e:
         logger.error(
             "failed_to_restore_s3_object",
@@ -1723,6 +1814,9 @@ def s3_get_bucket_replication(bucket_name: str) -> str:
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="s3_get_bucket_replication")
+        return _aws_config_required_response("s3_get_bucket_replication")
     except ClientError as e:
         if e.response["Error"]["Code"] == "ReplicationConfigurationNotFoundError":
             return json.dumps(
@@ -1785,6 +1879,9 @@ def route53_get_health_check(health_check_id: str) -> str:
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="route53_get_health_check")
+        return _aws_config_required_response("route53_get_health_check")
     except ClientError as e:
         logger.error(
             "failed_to_get_health_check", error=str(e), health_check_id=health_check_id
@@ -1861,6 +1958,9 @@ def route53_update_dns_records(
             }
         )
 
+    except IntegrationNotConfiguredError:
+        logger.warning("aws_not_configured", tool="route53_update_dns_records")
+        return _aws_config_required_response("route53_update_dns_records")
     except ClientError as e:
         logger.error(
             "failed_to_update_dns_record",
