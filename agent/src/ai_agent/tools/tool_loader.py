@@ -8,6 +8,7 @@ Loads tools conditionally based on:
 """
 
 import importlib
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -531,8 +532,13 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
         except Exception as e:
             logger.warning("grafana_tools_load_failed", error=str(e))
 
-    # Knowledge Base tools (RAPTOR) - if httpx available
-    if is_integration_available("httpx"):
+    # Knowledge Base tools (RAPTOR) - only if RAPTOR_ENABLED=true
+    raptor_enabled = os.getenv("RAPTOR_ENABLED", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    if raptor_enabled and is_integration_available("httpx"):
         try:
             from .knowledge_base_tools import (
                 ask_knowledge_base,
@@ -552,6 +558,8 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
             logger.debug("knowledge_base_tools_loaded", count=4)
         except Exception as e:
             logger.warning("knowledge_base_tools_load_failed", error=str(e))
+    elif not raptor_enabled:
+        logger.debug("knowledge_base_tools_skipped", reason="RAPTOR_ENABLED not set")
 
     # Remediation tools - for proposing fixes with approval
     if is_integration_available("httpx"):
