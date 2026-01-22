@@ -22,47 +22,177 @@ def _load_github_tools():
     Load GitHub-specific tools.
 
     These tools focus on repository operations - commits, PRs, issues, code search.
-    Code analysis tools (read_file, write_file, etc.) stay in coding_agent.
+    Includes both remote GitHub API tools and local git CLI tools.
     """
     tools = [think, llm_call, web_search]
 
-    # GitHub tools
+    # Remote GitHub API tools (for accessing any GitHub repository)
     try:
         from ..tools.github_tools import (
-            list_issues,
-            list_pull_requests,
+            # Repository info
+            get_repo_info,
+            list_files,
             read_github_file,
             search_github_code,
+            github_list_contributors,
+            # Commits
+            github_list_commits,
+            github_get_commit,
+            github_compare_commits,
+            github_search_commits_by_timerange,
+            # Branches and tags
+            list_branches,
+            create_branch,
+            github_list_tags,
+            github_list_releases,
+            # Pull requests
+            list_pull_requests,
+            github_get_pr,
+            create_pull_request,
+            merge_pull_request,
+            github_get_pr_files,
+            github_list_pr_commits,
+            github_list_pr_reviews,
+            github_create_pr_review,
+            github_add_pr_comment,
+            github_search_prs,
+            # Issues
+            list_issues,
+            github_get_issue,
+            github_create_issue,
+            close_issue,
+            github_list_issue_comments,
+            github_add_issue_comment,
+            github_search_issues,
+            # GitHub Actions
+            trigger_workflow,
+            list_workflow_runs,
         )
 
-        tools.extend(
-            [
-                read_github_file,
-                search_github_code,
-                list_pull_requests,
-                list_issues,
-            ]
-        )
-        logger.debug("github_tools_loaded")
+        tools.extend([
+            # Repository info
+            get_repo_info,
+            list_files,
+            read_github_file,
+            search_github_code,
+            github_list_contributors,
+            # Commits
+            github_list_commits,
+            github_get_commit,
+            github_compare_commits,
+            github_search_commits_by_timerange,
+            # Branches and tags
+            list_branches,
+            create_branch,
+            github_list_tags,
+            github_list_releases,
+            # Pull requests
+            list_pull_requests,
+            github_get_pr,
+            create_pull_request,
+            merge_pull_request,
+            github_get_pr_files,
+            github_list_pr_commits,
+            github_list_pr_reviews,
+            github_create_pr_review,
+            github_add_pr_comment,
+            github_search_prs,
+            # Issues
+            list_issues,
+            github_get_issue,
+            github_create_issue,
+            close_issue,
+            github_list_issue_comments,
+            github_add_issue_comment,
+            github_search_issues,
+            # GitHub Actions
+            trigger_workflow,
+            list_workflow_runs,
+        ])
+        logger.debug("github_remote_tools_loaded", count=len(tools) - 3)
     except Exception as e:
         logger.warning("github_tools_load_failed", error=str(e))
 
-    # Git tools for local repository operations
+    # Local git CLI tools (for working with locally cloned repositories)
     try:
         from ..tools.git_tools import (
-            git_diff,
+            # Core operations
+            git_status,
             git_log,
             git_show,
+            git_diff,
+            git_blame,
+            # Branch operations
+            git_branch_list,
+            git_branch_create,
+            git_branch_delete,
+            git_checkout,
+            git_merge,
+            # Remote sync
+            git_fetch,
+            git_pull,
+            git_push,
+            git_remote_list,
+            # Commit operations
+            git_add,
+            git_commit,
+            git_reset,
+            git_revert,
+            git_cherry_pick,
+            # Stash operations
+            git_stash_list,
+            git_stash_save,
+            git_stash_pop,
+            git_stash_apply,
+            # Tags
+            git_tag_list,
+            git_tag_create,
+            # Utilities
+            git_rev_parse,
+            git_ls_files,
+            git_shortlog,
+            git_reflog,
         )
 
-        tools.extend(
-            [
-                git_log,
-                git_show,
-                git_diff,
-            ]
-        )
-        logger.debug("git_tools_added_to_github_agent")
+        tools.extend([
+            # Core operations
+            git_status,
+            git_log,
+            git_show,
+            git_diff,
+            git_blame,
+            # Branch operations
+            git_branch_list,
+            git_branch_create,
+            git_branch_delete,
+            git_checkout,
+            git_merge,
+            # Remote sync
+            git_fetch,
+            git_pull,
+            git_push,
+            git_remote_list,
+            # Commit operations
+            git_add,
+            git_commit,
+            git_reset,
+            git_revert,
+            git_cherry_pick,
+            # Stash operations
+            git_stash_list,
+            git_stash_save,
+            git_stash_pop,
+            git_stash_apply,
+            # Tags
+            git_tag_list,
+            git_tag_create,
+            # Utilities
+            git_rev_parse,
+            git_ls_files,
+            git_shortlog,
+            git_reflog,
+        ])
+        logger.debug("git_local_tools_loaded")
     except Exception as e:
         logger.warning("git_tools_load_failed", error=str(e))
 
@@ -130,6 +260,65 @@ SYSTEM_PROMPT = """You are a GitHub expert specializing in repository analysis, 
 
 You are a specialized GitHub investigator. Your job is to gather context from repositories - recent changes, pull requests, issues, and code that might be relevant to an incident or investigation.
 
+## CRITICAL: CHOOSING THE RIGHT TOOLS
+
+You have TWO types of tools. Choosing the correct type is essential:
+
+### REMOTE GitHub API Tools (use for ANY repository by name)
+Use these when given a repository in "owner/repo" format (e.g., "facebook/react", "kubernetes/kubernetes").
+These tools access GitHub's API and work with ANY repository you have access to.
+
+| Tool | Purpose |
+|------|---------|
+| `github_list_commits` | List recent commits (SIMPLEST way to get commits) |
+| `github_get_commit` | Get details of a specific commit |
+| `github_compare_commits` | Compare two branches/commits/tags |
+| `github_search_commits_by_timerange` | Search commits in a time window |
+| `list_pull_requests` | List PRs in a repository |
+| `github_get_pr` | Get PR details |
+| `github_get_pr_files` | See files changed in a PR |
+| `github_list_pr_commits` | List commits in a PR |
+| `list_issues` | List issues |
+| `github_get_issue` | Get issue details |
+| `read_github_file` | Read a file from a remote repo |
+| `search_github_code` | Search code across repos |
+| `list_branches` | List branches |
+| `github_list_tags` | List tags |
+| `github_list_releases` | List releases |
+| `get_repo_info` | Get repository metadata |
+| `github_list_contributors` | List contributors |
+
+### LOCAL Git CLI Tools (use ONLY for locally cloned repositories)
+Use these ONLY when working with a repository that exists in the current working directory.
+These run `git` commands locally and will FAIL if the repo isn't cloned.
+
+| Tool | Purpose |
+|------|---------|
+| `git_log` | View local commit history |
+| `git_show` | View commit details locally |
+| `git_diff` | Compare local changes |
+| `git_status` | Check local repo status |
+| `git_blame` | See line-by-line history |
+| `git_branch_list` | List local branches |
+| `git_stash_list` | List stashes |
+| `git_reflog` | View HEAD history |
+
+### HOW TO DECIDE
+
+```
+User asks about "owner/repo" format (e.g., "incidentfox/incidentfox")
+  → Use REMOTE tools (github_list_commits, list_pull_requests, etc.)
+
+User asks about current directory or local repo
+  → Use LOCAL tools (git_log, git_status, etc.)
+
+User asks "list recent commits in X repo"
+  → Use github_list_commits(repo="owner/repo") - NOT git_log!
+
+User asks "what changed locally"
+  → Use git_status, git_diff
+```
+
 ## BEHAVIORAL PRINCIPLES
 
 ### Intellectual Honesty
@@ -147,42 +336,30 @@ You are a specialized GitHub investigator. Your job is to gather context from re
 - **Link to PRs/issues** - Provide URLs or references
 - **Include timestamps** - When were changes made?
 
-## YOUR TOOLS
-
-**Repository Operations:**
-- `read_github_file` - Read file contents from a repository
-- `search_github_code` - Search for code patterns across repos
-- `list_pull_requests` - List recent or relevant PRs
-- `list_issues` - List issues matching criteria
-
-**Local Git Operations:**
-- `git_log` - View commit history
-- `git_show` - View specific commit details
-- `git_diff` - See changes between commits/branches
-
 ## INVESTIGATION METHODOLOGY
 
 ### For Incident Investigation
 1. Identify the affected service/repository
-2. Check recent commits (last 24-48 hours)
-3. Look for PRs merged around the incident time
-4. Search for related issues or known problems
-5. Read relevant code to understand what might have changed
+2. Use `github_list_commits` to check recent commits
+3. Use `list_pull_requests` to find PRs merged around the incident time
+4. Use `github_search_issues` for related issues or known problems
+5. Use `read_github_file` to examine relevant code
 
 ### For Code Context
-1. Find the relevant files/modules
-2. Read the current state of the code
-3. Check recent changes to those files
-4. Look for related PRs or discussions
+1. Use `list_files` to find relevant files/modules
+2. Use `read_github_file` to read the current state
+3. Use `github_list_commits` with path filter to check recent changes
+4. Use `list_pull_requests` for related PRs
 
 ## COMMON PATTERNS
 
-| Scenario | First Check | Follow-up |
-|----------|-------------|-----------|
-| Sudden errors | Recent commits | Related PRs |
-| Performance degradation | Config changes | Dependency updates |
-| Feature broken | PRs to that feature | Related issues |
-| Intermittent issues | Recent merges | Similar past issues |
+| Scenario | First Tool | Follow-up |
+|----------|------------|-----------|
+| "List commits in owner/repo" | `github_list_commits` | `github_get_commit` for details |
+| "Recent PRs in owner/repo" | `list_pull_requests` | `github_get_pr_files` |
+| "What changed locally" | `git_status` | `git_diff` |
+| "Compare branches" | `github_compare_commits` | - |
+| "Find code pattern" | `search_github_code` | `read_github_file` |
 
 ## OUTPUT FORMAT
 

@@ -738,6 +738,712 @@ def github_get_pr(repo: str, pr_number: int) -> dict[str, Any] | str:
 
 
 @function_tool
+def github_list_commits(
+    repo: str,
+    branch: str | None = None,
+    author: str | None = None,
+    path: str | None = None,
+    max_results: int = 10,
+) -> list[dict[str, Any]] | str:
+    """
+    List recent commits from a remote GitHub repository.
+
+    This is the simplest way to get recent commits - no time range required.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        branch: Branch name (optional, defaults to default branch)
+        author: Filter by author username (optional)
+        path: Filter by file path (optional)
+        max_results: Maximum commits to return (default 10)
+
+    Returns:
+        List of commits or config_required response
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+
+        kwargs = {}
+        if branch:
+            kwargs["sha"] = branch
+        if author:
+            kwargs["author"] = author
+        if path:
+            kwargs["path"] = path
+
+        commits = repository.get_commits(**kwargs)
+
+        commit_list = []
+        for i, commit in enumerate(commits):
+            if i >= max_results:
+                break
+            commit_list.append(
+                {
+                    "sha": commit.sha,
+                    "short_sha": commit.sha[:7],
+                    "message": commit.commit.message,
+                    "author": commit.commit.author.name if commit.commit.author else None,
+                    "author_login": commit.author.login if commit.author else None,
+                    "date": str(commit.commit.author.date) if commit.commit.author else None,
+                    "url": commit.html_url,
+                }
+            )
+
+        logger.info("github_commits_listed", repo=repo, count=len(commit_list))
+        return commit_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_list_commits")
+        return _github_config_required_response("github_list_commits")
+
+    except Exception as e:
+        logger.error("github_list_commits_failed", error=str(e), repo=repo)
+        return json.dumps({"error": str(e), "repo": repo})
+
+
+@function_tool
+def github_get_commit(repo: str, sha: str) -> dict[str, Any] | str:
+    """
+    Get detailed information about a specific commit.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        sha: Commit SHA (full or short)
+
+    Returns:
+        Commit details including files changed, stats, etc.
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        commit = repository.get_commit(sha)
+
+        files_changed = []
+        for f in commit.files:
+            files_changed.append(
+                {
+                    "filename": f.filename,
+                    "status": f.status,
+                    "additions": f.additions,
+                    "deletions": f.deletions,
+                    "changes": f.changes,
+                    "patch": f.patch[:2000] if f.patch else None,
+                }
+            )
+
+        logger.info("github_commit_fetched", repo=repo, sha=sha[:7])
+        return {
+            "sha": commit.sha,
+            "message": commit.commit.message,
+            "author": commit.commit.author.name if commit.commit.author else None,
+            "author_email": commit.commit.author.email if commit.commit.author else None,
+            "author_login": commit.author.login if commit.author else None,
+            "date": str(commit.commit.author.date) if commit.commit.author else None,
+            "url": commit.html_url,
+            "stats": {
+                "additions": commit.stats.additions,
+                "deletions": commit.stats.deletions,
+                "total": commit.stats.total,
+            },
+            "files_changed": files_changed,
+            "parents": [p.sha for p in commit.parents],
+        }
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_get_commit")
+        return _github_config_required_response("github_get_commit")
+
+    except Exception as e:
+        logger.error("github_get_commit_failed", error=str(e), repo=repo, sha=sha)
+        return json.dumps({"error": str(e), "repo": repo, "sha": sha})
+
+
+@function_tool
+def github_compare_commits(
+    repo: str, base: str, head: str
+) -> dict[str, Any] | str:
+    """
+    Compare two commits, branches, or tags.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        base: Base commit/branch/tag
+        head: Head commit/branch/tag to compare
+
+    Returns:
+        Comparison including commits between, files changed, stats
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        comparison = repository.compare(base, head)
+
+        commits = []
+        for c in comparison.commits[:50]:  # Limit to 50 commits
+            commits.append(
+                {
+                    "sha": c.sha,
+                    "message": c.commit.message.split("\n")[0],  # First line only
+                    "author": c.commit.author.name if c.commit.author else None,
+                    "date": str(c.commit.author.date) if c.commit.author else None,
+                }
+            )
+
+        files = []
+        for f in comparison.files[:100]:  # Limit to 100 files
+            files.append(
+                {
+                    "filename": f.filename,
+                    "status": f.status,
+                    "additions": f.additions,
+                    "deletions": f.deletions,
+                }
+            )
+
+        logger.info("github_compare_completed", repo=repo, base=base, head=head)
+        return {
+            "status": comparison.status,
+            "ahead_by": comparison.ahead_by,
+            "behind_by": comparison.behind_by,
+            "total_commits": comparison.total_commits,
+            "commits": commits,
+            "files": files,
+            "url": comparison.html_url,
+        }
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_compare_commits")
+        return _github_config_required_response("github_compare_commits")
+
+    except Exception as e:
+        logger.error("github_compare_failed", error=str(e), repo=repo)
+        return json.dumps({"error": str(e), "repo": repo, "base": base, "head": head})
+
+
+@function_tool
+def github_list_tags(repo: str, max_results: int = 30) -> list[dict[str, Any]] | str:
+    """
+    List tags in a repository.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        max_results: Maximum tags to return
+
+    Returns:
+        List of tags with their commit info
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        tags = repository.get_tags()
+
+        tag_list = []
+        for i, tag in enumerate(tags):
+            if i >= max_results:
+                break
+            tag_list.append(
+                {
+                    "name": tag.name,
+                    "sha": tag.commit.sha,
+                    "url": f"https://github.com/{repo}/releases/tag/{tag.name}",
+                }
+            )
+
+        logger.info("github_tags_listed", repo=repo, count=len(tag_list))
+        return tag_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_list_tags")
+        return _github_config_required_response("github_list_tags")
+
+    except Exception as e:
+        logger.error("github_list_tags_failed", error=str(e), repo=repo)
+        return json.dumps({"error": str(e), "repo": repo})
+
+
+@function_tool
+def github_list_releases(
+    repo: str, include_prereleases: bool = True, max_results: int = 10
+) -> list[dict[str, Any]] | str:
+    """
+    List releases in a repository.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        include_prereleases: Include pre-release versions
+        max_results: Maximum releases to return
+
+    Returns:
+        List of releases with version info
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        releases = repository.get_releases()
+
+        release_list = []
+        for i, release in enumerate(releases):
+            if i >= max_results:
+                break
+            if not include_prereleases and release.prerelease:
+                continue
+            release_list.append(
+                {
+                    "id": release.id,
+                    "tag_name": release.tag_name,
+                    "name": release.title,
+                    "body": release.body[:500] if release.body else None,
+                    "draft": release.draft,
+                    "prerelease": release.prerelease,
+                    "created_at": str(release.created_at),
+                    "published_at": str(release.published_at) if release.published_at else None,
+                    "url": release.html_url,
+                    "author": release.author.login if release.author else None,
+                }
+            )
+
+        logger.info("github_releases_listed", repo=repo, count=len(release_list))
+        return release_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_list_releases")
+        return _github_config_required_response("github_list_releases")
+
+    except Exception as e:
+        logger.error("github_list_releases_failed", error=str(e), repo=repo)
+        return json.dumps({"error": str(e), "repo": repo})
+
+
+@function_tool
+def github_get_pr_files(
+    repo: str, pr_number: int, max_results: int = 100
+) -> list[dict[str, Any]] | str:
+    """
+    Get files changed in a pull request.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        pr_number: Pull request number
+        max_results: Maximum files to return
+
+    Returns:
+        List of files with change stats
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        pr = repository.get_pull(pr_number)
+        files = pr.get_files()
+
+        file_list = []
+        for i, f in enumerate(files):
+            if i >= max_results:
+                break
+            file_list.append(
+                {
+                    "filename": f.filename,
+                    "status": f.status,
+                    "additions": f.additions,
+                    "deletions": f.deletions,
+                    "changes": f.changes,
+                    "patch": f.patch[:1000] if f.patch else None,
+                }
+            )
+
+        logger.info("github_pr_files_fetched", repo=repo, pr_number=pr_number, count=len(file_list))
+        return file_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_get_pr_files")
+        return _github_config_required_response("github_get_pr_files")
+
+    except Exception as e:
+        logger.error("github_get_pr_files_failed", error=str(e), repo=repo, pr_number=pr_number)
+        return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
+
+
+@function_tool
+def github_list_pr_reviews(
+    repo: str, pr_number: int
+) -> list[dict[str, Any]] | str:
+    """
+    List reviews on a pull request.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        pr_number: Pull request number
+
+    Returns:
+        List of reviews with reviewer info and state
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        pr = repository.get_pull(pr_number)
+        reviews = pr.get_reviews()
+
+        review_list = []
+        for review in reviews:
+            review_list.append(
+                {
+                    "id": review.id,
+                    "user": review.user.login if review.user else None,
+                    "state": review.state,
+                    "body": review.body,
+                    "submitted_at": str(review.submitted_at) if review.submitted_at else None,
+                    "url": review.html_url,
+                }
+            )
+
+        logger.info("github_pr_reviews_listed", repo=repo, pr_number=pr_number, count=len(review_list))
+        return review_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_list_pr_reviews")
+        return _github_config_required_response("github_list_pr_reviews")
+
+    except Exception as e:
+        logger.error("github_list_pr_reviews_failed", error=str(e), repo=repo, pr_number=pr_number)
+        return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
+
+
+@function_tool
+def github_get_issue(repo: str, issue_number: int) -> dict[str, Any] | str:
+    """
+    Get detailed information about a specific issue.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        issue_number: Issue number
+
+    Returns:
+        Issue details including body, labels, assignees, etc.
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        issue = repository.get_issue(issue_number)
+
+        logger.info("github_issue_fetched", repo=repo, issue_number=issue_number)
+        return {
+            "number": issue.number,
+            "title": issue.title,
+            "body": issue.body,
+            "state": issue.state,
+            "author": issue.user.login if issue.user else None,
+            "labels": [l.name for l in issue.labels],
+            "assignees": [a.login for a in issue.assignees],
+            "milestone": issue.milestone.title if issue.milestone else None,
+            "created_at": str(issue.created_at),
+            "updated_at": str(issue.updated_at),
+            "closed_at": str(issue.closed_at) if issue.closed_at else None,
+            "comments_count": issue.comments,
+            "url": issue.html_url,
+        }
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_get_issue")
+        return _github_config_required_response("github_get_issue")
+
+    except Exception as e:
+        logger.error("github_get_issue_failed", error=str(e), repo=repo, issue_number=issue_number)
+        return json.dumps({"error": str(e), "repo": repo, "issue_number": issue_number})
+
+
+@function_tool
+def github_list_issue_comments(
+    repo: str, issue_number: int, max_results: int = 50
+) -> list[dict[str, Any]] | str:
+    """
+    List comments on an issue.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        issue_number: Issue number
+        max_results: Maximum comments to return
+
+    Returns:
+        List of comments with author and body
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        issue = repository.get_issue(issue_number)
+        comments = issue.get_comments()
+
+        comment_list = []
+        for i, comment in enumerate(comments):
+            if i >= max_results:
+                break
+            comment_list.append(
+                {
+                    "id": comment.id,
+                    "author": comment.user.login if comment.user else None,
+                    "body": comment.body,
+                    "created_at": str(comment.created_at),
+                    "updated_at": str(comment.updated_at),
+                    "url": comment.html_url,
+                }
+            )
+
+        logger.info("github_issue_comments_listed", repo=repo, issue_number=issue_number, count=len(comment_list))
+        return comment_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_list_issue_comments")
+        return _github_config_required_response("github_list_issue_comments")
+
+    except Exception as e:
+        logger.error("github_list_issue_comments_failed", error=str(e), repo=repo, issue_number=issue_number)
+        return json.dumps({"error": str(e), "repo": repo, "issue_number": issue_number})
+
+
+@function_tool
+def github_add_issue_comment(
+    repo: str, issue_number: int, body: str
+) -> dict[str, Any] | str:
+    """
+    Add a comment to an issue.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        issue_number: Issue number
+        body: Comment body (Markdown supported)
+
+    Returns:
+        Created comment info
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        issue = repository.get_issue(issue_number)
+        comment = issue.create_comment(body)
+
+        logger.info("github_issue_comment_added", repo=repo, issue_number=issue_number)
+        return {
+            "id": comment.id,
+            "body": comment.body,
+            "url": comment.html_url,
+            "created_at": str(comment.created_at),
+        }
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_add_issue_comment")
+        return _github_config_required_response("github_add_issue_comment")
+
+    except Exception as e:
+        logger.error("github_add_issue_comment_failed", error=str(e), repo=repo, issue_number=issue_number)
+        return json.dumps({"error": str(e), "repo": repo, "issue_number": issue_number})
+
+
+@function_tool
+def github_add_pr_comment(
+    repo: str, pr_number: int, body: str
+) -> dict[str, Any] | str:
+    """
+    Add a comment to a pull request.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        pr_number: Pull request number
+        body: Comment body (Markdown supported)
+
+    Returns:
+        Created comment info
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        pr = repository.get_pull(pr_number)
+        # PR comments are issue comments in GitHub's API
+        comment = pr.create_issue_comment(body)
+
+        logger.info("github_pr_comment_added", repo=repo, pr_number=pr_number)
+        return {
+            "id": comment.id,
+            "body": comment.body,
+            "url": comment.html_url,
+            "created_at": str(comment.created_at),
+        }
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_add_pr_comment")
+        return _github_config_required_response("github_add_pr_comment")
+
+    except Exception as e:
+        logger.error("github_add_pr_comment_failed", error=str(e), repo=repo, pr_number=pr_number)
+        return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
+
+
+@function_tool
+def github_list_contributors(
+    repo: str, max_results: int = 30
+) -> list[dict[str, Any]] | str:
+    """
+    List contributors to a repository.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        max_results: Maximum contributors to return
+
+    Returns:
+        List of contributors with contribution counts
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        contributors = repository.get_contributors()
+
+        contributor_list = []
+        for i, c in enumerate(contributors):
+            if i >= max_results:
+                break
+            contributor_list.append(
+                {
+                    "login": c.login,
+                    "contributions": c.contributions,
+                    "url": c.html_url,
+                    "avatar_url": c.avatar_url,
+                }
+            )
+
+        logger.info("github_contributors_listed", repo=repo, count=len(contributor_list))
+        return contributor_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_list_contributors")
+        return _github_config_required_response("github_list_contributors")
+
+    except Exception as e:
+        logger.error("github_list_contributors_failed", error=str(e), repo=repo)
+        return json.dumps({"error": str(e), "repo": repo})
+
+
+@function_tool
+def github_search_issues(
+    query: str,
+    repo: str | None = None,
+    state: str | None = None,
+    max_results: int = 20,
+) -> list[dict[str, Any]] | str:
+    """
+    Search issues across GitHub repositories.
+
+    Args:
+        query: Search query (GitHub issue search syntax)
+        repo: Limit to specific repo (format: "owner/repo")
+        state: Filter by state (open, closed)
+        max_results: Maximum results to return
+
+    Returns:
+        List of matching issues
+    """
+    try:
+        g = _get_github_client()
+
+        search_query = query
+        if repo:
+            search_query += f" repo:{repo}"
+        if state:
+            search_query += f" state:{state}"
+        search_query += " is:issue"  # Exclude PRs
+
+        results = g.search_issues(search_query)
+
+        issue_list = []
+        for i, issue in enumerate(results):
+            if i >= max_results:
+                break
+            issue_list.append(
+                {
+                    "number": issue.number,
+                    "title": issue.title,
+                    "state": issue.state,
+                    "repository": issue.repository.full_name,
+                    "author": issue.user.login if issue.user else None,
+                    "labels": [l.name for l in issue.labels],
+                    "created_at": str(issue.created_at),
+                    "url": issue.html_url,
+                }
+            )
+
+        logger.info("github_issues_searched", query=query, count=len(issue_list))
+        return issue_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_search_issues")
+        return _github_config_required_response("github_search_issues")
+
+    except Exception as e:
+        logger.error("github_search_issues_failed", error=str(e), query=query)
+        return json.dumps({"error": str(e), "query": query})
+
+
+@function_tool
+def github_search_prs(
+    query: str,
+    repo: str | None = None,
+    state: str | None = None,
+    max_results: int = 20,
+) -> list[dict[str, Any]] | str:
+    """
+    Search pull requests across GitHub repositories.
+
+    Args:
+        query: Search query (GitHub search syntax)
+        repo: Limit to specific repo (format: "owner/repo")
+        state: Filter by state (open, closed, merged)
+        max_results: Maximum results to return
+
+    Returns:
+        List of matching pull requests
+    """
+    try:
+        g = _get_github_client()
+
+        search_query = query
+        if repo:
+            search_query += f" repo:{repo}"
+        if state:
+            if state == "merged":
+                search_query += " is:merged"
+            else:
+                search_query += f" state:{state}"
+        search_query += " is:pr"
+
+        results = g.search_issues(search_query)
+
+        pr_list = []
+        for i, pr in enumerate(results):
+            if i >= max_results:
+                break
+            pr_list.append(
+                {
+                    "number": pr.number,
+                    "title": pr.title,
+                    "state": pr.state,
+                    "repository": pr.repository.full_name,
+                    "author": pr.user.login if pr.user else None,
+                    "labels": [l.name for l in pr.labels],
+                    "created_at": str(pr.created_at),
+                    "url": pr.html_url,
+                }
+            )
+
+        logger.info("github_prs_searched", query=query, count=len(pr_list))
+        return pr_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="github_search_prs")
+        return _github_config_required_response("github_search_prs")
+
+    except Exception as e:
+        logger.error("github_search_prs_failed", error=str(e), query=query)
+        return json.dumps({"error": str(e), "query": query})
+
+
+@function_tool
 def github_search_commits_by_timerange(
     repo: str,
     since: str,
@@ -936,22 +1642,42 @@ def github_create_pr_review(
 
 # List of all GitHub tools for registration
 GITHUB_TOOLS = [
-    search_github_code,
-    read_github_file,
-    create_pull_request,
-    list_pull_requests,
-    merge_pull_request,
-    github_create_issue,
-    list_issues,
-    close_issue,
-    create_branch,
-    list_branches,
-    list_files,
+    # Repository info
     get_repo_info,
+    list_files,
+    read_github_file,
+    search_github_code,
+    github_list_contributors,
+    # Commits
+    github_list_commits,
+    github_get_commit,
+    github_compare_commits,
+    github_search_commits_by_timerange,
+    # Branches and tags
+    list_branches,
+    create_branch,
+    github_list_tags,
+    github_list_releases,
+    # Pull requests
+    list_pull_requests,
+    github_get_pr,
+    create_pull_request,
+    merge_pull_request,
+    github_get_pr_files,
+    github_list_pr_commits,
+    github_list_pr_reviews,
+    github_create_pr_review,
+    github_add_pr_comment,
+    github_search_prs,
+    # Issues
+    list_issues,
+    github_get_issue,
+    github_create_issue,
+    close_issue,
+    github_list_issue_comments,
+    github_add_issue_comment,
+    github_search_issues,
+    # GitHub Actions
     trigger_workflow,
     list_workflow_runs,
-    github_get_pr,
-    github_search_commits_by_timerange,
-    github_list_pr_commits,
-    github_create_pr_review,
 ]
