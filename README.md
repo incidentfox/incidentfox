@@ -82,17 +82,14 @@ Try IncidentFox locally with an interactive terminal:
 
 ```bash
 cd local
+make quickstart
+```
 
-# 1. Setup (creates .env, starts PostgreSQL, Config Service, Agent)
-make setup
-make start
+This will prompt for your OpenAI API key, start all services, and launch the CLI.
 
-# 2. Add your OpenAI API key to .env
-echo "OPENAI_API_KEY=sk-xxx" >> .env
-
-# 3. Generate team token and run CLI
-make seed
-make cli
+**Already configured?** Just run:
+```bash
+make run
 ```
 
 ```
