@@ -170,9 +170,12 @@ def make_config_required_response(
         missing_config = []
 
     if help_options is None:
-        help_options = INTEGRATION_HELP.get(integration, [
-            f"Configure via team settings at /team/settings/integrations/{integration}",
-        ])
+        help_options = INTEGRATION_HELP.get(
+            integration,
+            [
+                f"Configure via team settings at /team/settings/integrations/{integration}",
+            ],
+        )
 
     if docs_url is None:
         docs_url = INTEGRATION_DOCS.get(
