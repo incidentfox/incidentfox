@@ -2,12 +2,17 @@
 # These are either false positives, disputed, or cannot be fixed due to transitive dependency constraints.
 # Review periodically and remove when fixes become available.
 
-# jaraco.context path traversal - pinned by transitive deps, post-install upgrade applied
+# jaraco.context path traversal - pinned by transitive deps, post-install upgrade applied in Dockerfile
 # TODO: Remove once upstream packages update their constraints
 GHSA-58pv-8j8x-9vj2
+CVE-2026-23949
 
 # npm transitive dependencies - added as direct devDeps with fixed versions
 # TODO: Remove once npm properly resolves overrides
 CVE-2024-21538
 CVE-2025-64756
 CVE-2026-23745
+
+# tar CVE - web_ui uses tar 7.5.4 (fixed version) as devDependency, only present in build layers
+# Trivy incorrectly reports 6.2.1 from scanning intermediate Docker layers
+CVE-2026-23950
