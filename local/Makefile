@@ -2,7 +2,7 @@
 # IncidentFox Local Development
 # ═══════════════════════════════════════════════════════════════════════════════
 
-.PHONY: help setup start stop restart logs status cli clean seed ui build
+.PHONY: help setup start stop restart logs status cli clean seed ui build run quickstart
 
 DOCKER_COMPOSE = docker compose
 
@@ -29,13 +29,16 @@ help:
 	@echo "  make cli       Run interactive CLI REPL"
 	@echo ""
 	@echo "$(GREEN)Service Management:$(NC)"
-	@echo "  make start     Start: PostgreSQL + Config Service + Agent"
-	@echo "  make start-ui  Start: Above + Web UI (localhost:3000)"
-	@echo "  make stop      Stop all services"
-	@echo "  make restart   Restart all services"
-	@echo "  make logs      Follow all service logs"
-	@echo "  make logs-agent Follow agent logs only"
-	@echo "  make status    Show service status and health"
+	@echo "  make start        Start: PostgreSQL + Config Service + Agent"
+	@echo "  make start-ui     Start: Above + Web UI (localhost:3000)"
+	@echo "  make start-raptor Start: Above + RAPTOR KB (localhost:8000)"
+	@echo "  make start-all    Start: All services including UI and RAPTOR"
+	@echo "  make stop         Stop all services"
+	@echo "  make restart      Restart all services"
+	@echo "  make logs         Follow all service logs"
+	@echo "  make logs-agent   Follow agent logs only"
+	@echo "  make logs-raptor  Follow RAPTOR logs only"
+	@echo "  make status       Show service status and health"
 	@echo ""
 	@echo "$(GREEN)Utilities:$(NC)"
 	@echo "  make build     Build all Docker images"
@@ -44,7 +47,10 @@ help:
 	@echo "  make clean     Remove containers and volumes"
 	@echo ""
 	@echo "$(YELLOW)First time? Run:$(NC)"
-	@echo "  make setup && make start && make seed && make cli"
+	@echo "  make quickstart"
+	@echo ""
+	@echo "$(YELLOW)Already configured? Run:$(NC)"
+	@echo "  make run"
 	@echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -80,8 +86,8 @@ seed:
 	fi
 	@$(DOCKER_COMPOSE) exec -T config-service python scripts/issue_team_token.py \
 		--org-id local --team-node-id default --issued-by "local-cli" 2>/dev/null | tee /tmp/incidentfox_token.txt
-	@TOKEN=$$(grep "Token:" /tmp/incidentfox_token.txt 2>/dev/null | awk '{print $$2}'); \
-	if [ -n "$$TOKEN" ]; then \
+	@TOKEN=$$(tail -1 /tmp/incidentfox_token.txt 2>/dev/null | tr -d '[:space:]'); \
+	if [ -n "$$TOKEN" ] && echo "$$TOKEN" | grep -q '\.'; then \
 		if [ "$$(uname)" = "Darwin" ]; then \
 			sed -i '' "s/^TEAM_TOKEN=.*/TEAM_TOKEN=$$TOKEN/" .env; \
 		else \
@@ -95,6 +101,117 @@ seed:
 		echo "$(YELLOW)⚠️  Could not extract token. Trying alternative method...$(NC)"; \
 		$(DOCKER_COMPOSE) logs config-service --tail=20; \
 	fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Quick Start Commands
+# ─────────────────────────────────────────────────────────────────────────────
+quickstart:
+	@echo "$(BLUE)╔════════════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(BLUE)║           IncidentFox Quick Start                              ║$(NC)"
+	@echo "$(BLUE)╚════════════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@# Step 1: Setup .env if needed
+	@if [ ! -f .env ]; then \
+		echo "$(BLUE)🔧 Creating .env file...$(NC)"; \
+		cp .env.example .env; \
+		PEPPER=$$(python3 -c "import secrets; print(secrets.token_urlsafe(32))"); \
+		if [ "$$(uname)" = "Darwin" ]; then \
+			sed -i '' "s/^TOKEN_PEPPER=$$/TOKEN_PEPPER=$$PEPPER/" .env; \
+		else \
+			sed -i "s/^TOKEN_PEPPER=$$/TOKEN_PEPPER=$$PEPPER/" .env; \
+		fi; \
+		echo "$(GREEN)✅ Created .env$(NC)"; \
+	fi
+	@# Step 2: Check/prompt for OpenAI API key
+	@if [ -z "$$(grep '^OPENAI_API_KEY=' .env 2>/dev/null | cut -d= -f2 | grep -v '^sk-your' | grep -v '^$$')" ]; then \
+		echo ""; \
+		echo "$(YELLOW)📝 OpenAI API key required$(NC)"; \
+		echo "   Get one at: https://platform.openai.com/api-keys"; \
+		echo ""; \
+		printf "   Enter your OpenAI API key: "; \
+		read -r API_KEY; \
+		if [ -n "$$API_KEY" ]; then \
+			if [ "$$(uname)" = "Darwin" ]; then \
+				sed -i '' "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$$API_KEY|" .env; \
+			else \
+				sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$$API_KEY|" .env; \
+			fi; \
+			echo "$(GREEN)   ✅ API key saved$(NC)"; \
+		else \
+			echo "$(RED)   ❌ No API key provided$(NC)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "$(GREEN)✅ OpenAI API key already configured$(NC)"; \
+	fi
+	@echo ""
+	@# Step 3: Start services
+	@echo "$(BLUE)🚀 Starting services...$(NC)"
+	@$(DOCKER_COMPOSE) up -d postgres config-service agent
+	@echo "$(YELLOW)⏳ Waiting for services to be healthy...$(NC)"
+	@sleep 8
+	@# Step 4: Seed token if needed
+	@if [ -z "$$(grep '^TEAM_TOKEN=' .env 2>/dev/null | cut -d= -f2 | grep -v '^$$')" ]; then \
+		echo "$(BLUE)🌱 Generating team token...$(NC)"; \
+		$(DOCKER_COMPOSE) exec -T config-service python scripts/issue_team_token.py \
+			--org-id local --team-node-id default --issued-by "local-cli" 2>/dev/null | tee /tmp/incidentfox_token.txt; \
+		TOKEN=$$(tail -1 /tmp/incidentfox_token.txt 2>/dev/null | tr -d '[:space:]'); \
+		if [ -n "$$TOKEN" ] && echo "$$TOKEN" | grep -q '\.'; then \
+			if [ "$$(uname)" = "Darwin" ]; then \
+				sed -i '' "s/^TEAM_TOKEN=.*/TEAM_TOKEN=$$TOKEN/" .env; \
+			else \
+				sed -i "s/^TEAM_TOKEN=.*/TEAM_TOKEN=$$TOKEN/" .env; \
+			fi; \
+			echo "$(GREEN)✅ Team token generated$(NC)"; \
+		fi; \
+	else \
+		echo "$(GREEN)✅ Team token already configured$(NC)"; \
+	fi
+	@echo ""
+	@echo "$(GREEN)✅ Setup complete! Starting CLI...$(NC)"
+	@echo ""
+	@# Step 5: Launch CLI
+	@set -a && . ./.env && set +a && python3 -m incidentfox_cli
+
+run:
+	@echo "$(BLUE)🚀 Starting IncidentFox...$(NC)"
+	@# Check prerequisites
+	@if [ ! -f .env ]; then \
+		echo "$(RED)❌ .env not found. Run 'make quickstart' for first-time setup.$(NC)"; \
+		exit 1; \
+	fi
+	@if [ -z "$$(grep '^OPENAI_API_KEY=' .env 2>/dev/null | cut -d= -f2 | grep -v '^sk-your' | grep -v '^$$')" ]; then \
+		echo "$(RED)❌ OPENAI_API_KEY not set in .env$(NC)"; \
+		echo "$(YELLOW)   Run 'make quickstart' or edit .env manually$(NC)"; \
+		exit 1; \
+	fi
+	@# Start services if not running
+	@if ! curl -s http://localhost:8081/health >/dev/null 2>&1; then \
+		echo "$(BLUE)🚀 Starting services...$(NC)"; \
+		$(DOCKER_COMPOSE) up -d postgres config-service agent; \
+		echo "$(YELLOW)⏳ Waiting for services...$(NC)"; \
+		sleep 8; \
+	else \
+		echo "$(GREEN)✅ Services already running$(NC)"; \
+	fi
+	@# Seed token if needed
+	@if [ -z "$$(grep '^TEAM_TOKEN=' .env 2>/dev/null | cut -d= -f2 | grep -v '^$$')" ]; then \
+		echo "$(BLUE)🌱 Generating team token...$(NC)"; \
+		$(DOCKER_COMPOSE) exec -T config-service python scripts/issue_team_token.py \
+			--org-id local --team-node-id default --issued-by "local-cli" 2>/dev/null | tee /tmp/incidentfox_token.txt; \
+		TOKEN=$$(tail -1 /tmp/incidentfox_token.txt 2>/dev/null | tr -d '[:space:]'); \
+		if [ -n "$$TOKEN" ] && echo "$$TOKEN" | grep -q '\.'; then \
+			if [ "$$(uname)" = "Darwin" ]; then \
+				sed -i '' "s/^TEAM_TOKEN=.*/TEAM_TOKEN=$$TOKEN/" .env; \
+			else \
+				sed -i "s/^TEAM_TOKEN=.*/TEAM_TOKEN=$$TOKEN/" .env; \
+			fi; \
+			echo "$(GREEN)✅ Team token generated$(NC)"; \
+		fi; \
+	fi
+	@# Launch CLI
+	@echo "$(BLUE)🦊 Starting CLI...$(NC)"
+	@set -a && . ./.env && set +a && python3 -m incidentfox_cli
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Services
@@ -133,9 +250,23 @@ start-ui: start
 	$(DOCKER_COMPOSE) --profile ui up -d web-ui
 	@echo "$(GREEN)✅ Web UI: http://localhost:3000$(NC)"
 
+start-raptor: start
+	@echo ""
+	@echo "$(BLUE)🔍 Starting RAPTOR Knowledge Base...$(NC)"
+	$(DOCKER_COMPOSE) --profile raptor up -d raptor
+	@echo "$(GREEN)✅ RAPTOR: http://localhost:8000$(NC)"
+	@echo "$(DIM)Trees persisted in Docker volume: incidentfox-raptor-trees$(NC)"
+
+start-all: start
+	@echo ""
+	@echo "$(BLUE)🚀 Starting all optional services...$(NC)"
+	$(DOCKER_COMPOSE) --profile ui --profile raptor up -d web-ui raptor
+	@echo "$(GREEN)✅ Web UI: http://localhost:3000$(NC)"
+	@echo "$(GREEN)✅ RAPTOR: http://localhost:8000$(NC)"
+
 stop:
 	@echo "$(BLUE)🛑 Stopping services...$(NC)"
-	$(DOCKER_COMPOSE) --profile ui down
+	$(DOCKER_COMPOSE) --profile ui --profile raptor down
 
 restart: stop start
 
@@ -147,6 +278,9 @@ logs-agent:
 
 logs-config:
 	$(DOCKER_COMPOSE) logs -f config-service
+
+logs-raptor:
+	$(DOCKER_COMPOSE) --profile raptor logs -f raptor
 
 status:
 	@echo "$(BLUE)Service Status:$(NC)"
