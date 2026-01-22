@@ -1446,7 +1446,9 @@ def create_app() -> Sanic:
                     # Parse message for multimodal content (embedded images)
                     # Converts <image src="data:..."/> to OpenAI's format
                     parsed_message = parse_multimodal_message(message)
-                    message_preview = get_message_preview(parsed_message, max_length=100)
+                    message_preview = get_message_preview(
+                        parsed_message, max_length=100
+                    )
 
                     logger.info(
                         "starting_streamed_agent_execution",
