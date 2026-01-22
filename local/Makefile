@@ -2,7 +2,7 @@
 # IncidentFox Local Development
 # ═══════════════════════════════════════════════════════════════════════════════
 
-.PHONY: help setup start stop restart logs status cli clean clean-all seed ui build run quickstart venv
+.PHONY: help setup start stop restart logs status cli clean clean-all seed ui build run quickstart venv dev-restart dev-build
 
 DOCKER_COMPOSE = docker compose
 VENV = .venv
@@ -44,16 +44,20 @@ help:
 	@echo "  make status       Show service status and health"
 	@echo ""
 	@echo "$(GREEN)Utilities:$(NC)"
-	@echo "  make build     Build all Docker images"
-	@echo "  make shell     Open bash in agent container"
-	@echo "  make db-shell  Open psql in postgres"
-	@echo "  make clean     Remove containers and volumes"
+	@echo "  make build        Build all Docker images"
+	@echo "  make dev-build    Build agent only (no start)"
+	@echo "  make dev-restart  Restart agent only (rebuilds if changed)"
+	@echo "  make shell        Open bash in agent container"
+	@echo "  make db-shell     Open psql in postgres"
+	@echo "  make clean        Remove containers and volumes"
 	@echo ""
 	@echo "$(YELLOW)First time? Run:$(NC)"
 	@echo "  make quickstart"
 	@echo ""
 	@echo "$(YELLOW)Already configured? Run:$(NC)"
 	@echo "  make run"
+	@echo ""
+	@echo "$(DIM)Note: start/run auto-rebuild agent if code changes$(NC)"
 	@echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -198,15 +202,11 @@ run: $(VENV)/bin/python
 		echo "$(YELLOW)   Run 'make quickstart' or edit .env manually$(NC)"; \
 		exit 1; \
 	fi
-	@# Start services if not running
-	@if ! curl -s http://localhost:8081/health >/dev/null 2>&1; then \
-		echo "$(BLUE)🚀 Starting services...$(NC)"; \
-		$(DOCKER_COMPOSE) up -d postgres config-service agent; \
-		echo "$(YELLOW)⏳ Waiting for services...$(NC)"; \
-		sleep 8; \
-	else \
-		echo "$(GREEN)✅ Services already running$(NC)"; \
-	fi
+	@# Start services (rebuilds agent if code changed)
+	@echo "$(BLUE)🔨 Starting services (rebuilds if code changed)...$(NC)"
+	@$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up -d --build postgres config-service agent
+	@echo "$(YELLOW)⏳ Waiting for services...$(NC)"
+	@sleep 8
 	@# Seed token if needed
 	@if [ -z "$$(grep '^TEAM_TOKEN=' .env 2>/dev/null | cut -d= -f2 | grep -v '^$$')" ]; then \
 		echo "$(BLUE)🌱 Generating team token...$(NC)"; \
@@ -234,13 +234,13 @@ build:
 	$(DOCKER_COMPOSE) build
 
 start:
-	@echo "$(BLUE)🚀 Starting IncidentFox services...$(NC)"
+	@echo "$(BLUE)🚀 Starting IncidentFox services (rebuilds if code changed)...$(NC)"
 	@if [ -z "$$(grep '^OPENAI_API_KEY=' .env 2>/dev/null | cut -d= -f2 | grep -v '^sk-your')" ]; then \
 		echo "$(RED)❌ OPENAI_API_KEY not set in .env$(NC)"; \
 		echo "$(YELLOW)   Edit .env and add your OpenAI API key$(NC)"; \
 		exit 1; \
 	fi
-	$(DOCKER_COMPOSE) up -d postgres config-service agent
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up -d --build postgres config-service agent
 	@echo ""
 	@echo "$(YELLOW)⏳ Waiting for services to be healthy...$(NC)"
 	@sleep 8
@@ -313,10 +313,12 @@ cli: $(VENV)/bin/python
 		echo "$(YELLOW)   Run 'make seed' first$(NC)"; \
 		exit 1; \
 	fi
+	@# Rebuild agent if code changed (fast if no changes due to caching)
+	@echo "$(BLUE)🔨 Checking for code changes...$(NC)"
+	@$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up -d --build agent
 	@if ! curl -s http://localhost:8081/health >/dev/null 2>&1; then \
-		echo "$(RED)❌ Agent service not running$(NC)"; \
-		echo "$(YELLOW)   Run 'make start' first$(NC)"; \
-		exit 1; \
+		echo "$(YELLOW)⏳ Waiting for agent...$(NC)"; \
+		sleep 5; \
 	fi
 	@echo "$(BLUE)🦊 Starting IncidentFox CLI...$(NC)"
 	@set -a && . ./.env && set +a && $(PYTHON) -m incidentfox_cli
@@ -366,18 +368,8 @@ dev-build:
 	@echo "$(BLUE)🔨 Building agent from local source...$(NC)"
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml build agent
 
-dev-start: dev-build
-	@echo "$(BLUE)🚀 Starting with local agent build...$(NC)"
-	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up -d
-	@echo ""
-	@echo "$(YELLOW)⏳ Waiting for services to be healthy...$(NC)"
-	@sleep 10
-	@$(DOCKER_COMPOSE) ps
-	@echo ""
-	@echo "$(GREEN)✅ Dev environment ready with local agent build$(NC)"
-
 dev-restart:
-	@echo "$(BLUE)🔄 Restarting agent with local build...$(NC)"
+	@echo "$(BLUE)🔄 Restarting agent (rebuilds if code changed)...$(NC)"
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up -d --build agent
 	@sleep 5
 	@echo "$(GREEN)✅ Agent restarted$(NC)"
