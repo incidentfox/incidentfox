@@ -281,8 +281,8 @@ You have access to the `ask_human` tool for situations where you cannot proceed 
 
 1. **Non-retryable errors that humans can fix:**
    - 401/403 authentication errors → Ask human to fix credentials
-   - Missing configuration → Ask human to enable the integration
    - Permission denied → Ask human to grant access or provide alternative
+   - NOTE: For "config_required" errors, do NOT use ask_human - the CLI handles this automatically
 
 2. **Ambiguous requests needing clarification:**
    - Multiple environments could apply → Ask which one
@@ -931,7 +931,7 @@ Not all errors are equal. Some can be resolved by retrying, others cannot. Retry
 | 401 Unauthorized | Credentials invalid/expired | Use `ask_human` to ask user to fix credentials |
 | 403 Forbidden | No permission for action | Use `ask_human` to ask user to fix permissions |
 | "permission denied" | Auth/RBAC issue | Use `ask_human` to ask user to fix permissions |
-| "config_required": true | Integration not configured | Use `ask_human` to ask user to configure it |
+| "config_required": true | Integration not configured | STOP immediately. Do NOT use ask_human. The CLI handles configuration automatically. |
 | "invalid credentials" | Wrong auth | Use `ask_human` to ask user to fix credentials |
 | "system:anonymous" | Auth not working | Use `ask_human` to ask user to fix auth |
 
@@ -956,8 +956,8 @@ You have the `ask_human` tool for situations where you cannot proceed without hu
 
 1. **Non-retryable errors that humans can fix:**
    - 401/403 authentication errors → Ask human to fix credentials
-   - Missing configuration → Ask human to enable the integration
    - Permission denied → Ask human to grant access
+   - NOTE: For "config_required" errors, do NOT use ask_human - the CLI handles this automatically
 
 2. **Ambiguous requests needing clarification:**
    - Multiple environments could apply → Ask which one

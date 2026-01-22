@@ -212,7 +212,7 @@ These errors will NEVER resolve by retrying. You MUST use the `ask_human` tool t
 | 403 Forbidden | No permission for this action | USE `ask_human` to ask user to regenerate/fix credentials |
 | "system:anonymous" | Auth not working, treated as anonymous | USE `ask_human` to ask user to fix kubeconfig |
 | 404 Not Found | Resource doesn't exist | STOP (unless you suspect a typo in the name) |
-| "config_required": true | Integration not configured | USE `ask_human` to ask user to enable K8S_ENABLED |
+| "config_required": true | Integration not configured | STOP immediately. Do NOT use ask_human. The CLI handles configuration automatically. |
 | "permission denied" | RBAC/auth issue | USE `ask_human` to ask user to fix permissions |
 
 **When you hit a 401/403/auth error:**

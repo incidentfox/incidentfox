@@ -1962,25 +1962,7 @@ async def run_with_streaming(
                 console.print(f"[red]Error: {error}[/red]")
                 return StreamResult()
 
-        # Handle human input request if detected
-        if pending_human_input and session:
-            console.print()
-            human_response = await handle_human_input_request(
-                pending_human_input, session
-            )
-            if human_response:
-                # Resume the conversation with the human's response
-                console.print("\n[dim]Resuming with your input...[/dim]\n")
-                return await run_with_streaming(
-                    client,
-                    agent_name,
-                    human_response,
-                    session,
-                    previous_response_id=current_conversation_id,
-                    local_context=local_context,
-                )
-
-        # Display config issues if any were encountered
+        # Handle config issues FIRST (before human input) - CLI handles configuration automatically
         if config_issues:
             console.print()
             should_retry = await display_config_issues(config_issues, session, client)
@@ -1998,6 +1980,24 @@ async def run_with_streaming(
                     client,
                     agent_name,
                     message,
+                    session,
+                    previous_response_id=current_conversation_id,
+                    local_context=local_context,
+                )
+
+        # Handle human input request (only if no config issues took priority)
+        if pending_human_input and session:
+            console.print()
+            human_response = await handle_human_input_request(
+                pending_human_input, session
+            )
+            if human_response:
+                # Resume the conversation with the human's response
+                console.print("\n[dim]Resuming with your input...[/dim]\n")
+                return await run_with_streaming(
+                    client,
+                    agent_name,
+                    human_response,
                     session,
                     previous_response_id=current_conversation_id,
                     local_context=local_context,
