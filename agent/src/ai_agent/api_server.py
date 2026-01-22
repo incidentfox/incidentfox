@@ -720,6 +720,33 @@ def create_app() -> Sanic:
                     status=400,
                 )
 
+            # Extract and format local_context from CLI
+            local_context = context_data.get("local_context")
+            if local_context:
+                from .prompts import format_local_context
+
+                context_preamble = format_local_context(local_context)
+                if context_preamble:
+                    # Prepend local context to the user message
+                    message = f"{context_preamble}\n## User Query\n\n{message}"
+                    logger.info(
+                        "local_context_injected_non_stream",
+                        has_k8s=bool(local_context.get("kubernetes")),
+                        has_git=bool(local_context.get("git")),
+                        has_aws=bool(local_context.get("aws")),
+                        has_key_context=bool(local_context.get("key_context")),
+                    )
+
+            # Parse message for multimodal content (embedded images)
+            from .core.multimodal import (
+                get_message_preview,
+                parse_multimodal_message,
+            )
+
+            parsed_message = parse_multimodal_message(message)
+            message_preview = get_message_preview(parsed_message, max_length=100)
+            is_multimodal = isinstance(parsed_message, list)
+
             # Build output destinations list
             output_destinations = []
             if output_destinations_raw:
@@ -874,18 +901,19 @@ def create_app() -> Sanic:
                             logger.info(
                                 "starting_agent_execution_with_mcp",
                                 agent_name=agent_name,
-                                message_preview=message[:100],
+                                message_preview=message_preview,
                                 max_turns=max_turns or 100,
                                 timeout=timeout or 600,
                                 has_conversation_id=conversation_id is not None,
                                 session_id=session_id,
                                 correlation_id=request.ctx.correlation_id,
+                                is_multimodal=is_multimodal,
                             )
 
                             agent_result = await asyncio.wait_for(
                                 agent_runner.run(
                                     agent_with_mcp,
-                                    message,
+                                    parsed_message,
                                     conversation_id=conversation_id,  # Pass conversation_id directly
                                     max_turns=max_turns or 100,
                                 ),
@@ -934,18 +962,19 @@ def create_app() -> Sanic:
                         logger.info(
                             "starting_agent_execution_without_mcp",
                             agent_name=agent_name,
-                            message_preview=message[:100],
+                            message_preview=message_preview,
                             max_turns=max_turns or 100,
                             timeout=timeout or 600,
                             has_conversation_id=conversation_id is not None,
                             session_id=session_id,
                             correlation_id=request.ctx.correlation_id,
+                            is_multimodal=is_multimodal,
                         )
 
                         agent_result = await asyncio.wait_for(
                             agent_runner.run(
                                 base_agent,
-                                message,
+                                parsed_message,
                                 conversation_id=conversation_id,  # Pass conversation_id directly
                                 max_turns=max_turns or 100,
                             ),
@@ -1153,13 +1182,14 @@ def create_app() -> Sanic:
                         logger.info(
                             "running_agent_with_mcp",
                             agent_name=agent_name,
-                            message_preview=message[:100],
+                            message_preview=message_preview,
                             correlation_id=request.ctx.correlation_id,
+                            is_multimodal=is_multimodal,
                         )
 
                         result = await mcp_runner.run(
                             context=task_context,
-                            user_message=message,
+                            user_message=parsed_message,
                             execution_context=exec_context,
                         )
                 else:
@@ -1184,13 +1214,14 @@ def create_app() -> Sanic:
                     logger.info(
                         "running_agent",
                         agent_name=agent_name,
-                        message_preview=message[:100],
+                        message_preview=message_preview,
                         correlation_id=request.ctx.correlation_id,
+                        is_multimodal=is_multimodal,
                     )
 
                     result = await runner.run(
                         context=task_context,
-                        user_message=message,
+                        user_message=parsed_message,
                         execution_context=exec_context,
                     )
             finally:
@@ -1336,10 +1367,31 @@ def create_app() -> Sanic:
                     status=400,
                 )
 
+            # Extract and format local_context from CLI
+            local_context = context_data.get("local_context")
+            if local_context:
+                from .prompts import format_local_context
+
+                context_preamble = format_local_context(local_context)
+                if context_preamble:
+                    # Prepend local context to the user message
+                    message = f"{context_preamble}\n## User Query\n\n{message}"
+                    logger.info(
+                        "local_context_injected",
+                        has_k8s=bool(local_context.get("kubernetes")),
+                        has_git=bool(local_context.get("git")),
+                        has_aws=bool(local_context.get("aws")),
+                        has_key_context=bool(local_context.get("key_context")),
+                    )
+
             async def stream_events(response_stream):
                 """Generator that yields SSE events during agent execution."""
                 from agents import Runner
 
+                from .core.multimodal import (
+                    get_message_preview,
+                    parse_multimodal_message,
+                )
                 from .core.stream_events import (
                     EventStreamRegistry,
                     set_current_stream_id,
@@ -1391,28 +1443,36 @@ def create_app() -> Sanic:
                     sdk_runner = Runner()
                     base_agent = runner.agent
 
+                    # Parse message for multimodal content (embedded images)
+                    # Converts <image src="data:..."/> to OpenAI's format
+                    parsed_message = parse_multimodal_message(message)
+                    message_preview = get_message_preview(
+                        parsed_message, max_length=100
+                    )
+
                     logger.info(
                         "starting_streamed_agent_execution",
                         agent_name=agent_name,
-                        message_preview=message[:100],
+                        message_preview=message_preview,
                         max_turns=max_turns,
                         correlation_id=correlation_id,
                         stream_id=stream_id,
                         has_previous_response_id=current_response_id is not None,
+                        is_multimodal=isinstance(parsed_message, list),
                     )
 
                     # Run with streaming - pass previous_response_id for chaining
                     if current_response_id:
                         result = sdk_runner.run_streamed(
                             base_agent,
-                            message,
+                            parsed_message,
                             max_turns=max_turns,
                             previous_response_id=current_response_id,
                         )
                     else:
                         result = sdk_runner.run_streamed(
                             base_agent,
-                            message,
+                            parsed_message,
                             max_turns=max_turns,
                         )
 

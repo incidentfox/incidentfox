@@ -834,3 +834,279 @@ def apply_role_based_prompt(
         prompt_parts.append("\n\n" + SUBAGENT_RESPONSE_GUIDANCE)
 
     return "".join(prompt_parts)
+
+
+def format_local_context(local_context: dict[str, Any] | None) -> str:
+    """
+    Format local CLI context for injection into the user message.
+
+    This formats the auto-detected environment context (K8s, Git, AWS) and
+    user-provided key context from key_context.txt into a readable context block.
+
+    Args:
+        local_context: Dict containing:
+            - kubernetes: {context, cluster, namespace}
+            - git: {repo, branch, recent_commits}
+            - aws: {region, profile}
+            - key_context: Plain text from key_context.txt
+            - timestamp: ISO timestamp
+
+    Returns:
+        Formatted context string to prepend to user message (empty if no context)
+    """
+    if not local_context:
+        return ""
+
+    lines = ["## Local Environment Context", ""]
+
+    # Kubernetes context
+    k8s = local_context.get("kubernetes")
+    if k8s:
+        lines.append("### Kubernetes")
+        if k8s.get("context"):
+            lines.append(f"- **Context**: {k8s['context']}")
+        if k8s.get("cluster"):
+            lines.append(f"- **Cluster**: {k8s['cluster']}")
+        if k8s.get("namespace"):
+            lines.append(f"- **Namespace**: {k8s['namespace']}")
+        lines.append("")
+
+    # Git context
+    git = local_context.get("git")
+    if git:
+        lines.append("### Git Repository")
+        if git.get("repo"):
+            lines.append(f"- **Repository**: {git['repo']}")
+        if git.get("branch"):
+            lines.append(f"- **Branch**: {git['branch']}")
+        if git.get("recent_commits"):
+            lines.append("- **Recent commits**:")
+            for commit in git["recent_commits"][:3]:
+                lines.append(f"  - {commit}")
+        lines.append("")
+
+    # AWS context
+    aws = local_context.get("aws")
+    if aws:
+        lines.append("### AWS")
+        if aws.get("region"):
+            lines.append(f"- **Region**: {aws['region']}")
+        if aws.get("profile"):
+            lines.append(f"- **Profile**: {aws['profile']}")
+        lines.append("")
+
+    # Key context (user-provided knowledge)
+    key_context = local_context.get("key_context")
+    if key_context:
+        lines.append("### Team Knowledge (from key_context.txt)")
+        lines.append("")
+        lines.append(key_context)
+        lines.append("")
+
+    # If nothing was added, return empty
+    if len(lines) <= 2:
+        return ""
+
+    lines.append("---")
+    lines.append("")
+    return "\n".join(lines)
+
+
+# =============================================================================
+# Tool-Specific Prompt Guidance
+# =============================================================================
+# These prompts provide guidance for specific tools. Agents should include
+# the guidance for tools they have access to.
+
+ASK_HUMAN_TOOL_PROMPT = """### Error Classification & When to Ask for Help
+
+**CRITICAL: Classify errors before deciding what to do next.**
+
+Not all errors are equal. Some can be resolved by retrying, others cannot. Retrying non-retryable errors wastes time.
+
+**NON-RETRYABLE ERRORS - Use `ask_human` tool:**
+
+| Error Pattern | Meaning | Action |
+|--------------|---------|--------|
+| 401 Unauthorized | Credentials invalid/expired | Use `ask_human` to ask user to fix credentials |
+| 403 Forbidden | No permission for action | Use `ask_human` to ask user to fix permissions |
+| "permission denied" | Auth/RBAC issue | Use `ask_human` to ask user to fix permissions |
+| "config_required": true | Integration not configured | Use `ask_human` to ask user to configure it |
+| "invalid credentials" | Wrong auth | Use `ask_human` to ask user to fix credentials |
+| "system:anonymous" | Auth not working | Use `ask_human` to ask user to fix auth |
+
+When you encounter a non-retryable error:
+1. **STOP** - Do NOT retry the same operation
+2. **Do NOT try variations** - Different parameters won't help auth issues
+3. **Use `ask_human`** - Ask the user to fix the issue
+
+**RETRYABLE ERRORS - May retry once before asking human:**
+
+| Error Pattern | Meaning | Action |
+|--------------|---------|--------|
+| 429 Too Many Requests | Rate limited | Wait briefly, retry once |
+| 500/502/503/504 | Server error | Retry once |
+| Timeout | Slow response | Retry once |
+
+### Using the `ask_human` Tool
+
+You have the `ask_human` tool for situations where you cannot proceed without human intervention.
+
+**WHEN TO USE `ask_human`:**
+
+1. **Non-retryable errors that humans can fix:**
+   - 401/403 authentication errors → Ask human to fix credentials
+   - Missing configuration → Ask human to enable the integration
+   - Permission denied → Ask human to grant access
+
+2. **Ambiguous requests needing clarification:**
+   - Multiple environments could apply → Ask which one
+   - Multiple possible approaches → Ask for preference
+   - Destructive actions → Ask for confirmation
+
+3. **External actions required:**
+   - Token needs regeneration (EKS, GKE, OAuth)
+   - Configuration change needed outside your control
+   - Manual intervention in a system you can't access
+
+**HOW TO USE `ask_human` EFFECTIVELY:**
+
+```python
+# For credential/auth issues:
+ask_human(
+    question="I need valid credentials to continue.",
+    context="The API returned 403 Forbidden - credentials lack permission.",
+    action_required="Please fix the credentials and type 'done' when ready.",
+    response_type="action_done"
+)
+
+# For clarification:
+ask_human(
+    question="Which environment should I investigate?",
+    context="I found the service running in both staging and production.",
+    choices=["production", "staging"],
+    response_type="choice"
+)
+
+# For confirmation:
+ask_human(
+    question="Should I proceed with this action?",
+    context="This will restart the service, causing brief downtime.",
+    response_type="yes_no"
+)
+```
+
+**WHEN NOT TO USE `ask_human`:**
+- For information you can find yourself
+- For retryable errors (try once first)
+- Excessively during a single task (batch questions if possible)
+
+---
+
+## ⚠️ CRITICAL: `ask_human` ENDS YOUR SESSION
+
+**Calling `ask_human` means your current session is COMPLETE.**
+
+When you call `ask_human`, you are signaling that you cannot proceed without human intervention. The system will:
+1. Pause the entire investigation
+2. Wait for the human to respond
+3. Resume in a NEW session with the human's response
+
+**THEREFORE, when you call `ask_human`:**
+
+### 1. Treat it as your FINAL action
+
+After calling `ask_human`, you MUST NOT:
+- Call any more tools
+- Continue investigating
+- Try alternative approaches
+- Do any other work
+
+The `ask_human` call is your conclusion. Stop immediately after calling it.
+
+### 2. Report ALL important findings BEFORE or IN the `ask_human` call
+
+Since your session ends when you call `ask_human`, you must ensure all valuable work is preserved:
+
+**Include in your response (before or alongside `ask_human`):**
+- All findings discovered so far
+- Any partial progress or intermediate results
+- Context that will help the investigation continue after human responds
+- What you were trying to do when you hit the blocker
+
+**Example - CORRECT approach:**
+```
+I investigated the API errors and found:
+- Error rate spiked at 10:30 AM (5% → 45%)
+- All errors are coming from the /checkout endpoint
+- Database connection pool shows exhaustion warnings
+
+However, I cannot access CloudWatch logs due to permission issues.
+
+[calls ask_human with: "I need CloudWatch read permissions to continue.
+Please grant logs:GetLogEvents permission and type 'done' when ready."]
+
+[STOPS - does not call any more tools]
+```
+
+**Example - WRONG approach:**
+```
+[calls ask_human with: "I need CloudWatch permissions"]
+[continues calling other tools]  ❌ WRONG - session should have ended
+[tries alternative approaches]   ❌ WRONG - should have stopped
+```
+
+### 3. Your findings go to the master agent
+
+If you are a sub-agent (called by another agent), your findings will be returned to the master agent. The master agent will:
+- See your findings and the `ask_human` request
+- Bubble up the request to pause the entire investigation
+- Resume with context when the human responds
+
+**Make sure your output is useful to the master agent** - include:
+- What you found (evidence, data, observations)
+- What you couldn't do (and why)
+- What the human needs to fix
+- What should happen after the human responds
+"""
+
+
+def build_tool_guidance(tools: list) -> str:
+    """
+    Build combined prompt guidance for the given tools.
+
+    This function returns guidance text for tools that have specific
+    usage instructions. Agents should call this with their tools list
+    and append the result to their system prompt.
+
+    Args:
+        tools: List of tool functions or tool names
+
+    Returns:
+        Combined guidance text for all tools that have guidance defined
+
+    Example:
+        tools = [think, llm_call, web_search, ask_human]
+        guidance = build_tool_guidance(tools)
+        system_prompt = base_prompt + "\\n\\n" + guidance
+    """
+    # Map tool names to their guidance prompts
+    guidance_map = {
+        "ask_human": ASK_HUMAN_TOOL_PROMPT,
+        # Future: Add more tool guidance here
+        # "web_search": WEB_SEARCH_TOOL_PROMPT,
+        # "llm_call": LLM_CALL_TOOL_PROMPT,
+    }
+
+    parts = []
+    for tool in tools:
+        # Get tool name - handle both function objects and strings
+        if callable(tool):
+            tool_name = getattr(tool, "__name__", str(tool))
+        else:
+            tool_name = str(tool)
+
+        if tool_name in guidance_map:
+            parts.append(guidance_map[tool_name])
+
+    return "\n\n".join(parts)
