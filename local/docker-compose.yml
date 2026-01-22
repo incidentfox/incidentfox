@@ -14,11 +14,14 @@ version: '3.8'
 #
 # Optional services (via profiles):
 #   - web-ui         Browser-based config UI (--profile ui)
+#   - raptor         RAPTOR Knowledge Base RAG (--profile raptor)
 #
 # Usage:
-#   make start       Start required services
-#   make start-ui    Start with Web UI
-#   make stop        Stop all services
+#   make start         Start required services
+#   make start-ui      Start with Web UI
+#   make start-raptor  Start with RAPTOR Knowledge Base
+#   make start-all     Start with all optional services
+#   make stop          Stop all services
 #
 # Image configuration:
 #   INCIDENTFOX_REGISTRY  - Docker registry (default: incidentfox)
@@ -156,6 +159,9 @@ services:
       SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT:-}
       SNOWFLAKE_USER: ${SNOWFLAKE_USER:-}
       SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD:-}
+      # RAPTOR Knowledge Base (if running with --profile raptor)
+      RAPTOR_URL: ${RAPTOR_URL:-}
+      RAPTOR_DEFAULT_TREE: ${RAPTOR_DEFAULT_TREE:-mega_ultra_v2}
     ports:
       - "8081:8080"
     depends_on:
@@ -177,13 +183,42 @@ services:
   # ─────────────────────────────────────────────────────────────────────────────
   # Web UI - Optional browser-based configuration (--profile ui)
   # ─────────────────────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────────
+  # RAPTOR Knowledge Base - Optional RAG service (--profile raptor)
+  # ─────────────────────────────────────────────────────────────────────────────
+  raptor:
+    image: ${INCIDENTFOX_REGISTRY:-incidentfox}/raptor:${INCIDENTFOX_VERSION:-latest}
+    container_name: incidentfox-raptor
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      RAPTOR_TREES_DIR: /app/trees
+      RAPTOR_DEFAULT_TREE: ${RAPTOR_DEFAULT_TREE:-mega_ultra_v2}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist knowledge trees locally
+      - raptor-trees:/app/trees
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    profiles:
+      - raptor
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Web UI - Optional browser-based configuration (--profile ui)
+  # ─────────────────────────────────────────────────────────────────────────────
   web-ui:
     image: ${INCIDENTFOX_REGISTRY:-incidentfox}/web-ui:${INCIDENTFOX_VERSION:-latest}
     container_name: incidentfox-web-ui
     environment:
       CONFIG_SERVICE_URL: http://config-service:8080
       ORCHESTRATOR_URL: ""
-      RAPTOR_API_URL: ""
+      RAPTOR_API_URL: ${RAPTOR_URL:-}
       WEB_UI_COOKIE_SECURE: "0"
       NEXT_PUBLIC_WEB_UI_OIDC_ENABLED: "0"
       WEB_UI_OIDC_ENABLED: "0"
@@ -198,3 +233,5 @@ services:
 volumes:
   postgres-data:
     name: incidentfox-postgres-data
+  raptor-trees:
+    name: incidentfox-raptor-trees

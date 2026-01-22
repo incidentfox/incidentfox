@@ -4,21 +4,25 @@ Run IncidentFox AI SRE locally on your terminal for evaluation and development.
 
 ## Quick Start
 
+**First-time setup (interactive):**
 ```bash
-# 1. Setup (creates .env with generated secrets)
-make setup
+make quickstart
+```
+This will prompt for your OpenAI API key, start all services, and launch the CLI.
 
-# 2. Add your OpenAI API key
-#    Edit .env and set OPENAI_API_KEY=sk-xxx
+**Already configured?**
+```bash
+make run
+```
+Starts services (if needed) and launches the CLI.
 
-# 3. Start services (PostgreSQL, Config Service, Agent)
-make start
-
-# 4. Generate team token
-make seed
-
-# 5. Run interactive CLI
-make cli
+**Manual setup (step-by-step):**
+```bash
+make setup                       # Create .env
+# Edit .env and set OPENAI_API_KEY=sk-xxx
+make start                       # Start services
+make seed                        # Generate team token
+make cli                         # Launch CLI
 ```
 
 ## What's Included
@@ -59,6 +63,13 @@ make cli
 
 ## Commands
 
+### Quick Commands
+
+```bash
+make quickstart  # First-time: setup + prompt for API key + start + cli
+make run         # Start services (if needed) + launch CLI
+```
+
 ### Service Management
 
 ```bash
@@ -74,7 +85,7 @@ make status      # Show service status and health
 ### CLI
 
 ```bash
-make cli         # Start interactive CLI REPL
+make cli         # Start interactive CLI REPL (requires services running)
 ```
 
 ### Utilities
@@ -185,7 +196,12 @@ OPENAI_API_KEY=sk-your-key-here
 
 ### "TEAM_TOKEN not set"
 
-Run `make seed` after services are started:
+Use `make run` which handles this automatically:
+```bash
+make run
+```
+
+Or run `make seed` manually after services are started:
 ```bash
 make start
 make seed

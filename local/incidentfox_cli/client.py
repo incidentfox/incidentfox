@@ -70,13 +70,19 @@ class AgentClient:
             "ci_agent",
         ]
 
-    async def run_agent(self, agent_name: str, message: str) -> Dict[str, Any]:
+    async def run_agent(
+        self,
+        agent_name: str,
+        message: str,
+        local_context: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
         """
         Run an agent with a message.
 
         Args:
             agent_name: Name of agent to run (e.g., "planner")
             message: User message/query
+            local_context: Optional local environment context (k8s, git, aws, key_context)
 
         Returns:
             Dict with success, output/error, duration, agent
@@ -88,7 +94,9 @@ class AgentClient:
                     headers=self._headers(),
                     json={
                         "message": message,
-                        "context": {},
+                        "context": {
+                            "local_context": local_context or {},
+                        },
                         "max_turns": 20,
                         "timeout": 600,
                     },
@@ -145,7 +153,11 @@ class AgentClient:
                 }
 
     async def run_agent_stream(
-        self, agent_name: str, message: str, previous_response_id: str | None = None
+        self,
+        agent_name: str,
+        message: str,
+        previous_response_id: str | None = None,
+        local_context: Dict[str, Any] | None = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Run an agent with SSE streaming.
@@ -160,16 +172,19 @@ class AgentClient:
             agent_name: Name of agent to run (e.g., "planner")
             message: User message/query
             previous_response_id: Optional response ID for chaining (continues conversation without pre-creating)
+            local_context: Optional local environment context (k8s, git, aws, key_context)
 
         Yields:
             Dict with event_type and event data
         """
         url = f"{self.base_url}/agents/{agent_name}/run/stream"
 
-        # Build request body
+        # Build request body with local context
         request_body = {
             "message": message,
-            "context": {},
+            "context": {
+                "local_context": local_context or {},
+            },
             "max_turns": 20,
             "timeout": 600,
         }
@@ -255,3 +270,201 @@ class AgentClient:
         except Exception:
             pass
         return {}
+
+    def get_agent_info(self, agent_name: str) -> Dict[str, Any] | None:
+        """
+        Get information about a specific agent.
+
+        Args:
+            agent_name: Name of the agent
+
+        Returns:
+            Dict with agent info (name, model, tools_count) or None if not found
+        """
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.get(
+                    f"{self.base_url}/agents/{agent_name}",
+                    headers=self._headers(),
+                )
+                if resp.status_code == 200:
+                    return resp.json()
+        except Exception:
+            pass
+        return None
+
+    def get_tools_catalog(self) -> List[Dict[str, Any]]:
+        """
+        Get the complete tools catalog.
+
+        Returns:
+            List of tool definitions
+        """
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.get(
+                    f"{self.base_url}/api/v1/tools/catalog",
+                    headers=self._headers(),
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data.get("tools", [])
+        except Exception:
+            pass
+        return []
+
+    def reload_config(self) -> bool:
+        """
+        Trigger agent to reload configuration.
+
+        Returns:
+            True if successful
+        """
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.post(
+                    f"{self.base_url}/api/v1/config/reload",
+                    headers=self._headers(),
+                )
+                return resp.status_code == 200
+        except Exception:
+            return False
+
+
+class ConfigServiceClient:
+    """Client for IncidentFox Config Service API."""
+
+    def __init__(self, base_url: str, team_token: str):
+        """
+        Initialize config service client.
+
+        Args:
+            base_url: Config service URL (e.g., http://localhost:8080)
+            team_token: Team authentication token
+        """
+        self.base_url = base_url.rstrip("/")
+        self.team_token = team_token
+        self.timeout = httpx.Timeout(30.0)
+
+    def _headers(self) -> Dict[str, str]:
+        """Get request headers with authentication."""
+        return {
+            "Authorization": f"Bearer {self.team_token}",
+            "Content-Type": "application/json",
+        }
+
+    def check_health(self) -> bool:
+        """Check if config service is healthy."""
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.get(f"{self.base_url}/health")
+                return resp.status_code == 200
+        except Exception:
+            return False
+
+    def get_effective_config(self) -> Dict[str, Any] | None:
+        """
+        Get effective (merged) team configuration.
+
+        Returns:
+            Merged configuration dict or None on error
+        """
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                resp = client.get(
+                    f"{self.base_url}/api/v1/config/me/effective",
+                    headers=self._headers(),
+                )
+                if resp.status_code == 200:
+                    return resp.json()
+                else:
+                    return {"error": f"HTTP {resp.status_code}: {resp.text[:200]}"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def get_raw_config(self) -> Dict[str, Any] | None:
+        """
+        Get raw team configuration (without inheritance).
+
+        Returns:
+            Raw configuration dict or None on error
+        """
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                resp = client.get(
+                    f"{self.base_url}/api/v1/config/me/raw",
+                    headers=self._headers(),
+                )
+                if resp.status_code == 200:
+                    return resp.json()
+                else:
+                    return {"error": f"HTTP {resp.status_code}: {resp.text[:200]}"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def update_config(
+        self, config_patch: Dict[str, Any], reason: str = "Updated via CLI"
+    ) -> Dict[str, Any]:
+        """
+        Update team configuration (deep merge).
+
+        Args:
+            config_patch: Configuration patch to apply
+            reason: Reason for the change (for audit)
+
+        Returns:
+            Updated configuration or error dict
+        """
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                resp = client.patch(
+                    f"{self.base_url}/api/v1/config/me",
+                    headers=self._headers(),
+                    json={"config": config_patch, "reason": reason},
+                )
+                if resp.status_code == 200:
+                    return {"success": True, "config": resp.json()}
+                else:
+                    error_detail = resp.text[:500]
+                    try:
+                        error_json = resp.json()
+                        error_detail = error_json.get("detail", error_detail)
+                    except Exception:
+                        pass
+                    return {
+                        "success": False,
+                        "error": f"HTTP {resp.status_code}: {error_detail}",
+                    }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_agents_config(self) -> Dict[str, Any]:
+        """
+        Get agent configurations from effective config.
+
+        Returns:
+            Dict of agent_name -> agent_config
+        """
+        config = self.get_effective_config()
+        if config and "error" not in config:
+            return config.get("config", {}).get("agents", {})
+        return {}
+
+    def update_agent_config(
+        self, agent_name: str, config_patch: Dict[str, Any], reason: str | None = None
+    ) -> Dict[str, Any]:
+        """
+        Update a specific agent's configuration.
+
+        Args:
+            agent_name: Name of the agent to update
+            config_patch: Configuration patch for the agent
+            reason: Reason for the change
+
+        Returns:
+            Result dict with success status
+        """
+        full_patch = {"agents": {agent_name: config_patch}}
+        return self.update_config(
+            full_patch, reason or f"Updated {agent_name} config via CLI"
+        )

@@ -15,6 +15,20 @@ dependencies = [
     "prompt-toolkit>=3.0",
 ]
 
+[project.optional-dependencies]
+voice = [
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12.1",
+    "openai>=1.0.0",
+    "numpy>=1.24.0",
+]
+all = [
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12.1",
+    "openai>=1.0.0",
+    "numpy>=1.24.0",
+]
+
 [project.scripts]
 incidentfox = "incidentfox_cli:main"
 
