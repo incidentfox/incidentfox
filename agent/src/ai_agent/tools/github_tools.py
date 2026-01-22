@@ -783,9 +783,13 @@ def github_list_commits(
                     "sha": commit.sha,
                     "short_sha": commit.sha[:7],
                     "message": commit.commit.message,
-                    "author": commit.commit.author.name if commit.commit.author else None,
+                    "author": (
+                        commit.commit.author.name if commit.commit.author else None
+                    ),
                     "author_login": commit.author.login if commit.author else None,
-                    "date": str(commit.commit.author.date) if commit.commit.author else None,
+                    "date": (
+                        str(commit.commit.author.date) if commit.commit.author else None
+                    ),
                     "url": commit.html_url,
                 }
             )
@@ -837,7 +841,9 @@ def github_get_commit(repo: str, sha: str) -> dict[str, Any] | str:
             "sha": commit.sha,
             "message": commit.commit.message,
             "author": commit.commit.author.name if commit.commit.author else None,
-            "author_email": commit.commit.author.email if commit.commit.author else None,
+            "author_email": (
+                commit.commit.author.email if commit.commit.author else None
+            ),
             "author_login": commit.author.login if commit.author else None,
             "date": str(commit.commit.author.date) if commit.commit.author else None,
             "url": commit.html_url,
@@ -860,9 +866,7 @@ def github_get_commit(repo: str, sha: str) -> dict[str, Any] | str:
 
 
 @function_tool
-def github_compare_commits(
-    repo: str, base: str, head: str
-) -> dict[str, Any] | str:
+def github_compare_commits(repo: str, base: str, head: str) -> dict[str, Any] | str:
     """
     Compare two commits, branches, or tags.
 
@@ -997,7 +1001,9 @@ def github_list_releases(
                     "draft": release.draft,
                     "prerelease": release.prerelease,
                     "created_at": str(release.created_at),
-                    "published_at": str(release.published_at) if release.published_at else None,
+                    "published_at": (
+                        str(release.published_at) if release.published_at else None
+                    ),
                     "url": release.html_url,
                     "author": release.author.login if release.author else None,
                 }
@@ -1051,7 +1057,12 @@ def github_get_pr_files(
                 }
             )
 
-        logger.info("github_pr_files_fetched", repo=repo, pr_number=pr_number, count=len(file_list))
+        logger.info(
+            "github_pr_files_fetched",
+            repo=repo,
+            pr_number=pr_number,
+            count=len(file_list),
+        )
         return file_list
 
     except IntegrationNotConfiguredError:
@@ -1059,14 +1070,14 @@ def github_get_pr_files(
         return _github_config_required_response("github_get_pr_files")
 
     except Exception as e:
-        logger.error("github_get_pr_files_failed", error=str(e), repo=repo, pr_number=pr_number)
+        logger.error(
+            "github_get_pr_files_failed", error=str(e), repo=repo, pr_number=pr_number
+        )
         return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
 @function_tool
-def github_list_pr_reviews(
-    repo: str, pr_number: int
-) -> list[dict[str, Any]] | str:
+def github_list_pr_reviews(repo: str, pr_number: int) -> list[dict[str, Any]] | str:
     """
     List reviews on a pull request.
 
@@ -1091,12 +1102,19 @@ def github_list_pr_reviews(
                     "user": review.user.login if review.user else None,
                     "state": review.state,
                     "body": review.body,
-                    "submitted_at": str(review.submitted_at) if review.submitted_at else None,
+                    "submitted_at": (
+                        str(review.submitted_at) if review.submitted_at else None
+                    ),
                     "url": review.html_url,
                 }
             )
 
-        logger.info("github_pr_reviews_listed", repo=repo, pr_number=pr_number, count=len(review_list))
+        logger.info(
+            "github_pr_reviews_listed",
+            repo=repo,
+            pr_number=pr_number,
+            count=len(review_list),
+        )
         return review_list
 
     except IntegrationNotConfiguredError:
@@ -1104,7 +1122,12 @@ def github_list_pr_reviews(
         return _github_config_required_response("github_list_pr_reviews")
 
     except Exception as e:
-        logger.error("github_list_pr_reviews_failed", error=str(e), repo=repo, pr_number=pr_number)
+        logger.error(
+            "github_list_pr_reviews_failed",
+            error=str(e),
+            repo=repo,
+            pr_number=pr_number,
+        )
         return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
@@ -1147,7 +1170,12 @@ def github_get_issue(repo: str, issue_number: int) -> dict[str, Any] | str:
         return _github_config_required_response("github_get_issue")
 
     except Exception as e:
-        logger.error("github_get_issue_failed", error=str(e), repo=repo, issue_number=issue_number)
+        logger.error(
+            "github_get_issue_failed",
+            error=str(e),
+            repo=repo,
+            issue_number=issue_number,
+        )
         return json.dumps({"error": str(e), "repo": repo, "issue_number": issue_number})
 
 
@@ -1187,7 +1215,12 @@ def github_list_issue_comments(
                 }
             )
 
-        logger.info("github_issue_comments_listed", repo=repo, issue_number=issue_number, count=len(comment_list))
+        logger.info(
+            "github_issue_comments_listed",
+            repo=repo,
+            issue_number=issue_number,
+            count=len(comment_list),
+        )
         return comment_list
 
     except IntegrationNotConfiguredError:
@@ -1195,7 +1228,12 @@ def github_list_issue_comments(
         return _github_config_required_response("github_list_issue_comments")
 
     except Exception as e:
-        logger.error("github_list_issue_comments_failed", error=str(e), repo=repo, issue_number=issue_number)
+        logger.error(
+            "github_list_issue_comments_failed",
+            error=str(e),
+            repo=repo,
+            issue_number=issue_number,
+        )
         return json.dumps({"error": str(e), "repo": repo, "issue_number": issue_number})
 
 
@@ -1233,14 +1271,17 @@ def github_add_issue_comment(
         return _github_config_required_response("github_add_issue_comment")
 
     except Exception as e:
-        logger.error("github_add_issue_comment_failed", error=str(e), repo=repo, issue_number=issue_number)
+        logger.error(
+            "github_add_issue_comment_failed",
+            error=str(e),
+            repo=repo,
+            issue_number=issue_number,
+        )
         return json.dumps({"error": str(e), "repo": repo, "issue_number": issue_number})
 
 
 @function_tool
-def github_add_pr_comment(
-    repo: str, pr_number: int, body: str
-) -> dict[str, Any] | str:
+def github_add_pr_comment(repo: str, pr_number: int, body: str) -> dict[str, Any] | str:
     """
     Add a comment to a pull request.
 
@@ -1272,7 +1313,9 @@ def github_add_pr_comment(
         return _github_config_required_response("github_add_pr_comment")
 
     except Exception as e:
-        logger.error("github_add_pr_comment_failed", error=str(e), repo=repo, pr_number=pr_number)
+        logger.error(
+            "github_add_pr_comment_failed", error=str(e), repo=repo, pr_number=pr_number
+        )
         return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
@@ -1308,7 +1351,9 @@ def github_list_contributors(
                 }
             )
 
-        logger.info("github_contributors_listed", repo=repo, count=len(contributor_list))
+        logger.info(
+            "github_contributors_listed", repo=repo, count=len(contributor_list)
+        )
         return contributor_list
 
     except IntegrationNotConfiguredError:

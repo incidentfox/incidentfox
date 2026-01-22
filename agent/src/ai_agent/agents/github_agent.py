@@ -29,86 +29,88 @@ def _load_github_tools():
     # Remote GitHub API tools (for accessing any GitHub repository)
     try:
         from ..tools.github_tools import (
+            close_issue,
+            create_branch,
+            create_pull_request,
             # Repository info
             get_repo_info,
-            list_files,
-            read_github_file,
-            search_github_code,
-            github_list_contributors,
+            github_add_issue_comment,
+            github_add_pr_comment,
+            github_compare_commits,
+            github_create_issue,
+            github_create_pr_review,
+            github_get_commit,
+            github_get_issue,
+            github_get_pr,
+            github_get_pr_files,
             # Commits
             github_list_commits,
-            github_get_commit,
-            github_compare_commits,
-            github_search_commits_by_timerange,
-            # Branches and tags
-            list_branches,
-            create_branch,
-            github_list_tags,
-            github_list_releases,
-            # Pull requests
-            list_pull_requests,
-            github_get_pr,
-            create_pull_request,
-            merge_pull_request,
-            github_get_pr_files,
+            github_list_contributors,
+            github_list_issue_comments,
             github_list_pr_commits,
             github_list_pr_reviews,
-            github_create_pr_review,
-            github_add_pr_comment,
+            github_list_releases,
+            github_list_tags,
+            github_search_commits_by_timerange,
+            github_search_issues,
             github_search_prs,
+            # Branches and tags
+            list_branches,
+            list_files,
             # Issues
             list_issues,
-            github_get_issue,
-            github_create_issue,
-            close_issue,
-            github_list_issue_comments,
-            github_add_issue_comment,
-            github_search_issues,
+            # Pull requests
+            list_pull_requests,
+            list_workflow_runs,
+            merge_pull_request,
+            read_github_file,
+            search_github_code,
             # GitHub Actions
             trigger_workflow,
-            list_workflow_runs,
         )
 
-        tools.extend([
-            # Repository info
-            get_repo_info,
-            list_files,
-            read_github_file,
-            search_github_code,
-            github_list_contributors,
-            # Commits
-            github_list_commits,
-            github_get_commit,
-            github_compare_commits,
-            github_search_commits_by_timerange,
-            # Branches and tags
-            list_branches,
-            create_branch,
-            github_list_tags,
-            github_list_releases,
-            # Pull requests
-            list_pull_requests,
-            github_get_pr,
-            create_pull_request,
-            merge_pull_request,
-            github_get_pr_files,
-            github_list_pr_commits,
-            github_list_pr_reviews,
-            github_create_pr_review,
-            github_add_pr_comment,
-            github_search_prs,
-            # Issues
-            list_issues,
-            github_get_issue,
-            github_create_issue,
-            close_issue,
-            github_list_issue_comments,
-            github_add_issue_comment,
-            github_search_issues,
-            # GitHub Actions
-            trigger_workflow,
-            list_workflow_runs,
-        ])
+        tools.extend(
+            [
+                # Repository info
+                get_repo_info,
+                list_files,
+                read_github_file,
+                search_github_code,
+                github_list_contributors,
+                # Commits
+                github_list_commits,
+                github_get_commit,
+                github_compare_commits,
+                github_search_commits_by_timerange,
+                # Branches and tags
+                list_branches,
+                create_branch,
+                github_list_tags,
+                github_list_releases,
+                # Pull requests
+                list_pull_requests,
+                github_get_pr,
+                create_pull_request,
+                merge_pull_request,
+                github_get_pr_files,
+                github_list_pr_commits,
+                github_list_pr_reviews,
+                github_create_pr_review,
+                github_add_pr_comment,
+                github_search_prs,
+                # Issues
+                list_issues,
+                github_get_issue,
+                github_create_issue,
+                close_issue,
+                github_list_issue_comments,
+                github_add_issue_comment,
+                github_search_issues,
+                # GitHub Actions
+                trigger_workflow,
+                list_workflow_runs,
+            ]
+        )
         logger.debug("github_remote_tools_loaded", count=len(tools) - 3)
     except Exception as e:
         logger.warning("github_tools_load_failed", error=str(e))
@@ -116,82 +118,84 @@ def _load_github_tools():
     # Local git CLI tools (for working with locally cloned repositories)
     try:
         from ..tools.git_tools import (
-            # Core operations
-            git_status,
-            git_log,
-            git_show,
-            git_diff,
-            git_blame,
-            # Branch operations
-            git_branch_list,
-            git_branch_create,
-            git_branch_delete,
-            git_checkout,
-            git_merge,
-            # Remote sync
-            git_fetch,
-            git_pull,
-            git_push,
-            git_remote_list,
             # Commit operations
             git_add,
-            git_commit,
-            git_reset,
-            git_revert,
+            git_blame,
+            git_branch_create,
+            git_branch_delete,
+            # Branch operations
+            git_branch_list,
+            git_checkout,
             git_cherry_pick,
-            # Stash operations
-            git_stash_list,
-            git_stash_save,
-            git_stash_pop,
-            git_stash_apply,
-            # Tags
-            git_tag_list,
-            git_tag_create,
+            git_commit,
+            git_diff,
+            # Remote sync
+            git_fetch,
+            git_log,
+            git_ls_files,
+            git_merge,
+            git_pull,
+            git_push,
+            git_reflog,
+            git_remote_list,
+            git_reset,
             # Utilities
             git_rev_parse,
-            git_ls_files,
+            git_revert,
             git_shortlog,
-            git_reflog,
+            git_show,
+            git_stash_apply,
+            # Stash operations
+            git_stash_list,
+            git_stash_pop,
+            git_stash_save,
+            # Core operations
+            git_status,
+            git_tag_create,
+            # Tags
+            git_tag_list,
         )
 
-        tools.extend([
-            # Core operations
-            git_status,
-            git_log,
-            git_show,
-            git_diff,
-            git_blame,
-            # Branch operations
-            git_branch_list,
-            git_branch_create,
-            git_branch_delete,
-            git_checkout,
-            git_merge,
-            # Remote sync
-            git_fetch,
-            git_pull,
-            git_push,
-            git_remote_list,
-            # Commit operations
-            git_add,
-            git_commit,
-            git_reset,
-            git_revert,
-            git_cherry_pick,
-            # Stash operations
-            git_stash_list,
-            git_stash_save,
-            git_stash_pop,
-            git_stash_apply,
-            # Tags
-            git_tag_list,
-            git_tag_create,
-            # Utilities
-            git_rev_parse,
-            git_ls_files,
-            git_shortlog,
-            git_reflog,
-        ])
+        tools.extend(
+            [
+                # Core operations
+                git_status,
+                git_log,
+                git_show,
+                git_diff,
+                git_blame,
+                # Branch operations
+                git_branch_list,
+                git_branch_create,
+                git_branch_delete,
+                git_checkout,
+                git_merge,
+                # Remote sync
+                git_fetch,
+                git_pull,
+                git_push,
+                git_remote_list,
+                # Commit operations
+                git_add,
+                git_commit,
+                git_reset,
+                git_revert,
+                git_cherry_pick,
+                # Stash operations
+                git_stash_list,
+                git_stash_save,
+                git_stash_pop,
+                git_stash_apply,
+                # Tags
+                git_tag_list,
+                git_tag_create,
+                # Utilities
+                git_rev_parse,
+                git_ls_files,
+                git_shortlog,
+                git_reflog,
+            ]
+        )
         logger.debug("git_local_tools_loaded")
     except Exception as e:
         logger.warning("git_tools_load_failed", error=str(e))
@@ -208,7 +212,11 @@ def _load_github_tools():
                 # Older SDK version without strict_mode
                 wrapped.append(function_tool(t))
             except Exception as e:
-                logger.warning("tool_wrap_failed", tool=getattr(t, "__name__", str(t)), error=str(e))
+                logger.warning(
+                    "tool_wrap_failed",
+                    tool=getattr(t, "__name__", str(t)),
+                    error=str(e),
+                )
                 wrapped.append(t)
     return wrapped
 

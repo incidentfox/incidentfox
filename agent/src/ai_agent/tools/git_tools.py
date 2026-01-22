@@ -431,7 +431,10 @@ def git_pull(
 
 @function_tool
 def git_fetch(
-    remote: str = "origin", prune: bool = False, all_remotes: bool = False, cwd: str = "."
+    remote: str = "origin",
+    prune: bool = False,
+    all_remotes: bool = False,
+    cwd: str = ".",
 ) -> str:
     """
     Fetch changes from remote without merging.
@@ -450,7 +453,9 @@ def git_fetch(
     Returns:
         JSON with ok status and fetch result
     """
-    logger.info("git_fetch", remote=remote, prune=prune, all_remotes=all_remotes, cwd=cwd)
+    logger.info(
+        "git_fetch", remote=remote, prune=prune, all_remotes=all_remotes, cwd=cwd
+    )
 
     args = ["fetch"]
     if all_remotes:
@@ -499,9 +504,7 @@ def git_checkout(
 
 
 @function_tool
-def git_branch_create(
-    name: str, start_point: str = "", cwd: str = "."
-) -> str:
+def git_branch_create(name: str, start_point: str = "", cwd: str = ".") -> str:
     """
     Create a new branch.
 
@@ -531,9 +534,7 @@ def git_branch_create(
 
 
 @function_tool
-def git_branch_delete(
-    name: str, force: bool = False, cwd: str = "."
-) -> str:
+def git_branch_delete(name: str, force: bool = False, cwd: str = ".") -> str:
     """
     Delete a branch.
 
@@ -642,7 +643,9 @@ def git_stash_list(cwd: str = ".") -> str:
 
 
 @function_tool
-def git_stash_save(message: str = "", include_untracked: bool = False, cwd: str = ".") -> str:
+def git_stash_save(
+    message: str = "", include_untracked: bool = False, cwd: str = "."
+) -> str:
     """
     Save changes to stash.
 
@@ -658,7 +661,9 @@ def git_stash_save(message: str = "", include_untracked: bool = False, cwd: str 
     Returns:
         JSON with ok status
     """
-    logger.info("git_stash_save", message=message, include_untracked=include_untracked, cwd=cwd)
+    logger.info(
+        "git_stash_save", message=message, include_untracked=include_untracked, cwd=cwd
+    )
 
     args = ["stash", "push"]
     if include_untracked:
@@ -753,9 +758,7 @@ def git_reset(
 
 
 @function_tool
-def git_revert(
-    commit: str, no_commit: bool = False, cwd: str = "."
-) -> str:
+def git_revert(commit: str, no_commit: bool = False, cwd: str = ".") -> str:
     """
     Revert a commit by creating a new commit that undoes changes.
 
@@ -786,9 +789,7 @@ def git_revert(
 
 
 @function_tool
-def git_cherry_pick(
-    commit: str, no_commit: bool = False, cwd: str = "."
-) -> str:
+def git_cherry_pick(commit: str, no_commit: bool = False, cwd: str = ".") -> str:
     """
     Apply changes from a specific commit.
 
@@ -978,7 +979,9 @@ def git_ls_files(
     Returns:
         JSON with files list
     """
-    logger.info("git_ls_files", pattern=pattern, untracked=untracked, modified=modified, cwd=cwd)
+    logger.info(
+        "git_ls_files", pattern=pattern, untracked=untracked, modified=modified, cwd=cwd
+    )
 
     args = ["ls-files"]
     if untracked:
