@@ -41,6 +41,7 @@ from agents.stream_events import RunItemStreamEvent
 from pydantic import BaseModel, Field
 
 from ..core.config import get_config
+from ..core.config_utils import get_agent_sub_agents
 from ..core.logging import get_logger
 from ..core.partial_work import summarize_partial_work
 from ..core.stream_events import (
@@ -357,57 +358,7 @@ def _get_enabled_agents_from_config(team_cfg) -> list[str]:
     Returns:
         List of enabled agent keys
     """
-    if not team_cfg:
-        return DEFAULT_PLANNER_AGENTS.copy()
-
-    try:
-        # Get planner agent config from team config
-        planner_cfg = None
-        if hasattr(team_cfg, "get_agent_config"):
-            planner_cfg = team_cfg.get_agent_config("planner")
-        elif isinstance(team_cfg, dict):
-            agents = team_cfg.get("agents", {})
-            planner_cfg = agents.get("planner", {})
-
-        if not planner_cfg:
-            return DEFAULT_PLANNER_AGENTS.copy()
-
-        # Check for sub_agents configuration (config uses underscore)
-        sub_agents_config = None
-        if hasattr(planner_cfg, "sub_agents"):
-            sub_agents_config = planner_cfg.sub_agents
-        elif isinstance(planner_cfg, dict):
-            sub_agents_config = planner_cfg.get("sub_agents", None)
-
-        if sub_agents_config is None:
-            return DEFAULT_PLANNER_AGENTS.copy()
-
-        # Parse sub_agents configuration
-        if isinstance(sub_agents_config, list):
-            # List format: ["investigation", "coding", "writeup"]
-            return list(sub_agents_config)
-        elif isinstance(sub_agents_config, dict):
-            # Dict format: {investigation: {enabled: true}, coding: false}
-            enabled = []
-            for name, cfg in sub_agents_config.items():
-                if isinstance(cfg, dict):
-                    if cfg.get("enabled", True):
-                        enabled.append(name)
-                elif isinstance(cfg, bool):
-                    if cfg:
-                        enabled.append(name)
-                elif hasattr(cfg, "enabled"):
-                    if cfg.enabled:
-                        enabled.append(name)
-                else:
-                    enabled.append(name)  # Default to enabled
-            return enabled if enabled else DEFAULT_PLANNER_AGENTS.copy()
-
-        return DEFAULT_PLANNER_AGENTS.copy()
-
-    except Exception as e:
-        logger.warning("failed_to_get_enabled_agents", error=str(e))
-        return DEFAULT_PLANNER_AGENTS.copy()
+    return get_agent_sub_agents(team_cfg, "planner", DEFAULT_PLANNER_AGENTS)
 
 
 # =============================================================================
@@ -435,6 +386,16 @@ def create_agent_tools(team_config=None):
 
     enabled_agents = _get_enabled_agents_from_config(team_config)
     logger.info("planner_enabled_agents", agents=enabled_agents)
+
+    # Warn about unknown agent names in config
+    known_agents = set(DEFAULT_PLANNER_AGENTS)
+    for agent in enabled_agents:
+        if agent not in known_agents:
+            logger.warning(
+                "unknown_agent_in_config",
+                agent=agent,
+                known_agents=list(known_agents),
+            )
 
     tools = []
 

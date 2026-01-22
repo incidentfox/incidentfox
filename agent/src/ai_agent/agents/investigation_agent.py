@@ -17,7 +17,7 @@ Architecture:
 Sub-agents can be configured via team_config:
     agents:
       investigation:
-        subagents:
+        sub_agents:
           - k8s
           - aws
           - metrics
@@ -35,6 +35,7 @@ from agents.stream_events import RunItemStreamEvent
 from pydantic import BaseModel, Field
 
 from ..core.config import get_config
+from ..core.config_utils import get_agent_sub_agents
 from ..core.logging import get_logger
 from ..core.partial_work import summarize_partial_work
 from ..core.stream_events import (
@@ -328,9 +329,9 @@ def _get_enabled_subagents(team_cfg) -> list[str]:
     Get list of enabled sub-agent keys from team config.
 
     Supports multiple configuration formats:
-    - List: subagents: ["k8s", "aws"]
-    - Dict with enabled flags: subagents: {k8s: {enabled: true}}
-    - Dict with bool values: subagents: {k8s: true, aws: false}
+    - List: sub_agents: ["github", "k8s", "aws", "metrics", "log_analysis"]
+    - Dict with enabled flags: sub_agents: {k8s: {enabled: true}}
+    - Dict with bool values: sub_agents: {k8s: true, aws: false}
 
     Args:
         team_cfg: Team configuration object
@@ -338,59 +339,7 @@ def _get_enabled_subagents(team_cfg) -> list[str]:
     Returns:
         List of enabled sub-agent keys
     """
-    if not team_cfg:
-        return DEFAULT_SUBAGENTS.copy()
-
-    try:
-        # Get investigation agent config
-        agent_cfg = None
-        if hasattr(team_cfg, "get_agent_config"):
-            agent_cfg = team_cfg.get_agent_config("investigation")
-        elif isinstance(team_cfg, dict):
-            agents = team_cfg.get("agents", {})
-            agent_cfg = agents.get("investigation", {})
-
-        if not agent_cfg:
-            return DEFAULT_SUBAGENTS.copy()
-
-        # Check for sub_agents configuration (config uses underscore)
-        subagents_config = None
-        if hasattr(agent_cfg, "sub_agents"):
-            subagents_config = agent_cfg.sub_agents
-        elif isinstance(agent_cfg, dict):
-            subagents_config = agent_cfg.get("sub_agents", None)
-
-        if subagents_config is None:
-            return DEFAULT_SUBAGENTS.copy()
-
-        # Parse subagents configuration
-        if isinstance(subagents_config, list):
-            # List format: ["k8s", "aws", "metrics"]
-            return [
-                s for s in subagents_config if s in DEFAULT_SUBAGENTS or True
-            ]  # Allow custom agents
-        elif isinstance(subagents_config, dict):
-            # Dict format: {k8s: {enabled: true}, aws: false}
-            enabled = []
-            for name, cfg in subagents_config.items():
-                if isinstance(cfg, dict):
-                    if cfg.get("enabled", True):
-                        enabled.append(name)
-                elif isinstance(cfg, bool):
-                    if cfg:
-                        enabled.append(name)
-                elif hasattr(cfg, "enabled"):
-                    if cfg.enabled:
-                        enabled.append(name)
-                else:
-                    enabled.append(name)  # Default to enabled
-            return enabled if enabled else DEFAULT_SUBAGENTS.copy()
-
-        return DEFAULT_SUBAGENTS.copy()
-
-    except Exception as e:
-        logger.warning("failed_to_get_enabled_subagents", error=str(e))
-        return DEFAULT_SUBAGENTS.copy()
+    return get_agent_sub_agents(team_cfg, "investigation", DEFAULT_SUBAGENTS)
 
 
 # =============================================================================
@@ -405,7 +354,7 @@ def _create_subagent_tools(team_config=None):
     Each sub-agent is wrapped as a callable tool. The investigation agent
     can call these tools to delegate specialized work.
 
-    Sub-agents are configured via team_config.agents.investigation.subagents.
+    Sub-agents are configured via team_config.agents.investigation.sub_agents.
 
     Args:
         team_config: Team configuration for customization
@@ -422,6 +371,16 @@ def _create_subagent_tools(team_config=None):
 
     enabled_subagents = _get_enabled_subagents(team_config)
     logger.info("investigation_enabled_subagents", subagents=enabled_subagents)
+
+    # Warn about unknown sub-agent names in config
+    known_subagents = set(DEFAULT_SUBAGENTS)
+    for subagent in enabled_subagents:
+        if subagent not in known_subagents:
+            logger.warning(
+                "unknown_subagent_in_config",
+                subagent=subagent,
+                known_subagents=list(known_subagents),
+            )
 
     tools = []
 
