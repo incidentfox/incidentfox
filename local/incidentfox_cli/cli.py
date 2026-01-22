@@ -2960,7 +2960,9 @@ async def configure_kubernetes(session) -> bool:
                     console.print("[green]✓ K8S_ENABLED=true saved to .env[/green]")
                     restart_success = await restart_agent_service()
                     if restart_success:
-                        console.print("\n[green]✓ Kubernetes is now configured![/green]")
+                        console.print(
+                            "\n[green]✓ Kubernetes is now configured![/green]"
+                        )
                         return True
                     else:
                         console.print(
