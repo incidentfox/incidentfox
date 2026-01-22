@@ -40,9 +40,9 @@ def extract_content_from_run_data(run_data) -> dict[str, list[str]]:
     # Import here to avoid circular imports
     from agents.items import (
         MessageOutputItem,
+        ReasoningItem,
         ToolCallItem,
         ToolCallOutputItem,
-        ReasoningItem,
     )
 
     content = {
@@ -155,7 +155,8 @@ def summarize_partial_work(
 
     if content["tool_outputs"]:
         context_parts.append(
-            "## Tool Results (truncated):\n" + "\n---\n".join(content["tool_outputs"][-5:])
+            "## Tool Results (truncated):\n"
+            + "\n---\n".join(content["tool_outputs"][-5:])
         )
 
     if content["reasoning"]:
@@ -163,7 +164,9 @@ def summarize_partial_work(
             "## Agent's Reasoning:\n" + "\n".join(content["reasoning"][-3:])
         )
 
-    context_text = "\n\n".join(context_parts) if context_parts else "No content captured."
+    context_text = (
+        "\n\n".join(context_parts) if context_parts else "No content captured."
+    )
 
     # Use LLM to summarize
     try:
