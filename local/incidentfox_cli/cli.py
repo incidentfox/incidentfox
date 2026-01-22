@@ -713,15 +713,21 @@ async def rag_answer_direct(question: str, tree: str = "", top_k: int = 5):
                     console.print("[yellow]No answer generated[/yellow]")
                     return
 
-                console.print(f"\n[green]Answer:[/green]\n")
+                console.print("\n[green]Answer:[/green]\n")
                 console.print(Panel(answer, border_style="green"))
 
                 # Show supporting context if available
                 context_chunks = data.get("context_chunks", [])[:3]
                 if context_chunks:
-                    console.print(f"\n[dim]Supporting context ({len(context_chunks)} chunks):[/dim]")
+                    console.print(
+                        f"\n[dim]Supporting context ({len(context_chunks)} chunks):[/dim]"
+                    )
                     for i, chunk in enumerate(context_chunks, 1):
-                        text = chunk[:300] if isinstance(chunk, str) else chunk.get("text", "")[:300]
+                        text = (
+                            chunk[:300]
+                            if isinstance(chunk, str)
+                            else chunk.get("text", "")[:300]
+                        )
                         console.print(f"[dim]{i}. {text}...[/dim]")
             else:
                 console.print(f"[red]Answer failed: {response.status_code}[/red]")
@@ -1157,7 +1163,9 @@ def display_agent_tools(
 
     # Get agent config - try both agent_name and agent_name without _agent suffix
     agents = effective_config.get("agents", {})
-    agent_config = agents.get(agent_name) or agents.get(agent_name.replace("_agent", ""))
+    agent_config = agents.get(agent_name) or agents.get(
+        agent_name.replace("_agent", "")
+    )
 
     if not agent_config:
         console.print(f"[yellow]Agent '{agent_name}' not found in config[/yellow]")
@@ -1197,7 +1205,9 @@ def display_agent_tools(
     # Show summary
     direct_count = len(enabled_tools) if "*" not in enabled_tools else "all"
     subagent_count = len(sub_agents) if handoff_strategy == "agent_as_tool" else 0
-    console.print(f"\n[dim]Direct tools: {direct_count}, Sub-agent tools: {subagent_count}[/dim]")
+    console.print(
+        f"\n[dim]Direct tools: {direct_count}, Sub-agent tools: {subagent_count}[/dim]"
+    )
 
     if handoff_strategy:
         console.print(f"[dim]Handoff strategy: {handoff_strategy}[/dim]")
