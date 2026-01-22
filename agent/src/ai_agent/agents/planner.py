@@ -343,7 +343,13 @@ def _get_enabled_agents_from_config(team_cfg) -> list[str]:
     """
     Get list of enabled agent keys from team config.
 
-    Respects the enabled/disabled settings in team config.
+    Reads sub_agents from the planner agent configuration, respecting
+    the enabled/disabled settings. Config is the source of truth.
+
+    Supports multiple configuration formats:
+    - List: sub_agents: ["investigation", "coding", "writeup"]
+    - Dict with enabled flags: sub_agents: {investigation: {enabled: true}}
+    - Dict with bool values: sub_agents: {investigation: true, coding: false}
 
     Args:
         team_cfg: Team configuration object
@@ -355,36 +361,49 @@ def _get_enabled_agents_from_config(team_cfg) -> list[str]:
         return DEFAULT_PLANNER_AGENTS.copy()
 
     try:
-        # Get agents dict from team config
-        agents_dict = None
-        if hasattr(team_cfg, "agents") and team_cfg.agents:
-            agents_dict = team_cfg.agents
+        # Get planner agent config from team config
+        planner_cfg = None
+        if hasattr(team_cfg, "get_agent_config"):
+            planner_cfg = team_cfg.get_agent_config("planner")
         elif isinstance(team_cfg, dict):
-            agents_dict = team_cfg.get("agents", {})
+            agents = team_cfg.get("agents", {})
+            planner_cfg = agents.get("planner", {})
 
-        if not agents_dict:
+        if not planner_cfg:
             return DEFAULT_PLANNER_AGENTS.copy()
 
-        # Filter to enabled agents
-        enabled = []
-        for agent_key in DEFAULT_PLANNER_AGENTS:
-            agent_cfg = agents_dict.get(agent_key)
-            if agent_cfg is None:
-                # Agent not in config - default to enabled
-                enabled.append(agent_key)
-            elif isinstance(agent_cfg, dict):
-                # Dict format - check enabled field
-                if agent_cfg.get("enabled", True):
-                    enabled.append(agent_key)
-            elif hasattr(agent_cfg, "enabled"):
-                # Object format - check enabled attribute
-                if agent_cfg.enabled:
-                    enabled.append(agent_key)
-            else:
-                # Unknown format - default to enabled
-                enabled.append(agent_key)
+        # Check for sub_agents configuration (config uses underscore)
+        sub_agents_config = None
+        if hasattr(planner_cfg, "sub_agents"):
+            sub_agents_config = planner_cfg.sub_agents
+        elif isinstance(planner_cfg, dict):
+            sub_agents_config = planner_cfg.get("sub_agents", None)
 
-        return enabled if enabled else DEFAULT_PLANNER_AGENTS.copy()
+        if sub_agents_config is None:
+            return DEFAULT_PLANNER_AGENTS.copy()
+
+        # Parse sub_agents configuration
+        if isinstance(sub_agents_config, list):
+            # List format: ["investigation", "coding", "writeup"]
+            return list(sub_agents_config)
+        elif isinstance(sub_agents_config, dict):
+            # Dict format: {investigation: {enabled: true}, coding: false}
+            enabled = []
+            for name, cfg in sub_agents_config.items():
+                if isinstance(cfg, dict):
+                    if cfg.get("enabled", True):
+                        enabled.append(name)
+                elif isinstance(cfg, bool):
+                    if cfg:
+                        enabled.append(name)
+                elif hasattr(cfg, "enabled"):
+                    if cfg.enabled:
+                        enabled.append(name)
+                else:
+                    enabled.append(name)  # Default to enabled
+            return enabled if enabled else DEFAULT_PLANNER_AGENTS.copy()
+
+        return DEFAULT_PLANNER_AGENTS.copy()
 
     except Exception as e:
         logger.warning("failed_to_get_enabled_agents", error=str(e))

@@ -353,12 +353,12 @@ def _get_enabled_subagents(team_cfg) -> list[str]:
         if not agent_cfg:
             return DEFAULT_SUBAGENTS.copy()
 
-        # Check for subagents configuration
+        # Check for sub_agents configuration (config uses underscore)
         subagents_config = None
-        if hasattr(agent_cfg, "subagents"):
-            subagents_config = agent_cfg.subagents
+        if hasattr(agent_cfg, "sub_agents"):
+            subagents_config = agent_cfg.sub_agents
         elif isinstance(agent_cfg, dict):
-            subagents_config = agent_cfg.get("subagents", None)
+            subagents_config = agent_cfg.get("sub_agents", None)
 
         if subagents_config is None:
             return DEFAULT_SUBAGENTS.copy()

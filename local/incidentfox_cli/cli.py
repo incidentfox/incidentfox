@@ -758,7 +758,9 @@ Maintained by the IncidentFox team.
 
 If IncidentFox helps your team, consider starring the repo!
 """
-    console.print(Panel(about_text.strip(), title="About IncidentFox", border_style="blue"))
+    console.print(
+        Panel(about_text.strip(), title="About IncidentFox", border_style="blue")
+    )
 
 
 @click.command()
