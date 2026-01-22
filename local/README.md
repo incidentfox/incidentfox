@@ -112,13 +112,9 @@ incidentfox> help
 
 ## Example Prompts
 
-incidentfox> Check if there are any pods crashing in the default namespace
-
-incidentfox> Investigate why the API service is returning 500 errors
-
-incidentfox> Analyze the performance of our payment service
-
-incidentfox> Find recent changes in the auth service
+incidentfox> Check if there are any k8s pods crashing
+incidentfox> Check if there's any grafana metric anomaly
+incidentfox> What GitHub PRs were merged in the last 24 hours?
 ```
 
 ## Configuration

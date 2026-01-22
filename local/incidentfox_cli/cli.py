@@ -2452,21 +2452,11 @@ to specialized sub-agents:
 ## Example Prompts
 
 ```
-Check if there are any pods crashing in the default namespace
+Check if there are any k8s pods crashing
 ```
-
 ```
-Investigate why the API service is returning 500 errors
+Check if there's any grafana metric anomaly
 ```
-
-```
-Analyze the performance of our payment service
-```
-
-```
-Find recent changes in the auth service that might have caused issues
-```
-
 ```
 What GitHub PRs were merged in the last 24 hours?
 ```
