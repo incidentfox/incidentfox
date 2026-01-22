@@ -149,7 +149,11 @@ def _load_log_analysis_tools():
             except TypeError:
                 wrapped.append(function_tool(t))
             except Exception as e:
-                logger.warning("tool_wrap_failed", tool=getattr(t, "__name__", str(t)), error=str(e))
+                logger.warning(
+                    "tool_wrap_failed",
+                    tool=getattr(t, "__name__", str(t)),
+                    error=str(e),
+                )
                 wrapped.append(t)
     return wrapped
 

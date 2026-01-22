@@ -795,7 +795,9 @@ def github_search_commits_by_timerange(
         return commit_list
 
     except IntegrationNotConfiguredError:
-        logger.warning("github_not_configured", tool="github_search_commits_by_timerange")
+        logger.warning(
+            "github_not_configured", tool="github_search_commits_by_timerange"
+        )
         return _github_config_required_response("github_search_commits_by_timerange")
 
     except Exception as e:
