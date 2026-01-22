@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from ..core.config import get_config
 from ..core.logging import get_logger
-from ..tools.agent_tools import llm_call, web_search
+from ..tools.agent_tools import ask_human, llm_call, web_search
 from ..tools.thinking import think
 from .base import TaskContext
 
@@ -24,7 +24,7 @@ def _load_github_tools():
     These tools focus on repository operations - commits, PRs, issues, code search.
     Includes both remote GitHub API tools and local git CLI tools.
     """
-    tools = [think, llm_call, web_search]
+    tools = [think, llm_call, web_search, ask_human]
 
     # Remote GitHub API tools (for accessing any GitHub repository)
     try:
@@ -413,7 +413,7 @@ def create_github_agent(
                    This adds guidance for effective delegation.
                    Can also be set via team config: agents.github.is_master: true
     """
-    from ..prompts.layers import apply_role_based_prompt
+    from ..prompts.layers import apply_role_based_prompt, build_tool_guidance
 
     config = get_config()
     team_cfg = team_config if team_config is not None else config.team_config
@@ -464,6 +464,11 @@ def create_github_agent(
     # Load GitHub-specific tools
     tools = _load_github_tools()
     logger.info("github_agent_tools_loaded", count=len(tools))
+
+    # Add tool-specific guidance to the system prompt
+    tool_guidance = build_tool_guidance(tools)
+    if tool_guidance:
+        system_prompt = system_prompt + "\n\n" + tool_guidance
 
     # Get model settings from team config if available
     model_name = config.openai.model

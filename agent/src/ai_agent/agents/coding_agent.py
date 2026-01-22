@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from ..core.config import get_config
 from ..core.logging import get_logger
-from ..tools.agent_tools import llm_call, web_search
+from ..tools.agent_tools import ask_human, llm_call, web_search
 from ..tools.thinking import think
 from .base import TaskContext
 
@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 
 def _load_coding_tools():
     """Load coding-specific tools."""
-    tools = [think, llm_call, web_search]
+    tools = [think, llm_call, web_search, ask_human]
 
     # Coding tools (file ops, search, testing)
     try:
@@ -129,7 +129,7 @@ def create_coding_agent(
                    This adds guidance for effective delegation.
                    Can also be set via team config: agents.coding.is_master: true
     """
-    from ..prompts.layers import apply_role_based_prompt
+    from ..prompts.layers import apply_role_based_prompt, build_tool_guidance
 
     config = get_config()
     team_cfg = team_config if team_config is not None else config.team_config
@@ -247,6 +247,11 @@ When providing fixes:
     # Load coding-specific tools
     tools = _load_coding_tools()
     logger.info("coding_agent_tools_loaded", count=len(tools))
+
+    # Add tool-specific guidance to the system prompt
+    tool_guidance = build_tool_guidance(tools)
+    if tool_guidance:
+        system_prompt = system_prompt + "\n\n" + tool_guidance
 
     # Get model settings from team config if available
     model_name = config.openai.model

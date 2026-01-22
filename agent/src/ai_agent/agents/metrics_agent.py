@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from ..core.config import get_config
 from ..core.logging import get_logger
-from ..tools.agent_tools import llm_call, web_search
+from ..tools.agent_tools import ask_human, llm_call, web_search
 from ..tools.aws_tools import get_cloudwatch_metrics, query_cloudwatch_insights
 from ..tools.thinking import think
 from ..tools.tool_loader import is_integration_available
@@ -21,6 +21,7 @@ def _load_metrics_tools():
         think,
         llm_call,
         web_search,
+        ask_human,
         # CloudWatch (always available)
         get_cloudwatch_metrics,
         query_cloudwatch_insights,
@@ -205,7 +206,7 @@ def create_metrics_agent(
                    This adds guidance for effective delegation.
                    Can also be set via team config: agents.metrics.is_master: true
     """
-    from ..prompts.layers import apply_role_based_prompt
+    from ..prompts.layers import apply_role_based_prompt, build_tool_guidance
 
     config = get_config()
     team_cfg = team_config if team_config is not None else config.team_config
@@ -385,6 +386,11 @@ When you find strong correlation, you've likely found the root cause path!"""
     # Load all available metrics tools
     tools = _load_metrics_tools()
     logger.info("metrics_agent_tools_loaded", count=len(tools))
+
+    # Add tool-specific guidance to the system prompt
+    tool_guidance = build_tool_guidance(tools)
+    if tool_guidance:
+        system_prompt = system_prompt + "\n\n" + tool_guidance
 
     # Get model settings from team config if available
     model_name = config.openai.model

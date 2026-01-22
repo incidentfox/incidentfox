@@ -591,7 +591,7 @@ def _extract_context_from_team_config(team_cfg) -> dict[str, Any]:
     Extract contextual information from team config for prompt building.
 
     Args:
-        team_cfg: Team configuration object
+        team_cfg: Team configuration object or dict
 
     Returns:
         Dict with contextual info fields
@@ -601,11 +601,26 @@ def _extract_context_from_team_config(team_cfg) -> dict[str, Any]:
 
     context_dict = {}
 
+    # Handle dict, Pydantic models, and plain objects
+    def get_field(cfg, field):
+        if isinstance(cfg, dict):
+            return cfg.get(field)
+        # Pydantic models with extra="allow" store extra fields in __pydantic_extra__
+        if hasattr(cfg, "__pydantic_extra__") and cfg.__pydantic_extra__:
+            if field in cfg.__pydantic_extra__:
+                return cfg.__pydantic_extra__[field]
+        # Also try model_dump for Pydantic v2
+        if hasattr(cfg, "model_dump"):
+            data = cfg.model_dump()
+            if field in data:
+                return data[field]
+        return getattr(cfg, field, None)
+
     # Try to get context fields from team config
     # These might be on the config object directly or in a 'context' sub-dict
     try:
-        if hasattr(team_cfg, "context") and team_cfg.context:
-            ctx = team_cfg.context
+        ctx = get_field(team_cfg, "context")
+        if ctx:
             if isinstance(ctx, dict):
                 context_dict = ctx.copy()
             elif hasattr(ctx, "__dict__"):
@@ -624,10 +639,9 @@ def _extract_context_from_team_config(team_cfg) -> dict[str, Any]:
             "approval_gates",
             "additional_instructions",
         ]:
-            if hasattr(team_cfg, field):
-                value = getattr(team_cfg, field)
-                if value and field not in context_dict:
-                    context_dict[field] = value
+            value = get_field(team_cfg, field)
+            if value and field not in context_dict:
+                context_dict[field] = value
 
         # Check for planner-specific additional instructions
         if hasattr(team_cfg, "get_agent_config"):
@@ -790,6 +804,8 @@ def create_planner_agent(
             prompt_length=len(system_prompt),
             enabled_agents=enabled_agents,
             has_context=bool(context_dict),
+            context_keys=list(context_dict.keys()) if context_dict else [],
+            has_service_info="service_info" in context_dict if context_dict else False,
             has_remote_agents=bool(remote_agents_config),
         )
 

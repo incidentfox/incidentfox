@@ -688,21 +688,39 @@ SUBAGENT_RESPONSE_GUIDANCE = """## RESPONDING TO YOUR CALLER
 
 You are being called by another agent as part of a larger investigation. Optimize your response for the caller:
 
-**Be concise and focused:**
-- Lead with the most important finding or conclusion
-- Return only key findings relevant to what was asked
-- Don't include your full investigation methodology or intermediate reasoning steps
+### Include Key Identifiers in Your Response
 
-**Structure for your caller:**
-- Start with a clear 1-2 sentence summary of what you found
-- List specific findings with supporting evidence (quote logs, metrics, timestamps)
-- Include your confidence level (low/medium/high or 0-100%)
-- End with actionable recommendations if relevant
+**Always echo back the specific resources you investigated** so the caller knows exactly what was checked:
 
-**What NOT to include:**
-- Lengthy explanations of how you investigated
+```
+✓ "Checked deployment 'checkout-api' in namespace 'checkout-prod' (cluster: prod-us-east-1)"
+✓ "Queried CloudWatch logs for log group '/aws/lambda/payment-processor' in us-east-1"
+✓ "Analyzed metrics for service 'api-gateway' in environment 'production' from 10:00-12:00 UTC"
+```
+
+This prevents confusion about what was actually investigated vs. what was assumed.
+
+### Structure Your Response
+
+1. **Summary** (1-2 sentences) - The most important finding or conclusion
+2. **Resources investigated** - Which specific resources/identifiers you checked
+3. **Key findings** - Evidence with specifics (timestamps, values, error messages)
+4. **Confidence level** - low/medium/high or 0-100%
+5. **Recommendations** - Actionable next steps if relevant
+
+### Be Specific with Evidence
+
+Include concrete details that help the caller:
+- Exact timestamps: "Error spike at 10:32:15 UTC"
+- Specific values: "CPU usage 94%, memory 87%"
+- Quoted log lines: `"Connection refused: database-primary:5432"`
+- Resource states: "Pod status: CrashLoopBackOff, restarts: 47"
+
+### What NOT to Include
+
+- Lengthy explanations of your methodology
 - Raw, unprocessed tool outputs (summarize key points)
-- Tangential findings unrelated to the specific query
+- Tangential findings unrelated to the query
 - Excessive caveats or disclaimers
 
 The agent calling you will synthesize your findings with information from other sources. Be direct, specific, and evidence-based.
@@ -713,32 +731,111 @@ DELEGATION_GUIDANCE = """## DELEGATING TO SUB-AGENTS
 
 When calling sub-agents, your job is to set them up for success. Provide context that helps them focus.
 
-**Include in every delegation:**
-- **The specific question or task** - Be clear about what you need to know
-- **Relevant context** - What symptoms are you seeing? When did it start?
-- **Prior findings** - What have you or other agents already discovered?
-- **Focus hints** - If you suspect something, mention it so they can prioritize
+### ⚠️ CRITICAL: Always Include Resource Identifiers
 
-**Example of effective delegation:**
+**Sub-agents CANNOT guess resource names.** Without explicit identifiers, their tool calls will fail or target wrong resources.
+
+**ALWAYS include these when you know them:**
+
+| Domain | Critical Identifiers |
+|--------|---------------------|
+| Kubernetes | `namespace`, `deployment`, `service`, `pod name pattern`, `cluster` |
+| AWS | `region`, `account_id`, `service_name`, `function_name`, `log_group` |
+| Metrics | `service_name`, `environment`, `time_range`, `metric_name` |
+| GitHub | `repo`, `branch`, `PR number`, `commit SHA` |
+| Logs | `log_group`, `log_stream`, `service_name`, `time_range` |
+
+**Example - GOOD (includes identifiers):**
 ```
-"Investigate pod health in the checkout namespace.
-Context: We're seeing HTTP 500 errors since 10:30 AM.
-Prior findings: Metrics agent found latency spike correlating with this time, and database connections are elevated.
-Focus: Check for OOMKills, recent restarts, or resource pressure that might explain the errors."
+"Investigate pod health issues.
+Namespace: checkout-prod
+Deployment: checkout-api
+Cluster: prod-us-east-1
+Time range: Last 2 hours (since 10:30 AM UTC)
+Context: We're seeing HTTP 500 errors. Check for OOMKills, crashes, or resource pressure."
 ```
 
-**Example of poor delegation:**
+**Example - BAD (missing identifiers):**
 ```
-"Check the pods"
+"Check the pods for the checkout service"
 ```
-(Too vague - the agent won't know what to focus on or what problem you're trying to solve)
+❌ Sub-agent doesn't know: Which namespace? Which cluster? What's the deployment called?
+❌ Result: Failed API calls or wrong resources investigated
 
-**What NOT to include:**
+### What to Include in Every Delegation
+
+1. **Resource identifiers** (namespace, service name, region, etc.) - REQUIRED when known
+2. **The specific question or task** - What do you need to know?
+3. **Time context** - When did the issue start? What time range to investigate?
+4. **Prior findings** - What have you or other agents already discovered?
+5. **Focus hints** - If you suspect something, mention it so they can prioritize
+
+### What NOT to Include
+
 - Information irrelevant to the sub-agent's domain (don't tell K8s agent about Lambda issues)
 - Step-by-step instructions on how to investigate (trust the expert)
 - Your entire investigation history (just the relevant parts)
 
-**Trust your sub-agents.** They are domain experts. Give them goals and context, let them decide how to investigate.
+**Trust your sub-agents.** They are domain experts. Give them goals, identifiers, and context - let them decide how to investigate.
+
+---
+
+## ⚠️ CRITICAL: Handling Sub-Agent `ask_human` Requests
+
+**When a sub-agent uses `ask_human`, you MUST stop and bubble up the request.**
+
+Sub-agents may encounter situations where they cannot proceed without human intervention (e.g., credential issues, permission errors, clarification needed). When this happens:
+
+### How to detect `ask_human` from a sub-agent
+
+The sub-agent's response will contain `"human_input_required": true` in its output. This signals that:
+1. The sub-agent has stopped working
+2. Human intervention is needed before continuing
+3. The entire investigation must pause
+
+### What you MUST do
+
+When you see a sub-agent output containing `"human_input_required": true`:
+
+1. **STOP IMMEDIATELY** - Do NOT continue with other sub-agents or tasks
+2. **Preserve the sub-agent's findings** - Include their partial results in your response
+3. **Bubble up the request** - Use `ask_human` yourself to relay the request to the human
+4. **End your session** - Your session is also complete until the human responds
+
+### Example - CORRECT handling:
+
+```
+Sub-agent (aws_agent) response:
+"I found elevated error rates on the API Gateway (5% → 40% since 10:30 AM).
+However, I cannot access CloudWatch logs due to 403 Forbidden error.
+{"human_input_required": true, "question": "Please grant CloudWatch read permissions"}"
+
+Master agent (you) should:
+1. Note the findings: "AWS agent found elevated API Gateway errors (5% → 40%)"
+2. Recognize the blocker: "AWS agent needs CloudWatch permissions"
+3. Call ask_human: "The AWS agent needs CloudWatch read permissions to access logs.
+   Please grant logs:GetLogEvents permission and type 'done' when ready."
+4. STOP - do not call other agents or continue investigating
+```
+
+### Example - WRONG handling:
+
+```
+Sub-agent response contains "human_input_required": true
+
+❌ "Let me try the metrics agent instead..."     - WRONG: should stop
+❌ "Let me ask the K8s agent to check pods..."   - WRONG: should stop
+❌ Continuing investigation without addressing   - WRONG: must bubble up
+```
+
+### Why this matters
+
+The investigation cannot meaningfully proceed if a critical path is blocked. Continuing with other agents:
+- Wastes resources on potentially irrelevant work
+- May lead to incomplete or misleading conclusions
+- Delays getting the human intervention that's actually needed
+
+**When a sub-agent asks for human help, the entire investigation pauses until the human responds.**
 """
 
 
