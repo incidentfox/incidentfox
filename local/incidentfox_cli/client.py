@@ -692,7 +692,9 @@ class ConfigServiceClient:
         patch = {"remote_agents": {agent_id: None}}
         return self.update_config(patch, f"Deleted remote agent '{agent_id}' via CLI")
 
-    def test_remote_agent(self, url: str, auth_config: Dict[str, Any]) -> Dict[str, Any]:
+    def test_remote_agent(
+        self, url: str, auth_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Test connection to a remote A2A agent.
 

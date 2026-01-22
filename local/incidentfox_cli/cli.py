@@ -758,7 +758,9 @@ Maintained by the IncidentFox team.
 
 If IncidentFox helps your team, consider starring the repo!
 """
-    console.print(Panel(about_text.strip(), title="About IncidentFox", border_style="blue"))
+    console.print(
+        Panel(about_text.strip(), title="About IncidentFox", border_style="blue")
+    )
 
 
 @click.command()
@@ -1476,12 +1478,18 @@ async def handle_mcp_command(
         # Show help
         console.print("[cyan]MCP Server Commands:[/cyan]")
         console.print("  [green]/mcp[/green]                 List all MCP servers")
-        console.print("  [green]/mcp add[/green]             Add a new MCP server (interactive)")
+        console.print(
+            "  [green]/mcp add[/green]             Add a new MCP server (interactive)"
+        )
         console.print("  [green]/mcp enable <id>[/green]     Enable an MCP server")
         console.print("  [green]/mcp disable <id>[/green]    Disable an MCP server")
         console.print("  [green]/mcp delete <id>[/green]     Delete an MCP server")
-        console.print("  [green]/mcp preview[/green]         Preview MCP tools before adding")
-        console.print("  [green]/mcp tools <id>[/green]      Show tools from a specific MCP")
+        console.print(
+            "  [green]/mcp preview[/green]         Preview MCP tools before adding"
+        )
+        console.print(
+            "  [green]/mcp tools <id>[/green]      Show tools from a specific MCP"
+        )
 
 
 async def display_mcp_list(config_client: ConfigServiceClient) -> None:
@@ -1507,7 +1515,11 @@ async def display_mcp_list(config_client: ConfigServiceClient) -> None:
         status = "[green]✓ enabled[/green]" if enabled else "[dim]disabled[/dim]"
         command = cfg.get("command", "")
         args = cfg.get("args", [])
-        cmd_str = f"{command} {' '.join(args[:2])}..." if len(args) > 2 else f"{command} {' '.join(args)}"
+        cmd_str = (
+            f"{command} {' '.join(args[:2])}..."
+            if len(args) > 2
+            else f"{command} {' '.join(args)}"
+        )
 
         table.add_row(mcp_id, name, status, cmd_str[:40])
 
@@ -1557,7 +1569,9 @@ async def add_mcp_interactive(
     args = args_str.strip().split() if args_str.strip() else []
 
     # Get environment variables
-    console.print("\n[dim]Environment variables (format: KEY=value, empty line to finish)[/dim]")
+    console.print(
+        "\n[dim]Environment variables (format: KEY=value, empty line to finish)[/dim]"
+    )
     console.print("[dim]Use ${var} for secrets configured in the UI[/dim]")
     env_vars: dict[str, str] = {}
     while True:
@@ -1577,7 +1591,9 @@ async def add_mcp_interactive(
 
     if preview_result.get("success"):
         tool_count = preview_result.get("tool_count", 0)
-        console.print(f"[green]✓ Connection successful! Found {tool_count} tools[/green]")
+        console.print(
+            f"[green]✓ Connection successful! Found {tool_count} tools[/green]"
+        )
 
         # Show some tools
         tools = preview_result.get("tools", [])[:5]
@@ -1653,7 +1669,8 @@ async def preview_mcp_interactive(
             for tool in tools:
                 table.add_row(
                     tool.get("name", ""),
-                    tool.get("description", "")[:60] + ("..." if len(tool.get("description", "")) > 60 else ""),
+                    tool.get("description", "")[:60]
+                    + ("..." if len(tool.get("description", "")) > 60 else ""),
                 )
             console.print(table)
     else:
@@ -1792,12 +1809,18 @@ async def handle_a2a_command(
         # Show help
         console.print("[cyan]A2A Remote Agent Commands:[/cyan]")
         console.print("  [green]/a2a[/green]                 List all remote agents")
-        console.print("  [green]/a2a add[/green]             Add a new remote agent (interactive)")
+        console.print(
+            "  [green]/a2a add[/green]             Add a new remote agent (interactive)"
+        )
         console.print("  [green]/a2a enable <id>[/green]     Enable a remote agent")
         console.print("  [green]/a2a disable <id>[/green]    Disable a remote agent")
         console.print("  [green]/a2a delete <id>[/green]     Delete a remote agent")
-        console.print("  [green]/a2a test[/green]            Test connection to an A2A endpoint")
-        console.print("  [green]/a2a info <id>[/green]       Show details of a remote agent")
+        console.print(
+            "  [green]/a2a test[/green]            Test connection to an A2A endpoint"
+        )
+        console.print(
+            "  [green]/a2a info <id>[/green]       Show details of a remote agent"
+        )
 
 
 async def display_a2a_list(config_client: ConfigServiceClient) -> None:
@@ -1925,7 +1948,9 @@ async def add_a2a_interactive(
 
     # Test connection
     console.print("\n[dim]Testing connection...[/dim]")
-    test_result = config_client.test_remote_agent(url, {"type": auth_type, **auth_config})
+    test_result = config_client.test_remote_agent(
+        url, {"type": auth_type, **auth_config}
+    )
 
     if test_result.get("success"):
         console.print("[green]✓ Connection successful![/green]")
@@ -1934,7 +1959,9 @@ async def add_a2a_interactive(
             console.print(f"  Agent name: {agent_info.get('name', 'unknown')}")
             console.print(f"  Version: {agent_info.get('version', 'unknown')}")
     else:
-        console.print(f"[yellow]⚠ Connection test failed: {test_result.get('message')}[/yellow]")
+        console.print(
+            f"[yellow]⚠ Connection test failed: {test_result.get('message')}[/yellow]"
+        )
         console.print("[yellow]The agent may still work - continue anyway?[/yellow]")
 
     # Confirm add
@@ -1955,7 +1982,9 @@ async def add_a2a_interactive(
     )
 
     if result.get("success"):
-        console.print(f"\n[green]✓ Added remote agent '{agent_id}' successfully![/green]")
+        console.print(
+            f"\n[green]✓ Added remote agent '{agent_id}' successfully![/green]"
+        )
         console.print("[dim]Use '/agents reload' to make it available[/dim]")
     else:
         console.print(f"[red]Failed to add agent: {result.get('error')}[/red]")
@@ -1993,7 +2022,7 @@ async def test_a2a_interactive(
         console.print("[green]✓ Connection successful![/green]")
         agent_info = result.get("agentInfo", {})
         if agent_info:
-            console.print(f"\n[cyan]Agent Info:[/cyan]")
+            console.print("\n[cyan]Agent Info:[/cyan]")
             console.print(f"  Name: {agent_info.get('name', 'unknown')}")
             console.print(f"  Description: {agent_info.get('description', 'N/A')}")
             console.print(f"  Version: {agent_info.get('version', 'unknown')}")
@@ -2027,7 +2056,7 @@ async def display_a2a_info(config_client: ConfigServiceClient, agent_id: str) ->
         console.print(f"[green]Description:[/green] {cfg.get('description')}")
 
     auth = cfg.get("auth", {})
-    console.print(f"\n[cyan]Authentication:[/cyan]")
+    console.print("\n[cyan]Authentication:[/cyan]")
     console.print(f"  Type: {auth.get('type', 'none')}")
     if auth.get("type") == "apikey":
         console.print(f"  Location: {auth.get('location', 'header')}")
