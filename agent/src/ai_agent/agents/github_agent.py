@@ -1,6 +1,6 @@
 """GitHub repository operations agent."""
 
-from agents import Agent, ModelSettings
+from agents import Agent, ModelSettings, Tool, function_tool
 from pydantic import BaseModel, Field
 
 from ..core.config import get_config
@@ -66,7 +66,21 @@ def _load_github_tools():
     except Exception as e:
         logger.warning("git_tools_load_failed", error=str(e))
 
-    return tools
+    # Wrap plain functions into Tool objects for SDK compatibility
+    wrapped = []
+    for t in tools:
+        if isinstance(t, Tool) or hasattr(t, "name"):
+            wrapped.append(t)
+        else:
+            try:
+                wrapped.append(function_tool(t, strict_mode=False))
+            except TypeError:
+                # Older SDK version without strict_mode
+                wrapped.append(function_tool(t))
+            except Exception as e:
+                logger.warning("tool_wrap_failed", tool=getattr(t, "__name__", str(t)), error=str(e))
+                wrapped.append(t)
+    return wrapped
 
 
 # =============================================================================

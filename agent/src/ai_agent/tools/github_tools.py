@@ -5,6 +5,8 @@ import json
 import os
 from typing import Any
 
+from agents import function_tool
+
 from ..core.config_required import make_config_required_response
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
@@ -58,6 +60,7 @@ def _github_config_required_response(tool_name: str) -> str:
     )
 
 
+@function_tool
 def search_github_code(
     query: str, org: str | None = None, repo: str | None = None, max_results: int = 10
 ) -> list[dict[str, Any]] | str:
@@ -111,6 +114,7 @@ def search_github_code(
         return json.dumps({"error": str(e), "query": query})
 
 
+@function_tool
 def read_github_file(repo: str, file_path: str, ref: str = "main") -> str:
     """
     Read a file from GitHub repository.
@@ -145,6 +149,7 @@ def read_github_file(repo: str, file_path: str, ref: str = "main") -> str:
         return json.dumps({"error": str(e), "repo": repo, "file": file_path})
 
 
+@function_tool
 def create_pull_request(
     repo: str, title: str, head: str, base: str, body: str
 ) -> dict[str, Any] | str:
@@ -185,6 +190,7 @@ def create_pull_request(
         return json.dumps({"error": str(e), "repo": repo})
 
 
+@function_tool
 def list_pull_requests(
     repo: str, state: str = "open", max_results: int = 10
 ) -> list[dict[str, Any]] | str:
@@ -237,6 +243,7 @@ def list_pull_requests(
 # ============================================================================
 
 
+@function_tool
 def merge_pull_request(
     repo: str, pr_number: int, merge_method: str = "merge"
 ) -> dict[str, Any] | str:
@@ -269,6 +276,7 @@ def merge_pull_request(
         return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
+@function_tool
 def github_create_issue(
     repo: str,
     title: str,
@@ -313,6 +321,7 @@ def github_create_issue(
         return json.dumps({"error": str(e), "repo": repo})
 
 
+@function_tool
 def list_issues(
     repo: str,
     state: str = "open",
@@ -368,6 +377,7 @@ def list_issues(
         return json.dumps({"error": str(e), "repo": repo})
 
 
+@function_tool
 def close_issue(
     repo: str, issue_number: int, comment: str | None = None
 ) -> dict[str, Any] | str:
@@ -403,6 +413,7 @@ def close_issue(
         return json.dumps({"error": str(e), "repo": repo, "issue_number": issue_number})
 
 
+@function_tool
 def create_branch(
     repo: str, branch_name: str, source_branch: str = "main"
 ) -> dict[str, Any] | str:
@@ -442,6 +453,7 @@ def create_branch(
         return json.dumps({"error": str(e), "repo": repo, "branch": branch_name})
 
 
+@function_tool
 def list_branches(repo: str, max_results: int = 30) -> list[dict[str, Any]] | str:
     """
     List branches in a repository.
@@ -482,6 +494,7 @@ def list_branches(repo: str, max_results: int = 30) -> list[dict[str, Any]] | st
         return json.dumps({"error": str(e), "repo": repo})
 
 
+@function_tool
 def list_files(
     repo: str, path: str = "", ref: str | None = None
 ) -> list[dict[str, Any]] | str:
@@ -537,6 +550,7 @@ def list_files(
         return json.dumps({"error": str(e), "repo": repo, "path": path})
 
 
+@function_tool
 def get_repo_info(repo: str) -> dict[str, Any] | str:
     """
     Get repository information.
@@ -576,8 +590,9 @@ def get_repo_info(repo: str) -> dict[str, Any] | str:
         return json.dumps({"error": str(e), "repo": repo})
 
 
+@function_tool
 def trigger_workflow(
-    repo: str, workflow_id: str, ref: str = "main", inputs: dict[str, str] | None = None
+    repo: str, workflow_id: str, ref: str = "main", inputs: str = ""
 ) -> dict[str, Any] | str:
     """
     Trigger a GitHub Actions workflow.
@@ -586,16 +601,19 @@ def trigger_workflow(
         repo: Repository (format: "owner/repo")
         workflow_id: Workflow filename (e.g., "ci.yml") or ID
         ref: Branch to run on
-        inputs: Workflow input parameters
+        inputs: Workflow input parameters as JSON string (e.g., '{"key": "value"}')
 
     Returns:
         Trigger result or config_required response
     """
     try:
+        # Parse inputs JSON string
+        inputs_dict = json.loads(inputs) if inputs else {}
+
         g = _get_github_client()
         repository = g.get_repo(repo)
         workflow = repository.get_workflow(workflow_id)
-        result = workflow.create_dispatch(ref=ref, inputs=inputs or {})
+        result = workflow.create_dispatch(ref=ref, inputs=inputs_dict)
 
         logger.info(
             "github_workflow_triggered", repo=repo, workflow=workflow_id, ref=ref
@@ -611,6 +629,7 @@ def trigger_workflow(
         return json.dumps({"error": str(e), "repo": repo, "workflow_id": workflow_id})
 
 
+@function_tool
 def list_workflow_runs(
     repo: str,
     workflow_id: str | None = None,
@@ -671,6 +690,7 @@ def list_workflow_runs(
         return json.dumps({"error": str(e), "repo": repo})
 
 
+@function_tool
 def github_get_pr(repo: str, pr_number: int) -> dict[str, Any] | str:
     """
     Get details of a specific pull request.
@@ -717,6 +737,7 @@ def github_get_pr(repo: str, pr_number: int) -> dict[str, Any] | str:
         return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
+@function_tool
 def github_search_commits_by_timerange(
     repo: str,
     since: str,
@@ -782,6 +803,7 @@ def github_search_commits_by_timerange(
         return json.dumps({"error": str(e), "repo": repo})
 
 
+@function_tool
 def github_list_pr_commits(
     repo: str, pr_number: int, max_results: int = 100
 ) -> list[dict[str, Any]] | str:
@@ -855,6 +877,7 @@ def github_list_pr_commits(
         return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
+@function_tool
 def github_create_pr_review(
     repo: str, pr_number: int, body: str, event: str = "COMMENT"
 ) -> dict[str, Any] | str:
