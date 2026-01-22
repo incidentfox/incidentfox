@@ -932,6 +932,15 @@ def create_investigation_agent(
     if team_cfg:
         if isinstance(team_cfg, dict):
             team_config_dict = team_cfg
+        elif hasattr(team_cfg, "model_dump"):
+            # Pydantic v2 model - use model_dump() to get all fields including extras
+            team_config_dict = team_cfg.model_dump()
+        elif hasattr(team_cfg, "__pydantic_extra__") and team_cfg.__pydantic_extra__:
+            # Pydantic model with extra fields - merge __dict__ and __pydantic_extra__
+            team_config_dict = {
+                k: v for k, v in team_cfg.__dict__.items() if not k.startswith("_")
+            }
+            team_config_dict.update(team_cfg.__pydantic_extra__)
         elif hasattr(team_cfg, "__dict__"):
             team_config_dict = {
                 k: v for k, v in team_cfg.__dict__.items() if not k.startswith("_")

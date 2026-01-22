@@ -56,7 +56,12 @@ def ask_human(
         choices: For response_type="choice", the list of options to choose from.
 
     Returns:
-        The human's response as a string.
+        A JSON string with `human_input_required: true` and the request details.
+        This signals to the system that human input is needed. The actual human
+        response will come in a follow-up message after the session resumes.
+
+        IMPORTANT: After calling this tool, your session is effectively complete.
+        Do not call any more tools or continue working - stop immediately.
 
     Examples:
         # Ask for information

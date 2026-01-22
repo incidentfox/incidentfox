@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from ..core.config import get_config
 from ..core.logging import get_logger
-from ..tools.agent_tools import llm_call
+from ..tools.agent_tools import ask_human, llm_call
 from ..tools.thinking import think
 from .base import TaskContext
 
@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 
 def _load_ci_tools():
     """Load CI-specific tools."""
-    tools = [think, llm_call]
+    tools = [think, llm_call, ask_human]
 
     # CI tools (workflow logs, PR comments, commits)
     try:
@@ -279,6 +279,13 @@ def create_ci_agent(team_config: dict[str, Any] | None = None) -> Agent[TaskCont
     # Load CI-specific tools
     tools = _load_ci_tools()
     logger.info("ci_agent_tools_loaded", count=len(tools))
+
+    # Add tool-specific guidance to the system prompt
+    from ..prompts.layers import build_tool_guidance
+
+    tool_guidance = build_tool_guidance(tools)
+    if tool_guidance:
+        system_prompt = system_prompt + "\n\n" + tool_guidance
 
     # Get model settings from team config if available
     model_name = config.openai.model
