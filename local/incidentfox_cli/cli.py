@@ -1390,6 +1390,33 @@ async def run_repl(
             # Built-in commands
             cmd = prompt.lower()
 
+            # Shell escape: run bash commands with ! prefix
+            if prompt.startswith("!"):
+                shell_cmd = prompt[1:].strip()
+                if shell_cmd:
+                    try:
+                        console.print(f"[dim]$ {shell_cmd}[/dim]")
+                        result = subprocess.run(
+                            shell_cmd,
+                            shell=True,
+                            capture_output=True,
+                            text=True,
+                            cwd=os.getcwd(),
+                        )
+                        if result.stdout:
+                            console.print(result.stdout.rstrip())
+                        if result.stderr:
+                            console.print(f"[red]{result.stderr.rstrip()}[/red]")
+                        if result.returncode != 0:
+                            console.print(
+                                f"[yellow]Exit code: {result.returncode}[/yellow]"
+                            )
+                    except Exception as e:
+                        console.print(f"[red]Error running command: {e}[/red]")
+                else:
+                    console.print("[yellow]Usage: !<command> (e.g., !ls -la)[/yellow]")
+                continue
+
             # Basic commands: work with or without slash
             if cmd in ("quit", "exit", "q", "/quit", "/exit", "/q"):
                 console.print("[dim]Goodbye![/dim]")
@@ -2372,6 +2399,7 @@ def display_help():
 
 | Command | Description |
 |---------|-------------|
+| `!<cmd>` | Run a shell command (e.g., `!ls -la`, `!kubectl get pods`) |
 | `help` | Show this help |
 | `/config` | Show integration config status |
 | `/config <name>` | Configure an integration (e.g., `/config kubernetes`) |
