@@ -2778,14 +2778,59 @@ def update_env_var(key: str, value: str) -> bool:
         return False
 
 
-async def restart_agent_service():
-    """Recreate agent container to apply new config."""
+def _find_local_dir() -> str | None:
+    """Find the local directory containing docker-compose.yml.
+
+    Searches in order of preference:
+    1. INCIDENTFOX_LOCAL_DIR environment variable
+    2. ./local (relative to cwd)
+    3. . (cwd itself)
+    4. Relative to __file__ (fallback for development)
+
+    Returns the path if found, None otherwise.
+    """
+    # Check environment variable first
+    env_dir = os.getenv("INCIDENTFOX_LOCAL_DIR")
+    if env_dir and os.path.exists(os.path.join(env_dir, "docker-compose.yml")):
+        return env_dir
+
+    # Check common locations relative to cwd
+    candidates = [
+        os.path.join(os.getcwd(), "local"),
+        os.getcwd(),
+        # Fallback: relative to this file (works in development)
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    ]
+
+    for candidate in candidates:
+        if os.path.exists(os.path.join(candidate, "docker-compose.yml")):
+            return candidate
+
+    return None
+
+
+async def restart_agent_service() -> bool:
+    """Recreate agent container to apply new config.
+
+    Returns:
+        True if restart was successful, False otherwise.
+    """
     console.print("\n[dim]Recreating agent service to apply new config...[/dim]")
     try:
         import subprocess
 
-        cli_dir = os.path.dirname(os.path.abspath(__file__))
-        local_dir = os.path.dirname(cli_dir)
+        local_dir = _find_local_dir()
+        if not local_dir:
+            console.print(
+                "[yellow]Could not find docker-compose.yml in expected locations[/yellow]"
+            )
+            console.print(
+                "[dim]Searched: ./local, ., and relative to CLI installation[/dim]"
+            )
+            console.print(
+                "[dim]Set INCIDENTFOX_LOCAL_DIR to specify the correct path[/dim]"
+            )
+            raise FileNotFoundError("docker-compose.yml not found")
 
         # Check if dev compose file exists (mounts local source code)
         dev_compose = os.path.join(local_dir, "docker-compose.dev.yml")
@@ -2913,9 +2958,18 @@ async def configure_kubernetes(session) -> bool:
             if response.lower() in ("", "y", "yes"):
                 if update_env_var("K8S_ENABLED", "true"):
                     console.print("[green]✓ K8S_ENABLED=true saved to .env[/green]")
-                    await restart_agent_service()
-                    console.print("\n[green]✓ Kubernetes is now configured![/green]")
-                    return True
+                    restart_success = await restart_agent_service()
+                    if restart_success:
+                        console.print("\n[green]✓ Kubernetes is now configured![/green]")
+                        return True
+                    else:
+                        console.print(
+                            "\n[yellow]Config saved but service restart failed.[/yellow]"
+                        )
+                        console.print(
+                            "[yellow]Please restart manually, then retry your query.[/yellow]"
+                        )
+                        return False
                 else:
                     console.print("[red]Failed to update .env file[/red]")
                     return False
@@ -2991,9 +3045,16 @@ async def configure_aws(session) -> bool:
             region = response.strip()
 
     if changes_made:
-        await restart_agent_service()
-        console.print("\n[green]✓ AWS is now configured![/green]")
-        return True
+        restart_success = await restart_agent_service()
+        if restart_success:
+            console.print("\n[green]✓ AWS is now configured![/green]")
+            return True
+        else:
+            console.print("\n[yellow]Config saved but service restart failed.[/yellow]")
+            console.print(
+                "[yellow]Please restart manually, then retry your query.[/yellow]"
+            )
+            return False
     elif has_creds and region:
         console.print("\n[green]✓ AWS is fully configured![/green]")
         return True
@@ -3033,24 +3094,34 @@ async def configure_github(session) -> bool:
     console.print()
     new_token = await session.prompt_async("Paste your GitHub token (ghp_...): ")
     if new_token.strip():
+        should_save = False
         if new_token.strip().startswith("ghp_") or new_token.strip().startswith(
             "github_"
         ):
-            update_env_var("GITHUB_TOKEN", new_token.strip())
-            console.print("[green]✓ GITHUB_TOKEN saved to .env[/green]")
-            await restart_agent_service()
-            console.print("\n[green]✓ GitHub is now configured![/green]")
-            return True
+            should_save = True
         else:
             console.print(
                 "[yellow]Token doesn't look like a GitHub token (should start with ghp_ or github_)[/yellow]"
             )
             confirm = await session.prompt_async("Save anyway? [y/N]: ")
             if confirm.lower() in ("y", "yes"):
-                update_env_var("GITHUB_TOKEN", new_token.strip())
-                console.print("[green]✓ GITHUB_TOKEN saved to .env[/green]")
-                await restart_agent_service()
+                should_save = True
+
+        if should_save:
+            update_env_var("GITHUB_TOKEN", new_token.strip())
+            console.print("[green]✓ GITHUB_TOKEN saved to .env[/green]")
+            restart_success = await restart_agent_service()
+            if restart_success:
+                console.print("\n[green]✓ GitHub is now configured![/green]")
                 return True
+            else:
+                console.print(
+                    "\n[yellow]Config saved but service restart failed.[/yellow]"
+                )
+                console.print(
+                    "[yellow]Please restart manually, then retry your query.[/yellow]"
+                )
+                return False
     else:
         console.print("[dim]Skipped.[/dim]")
 
@@ -3088,22 +3159,32 @@ async def configure_slack(session) -> bool:
     console.print()
     new_token = await session.prompt_async("Paste your Slack Bot Token (xoxb-...): ")
     if new_token.strip():
+        should_save = False
         if new_token.strip().startswith("xoxb-"):
-            update_env_var("SLACK_BOT_TOKEN", new_token.strip())
-            console.print("[green]✓ SLACK_BOT_TOKEN saved to .env[/green]")
-            await restart_agent_service()
-            console.print("\n[green]✓ Slack is now configured![/green]")
-            return True
+            should_save = True
         else:
             console.print(
                 "[yellow]Token doesn't look like a Slack bot token (should start with xoxb-)[/yellow]"
             )
             confirm = await session.prompt_async("Save anyway? [y/N]: ")
             if confirm.lower() in ("y", "yes"):
-                update_env_var("SLACK_BOT_TOKEN", new_token.strip())
-                console.print("[green]✓ SLACK_BOT_TOKEN saved to .env[/green]")
-                await restart_agent_service()
+                should_save = True
+
+        if should_save:
+            update_env_var("SLACK_BOT_TOKEN", new_token.strip())
+            console.print("[green]✓ SLACK_BOT_TOKEN saved to .env[/green]")
+            restart_success = await restart_agent_service()
+            if restart_success:
+                console.print("\n[green]✓ Slack is now configured![/green]")
                 return True
+            else:
+                console.print(
+                    "\n[yellow]Config saved but service restart failed.[/yellow]"
+                )
+                console.print(
+                    "[yellow]Please restart manually, then retry your query.[/yellow]"
+                )
+                return False
     else:
         console.print("[dim]Skipped.[/dim]")
 
@@ -3209,9 +3290,16 @@ async def configure_generic_integration(session, integration: str) -> bool:
                     console.print(f"[green]✓[/green] {var} saved to .env")
 
     if changes_made:
-        await restart_agent_service()
-        console.print(f"\n[green]✓ {name} is now configured![/green]")
-        return True
+        restart_success = await restart_agent_service()
+        if restart_success:
+            console.print(f"\n[green]✓ {name} is now configured![/green]")
+            return True
+        else:
+            console.print("\n[yellow]Config saved but service restart failed.[/yellow]")
+            console.print(
+                "[yellow]Please restart manually, then retry your query.[/yellow]"
+            )
+            return False
     else:
         console.print("[dim]No changes made.[/dim]")
         return False
