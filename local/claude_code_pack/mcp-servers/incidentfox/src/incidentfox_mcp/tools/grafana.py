@@ -48,9 +48,7 @@ def _get_grafana_client():
     try:
         import httpx
     except ImportError:
-        raise GrafanaConfigError(
-            "httpx not installed. Install with: pip install httpx"
-        )
+        raise GrafanaConfigError("httpx not installed. Install with: pip install httpx")
 
     config = _get_grafana_config()
 
@@ -433,9 +431,7 @@ def register_tools(mcp: FastMCP):
                 alerts = alerts_data
             else:
                 alerts = (
-                    alerts_data.get("rules", [])
-                    or alerts_data.get("data", [])
-                    or []
+                    alerts_data.get("rules", []) or alerts_data.get("data", []) or []
                 )
 
             filtered = []

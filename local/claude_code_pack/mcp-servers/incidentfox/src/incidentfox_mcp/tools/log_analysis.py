@@ -2062,7 +2062,9 @@ def register_tools(mcp: FastMCP):
                     f"Detected {spike_count} spike(s) and {drop_count} drop(s) in log volume."
                 )
             else:
-                result["insight"] = "No significant anomalies detected in the time range."
+                result["insight"] = (
+                    "No significant anomalies detected in the time range."
+                )
 
             return json.dumps(result, indent=2, default=str)
 

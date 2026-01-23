@@ -96,7 +96,10 @@ def register_tools(mcp: FastMCP):
                         for assignment in incident.get("assignments", [])
                     ],
                     "acknowledgements": [
-                        {"acknowledger": ack["acknowledger"]["summary"], "at": ack["at"]}
+                        {
+                            "acknowledger": ack["acknowledger"]["summary"],
+                            "at": ack["at"],
+                        }
                         for ack in incident.get("acknowledgements", [])
                     ],
                     "url": incident["html_url"],
@@ -295,9 +298,7 @@ def register_tools(mcp: FastMCP):
             return json.dumps({"error": str(e), "policy_id": policy_id})
 
     @mcp.tool()
-    def pagerduty_calculate_mttr(
-        service_id: str | None = None, days: int = 30
-    ) -> str:
+    def pagerduty_calculate_mttr(service_id: str | None = None, days: int = 30) -> str:
         """Calculate Mean Time To Resolve (MTTR) for PagerDuty incidents.
 
         Provides incident resolution metrics over a time period.

@@ -288,7 +288,11 @@ def register_tools(mcp: FastMCP):
                 )
 
             return json.dumps(
-                {"repo": repo, "commit_count": len(commit_list), "commits": commit_list},
+                {
+                    "repo": repo,
+                    "commit_count": len(commit_list),
+                    "commits": commit_list,
+                },
                 indent=2,
             )
 
@@ -414,7 +418,9 @@ def register_tools(mcp: FastMCP):
         except GitHubConfigError as e:
             return json.dumps({"error": str(e), "config_required": True})
         except Exception as e:
-            return json.dumps({"error": str(e), "repo": repo, "base": base, "head": head})
+            return json.dumps(
+                {"error": str(e), "repo": repo, "base": base, "head": head}
+            )
 
     @mcp.tool()
     def github_search_commits_by_timerange(
@@ -517,7 +523,11 @@ def register_tools(mcp: FastMCP):
                 )
 
             return json.dumps(
-                {"repo": repo, "branch_count": len(branch_list), "branches": branch_list},
+                {
+                    "repo": repo,
+                    "branch_count": len(branch_list),
+                    "branches": branch_list,
+                },
                 indent=2,
             )
 
@@ -711,9 +721,7 @@ def register_tools(mcp: FastMCP):
             return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
     @mcp.tool()
-    def github_get_pr_files(
-        repo: str, pr_number: int, max_results: int = 100
-    ) -> str:
+    def github_get_pr_files(repo: str, pr_number: int, max_results: int = 100) -> str:
         """Get files changed in a pull request.
 
         Args:
