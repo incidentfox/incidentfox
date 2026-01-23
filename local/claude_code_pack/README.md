@@ -2,6 +2,10 @@
 
 **Claude Code plugin with ~100 DevOps & SRE tools, skills, and commands** to investigate incidents, analyze costs, and debug CI/CD — all from your terminal.
 
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/52d86ad1-6dc9-45e5-b80c-5f8a96b3dccd" width="700" controls autoplay loop muted></video>
+</p>
+
 ## What You Can Do
 
 | Use Case | Example Prompt |
