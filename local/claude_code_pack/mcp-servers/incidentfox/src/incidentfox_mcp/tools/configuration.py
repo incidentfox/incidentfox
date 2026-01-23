@@ -5,11 +5,12 @@ Credentials are stored in ~/.incidentfox/.env and persist across sessions.
 """
 
 import json
+
 from mcp.server.fastmcp import FastMCP
 
-from ..utils.config import save_credential as _save_credential
-from ..utils.config import get_config_status as _get_config_status
 from ..utils.config import CONFIG_FILE
+from ..utils.config import get_config_status as _get_config_status
+from ..utils.config import save_credential as _save_credential
 
 
 def register_tools(mcp: FastMCP):
@@ -40,17 +41,17 @@ def register_tools(mcp: FastMCP):
         """
         try:
             _save_credential(key, value)
-            return json.dumps({
-                "status": "saved",
-                "key": key,
-                "config_file": str(CONFIG_FILE),
-                "message": f"Configuration '{key}' saved. It will be used immediately and persist across sessions."
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "saved",
+                    "key": key,
+                    "config_file": str(CONFIG_FILE),
+                    "message": f"Configuration '{key}' saved. It will be used immediately and persist across sessions.",
+                },
+                indent=2,
+            )
         except Exception as e:
-            return json.dumps({
-                "error": str(e),
-                "key": key
-            }, indent=2)
+            return json.dumps({"error": str(e), "key": key}, indent=2)
 
     @mcp.tool()
     def get_config_status() -> str:
@@ -69,9 +70,7 @@ def register_tools(mcp: FastMCP):
             status = _get_config_status()
             return json.dumps(status, indent=2)
         except Exception as e:
-            return json.dumps({
-                "error": str(e)
-            }, indent=2)
+            return json.dumps({"error": str(e)}, indent=2)
 
     @mcp.tool()
     def delete_credential(key: str) -> str:
@@ -100,11 +99,14 @@ def register_tools(mcp: FastMCP):
 
             # Check if key exists
             if key not in existing:
-                return json.dumps({
-                    "status": "not_found",
-                    "key": key,
-                    "message": f"Key '{key}' was not in config file"
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "not_found",
+                        "key": key,
+                        "message": f"Key '{key}' was not in config file",
+                    },
+                    indent=2,
+                )
 
             # Remove the key
             del existing[key]
@@ -119,14 +121,14 @@ def register_tools(mcp: FastMCP):
                     else:
                         f.write(f"{k}={v}\n")
 
-            return json.dumps({
-                "status": "deleted",
-                "key": key,
-                "message": f"Key '{key}' has been removed from config"
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "deleted",
+                    "key": key,
+                    "message": f"Key '{key}' has been removed from config",
+                },
+                indent=2,
+            )
 
         except Exception as e:
-            return json.dumps({
-                "error": str(e),
-                "key": key
-            }, indent=2)
+            return json.dumps({"error": str(e), "key": key}, indent=2)

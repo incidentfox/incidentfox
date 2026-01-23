@@ -113,44 +113,55 @@ def get_config_status() -> dict:
         "config_file_exists": CONFIG_FILE.exists(),
         "integrations": {
             "kubernetes": {
-                "configured": is_set("KUBECONFIG") or Path.home().joinpath(".kube/config").exists(),
+                "configured": is_set("KUBECONFIG")
+                or Path.home().joinpath(".kube/config").exists(),
                 "variables": {
                     "KUBECONFIG": "set" if is_set("KUBECONFIG") else "using default",
-                    "K8S_CONTEXT": "set" if is_set("K8S_CONTEXT") else "not set (optional)",
-                }
+                    "K8S_CONTEXT": (
+                        "set" if is_set("K8S_CONTEXT") else "not set (optional)"
+                    ),
+                },
             },
             "aws": {
                 "configured": True,  # Uses default credential chain
                 "variables": {
                     "AWS_REGION": get_env("AWS_REGION", "us-east-1"),
-                }
+                },
             },
             "datadog": {
                 "configured": is_set("DATADOG_API_KEY") and is_set("DATADOG_APP_KEY"),
                 "variables": {
-                    "DATADOG_API_KEY": "set" if is_set("DATADOG_API_KEY") else "NOT SET",
-                    "DATADOG_APP_KEY": "set" if is_set("DATADOG_APP_KEY") else "NOT SET",
-                }
+                    "DATADOG_API_KEY": (
+                        "set" if is_set("DATADOG_API_KEY") else "NOT SET"
+                    ),
+                    "DATADOG_APP_KEY": (
+                        "set" if is_set("DATADOG_APP_KEY") else "NOT SET"
+                    ),
+                },
             },
             "prometheus": {
                 "configured": is_set("PROMETHEUS_URL") or is_set("PROM_URL"),
                 "variables": {
-                    "PROMETHEUS_URL": get_env("PROMETHEUS_URL") or get_env("PROM_URL") or "NOT SET",
-                }
+                    "PROMETHEUS_URL": get_env("PROMETHEUS_URL")
+                    or get_env("PROM_URL")
+                    or "NOT SET",
+                },
             },
             "elasticsearch": {
                 "configured": is_set("ELASTICSEARCH_URL") or is_set("ES_URL"),
                 "variables": {
-                    "ELASTICSEARCH_URL": get_env("ELASTICSEARCH_URL") or get_env("ES_URL") or "NOT SET",
-                }
+                    "ELASTICSEARCH_URL": get_env("ELASTICSEARCH_URL")
+                    or get_env("ES_URL")
+                    or "NOT SET",
+                },
             },
             "loki": {
                 "configured": is_set("LOKI_URL"),
                 "variables": {
                     "LOKI_URL": get_env("LOKI_URL") or "NOT SET",
-                }
+                },
             },
-        }
+        },
     }
 
 
@@ -204,7 +215,9 @@ class AWSConfig:
     @classmethod
     def from_env(cls) -> "AWSConfig":
         return cls(
-            region=get_env("AWS_REGION") or get_env("AWS_DEFAULT_REGION") or "us-east-1",
+            region=get_env("AWS_REGION")
+            or get_env("AWS_DEFAULT_REGION")
+            or "us-east-1",
         )
 
 

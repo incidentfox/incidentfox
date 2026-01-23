@@ -125,7 +125,9 @@ def _search_cloudwatch(
         import boto3
 
         session = boto3.Session(
-            region_name=get_env("AWS_REGION") or get_env("AWS_DEFAULT_REGION") or "us-east-1"
+            region_name=get_env("AWS_REGION")
+            or get_env("AWS_DEFAULT_REGION")
+            or "us-east-1"
         )
         logs_client = session.client("logs")
 

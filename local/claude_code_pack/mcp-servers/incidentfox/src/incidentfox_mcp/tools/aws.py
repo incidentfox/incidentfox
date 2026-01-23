@@ -36,7 +36,9 @@ def _get_aws_session(region: str | None = None):
     - IAM instance profile (for EC2)
     - IAM task role (for ECS/Fargate)
     """
-    region = region or get_env("AWS_REGION") or get_env("AWS_DEFAULT_REGION") or "us-east-1"
+    region = (
+        region or get_env("AWS_REGION") or get_env("AWS_DEFAULT_REGION") or "us-east-1"
+    )
 
     try:
         session = boto3.Session(region_name=region)
