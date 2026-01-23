@@ -56,12 +56,6 @@ jobs:
             dockerfile: ./web_ui/Dockerfile
             image: incidentfox-web-ui
 
-    outputs:
-      agent-digest: ${{ steps.build-agent.outputs.digest }}
-      config-service-digest: ${{ steps.build-config-service.outputs.digest }}
-      orchestrator-digest: ${{ steps.build-orchestrator.outputs.digest }}
-      web-ui-digest: ${{ steps.build-web-ui.outputs.digest }}
-
     steps:
       - name: Check if service should be built
         id: should-build
@@ -107,12 +101,6 @@ jobs:
             ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
-
-      - name: Export digest
-        if: steps.should-build.outputs.build == 'true'
-        id: build-${{ matrix.service }}
-        run: |
-          echo "digest=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
 
       - name: Summary
         if: steps.should-build.outputs.build == 'true'
