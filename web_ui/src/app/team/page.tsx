@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { RequireRole } from '@/components/RequireRole';
 import { useIdentity } from '@/lib/useIdentity';
 import { useOnboarding } from '@/lib/useOnboarding';
-import { WelcomeModal } from '@/components/onboarding/WelcomeModal';
+import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
 import { AgentRunnerModal } from '@/components/onboarding/AgentRunnerModal';
 import {
   Bot,
@@ -258,8 +258,7 @@ export default function TeamDashboardPage() {
     <RequireRole role="team" fallbackHref="/">
       {/* Onboarding Modals */}
       {showWelcomeModal && (
-        <WelcomeModal
-          role="team"
+        <QuickStartWizard
           onClose={() => setShowWelcomeModal(false)}
           onRunAgent={handleWelcomeRunAgent}
           onSkip={handleWelcomeSkip}
