@@ -358,7 +358,6 @@ DATADOG_APP_KEY=...
 
 | Method | Command |
 |--------|---------|
-| **Local CLI** | `cd local && make quickstart` |
 | **Docker Compose** | `docker-compose up -d` |
 | **Kubernetes** | `helm upgrade --install incidentfox ./charts/incidentfox -n incidentfox` |
 
