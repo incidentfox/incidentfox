@@ -163,9 +163,7 @@ known_issues:
                 if "namespace" in config:
                     output.append(f"- Namespace: {config['namespace']}")
                 if "deployments" in config:
-                    output.append(
-                        f"- Deployments: {', '.join(config['deployments'])}"
-                    )
+                    output.append(f"- Deployments: {', '.join(config['deployments'])}")
                 if "dependencies" in config:
                     output.append(
                         f"- Dependencies: {', '.join(config['dependencies'])}"

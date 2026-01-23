@@ -722,7 +722,16 @@ def register_tools(mcp: FastMCP):
             (id, name, namespace, deployments, description, team, discovered_at, source_tool)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-            (service_id, name, namespace, deployments, description, team, now, source_tool),
+            (
+                service_id,
+                name,
+                namespace,
+                deployments,
+                description,
+                team,
+                now,
+                source_tool,
+            ),
         )
 
         conn.commit()
@@ -877,7 +886,14 @@ def register_tools(mcp: FastMCP):
                 SET occurrences = ?, investigation_ids = ?, cause = ?, solution = ?, services = ?
                 WHERE id = ?
             """,
-                (occurrences, json.dumps(inv_ids), cause, solution, services, existing[0]),
+                (
+                    occurrences,
+                    json.dumps(inv_ids),
+                    cause,
+                    solution,
+                    services,
+                    existing[0],
+                ),
             )
             conn.commit()
             conn.close()
@@ -969,9 +985,11 @@ def register_tools(mcp: FastMCP):
                     "count": len(known_issues),
                     "items": known_issues,
                 },
-                "hint": "Use /sync-catalog to review and add these to .incidentfox.yaml"
-                if total > 0
-                else "No pending discoveries",
+                "hint": (
+                    "Use /sync-catalog to review and add these to .incidentfox.yaml"
+                    if total > 0
+                    else "No pending discoveries"
+                ),
             },
             indent=2,
         )
