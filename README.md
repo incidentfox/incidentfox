@@ -32,29 +32,48 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 
 ## 🧑‍💻 For Developers
 
-Try IncidentFox locally with an interactive terminal — no infrastructure required.
+Two ways to run IncidentFox locally:
 
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/d7dfedf0-e814-4772-b6c4-daf6d5d11901" width="700" controls autoplay loop muted></video>
-  <br>
-  <em>Local CLI for terminal-native developers</em>
-</div>
+| Option | Setup Time | Best For |
+|--------|------------|----------|
+| **[Claude Code Plugin](#option-1-claude-code-plugin-recommended)** | 2 minutes | Most developers — zero infrastructure |
+| **[Local CLI](#option-2-local-cli)** | 10+ minutes | Advanced customization — requires Docker |
 
-### Quick Start
+### Option 1: Claude Code Plugin (Recommended)
+
+**85+ SRE tools directly in Claude Code.** No Docker, no services to manage.
+
+```bash
+cd local/claude_code_pack
+./install.sh
+```
+
+Then in Claude Code:
+```
+> Check if there are any pods crashing in default namespace
+> Search Datadog logs for errors in payment-service
+> What GitHub PRs were merged in the last 24 hours?
+```
+
+**What you get:**
+- Kubernetes, AWS, Datadog, Prometheus, GitHub, Slack, PagerDuty, Grafana, Sentry
+- Unified log search across multiple backends
+- Investigation history with pattern learning
+- Postmortem generation
+
+**Full docs:** [local/claude_code_pack/README.md](local/claude_code_pack/README.md)
+
+### Option 2: Local CLI
+
+**Self-hosted multi-agent system** with full customization control.
 
 ```bash
 cd local
 make quickstart
 ```
 
-This will prompt for your OpenAI API key, start all services, and launch the CLI.
-
-**Already configured?** Just run:
-```bash
-make run
-```
-
-### Example Session
+<details>
+<summary>Example session</summary>
 
 ```
 incidentfox> Check if there are any pods crashing in default namespace
@@ -69,16 +88,15 @@ Recommendations:
 1. Increase memory limit for payment-service to 1Gi
 2. Check cart-service logs for startup errors
 ```
+</details>
 
-### What You Can Do Locally
+**What you get:**
+- Multi-agent architecture (Planner + specialized sub-agents)
+- Self-hosted services (PostgreSQL, Config Service, Agent)
+- Full control over prompts and agent behavior
+- Uses OpenAI (configurable)
 
-- Investigate Kubernetes issues (pod crashes, deployments, services)
-- Query logs and metrics from your observability stack
-- Analyze AWS resources (EC2, Lambda, ECS, CloudWatch)
-- Search and analyze code with GitHub integration
-- Run anomaly detection on metrics
-
-**Full local setup guide:** [local/README.md](local/README.md)
+**Full docs:** [local/README.md](local/README.md)
 
 ---
 
