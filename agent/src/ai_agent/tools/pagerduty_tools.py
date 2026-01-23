@@ -3,6 +3,7 @@
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -97,6 +98,8 @@ def pagerduty_get_incident(incident_id: str) -> dict[str, Any]:
             "url": incident["html_url"],
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "pagerduty_get_incident", "pagerduty")
     except Exception as e:
         logger.error(
             "pagerduty_get_incident_failed", error=str(e), incident_id=incident_id
@@ -155,6 +158,8 @@ def pagerduty_get_incident_log_entries(
         )
         return entries
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "pagerduty_get_incident_log_entries", "pagerduty")
     except Exception as e:
         logger.error(
             "pagerduty_log_entries_failed", error=str(e), incident_id=incident_id
@@ -224,6 +229,8 @@ def pagerduty_list_incidents(
         logger.info("pagerduty_incidents_listed", count=len(incident_list))
         return incident_list
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "pagerduty_list_incidents", "pagerduty")
     except Exception as e:
         logger.error("pagerduty_list_incidents_failed", error=str(e))
         raise ToolExecutionError("pagerduty_list_incidents", str(e), e)
@@ -285,6 +292,8 @@ def pagerduty_get_escalation_policy(policy_id: str) -> dict[str, Any]:
             ],
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "pagerduty_get_escalation_policy", "pagerduty")
     except Exception as e:
         logger.error(
             "pagerduty_escalation_policy_failed", error=str(e), policy_id=policy_id
@@ -381,6 +390,8 @@ def pagerduty_calculate_mttr(
             "slowest_resolution_minutes": round(max(resolution_times), 2),
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "pagerduty_calculate_mttr", "pagerduty")
     except Exception as e:
         logger.error("pagerduty_mttr_failed", error=str(e), service_id=service_id)
         raise ToolExecutionError("pagerduty_calculate_mttr", str(e), e)

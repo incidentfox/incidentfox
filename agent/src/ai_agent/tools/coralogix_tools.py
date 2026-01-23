@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 
 import httpx
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
 
@@ -124,7 +125,7 @@ def search_coralogix_logs(
     try:
         config = get_coralogix_config()
     except IntegrationNotConfiguredError as e:
-        return json.dumps({"error": str(e)})
+        return handle_integration_not_configured(e, "search_coralogix_logs", "coralogix")
 
     logger.info(f"Searching Coralogix logs: {query[:50]}...")
 
@@ -258,9 +259,10 @@ def get_coralogix_alerts(
     Returns:
         JSON with alert information.
     """
-    config = get_coralogix_config()
-    if not config.get("api_key"):
-        return json.dumps({"error": "Coralogix API key not configured"})
+    try:
+        config = get_coralogix_config()
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_coralogix_alerts", "coralogix")
 
     logger.info("Fetching Coralogix alerts via DataPrime query...")
 
@@ -290,9 +292,12 @@ def query_coralogix_metrics(
     Returns:
         JSON with metric data points.
     """
-    config = get_coralogix_config()
-    if not config.get("api_key"):
-        return json.dumps({"error": "Coralogix API key not configured"})
+    try:
+        config = get_coralogix_config()
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "query_coralogix_metrics", "coralogix"
+        )
 
     logger.info(f"Querying Coralogix metric: {metric_name}")
 
@@ -357,9 +362,12 @@ def search_coralogix_traces(
     Returns:
         JSON with trace information.
     """
-    config = get_coralogix_config()
-    if not config.get("api_key"):
-        return json.dumps({"error": "Coralogix API key not configured"})
+    try:
+        config = get_coralogix_config()
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "search_coralogix_traces", "coralogix"
+        )
 
     logger.info(f"Searching Coralogix traces for service: {service}")
 
@@ -414,9 +422,12 @@ def get_coralogix_service_health(service: str, time_range_minutes: int = 60) -> 
     Returns:
         JSON with service health metrics (error rate, latency, throughput).
     """
-    config = get_coralogix_config()
-    if not config.get("api_key"):
-        return json.dumps({"error": "Coralogix API key not configured"})
+    try:
+        config = get_coralogix_config()
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "get_coralogix_service_health", "coralogix"
+        )
 
     logger.info(f"Getting Coralogix health for service: {service}")
 
@@ -472,9 +483,12 @@ def coralogix_get_alert_rules() -> str:
     Returns:
         JSON with list of configured alert rules
     """
-    config = get_coralogix_config()
-    if not config.get("api_key"):
-        return json.dumps({"error": "Coralogix API key not configured"})
+    try:
+        config = get_coralogix_config()
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "coralogix_get_alert_rules", "coralogix"
+        )
 
     logger.info("Fetching Coralogix alert rules...")
 
@@ -515,9 +529,12 @@ def coralogix_get_alert_history(
     Returns:
         JSON with alert firing history
     """
-    config = get_coralogix_config()
-    if not config.get("api_key"):
-        return json.dumps({"error": "Coralogix API key not configured"})
+    try:
+        config = get_coralogix_config()
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "coralogix_get_alert_history", "coralogix"
+        )
 
     logger.info(f"Fetching Coralogix alert history for: {alert_name or 'all alerts'}")
 

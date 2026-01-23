@@ -18,6 +18,7 @@ from typing import Any
 
 import httpx
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import (
@@ -824,7 +825,9 @@ def meeting_get_transcript(meeting_id: str) -> dict[str, Any]:
 
         return result
 
-    except (IntegrationNotConfiguredError, IntegrationAuthenticationError):
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "meeting_get_transcript", "meeting")
+    except IntegrationAuthenticationError:
         raise
     except Exception as e:
         logger.error("meeting_transcript_failed", meeting_id=meeting_id, error=str(e))
@@ -867,7 +870,9 @@ def meeting_search(
 
         return results
 
-    except (IntegrationNotConfiguredError, IntegrationAuthenticationError):
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "meeting_search", "meeting")
+    except IntegrationAuthenticationError:
         raise
     except Exception as e:
         logger.error("meeting_search_failed", query=query, error=str(e))
@@ -905,7 +910,9 @@ def meeting_get_recent(hours: int = 24) -> list[dict[str, Any]]:
 
         return results
 
-    except (IntegrationNotConfiguredError, IntegrationAuthenticationError):
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "meeting_get_recent", "meeting")
+    except IntegrationAuthenticationError:
         raise
     except Exception as e:
         logger.error("meeting_recent_failed", hours=hours, error=str(e))
@@ -952,7 +959,9 @@ def meeting_search_transcript(
 
         return matches
 
-    except (IntegrationNotConfiguredError, IntegrationAuthenticationError):
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "meeting_search_transcript", "meeting")
+    except IntegrationAuthenticationError:
         raise
     except Exception as e:
         logger.error(
@@ -1018,7 +1027,9 @@ def meeting_join(meeting_url: str) -> dict[str, Any]:
             "Use meeting_get_transcript with the meeting_id to get transcripts.",
         }
 
-    except (IntegrationNotConfiguredError, IntegrationAuthenticationError):
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "meeting_join", "meeting")
+    except IntegrationAuthenticationError:
         raise
     except Exception as e:
         logger.error("meeting_join_failed", url=meeting_url, error=str(e))

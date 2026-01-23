@@ -4,6 +4,7 @@ import json
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -109,6 +110,8 @@ def bigquery_query(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "bigquery_query", "bigquery")
     except Exception as e:
         logger.error("bigquery_query_failed", error=str(e))
         raise ToolExecutionError("bigquery_query", str(e), e)
@@ -137,6 +140,8 @@ def bigquery_list_datasets() -> list[dict[str, Any]]:
         logger.info("bigquery_datasets_listed", count=len(datasets))
         return datasets
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "bigquery_list_datasets", "bigquery")
     except Exception as e:
         logger.error("bigquery_list_datasets_failed", error=str(e))
         raise ToolExecutionError("bigquery_list_datasets", str(e), e)
@@ -177,6 +182,8 @@ def bigquery_list_tables(dataset: str) -> list[dict[str, Any]]:
         logger.info("bigquery_tables_listed", dataset=dataset, count=len(tables))
         return tables
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "bigquery_list_tables", "bigquery")
     except Exception as e:
         logger.error("bigquery_list_tables_failed", error=str(e), dataset=dataset)
         raise ToolExecutionError("bigquery_list_tables", str(e), e)
@@ -227,6 +234,8 @@ def bigquery_get_table_schema(dataset: str, table: str) -> dict[str, Any]:
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "bigquery_get_table_schema", "bigquery")
     except Exception as e:
         logger.error(
             "bigquery_get_schema_failed", error=str(e), dataset=dataset, table=table

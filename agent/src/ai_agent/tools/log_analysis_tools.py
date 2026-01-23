@@ -19,6 +19,7 @@ from typing import Any
 
 from agents import function_tool
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -1472,6 +1473,8 @@ def get_log_statistics(
         )
         return json.dumps(result, indent=2, default=str)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_log_statistics")
     except Exception as e:
         logger.error("get_log_statistics_failed", error=str(e), service=service)
         return json.dumps({"error": str(e), "tool": "get_log_statistics"})
@@ -1562,6 +1565,8 @@ def sample_logs(
         )
         return json.dumps(result, indent=2, default=str)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "sample_logs")
     except Exception as e:
         logger.error("sample_logs_failed", error=str(e), strategy=strategy)
         return json.dumps({"error": str(e), "tool": "sample_logs"})
@@ -1624,6 +1629,8 @@ def search_logs_by_pattern(
         )
         return json.dumps(result, indent=2, default=str)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "search_logs_by_pattern")
     except Exception as e:
         logger.error(
             "search_logs_by_pattern_failed", error=str(e), pattern=pattern[:50]
@@ -1693,6 +1700,8 @@ def get_logs_around_timestamp(
         )
         return json.dumps(result, indent=2, default=str)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_logs_around_timestamp")
     except Exception as e:
         logger.error(
             "get_logs_around_timestamp_failed", error=str(e), timestamp=timestamp
@@ -1826,6 +1835,8 @@ def correlate_logs_with_events(
         )
         return json.dumps(result, indent=2, default=str)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "correlate_logs_with_events")
     except Exception as e:
         logger.error("correlate_logs_with_events_failed", error=str(e), service=service)
         return json.dumps({"error": str(e), "tool": "correlate_logs_with_events"})
@@ -1976,6 +1987,8 @@ def extract_log_signatures(
         )
         return json.dumps(result, indent=2, default=str)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "extract_log_signatures")
     except Exception as e:
         logger.error("extract_log_signatures_failed", error=str(e), service=service)
         return json.dumps({"error": str(e), "tool": "extract_log_signatures"})
@@ -2100,6 +2113,8 @@ def detect_log_anomalies(
         )
         return json.dumps(result, indent=2, default=str)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "detect_log_anomalies")
     except Exception as e:
         logger.error("detect_log_anomalies_failed", error=str(e), service=service)
         return json.dumps({"error": str(e), "tool": "detect_log_anomalies"})

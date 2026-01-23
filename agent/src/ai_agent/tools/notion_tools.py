@@ -3,6 +3,7 @@
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -111,6 +112,8 @@ def notion_create_page(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "notion_create_page", "notion")
     except Exception as e:
         logger.error("notion_create_page_failed", error=str(e), title=title)
         raise ToolExecutionError("notion_create_page", str(e), e)
@@ -167,6 +170,8 @@ def notion_write_content(
             "blocks_added": len(children),
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "notion_write_content", "notion")
     except Exception as e:
         logger.error("notion_write_failed", error=str(e), page_id=page_id)
         raise ToolExecutionError("notion_write_content", str(e), e)
@@ -209,6 +214,8 @@ def notion_search(query: str, max_results: int = 10) -> list[dict[str, Any]]:
         logger.info("notion_search_completed", query=query, results=len(results))
         return results
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "notion_search", "notion")
     except Exception as e:
         logger.error("notion_search_failed", error=str(e), query=query)
         raise ToolExecutionError("notion_search", str(e), e)

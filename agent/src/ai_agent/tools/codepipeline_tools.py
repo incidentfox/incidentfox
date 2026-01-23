@@ -3,6 +3,7 @@
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -94,6 +95,8 @@ def codepipeline_list_pipelines() -> list[dict[str, Any]]:
         logger.info("codepipeline_pipelines_listed", count=len(pipelines))
         return pipelines
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "codepipeline_list_pipelines", "codepipeline")
     except Exception as e:
         logger.error("codepipeline_list_pipelines_failed", error=str(e))
         raise ToolExecutionError("codepipeline_list_pipelines", str(e), e)
@@ -157,6 +160,8 @@ def codepipeline_get_pipeline_state(pipeline_name: str) -> dict[str, Any]:
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "codepipeline_get_pipeline_state", "codepipeline")
     except Exception as e:
         logger.error(
             "codepipeline_get_state_failed", error=str(e), pipeline=pipeline_name
@@ -203,6 +208,8 @@ def codepipeline_get_execution_history(
         )
         return executions
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "codepipeline_get_execution_history", "codepipeline")
     except Exception as e:
         logger.error(
             "codepipeline_get_history_failed", error=str(e), pipeline=pipeline_name
@@ -244,6 +251,8 @@ def codepipeline_start_execution(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "codepipeline_start_execution", "codepipeline")
     except Exception as e:
         logger.error(
             "codepipeline_start_execution_failed", error=str(e), pipeline=pipeline_name
@@ -307,6 +316,8 @@ def codepipeline_get_failed_actions(pipeline_name: str) -> list[dict[str, Any]]:
         )
         return failed_actions
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "codepipeline_get_failed_actions", "codepipeline")
     except Exception as e:
         logger.error(
             "codepipeline_get_failed_actions_failed",

@@ -5,6 +5,7 @@ from typing import Any
 
 import requests
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -81,6 +82,8 @@ def send_teams_message(
             "message": "Message sent successfully",
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "send_teams_message", "msteams")
     except Exception as e:
         logger.error("teams_message_failed", error=str(e))
         raise ToolExecutionError("send_teams_message", str(e), e)
@@ -154,6 +157,8 @@ def send_teams_adaptive_card(
             "message": "Adaptive card sent successfully",
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "send_teams_adaptive_card", "msteams")
     except Exception as e:
         logger.error("teams_adaptive_card_failed", error=str(e))
         raise ToolExecutionError("send_teams_adaptive_card", str(e), e)
@@ -257,6 +262,8 @@ def send_teams_alert(
             "message": "Alert sent successfully",
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "send_teams_alert", "msteams")
     except Exception as e:
         logger.error("teams_alert_failed", error=str(e))
         raise ToolExecutionError("send_teams_alert", str(e), e)

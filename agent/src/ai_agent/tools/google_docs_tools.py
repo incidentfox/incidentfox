@@ -4,6 +4,7 @@ import json
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -120,6 +121,8 @@ def read_google_doc(document_id: str) -> dict[str, Any]:
             "url": f"https://docs.google.com/document/d/{document_id}",
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "read_google_doc", "google_docs")
     except Exception as e:
         logger.error("google_doc_read_failed", error=str(e), doc_id=document_id)
         raise ToolExecutionError("read_google_doc", str(e), e)
@@ -172,6 +175,8 @@ def search_google_drive(
         logger.info("google_drive_search_completed", query=query, results=len(files))
         return files
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "search_google_drive", "google_docs")
     except Exception as e:
         logger.error("google_drive_search_failed", error=str(e), query=query)
         raise ToolExecutionError("search_google_drive", str(e), e)
@@ -213,6 +218,8 @@ def list_folder_contents(folder_id: str) -> list[dict[str, Any]]:
         logger.info("google_folder_listed", folder_id=folder_id, files=len(files))
         return files
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "list_folder_contents", "google_docs")
     except Exception as e:
         logger.error("google_folder_list_failed", error=str(e), folder=folder_id)
         raise ToolExecutionError("list_folder_contents", str(e), e)
@@ -258,6 +265,8 @@ def google_docs_create_document(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "google_docs_create_document", "google_docs")
     except Exception as e:
         logger.error("google_docs_create_failed", error=str(e), title=title)
         raise ToolExecutionError("google_docs_create_document", str(e), e)
@@ -366,6 +375,8 @@ def google_docs_write_content(
             "characters_written": len(content),
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "google_docs_write_content", "google_docs")
     except Exception as e:
         logger.error("google_docs_write_failed", error=str(e), doc_id=document_id)
         raise ToolExecutionError("google_docs_write_content", str(e), e)
@@ -436,6 +447,8 @@ def google_docs_share_document(
         else:
             raise ValueError("Must specify either email or anyone=True")
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "google_docs_share_document", "google_docs")
     except Exception as e:
         logger.error("google_docs_share_failed", error=str(e), doc_id=document_id)
         raise ToolExecutionError("google_docs_share_document", str(e), e)

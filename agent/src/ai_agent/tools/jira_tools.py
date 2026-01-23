@@ -3,6 +3,7 @@
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -122,6 +123,8 @@ def jira_create_issue(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "jira_create_issue", "jira")
     except Exception as e:
         logger.error("jira_create_issue_failed", error=str(e), project=project_key)
         raise ToolExecutionError("jira_create_issue", str(e), e)
@@ -168,6 +171,8 @@ def jira_create_epic(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "jira_create_epic", "jira")
     except Exception as e:
         logger.error("jira_create_epic_failed", error=str(e), project=project_key)
         raise ToolExecutionError("jira_create_epic", str(e), e)
@@ -210,6 +215,8 @@ def jira_get_issue(issue_key: str) -> dict[str, Any]:
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "jira_get_issue", "jira")
     except Exception as e:
         logger.error("jira_get_issue_failed", error=str(e), issue_key=issue_key)
         raise ToolExecutionError("jira_get_issue", str(e), e)
@@ -241,6 +248,8 @@ def jira_add_comment(issue_key: str, comment: str) -> dict[str, Any]:
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "jira_add_comment", "jira")
     except Exception as e:
         logger.error("jira_add_comment_failed", error=str(e), issue_key=issue_key)
         raise ToolExecutionError("jira_add_comment", str(e), e)
@@ -304,6 +313,8 @@ def jira_update_issue(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "jira_update_issue", "jira")
     except Exception as e:
         logger.error("jira_update_issue_failed", error=str(e), issue_key=issue_key)
         raise ToolExecutionError("jira_update_issue", str(e), e)
@@ -355,6 +366,8 @@ def jira_list_issues(
         logger.info("jira_issues_listed", project=project_key, count=len(issue_list))
         return issue_list
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "jira_list_issues", "jira")
     except Exception as e:
         logger.error("jira_list_issues_failed", error=str(e), project=project_key)
         raise ToolExecutionError("jira_list_issues", str(e), e)

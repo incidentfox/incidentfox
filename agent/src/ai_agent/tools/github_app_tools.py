@@ -7,6 +7,7 @@ from typing import Any
 import jwt
 import requests
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -143,6 +144,8 @@ def github_app_create_check_run(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "github_app_create_check_run", "github-app")
     except Exception as e:
         logger.error("github_check_run_failed", error=str(e), repo=repo)
         raise ToolExecutionError("github_app_create_check_run", str(e), e)
@@ -182,6 +185,8 @@ def github_app_add_pr_comment(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "github_app_add_pr_comment", "github-app")
     except Exception as e:
         logger.error("github_pr_comment_failed", error=str(e), repo=repo, pr=pr_number)
         raise ToolExecutionError("github_app_add_pr_comment", str(e), e)
@@ -239,6 +244,8 @@ def github_app_update_pr_status(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "github_app_update_pr_status", "github-app")
     except Exception as e:
         logger.error("github_status_update_failed", error=str(e), repo=repo)
         raise ToolExecutionError("github_app_update_pr_status", str(e), e)
@@ -279,6 +286,8 @@ def github_app_list_installations() -> list[dict[str, Any]]:
         logger.info("github_installations_listed", count=len(installations))
         return installations
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "github_app_list_installations", "github-app")
     except Exception as e:
         logger.error("github_installations_list_failed", error=str(e))
         raise ToolExecutionError("github_app_list_installations", str(e), e)

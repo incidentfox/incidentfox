@@ -6,6 +6,7 @@ import json
 import logging
 import os
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
 
@@ -140,6 +141,8 @@ def run_snowflake_query(query: str, limit: int = 100) -> str:
             default=str,
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "run_snowflake_query", "snowflake")
     except Exception as e:
         logger.error(f"Snowflake query failed: {e}")
         return json.dumps({"success": False, "error": str(e)})
@@ -376,6 +379,8 @@ def snowflake_list_tables(
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "snowflake_list_tables", "snowflake")
     except Exception as e:
         logger.error(f"failed_to_list_snowflake_tables: {e}")
         return json.dumps({"error": str(e)})
@@ -433,6 +438,8 @@ def snowflake_describe_table(
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "snowflake_describe_table", "snowflake")
     except Exception as e:
         logger.error(f"failed_to_describe_snowflake_table: {e}")
         return json.dumps({"error": str(e), "table": table_name})
@@ -494,6 +501,8 @@ def snowflake_bulk_export(
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "snowflake_bulk_export", "snowflake")
     except Exception as e:
         logger.error(f"failed_to_bulk_export: {e}")
         return json.dumps({"error": str(e)})

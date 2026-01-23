@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from agents import function_tool
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
 from ..core.logging import get_logger
@@ -113,6 +114,8 @@ def grafana_list_dashboards(folder_id: int = 0, query: str = "") -> str:
         logger.info("grafana_dashboards_listed", count=len(dashboards))
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "grafana_list_dashboards", "grafana")
     except ValueError as e:
         return json.dumps(
             {
@@ -200,6 +203,8 @@ def grafana_get_dashboard(dashboard_uid: str) -> str:
         )
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "grafana_get_dashboard", "grafana")
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e)})
     except Exception as e:
@@ -334,6 +339,8 @@ def grafana_query_prometheus(
         logger.info("grafana_prometheus_queried", query=query[:50], series=len(series))
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "grafana_query_prometheus", "grafana")
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e)})
     except Exception as e:
@@ -381,6 +388,8 @@ def grafana_list_datasources() -> str:
         logger.info("grafana_datasources_listed", count=len(datasources))
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "grafana_list_datasources", "grafana")
     except ValueError as e:
         return json.dumps(
             {
@@ -463,6 +472,8 @@ def grafana_get_annotations(
         logger.info("grafana_annotations_fetched", count=len(annotations))
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "grafana_get_annotations", "grafana")
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e)})
     except Exception as e:
@@ -534,6 +545,8 @@ def grafana_get_alerts(state: str = "all") -> str:
         logger.info("grafana_alerts_fetched", count=len(filtered))
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "grafana_get_alerts", "grafana")
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e)})
     except Exception as e:
@@ -619,6 +632,8 @@ def grafana_update_alert_rule(
         logger.info("grafana_alert_rule_updated", uid=alert_uid)
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "grafana_update_alert_rule", "grafana")
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e)})
     except Exception as e:

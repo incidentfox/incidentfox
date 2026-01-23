@@ -5,6 +5,7 @@ from typing import Any
 
 import requests
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -98,6 +99,8 @@ def sentry_list_issues(
         logger.info("sentry_issues_listed", project=project_slug, count=len(issues))
         return issues
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "sentry_list_issues", "sentry")
     except Exception as e:
         logger.error("sentry_list_issues_failed", error=str(e), project=project)
         raise ToolExecutionError("sentry_list_issues", str(e), e)
@@ -142,6 +145,8 @@ def sentry_get_issue_details(issue_id: str) -> dict[str, Any]:
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "sentry_get_issue_details", "sentry")
     except Exception as e:
         logger.error("sentry_get_issue_details_failed", error=str(e), issue_id=issue_id)
         raise ToolExecutionError("sentry_get_issue_details", str(e), e)
@@ -175,6 +180,8 @@ def sentry_update_issue_status(issue_id: str, status: str) -> dict[str, Any]:
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "sentry_update_issue_status", "sentry")
     except Exception as e:
         logger.error(
             "sentry_update_issue_status_failed", error=str(e), issue_id=issue_id
@@ -215,6 +222,8 @@ def sentry_list_projects() -> list[dict[str, Any]]:
         logger.info("sentry_projects_listed", count=len(projects))
         return projects
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "sentry_list_projects", "sentry")
     except Exception as e:
         logger.error("sentry_list_projects_failed", error=str(e))
         raise ToolExecutionError("sentry_list_projects", str(e), e)
@@ -260,6 +269,8 @@ def sentry_get_project_stats(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "sentry_get_project_stats", "sentry")
     except Exception as e:
         logger.error("sentry_get_project_stats_failed", error=str(e), project=project)
         raise ToolExecutionError("sentry_get_project_stats", str(e), e)
@@ -303,6 +314,8 @@ def sentry_list_releases(project: str, limit: int = 10) -> list[dict[str, Any]]:
         logger.info("sentry_releases_listed", project=project, count=len(releases))
         return releases
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "sentry_list_releases", "sentry")
     except Exception as e:
         logger.error("sentry_list_releases_failed", error=str(e), project=project)
         raise ToolExecutionError("sentry_list_releases", str(e), e)

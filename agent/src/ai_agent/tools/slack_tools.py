@@ -3,6 +3,7 @@
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -76,6 +77,8 @@ def slack_search_messages(query: str, count: int = 20) -> list[dict[str, Any]]:
         logger.info("slack_search_completed", query=query, results=len(messages))
         return messages
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "slack_search_messages", "slack")
     except Exception as e:
         logger.error("slack_search_failed", error=str(e), query=query)
         raise ToolExecutionError("slack_search_messages", str(e), e)
@@ -119,6 +122,8 @@ def slack_get_channel_history(
         logger.info("slack_history_fetched", channel=channel_id, messages=len(messages))
         return messages
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "slack_get_channel_history", "slack")
     except Exception as e:
         logger.error("slack_history_failed", error=str(e), channel=channel_id)
         raise ToolExecutionError("slack_get_channel_history", str(e), e)
@@ -152,6 +157,8 @@ def slack_get_thread_replies(channel_id: str, thread_ts: str) -> list[dict[str, 
         logger.info("slack_thread_fetched", channel=channel_id, messages=len(messages))
         return messages
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "slack_get_thread_replies", "slack")
     except Exception as e:
         logger.error("slack_thread_failed", error=str(e))
         raise ToolExecutionError("slack_get_thread_replies", str(e), e)
@@ -187,6 +194,8 @@ def slack_post_message(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "slack_post_message", "slack")
     except Exception as e:
         logger.error("slack_post_failed", error=str(e))
         raise ToolExecutionError("slack_post_message", str(e), e)

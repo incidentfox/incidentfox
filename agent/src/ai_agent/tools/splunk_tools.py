@@ -3,6 +3,7 @@
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -105,6 +106,8 @@ def splunk_search(
 
         return results
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "splunk_search", "splunk")
     except Exception as e:
         logger.error("splunk_search_failed", error=str(e))
         raise ToolExecutionError("splunk_search", str(e), e)
@@ -137,6 +140,8 @@ def splunk_list_indexes() -> list[dict[str, Any]]:
         logger.info("splunk_indexes_listed", count=len(indexes))
         return indexes
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "splunk_list_indexes", "splunk")
     except Exception as e:
         logger.error("splunk_list_indexes_failed", error=str(e))
         raise ToolExecutionError("splunk_list_indexes", str(e), e)
@@ -168,6 +173,8 @@ def splunk_get_saved_searches() -> list[dict[str, Any]]:
         logger.info("splunk_saved_searches_listed", count=len(saved_searches))
         return saved_searches
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "splunk_get_saved_searches", "splunk")
     except Exception as e:
         logger.error("splunk_get_saved_searches_failed", error=str(e))
         raise ToolExecutionError("splunk_get_saved_searches", str(e), e)
@@ -210,6 +217,8 @@ def splunk_get_alerts(earliest_time: str = "-24h") -> list[dict[str, Any]]:
         logger.info("splunk_alerts_retrieved", count=len(alerts))
         return alerts
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "splunk_get_alerts", "splunk")
     except Exception as e:
         logger.error("splunk_get_alerts_failed", error=str(e))
         raise ToolExecutionError("splunk_get_alerts", str(e), e)

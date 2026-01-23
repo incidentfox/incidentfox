@@ -3,6 +3,7 @@
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -85,6 +86,8 @@ def gitlab_list_projects(visibility: str | None = None) -> list[dict[str, Any]]:
         logger.info("gitlab_projects_listed", count=len(projects))
         return projects
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "gitlab_list_projects", "gitlab")
     except Exception as e:
         logger.error("gitlab_list_projects_failed", error=str(e))
         raise ToolExecutionError("gitlab_list_projects", str(e), e)
@@ -132,6 +135,8 @@ def gitlab_get_pipelines(
         logger.info("gitlab_pipelines_retrieved", project=project, count=len(pipelines))
         return pipelines
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "gitlab_get_pipelines", "gitlab")
     except Exception as e:
         logger.error("gitlab_get_pipelines_failed", error=str(e), project=project)
         raise ToolExecutionError("gitlab_get_pipelines", str(e), e)
@@ -175,6 +180,8 @@ def gitlab_get_merge_requests(
         logger.info("gitlab_merge_requests_listed", project=project, count=len(mrs))
         return mrs
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "gitlab_get_merge_requests", "gitlab")
     except Exception as e:
         logger.error("gitlab_get_merge_requests_failed", error=str(e), project=project)
         raise ToolExecutionError("gitlab_get_merge_requests", str(e), e)
@@ -208,6 +215,8 @@ def gitlab_add_mr_comment(project: str, mr_iid: int, comment: str) -> dict[str, 
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "gitlab_add_mr_comment", "gitlab")
     except Exception as e:
         logger.error(
             "gitlab_mr_comment_failed", error=str(e), project=project, mr_iid=mr_iid
@@ -255,6 +264,8 @@ def gitlab_get_pipeline_jobs(project: str, pipeline_id: int) -> list[dict[str, A
         )
         return jobs
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "gitlab_get_pipeline_jobs", "gitlab")
     except Exception as e:
         logger.error(
             "gitlab_get_pipeline_jobs_failed",

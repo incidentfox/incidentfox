@@ -4,6 +4,7 @@ import json
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -139,6 +140,8 @@ def gcp_list_compute_instances(zone: str | None = None) -> list[dict[str, Any]]:
         logger.info("gcp_instances_listed", count=len(instances), zone=zone or "all")
         return instances
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "gcp_list_compute_instances", "gcp")
     except Exception as e:
         logger.error("gcp_list_instances_failed", error=str(e), zone=zone)
         raise ToolExecutionError("gcp_list_compute_instances", str(e), e)
@@ -181,6 +184,8 @@ def gcp_list_gke_clusters() -> list[dict[str, Any]]:
         logger.info("gcp_gke_clusters_listed", count=len(clusters))
         return clusters
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "gcp_list_gke_clusters", "gcp")
     except Exception as e:
         logger.error("gcp_list_gke_clusters_failed", error=str(e))
         raise ToolExecutionError("gcp_list_gke_clusters", str(e), e)
@@ -222,6 +227,8 @@ def gcp_list_cloud_functions() -> list[dict[str, Any]]:
         logger.info("gcp_cloud_functions_listed", count=len(function_list))
         return function_list
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "gcp_list_cloud_functions", "gcp")
     except Exception as e:
         logger.error("gcp_list_cloud_functions_failed", error=str(e))
         raise ToolExecutionError("gcp_list_cloud_functions", str(e), e)
@@ -262,6 +269,8 @@ def gcp_list_cloud_sql_instances() -> list[dict[str, Any]]:
         logger.info("gcp_cloud_sql_instances_listed", count=len(instances))
         return instances
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "gcp_list_cloud_sql_instances", "gcp")
     except Exception as e:
         logger.error("gcp_list_cloud_sql_failed", error=str(e))
         raise ToolExecutionError("gcp_list_cloud_sql_instances", str(e), e)
@@ -301,6 +310,8 @@ def gcp_get_project_metadata() -> dict[str, Any]:
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "gcp_get_project_metadata", "gcp")
     except Exception as e:
         logger.error("gcp_get_project_metadata_failed", error=str(e))
         raise ToolExecutionError("gcp_get_project_metadata", str(e), e)

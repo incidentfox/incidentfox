@@ -3,6 +3,7 @@
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -117,6 +118,8 @@ def linear_create_issue(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "linear_create_issue", "linear")
     except Exception as e:
         logger.error("linear_create_issue_failed", error=str(e), title=title)
         raise ToolExecutionError("linear_create_issue", str(e), e)
@@ -187,6 +190,8 @@ def linear_create_project(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "linear_create_project", "linear")
     except Exception as e:
         logger.error("linear_create_project_failed", error=str(e), name=name)
         raise ToolExecutionError("linear_create_project", str(e), e)
@@ -253,6 +258,8 @@ def linear_get_issue(issue_id: str) -> dict[str, Any]:
             "url": issue["url"],
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "linear_get_issue", "linear")
     except Exception as e:
         logger.error("linear_get_issue_failed", error=str(e), issue_id=issue_id)
         raise ToolExecutionError("linear_get_issue", str(e), e)
@@ -326,6 +333,8 @@ def linear_list_issues(
         logger.info("linear_issues_listed", count=len(issue_list))
         return issue_list
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "linear_list_issues", "linear")
     except Exception as e:
         logger.error("linear_list_issues_failed", error=str(e))
         raise ToolExecutionError("linear_list_issues", str(e), e)

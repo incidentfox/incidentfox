@@ -3704,7 +3704,12 @@ async def configure_kubernetes(session) -> bool:
     )
 
     kubeconfig = Path.home() / ".kube" / "config"
-    k8s_enabled = os.getenv("K8S_ENABLED", "false").lower() == "true"
+
+    # Check both .env file and shell environment
+    # The agent container uses .env, not shell environment
+    env_file_vars = read_env_file(get_env_file_path())
+    k8s_in_file = env_file_vars.get("K8S_ENABLED", "").lower() == "true"
+    k8s_in_shell = os.getenv("K8S_ENABLED", "false").lower() == "true"
 
     if kubeconfig.exists():
         console.print(f"[green]✓[/green] Found kubeconfig at {kubeconfig}")
@@ -3725,38 +3730,70 @@ async def configure_kubernetes(session) -> bool:
         except Exception:
             pass
 
-        if not k8s_enabled:
-            # Auto-enable K8s
-            console.print("\n[yellow]K8S_ENABLED is currently 'false'[/yellow]")
-            response = await session.prompt_async(
-                "Enable Kubernetes integration? [Y/n]: "
+        if k8s_in_file:
+            # K8S_ENABLED=true is in .env - agent needs restart to pick it up
+            console.print("[green]✓[/green] K8S_ENABLED=true found in .env")
+            console.print(
+                "[yellow]Agent container needs restart to pick up this config.[/yellow]"
             )
+            response = await session.prompt_async("Restart agent? [Y/n]: ")
             if response.lower() in ("", "y", "yes"):
-                if update_env_var("K8S_ENABLED", "true"):
-                    console.print("[green]✓ K8S_ENABLED=true saved to .env[/green]")
-                    restart_success = await restart_agent_service()
-                    if restart_success:
-                        console.print(
-                            "\n[green]✓ Kubernetes is now configured![/green]"
-                        )
-                        return True
-                    else:
-                        console.print(
-                            "\n[yellow]Config saved but service restart failed.[/yellow]"
-                        )
-                        console.print(
-                            "[yellow]Please restart manually, then retry your query.[/yellow]"
-                        )
-                        return False
+                restart_success = await restart_agent_service()
+                if restart_success:
+                    console.print("\n[green]✓ Kubernetes is now configured![/green]")
+                    return True
                 else:
-                    console.print("[red]Failed to update .env file[/red]")
+                    console.print("\n[yellow]Restart failed. Please restart manually.[/yellow]")
+                    return False
+            console.print("[dim]Please restart the agent manually, then retry.[/dim]")
+            return False
+
+        if k8s_in_shell and not k8s_in_file:
+            # K8S_ENABLED in shell env but not in .env - agent can't see it
+            console.print("[yellow]○[/yellow] K8S_ENABLED=true in shell but not in .env")
+            console.print("[dim]The agent container can't see your shell environment.[/dim]")
+            response = await session.prompt_async("Save to .env and restart agent? [Y/n]: ")
+            if response.lower() in ("", "y", "yes"):
+                update_env_var("K8S_ENABLED", "true")
+                console.print("[green]✓ K8S_ENABLED=true saved to .env[/green]")
+                restart_success = await restart_agent_service()
+                if restart_success:
+                    console.print("\n[green]✓ Kubernetes is now configured![/green]")
+                    return True
+                else:
+                    console.print("\n[yellow]Config saved but restart failed.[/yellow]")
+                    return False
+            console.print("[dim]Skipped.[/dim]")
+            return False
+
+        # K8S_ENABLED not set anywhere - offer to enable
+        console.print("\n[yellow]K8S_ENABLED is currently 'false'[/yellow]")
+        response = await session.prompt_async(
+            "Enable Kubernetes integration? [Y/n]: "
+        )
+        if response.lower() in ("", "y", "yes"):
+            if update_env_var("K8S_ENABLED", "true"):
+                console.print("[green]✓ K8S_ENABLED=true saved to .env[/green]")
+                restart_success = await restart_agent_service()
+                if restart_success:
+                    console.print(
+                        "\n[green]✓ Kubernetes is now configured![/green]"
+                    )
+                    return True
+                else:
+                    console.print(
+                        "\n[yellow]Config saved but service restart failed.[/yellow]"
+                    )
+                    console.print(
+                        "[yellow]Please restart manually, then retry your query.[/yellow]"
+                    )
                     return False
             else:
-                console.print("[dim]Skipped.[/dim]")
+                console.print("[red]Failed to update .env file[/red]")
                 return False
         else:
-            console.print("\n[green]✓ Kubernetes is fully configured![/green]")
-            return True  # Already configured
+            console.print("[dim]Skipped.[/dim]")
+            return False
     else:
         console.print(f"[red]✗[/red] No kubeconfig found at {kubeconfig}")
         console.print("\n[yellow]To set up Kubernetes:[/yellow]")
@@ -3781,15 +3818,44 @@ async def configure_aws(session) -> bool:
         )
     )
 
-    region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
-    has_creds = os.getenv("AWS_ACCESS_KEY_ID") or os.path.exists(
-        os.path.expanduser("~/.aws/credentials")
-    )
-    changes_made = False
+    # Check both .env file and shell environment
+    # The agent container uses .env, not shell environment
+    env_file_vars = read_env_file(get_env_file_path())
+    aws_creds_file = os.path.expanduser("~/.aws/credentials")
 
-    # Check credentials
-    if has_creds:
-        console.print("[green]✓[/green] AWS credentials found")
+    # Check credentials in various sources
+    creds_in_file = env_file_vars.get("AWS_ACCESS_KEY_ID")
+    creds_in_shell = os.getenv("AWS_ACCESS_KEY_ID")
+    creds_in_aws_file = os.path.exists(aws_creds_file)
+
+    # Check region in various sources
+    region_in_file = env_file_vars.get("AWS_REGION") or env_file_vars.get(
+        "AWS_DEFAULT_REGION"
+    )
+    region_in_shell = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+
+    changes_made = False
+    needs_restart = False
+
+    # Handle credentials
+    if creds_in_file:
+        console.print("[green]✓[/green] AWS credentials found in .env")
+        needs_restart = True  # If we're here, agent needs restart
+    elif creds_in_aws_file:
+        console.print(f"[green]✓[/green] AWS credentials found at {aws_creds_file}")
+        # ~/.aws/credentials may be mounted in container, check if restart needed
+        needs_restart = True
+    elif creds_in_shell:
+        console.print("[yellow]○[/yellow] AWS credentials in shell but not in .env")
+        console.print("[dim]The agent container can't see your shell environment.[/dim]")
+        response = await session.prompt_async("Save to .env? [Y/n]: ")
+        if response.lower() in ("", "y", "yes"):
+            update_env_var("AWS_ACCESS_KEY_ID", creds_in_shell)
+            secret = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+            if secret:
+                update_env_var("AWS_SECRET_ACCESS_KEY", secret)
+            console.print("[green]✓ AWS credentials saved to .env[/green]")
+            changes_made = True
     else:
         console.print("[red]✗[/red] No AWS credentials found")
         console.print("\n[yellow]Do you want to configure AWS credentials?[/yellow]")
@@ -3804,11 +3870,20 @@ async def configure_aws(session) -> bool:
                 update_env_var("AWS_SECRET_ACCESS_KEY", secret_key.strip())
                 console.print("[green]✓ AWS credentials saved to .env[/green]")
                 changes_made = True
-                has_creds = True
 
-    # Check region
-    if region:
-        console.print(f"[green]✓[/green] AWS_REGION: [cyan]{region}[/cyan]")
+    # Handle region
+    if region_in_file:
+        console.print(f"[green]✓[/green] AWS_REGION in .env: [cyan]{region_in_file}[/cyan]")
+        needs_restart = True
+    elif region_in_shell:
+        console.print(
+            f"[yellow]○[/yellow] AWS_REGION in shell ({region_in_shell}) but not in .env"
+        )
+        response = await session.prompt_async("Save to .env? [Y/n]: ")
+        if response.lower() in ("", "y", "yes"):
+            update_env_var("AWS_REGION", region_in_shell)
+            console.print(f"[green]✓ AWS_REGION={region_in_shell} saved to .env[/green]")
+            changes_made = True
     else:
         console.print("\n[yellow]AWS_REGION not set[/yellow]")
         response = await session.prompt_async(
@@ -3820,9 +3895,18 @@ async def configure_aws(session) -> bool:
                 f"[green]✓ AWS_REGION={response.strip()} saved to .env[/green]"
             )
             changes_made = True
-            region = response.strip()
 
-    if changes_made:
+    # Restart if changes made or if config exists but agent doesn't have it
+    if changes_made or needs_restart:
+        if needs_restart and not changes_made:
+            console.print(
+                "\n[yellow]Agent container needs restart to pick up config.[/yellow]"
+            )
+            response = await session.prompt_async("Restart agent? [Y/n]: ")
+            if response.lower() not in ("", "y", "yes"):
+                console.print("[dim]Please restart the agent manually, then retry.[/dim]")
+                return False
+
         restart_success = await restart_agent_service()
         if restart_success:
             console.print("\n[green]✓ AWS is now configured![/green]")
@@ -3833,9 +3917,6 @@ async def configure_aws(session) -> bool:
                 "[yellow]Please restart manually, then retry your query.[/yellow]"
             )
             return False
-    elif has_creds and region:
-        console.print("\n[green]✓ AWS is fully configured![/green]")
-        return True
 
     return False
 
@@ -3853,21 +3934,63 @@ async def configure_github(session) -> bool:
         )
     )
 
-    token = os.getenv("GITHUB_TOKEN")
-    if token:
-        # Show masked token
-        masked = token[:4] + "..." + token[-4:] if len(token) > 8 else "***"
-        console.print(f"[green]✓[/green] GITHUB_TOKEN is set ({masked})")
-        response = await session.prompt_async("Update token? [y/N]: ")
-        if response.lower() not in ("y", "yes"):
-            console.print("\n[green]✓ GitHub is configured![/green]")
-            return True  # Already configured
+    # Check both .env file and shell environment
+    # The agent container uses .env, not shell environment
+    env_file_vars = read_env_file(get_env_file_path())
+    token_in_file = env_file_vars.get("GITHUB_TOKEN")
+    token_in_shell = os.getenv("GITHUB_TOKEN")
 
-    if not token:
-        console.print("[yellow]GITHUB_TOKEN not set[/yellow]")
-        console.print("\n[dim]To get a token:[/dim]")
-        console.print("  1. Go to [cyan]https://github.com/settings/tokens[/cyan]")
-        console.print("  2. Create a token with 'repo' and 'read:org' scopes")
+    if token_in_file:
+        # Token is in .env - if we're here, agent needs restart to pick it up
+        masked = (
+            token_in_file[:4] + "..." + token_in_file[-4:]
+            if len(token_in_file) > 8
+            else "***"
+        )
+        console.print(f"[green]✓[/green] GITHUB_TOKEN found in .env ({masked})")
+        console.print(
+            "[yellow]Agent container needs restart to pick up this config.[/yellow]"
+        )
+        response = await session.prompt_async("Restart agent? [Y/n]: ")
+        if response.lower() in ("", "y", "yes"):
+            restart_success = await restart_agent_service()
+            if restart_success:
+                console.print("\n[green]✓ GitHub is now configured![/green]")
+                return True
+            else:
+                console.print("\n[yellow]Restart failed. Please restart manually.[/yellow]")
+                return False
+        console.print("[dim]Please restart the agent manually, then retry.[/dim]")
+        return False
+
+    if token_in_shell:
+        # Token in shell env but not in .env - agent can't see it
+        masked = (
+            token_in_shell[:4] + "..." + token_in_shell[-4:]
+            if len(token_in_shell) > 8
+            else "***"
+        )
+        console.print(f"[yellow]○[/yellow] GITHUB_TOKEN in shell ({masked}) but not in .env")
+        console.print("[dim]The agent container can't see your shell environment.[/dim]")
+        response = await session.prompt_async("Save to .env and restart agent? [Y/n]: ")
+        if response.lower() in ("", "y", "yes"):
+            update_env_var("GITHUB_TOKEN", token_in_shell)
+            console.print("[green]✓ GITHUB_TOKEN saved to .env[/green]")
+            restart_success = await restart_agent_service()
+            if restart_success:
+                console.print("\n[green]✓ GitHub is now configured![/green]")
+                return True
+            else:
+                console.print("\n[yellow]Config saved but restart failed.[/yellow]")
+                return False
+        console.print("[dim]Skipped.[/dim]")
+        return False
+
+    # Token not found anywhere
+    console.print("[yellow]GITHUB_TOKEN not set[/yellow]")
+    console.print("\n[dim]To get a token:[/dim]")
+    console.print("  1. Go to [cyan]https://github.com/settings/tokens[/cyan]")
+    console.print("  2. Create a token with 'repo' and 'read:org' scopes")
 
     console.print()
     new_token = await session.prompt_async("Paste your GitHub token (ghp_...): ")
@@ -3919,20 +4042,54 @@ async def configure_slack(session) -> bool:
         )
     )
 
-    token = os.getenv("SLACK_BOT_TOKEN")
-    if token:
-        console.print("[green]✓[/green] SLACK_BOT_TOKEN is set")
-        response = await session.prompt_async("Update token? [y/N]: ")
-        if response.lower() not in ("y", "yes"):
-            console.print("\n[green]✓ Slack is configured![/green]")
-            return True  # Already configured
+    # Check both .env file and shell environment
+    # The agent container uses .env, not shell environment
+    env_file_vars = read_env_file(get_env_file_path())
+    token_in_file = env_file_vars.get("SLACK_BOT_TOKEN")
+    token_in_shell = os.getenv("SLACK_BOT_TOKEN")
 
-    if not token:
-        console.print("[dim]SLACK_BOT_TOKEN not set (optional integration)[/dim]")
-        console.print("\n[dim]To get a token:[/dim]")
-        console.print("  1. Create app at [cyan]https://api.slack.com/apps[/cyan]")
-        console.print("  2. Add scopes: channels:history, channels:read, chat:write")
-        console.print("  3. Install to workspace and copy Bot Token")
+    if token_in_file:
+        # Token is in .env - if we're here, agent needs restart to pick it up
+        console.print("[green]✓[/green] SLACK_BOT_TOKEN found in .env")
+        console.print(
+            "[yellow]Agent container needs restart to pick up this config.[/yellow]"
+        )
+        response = await session.prompt_async("Restart agent? [Y/n]: ")
+        if response.lower() in ("", "y", "yes"):
+            restart_success = await restart_agent_service()
+            if restart_success:
+                console.print("\n[green]✓ Slack is now configured![/green]")
+                return True
+            else:
+                console.print("\n[yellow]Restart failed. Please restart manually.[/yellow]")
+                return False
+        console.print("[dim]Please restart the agent manually, then retry.[/dim]")
+        return False
+
+    if token_in_shell:
+        # Token in shell env but not in .env - agent can't see it
+        console.print("[yellow]○[/yellow] SLACK_BOT_TOKEN in shell but not in .env")
+        console.print("[dim]The agent container can't see your shell environment.[/dim]")
+        response = await session.prompt_async("Save to .env and restart agent? [Y/n]: ")
+        if response.lower() in ("", "y", "yes"):
+            update_env_var("SLACK_BOT_TOKEN", token_in_shell)
+            console.print("[green]✓ SLACK_BOT_TOKEN saved to .env[/green]")
+            restart_success = await restart_agent_service()
+            if restart_success:
+                console.print("\n[green]✓ Slack is now configured![/green]")
+                return True
+            else:
+                console.print("\n[yellow]Config saved but restart failed.[/yellow]")
+                return False
+        console.print("[dim]Skipped.[/dim]")
+        return False
+
+    # Token not found anywhere
+    console.print("[dim]SLACK_BOT_TOKEN not set (optional integration)[/dim]")
+    console.print("\n[dim]To get a token:[/dim]")
+    console.print("  1. Create app at [cyan]https://api.slack.com/apps[/cyan]")
+    console.print("  2. Add scopes: channels:history, channels:read, chat:write")
+    console.print("  3. Install to workspace and copy Bot Token")
 
     console.print()
     new_token = await session.prompt_async("Paste your Slack Bot Token (xoxb-...): ")
@@ -3996,44 +4153,98 @@ async def configure_generic_integration(session, integration: str) -> bool:
         console.print(f"[dim]{name} has no required configuration.[/dim]")
         return True
 
+    # Check both .env file and shell environment
+    # The agent container uses .env, not shell environment
+    env_file_vars = read_env_file(get_env_file_path())
+
     changes_made = False
-    all_set = True
+    needs_restart = False
+    all_in_file = True
+    shell_only_vars = []  # Vars that exist in shell but not .env
 
     # Check and configure required variables
     for var in required:
-        current = os.getenv(var)
-        if current:
-            # Show masked value
+        in_file = env_file_vars.get(var)
+        in_shell = os.getenv(var)
+
+        if in_file:
+            # Value is in .env - agent needs restart to pick it up
+            needs_restart = True
             if (
                 "token" in var.lower()
                 or "key" in var.lower()
                 or "password" in var.lower()
             ):
                 masked = (
-                    current[:4] + "..." + current[-4:] if len(current) > 8 else "***"
+                    in_file[:4] + "..." + in_file[-4:] if len(in_file) > 8 else "***"
                 )
-                console.print(f"[green]✓[/green] {var} is set ({masked})")
+                console.print(f"[green]✓[/green] {var} in .env ({masked})")
             else:
-                console.print(f"[green]✓[/green] {var} = {current}")
+                console.print(f"[green]✓[/green] {var} in .env = {in_file}")
+        elif in_shell:
+            # Value in shell but not .env - agent can't see it
+            all_in_file = False
+            shell_only_vars.append((var, in_shell))
+            if (
+                "token" in var.lower()
+                or "key" in var.lower()
+                or "password" in var.lower()
+            ):
+                masked = (
+                    in_shell[:4] + "..." + in_shell[-4:] if len(in_shell) > 8 else "***"
+                )
+                console.print(f"[yellow]○[/yellow] {var} in shell ({masked}) but not .env")
+            else:
+                console.print(f"[yellow]○[/yellow] {var} in shell ({in_shell}) but not .env")
         else:
-            all_set = False
+            all_in_file = False
             console.print(f"[yellow]○[/yellow] {var} not set")
 
-    if all_set:
-        response = await session.prompt_async("Update configuration? [y/N]: ")
-        if response.lower() not in ("y", "yes"):
-            console.print(f"\n[green]✓ {name} is configured![/green]")
-            return True
+    # Handle vars that are in shell but not .env
+    if shell_only_vars:
+        console.print("\n[dim]The agent container can't see your shell environment.[/dim]")
+        response = await session.prompt_async(
+            f"Save {len(shell_only_vars)} value(s) from shell to .env? [Y/n]: "
+        )
+        if response.lower() in ("", "y", "yes"):
+            for var, value in shell_only_vars:
+                update_env_var(var, value)
+                console.print(f"[green]✓[/green] {var} saved to .env")
+            changes_made = True
+
+    # If all required vars are in .env but agent still failed, it needs restart
+    if all_in_file and needs_restart:
+        console.print(
+            "\n[yellow]Agent container needs restart to pick up config.[/yellow]"
+        )
+        response = await session.prompt_async("Restart agent? [Y/n]: ")
+        if response.lower() in ("", "y", "yes"):
+            restart_success = await restart_agent_service()
+            if restart_success:
+                console.print(f"\n[green]✓ {name} is now configured![/green]")
+                return True
+            else:
+                console.print("\n[yellow]Restart failed. Please restart manually.[/yellow]")
+                return False
+        console.print("[dim]Please restart the agent manually, then retry.[/dim]")
+        return False
 
     # Get hint for how values should look
-    if env_hint and not all_set:
+    if env_hint and not all_in_file:
         console.print(f"\n[dim]Format hint: {env_hint}[/dim]")
 
     console.print()
 
-    # Prompt for each required variable
+    # Prompt for any remaining required variables not yet set
     for var in required:
-        current = os.getenv(var)
+        in_file = env_file_vars.get(var)
+        in_shell = os.getenv(var)
+
+        # Skip if already in .env or was just saved from shell
+        if in_file or (var, in_shell) in shell_only_vars and changes_made:
+            continue
+
+        current = in_shell  # Use shell value as suggestion if available
         prompt_text = f"Enter {var}"
         if current:
             prompt_text += " (press Enter to keep current)"
@@ -4046,7 +4257,12 @@ async def configure_generic_integration(session, integration: str) -> bool:
             update_env_var(var, value)
             console.print(f"[green]✓[/green] {var} saved to .env")
             changes_made = True
-        elif not current:
+        elif current:
+            # User pressed Enter - use shell value
+            update_env_var(var, current)
+            console.print(f"[green]✓[/green] {var} saved to .env")
+            changes_made = True
+        else:
             console.print(f"[yellow]⚠[/yellow] {var} skipped (still required)")
 
     # Optionally configure optional variables
@@ -4055,7 +4271,7 @@ async def configure_generic_integration(session, integration: str) -> bool:
         response = await session.prompt_async("Configure optional variables? [y/N]: ")
         if response.lower() in ("y", "yes"):
             for var in optional:
-                current = os.getenv(var)
+                current = env_file_vars.get(var) or os.getenv(var)
                 prompt_text = f"Enter {var}"
                 if current:
                     prompt_text += f" (current: {current})"

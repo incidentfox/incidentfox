@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from agents import function_tool
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
 from ..core.logging import get_logger
@@ -146,6 +147,8 @@ def query_log_analytics(
                 }
             )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "query_log_analytics", "azure")
     except Exception as e:
         logger.error(
             "failed_to_query_log_analytics", error=str(e), workspace_id=workspace_id
@@ -213,6 +216,8 @@ def query_azure_resource_graph(
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "query_azure_resource_graph", "azure")
     except Exception as e:
         logger.error("failed_to_query_resource_graph", error=str(e))
         return json.dumps({"error": str(e), "query": query})
@@ -297,6 +302,8 @@ def get_application_insights_traces(
                 }
             )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_application_insights_traces", "azure")
     except Exception as e:
         logger.error(
             "failed_to_query_app_insights", error=str(e), app_id=app_insights_app_id
@@ -388,6 +395,8 @@ def get_azure_monitor_metrics(
             {"resource_id": resource_id, "interval": interval, "metrics": metrics_data}
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_azure_monitor_metrics", "azure")
     except Exception as e:
         logger.error(
             "failed_to_get_azure_monitor_metrics", error=str(e), resource_id=resource_id
@@ -449,6 +458,8 @@ def get_azure_monitor_alerts(resource_group: str | None = None) -> str:
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_azure_monitor_alerts", "azure")
     except Exception as e:
         logger.error("failed_to_get_azure_monitor_alerts", error=str(e))
         return json.dumps({"error": str(e), "resource_group": resource_group})
@@ -518,6 +529,8 @@ def describe_azure_vm(
 
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "describe_azure_vm", "azure")
     except Exception as e:
         logger.error(
             "failed_to_describe_azure_vm", error=str(e), vm=vm_name, rg=resource_group
@@ -571,6 +584,8 @@ def list_azure_vms(resource_group: str | None = None) -> str:
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "list_azure_vms", "azure")
     except Exception as e:
         logger.error("failed_to_list_azure_vms", error=str(e), rg=resource_group)
         return json.dumps({"error": str(e), "resource_group": resource_group})
@@ -643,6 +658,8 @@ def describe_aks_cluster(
 
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "describe_aks_cluster", "azure")
     except Exception as e:
         logger.error(
             "failed_to_describe_aks_cluster",
@@ -706,6 +723,8 @@ def list_aks_clusters(resource_group: str | None = None) -> str:
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "list_aks_clusters", "azure")
     except Exception as e:
         logger.error("failed_to_list_aks_clusters", error=str(e), rg=resource_group)
         return json.dumps({"error": str(e), "resource_group": resource_group})
@@ -755,6 +774,8 @@ def describe_azure_function(
 
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "describe_azure_function", "azure")
     except Exception as e:
         logger.error(
             "failed_to_describe_azure_function",
@@ -818,6 +839,8 @@ def list_azure_functions(resource_group: str | None = None) -> str:
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "list_azure_functions", "azure")
     except Exception as e:
         logger.error("failed_to_list_azure_functions", error=str(e), rg=resource_group)
         return json.dumps({"error": str(e), "resource_group": resource_group})
@@ -876,6 +899,8 @@ def describe_azure_sql_database(
 
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "describe_azure_sql_database", "azure")
     except Exception as e:
         logger.error(
             "failed_to_describe_azure_sql_db",
@@ -937,6 +962,8 @@ def list_azure_sql_databases(resource_group: str, server_name: str) -> str:
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "list_azure_sql_databases", "azure")
     except Exception as e:
         logger.error(
             "failed_to_list_azure_sql_databases", error=str(e), server=server_name
@@ -1009,6 +1036,8 @@ def describe_cosmos_db_account(
 
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "describe_cosmos_db_account", "azure")
     except Exception as e:
         logger.error(
             "failed_to_describe_cosmos_db",
@@ -1114,6 +1143,8 @@ def query_azure_cost_management(
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "query_azure_cost_management", "azure")
     except Exception as e:
         logger.error("failed_to_query_cost_management", error=str(e), scope=scope)
         return json.dumps({"error": str(e), "scope": scope})
@@ -1200,6 +1231,8 @@ def get_azure_advisor_recommendations(
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_azure_advisor_recommendations", "azure")
     except Exception as e:
         logger.error("failed_to_get_advisor_recommendations", error=str(e))
         return json.dumps(
@@ -1262,6 +1295,8 @@ def list_azure_backup_vaults(resource_group: str | None = None) -> str:
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "list_azure_backup_vaults", "azure")
     except Exception as e:
         logger.error("failed_to_list_backup_vaults", error=str(e), rg=resource_group)
         return json.dumps({"error": str(e), "resource_group": resource_group})
@@ -1336,6 +1371,8 @@ def get_azure_backup_status(
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_azure_backup_status", "azure")
     except Exception as e:
         logger.error(
             "failed_to_get_backup_status",
@@ -1407,6 +1444,8 @@ def describe_azure_vnet(
 
         return json.dumps(result)
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "describe_azure_vnet", "azure")
     except Exception as e:
         logger.error(
             "failed_to_describe_vnet", error=str(e), vnet=vnet_name, rg=resource_group
@@ -1467,6 +1506,8 @@ def get_azure_nsg_rules(
             }
         )
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_azure_nsg_rules", "azure")
     except Exception as e:
         logger.error(
             "failed_to_get_nsg_rules", error=str(e), nsg=nsg_name, rg=resource_group

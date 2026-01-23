@@ -3,6 +3,7 @@
 import os
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -92,6 +93,8 @@ def search_confluence(
         logger.info("confluence_search_completed", query=query, results=len(pages))
         return pages
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "search_confluence", "confluence")
     except Exception as e:
         logger.error("confluence_search_failed", error=str(e), query=query)
         raise ToolExecutionError("search_confluence", str(e), e)
@@ -134,6 +137,8 @@ def get_confluence_page(
             "url": f"{confluence.url}/wiki{page['_links']['webui']}",
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_confluence_page", "confluence")
     except Exception as e:
         logger.error("confluence_get_page_failed", error=str(e))
         raise ToolExecutionError("get_confluence_page", str(e), e)
@@ -167,6 +172,8 @@ def list_space_pages(space: str, limit: int = 25) -> list[dict[str, Any]]:
         logger.info("confluence_pages_listed", space=space, count=len(page_list))
         return page_list
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "list_space_pages", "confluence")
     except Exception as e:
         logger.error("confluence_list_failed", error=str(e), space=space)
         raise ToolExecutionError("list_space_pages", str(e), e)
@@ -209,6 +216,8 @@ def confluence_create_page(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "confluence_create_page", "confluence")
     except Exception as e:
         logger.error("confluence_create_page_failed", error=str(e), title=title)
         raise ToolExecutionError("confluence_create_page", str(e), e)
@@ -261,6 +270,8 @@ def confluence_write_content(
             "characters_written": len(content),
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "confluence_write_content", "confluence")
     except Exception as e:
         logger.error("confluence_write_failed", error=str(e), page_id=page_id)
         raise ToolExecutionError("confluence_write_content", str(e), e)
@@ -303,6 +314,8 @@ def confluence_get_page(
             "url": f"{confluence.url}/wiki{page['_links']['webui']}",
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "confluence_get_page", "confluence")
     except Exception as e:
         logger.error("confluence_get_page_failed", error=str(e))
         raise ToolExecutionError("confluence_get_page", str(e), e)

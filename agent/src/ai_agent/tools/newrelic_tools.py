@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -95,6 +96,8 @@ def query_newrelic_nrql(
         logger.info("newrelic_nrql_completed", account=account_id, results=len(results))
         return results
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "query_newrelic_nrql", "newrelic")
     except Exception as e:
         logger.error("newrelic_nrql_failed", error=str(e), query=nrql_query)
         raise ToolExecutionError("query_newrelic_nrql", str(e), e)
@@ -134,6 +137,8 @@ def get_apm_summary(
         logger.info("newrelic_apm_summary", app=app_name)
         return {"app": app_name, "summary": summary}
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_apm_summary", "newrelic")
     except Exception as e:
         logger.error("newrelic_apm_failed", error=str(e), app=app_name)
         raise ToolExecutionError("get_apm_summary", str(e), e)

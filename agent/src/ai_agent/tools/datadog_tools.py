@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Any
 
+from ..core.config_required import handle_integration_not_configured
 from ..core.errors import ToolExecutionError
 from ..core.execution_context import get_execution_context
 from ..core.integration_errors import IntegrationNotConfiguredError
@@ -93,6 +94,8 @@ def query_datadog_metrics(query: str, time_range: str = "1h") -> dict[str, Any]:
             "to_time": str(end_time),
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "query_datadog_metrics", "datadog")
     except Exception as e:
         logger.error("datadog_metrics_failed", error=str(e), query=query)
         raise ToolExecutionError("query_datadog_metrics", str(e), e)
@@ -151,6 +154,8 @@ def search_datadog_logs(
         logger.info("datadog_logs_searched", query=query, results=len(logs))
         return logs
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "search_datadog_logs", "datadog")
     except Exception as e:
         logger.error("datadog_logs_failed", error=str(e), query=query)
         raise ToolExecutionError("search_datadog_logs", str(e), e)
@@ -187,6 +192,8 @@ def get_service_apm_metrics(
         logger.info("datadog_apm_fetched", service=service_name)
         return {"service": service_name, "metrics": metrics}
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "get_service_apm_metrics", "datadog")
     except Exception as e:
         logger.error("datadog_apm_failed", error=str(e), service=service_name)
         raise ToolExecutionError("get_service_apm_metrics", str(e), e)
@@ -242,6 +249,8 @@ def datadog_get_monitors(
         logger.info("datadog_monitors_listed", count=len(monitors))
         return monitors
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "datadog_get_monitors", "datadog")
     except Exception as e:
         logger.error("datadog_get_monitors_failed", error=str(e))
         raise ToolExecutionError("datadog_get_monitors", str(e), e)
@@ -294,6 +303,8 @@ def datadog_get_monitor_history(
         logger.info("datadog_monitor_history_fetched", monitor_id=monitor_id)
         return result
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "datadog_get_monitor_history", "datadog")
     except Exception as e:
         logger.error(
             "datadog_monitor_history_failed", error=str(e), monitor_id=monitor_id
@@ -358,6 +369,8 @@ def datadog_update_monitor(
             "success": True,
         }
 
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "datadog_update_monitor", "datadog")
     except Exception as e:
         logger.error(
             "datadog_update_monitor_failed", error=str(e), monitor_id=monitor_id
