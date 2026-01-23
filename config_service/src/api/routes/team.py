@@ -982,8 +982,7 @@ class TeamStatsResponse(BaseModel):
 
     totalRuns: int
     successRate: float
-    activeAgents: int
-    knowledgeDocs: int
+    avgMttdSeconds: Optional[float]  # Average Mean Time To Detect (run duration)
     runsThisWeek: int
     runsPrevWeek: int
     trend: str  # up, down, stable
@@ -1073,8 +1072,7 @@ async def get_team_stats(
     Returns:
     - Total runs (all time)
     - Success rate
-    - Active agents count
-    - Knowledge documents count
+    - Average MTTD (run duration in seconds)
     - Weekly trend
     """
     import structlog
@@ -1134,28 +1132,29 @@ async def get_team_stats(
         (successful_runs / total_runs * 100) if total_runs > 0 else 0, 1
     )
 
-    # Active agents (agents with at least one run in last 7 days)
-    active_agents = (
-        db.query(func.count(func.distinct(AgentRun.agent_name)))
+    # Calculate average MTTD (run duration) for completed runs in last 30 days
+    thirty_days_ago = now - timedelta(days=30)
+    completed_runs = (
+        db.query(AgentRun)
         .filter(
             AgentRun.org_id == team.org_id,
             AgentRun.team_node_id == team.team_node_id,
-            AgentRun.started_at >= seven_days_ago,
+            AgentRun.started_at >= thirty_days_ago,
+            AgentRun.status == "completed",
+            AgentRun.completed_at.isnot(None),
         )
-        .scalar()
-        or 0
+        .all()
     )
 
-    # Knowledge documents
-    knowledge_docs = (
-        db.query(func.count(KnowledgeDocument.doc_id))
-        .filter(
-            KnowledgeDocument.org_id == team.org_id,
-            KnowledgeDocument.team_node_id == team.team_node_id,
-        )
-        .scalar()
-        or 0
-    )
+    avg_mttd_seconds = None
+    if completed_runs:
+        durations = [
+            (run.completed_at - run.started_at).total_seconds()
+            for run in completed_runs
+            if run.completed_at and run.started_at
+        ]
+        if durations:
+            avg_mttd_seconds = round(sum(durations) / len(durations), 1)
 
     # Runs this week
     runs_this_week = (
@@ -1193,8 +1192,7 @@ async def get_team_stats(
     return TeamStatsResponse(
         totalRuns=total_runs,
         successRate=success_rate,
-        activeAgents=active_agents,
-        knowledgeDocs=knowledge_docs,
+        avgMttdSeconds=avg_mttd_seconds,
         runsThisWeek=runs_this_week,
         runsPrevWeek=runs_prev_week,
         trend=trend,
