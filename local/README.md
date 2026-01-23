@@ -27,15 +27,7 @@ claude
 > Why did my GitHub Actions workflow fail? [paste url]
 ```
 
-### What You Get
-
-- 85+ investigation tools (Kubernetes, AWS, Datadog, Prometheus, GitHub, Slack, etc.)
-- Unified log search across multiple backends
-- Investigation history with pattern learning
-- Postmortem generation
-- No Docker, no services to manage
-
-**Full documentation:** [claude_code_pack/README.md](./claude_code_pack/README.md)
+**Full docs:** [claude_code_pack/README.md](./claude_code_pack/README.md)
 
 ---
 
