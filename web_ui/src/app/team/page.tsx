@@ -3,6 +3,9 @@
 import Link from 'next/link';
 import { RequireRole } from '@/components/RequireRole';
 import { useIdentity } from '@/lib/useIdentity';
+import { useOnboarding } from '@/lib/useOnboarding';
+import { WelcomeModal } from '@/components/onboarding/WelcomeModal';
+import { AgentRunnerModal } from '@/components/onboarding/AgentRunnerModal';
 import {
   Bot,
   Activity,
@@ -24,6 +27,8 @@ import {
   Wrench,
   LayoutTemplate,
   GitPullRequest,
+  Network,
+  Sparkles,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -73,6 +78,24 @@ export default function TeamDashboardPage() {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [pending, setPending] = useState<PendingItems>({ configChanges: 0, knowledgeChanges: 0 });
   const [integrations, setIntegrations] = useState<IntegrationHealth[]>([]);
+
+  // Onboarding state
+  const {
+    shouldShowWelcome,
+    state: onboardingState,
+    markWelcomeSeen,
+    markFirstAgentRunCompleted,
+  } = useOnboarding();
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showAgentRunner, setShowAgentRunner] = useState(false);
+  const [isOnboardingFlow, setIsOnboardingFlow] = useState(false);
+
+  // Show welcome modal on first visit
+  useEffect(() => {
+    if (shouldShowWelcome) {
+      setShowWelcomeModal(true);
+    }
+  }, [shouldShowWelcome]);
 
   useEffect(() => {
     // Fetch team stats
@@ -208,8 +231,49 @@ export default function TeamDashboardPage() {
 
   const totalPending = pending.configChanges + pending.knowledgeChanges;
 
+  const handleWelcomeRunAgent = () => {
+    markWelcomeSeen();
+    setShowWelcomeModal(false);
+    setIsOnboardingFlow(true);
+    setShowAgentRunner(true);
+  };
+
+  const handleWelcomeSkip = () => {
+    markWelcomeSeen();
+    setShowWelcomeModal(false);
+  };
+
+  const handleAgentRunnerClose = () => {
+    setShowAgentRunner(false);
+    setIsOnboardingFlow(false);
+  };
+
+  const handleAgentRunComplete = () => {
+    if (isOnboardingFlow) {
+      markFirstAgentRunCompleted();
+    }
+  };
+
   return (
     <RequireRole role="team" fallbackHref="/">
+      {/* Onboarding Modals */}
+      {showWelcomeModal && (
+        <WelcomeModal
+          role="team"
+          onClose={() => setShowWelcomeModal(false)}
+          onRunAgent={handleWelcomeRunAgent}
+          onSkip={handleWelcomeSkip}
+        />
+      )}
+
+      {showAgentRunner && (
+        <AgentRunnerModal
+          onClose={handleAgentRunnerClose}
+          onComplete={handleAgentRunComplete}
+          isOnboarding={isOnboardingFlow}
+        />
+      )}
+
       <div className="p-8 max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -220,9 +284,19 @@ export default function TeamDashboardPage() {
               <p className="text-sm text-gray-500">Monitor your AI agents and team activity</p>
             </div>
           </div>
-          <div className="text-xs text-gray-500 text-right">
-            <div>
-              Team: <span className="font-mono">{identity?.team_node_id || identity?.org_id || 'unknown'}</span>
+          <div className="flex items-center gap-4">
+            {/* Run Agent Button */}
+            <button
+              onClick={() => setShowAgentRunner(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors shadow-sm"
+            >
+              <Sparkles className="w-4 h-4" />
+              Ask IncidentFox
+            </button>
+            <div className="text-xs text-gray-500 text-right">
+              <div>
+                Team: <span className="font-mono">{identity?.team_node_id || identity?.org_id || 'unknown'}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -492,20 +566,20 @@ export default function TeamDashboardPage() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Link
-              href="/team/agent-runs"
-              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm hover:border-gray-400 dark:hover:border-gray-600 transition-colors group"
+            <button
+              onClick={() => setShowAgentRunner(true)}
+              className="bg-gradient-to-br from-orange-500 to-amber-500 border border-orange-600 rounded-xl p-5 shadow-sm hover:from-orange-600 hover:to-amber-600 transition-all group text-left"
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
-                  <Play className="w-5 h-5" />
+                <div className="p-2 rounded-lg bg-white/20 text-white">
+                  <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="font-medium text-gray-900 dark:text-white">Run Agent</div>
-                  <div className="text-xs text-gray-500">Start investigation</div>
+                  <div className="font-medium text-white">Ask IncidentFox</div>
+                  <div className="text-xs text-white/80">AI-powered investigation</div>
                 </div>
               </div>
-            </Link>
+            </button>
 
             <Link
               href="/team/knowledge"

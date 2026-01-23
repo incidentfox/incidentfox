@@ -3,6 +3,9 @@
 import Link from 'next/link';
 import { RequireRole } from '@/components/RequireRole';
 import { useIdentity } from '@/lib/useIdentity';
+import { useOnboarding } from '@/lib/useOnboarding';
+import { WelcomeModal } from '@/components/onboarding/WelcomeModal';
+import { AgentRunnerModal } from '@/components/onboarding/AgentRunnerModal';
 import {
   ShieldCheck,
   Network,
@@ -25,6 +28,7 @@ import {
   Github,
   Code,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -94,6 +98,23 @@ export default function AdminHomePage() {
   const [pending, setPending] = useState<PendingItems>({ remediations: 0, configChanges: 0, expiringTokens: 0 });
   const [services, setServices] = useState<ServiceHealth[]>([]);
   const [integrations, setIntegrations] = useState<IntegrationHealth[]>([]);
+
+  // Onboarding state
+  const {
+    shouldShowWelcome,
+    markWelcomeSeen,
+    markFirstAgentRunCompleted,
+  } = useOnboarding();
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showAgentRunner, setShowAgentRunner] = useState(false);
+  const [isOnboardingFlow, setIsOnboardingFlow] = useState(false);
+
+  // Show welcome modal on first visit
+  useEffect(() => {
+    if (shouldShowWelcome) {
+      setShowWelcomeModal(true);
+    }
+  }, [shouldShowWelcome]);
 
   useEffect(() => {
     if (!identity?.org_id) return;
@@ -253,8 +274,49 @@ export default function AdminHomePage() {
 
   const totalPending = pending.remediations + pending.configChanges + pending.expiringTokens;
 
+  const handleWelcomeRunAgent = () => {
+    markWelcomeSeen();
+    setShowWelcomeModal(false);
+    setIsOnboardingFlow(true);
+    setShowAgentRunner(true);
+  };
+
+  const handleWelcomeSkip = () => {
+    markWelcomeSeen();
+    setShowWelcomeModal(false);
+  };
+
+  const handleAgentRunnerClose = () => {
+    setShowAgentRunner(false);
+    setIsOnboardingFlow(false);
+  };
+
+  const handleAgentRunComplete = () => {
+    if (isOnboardingFlow) {
+      markFirstAgentRunCompleted();
+    }
+  };
+
   return (
     <RequireRole role="admin" fallbackHref="/">
+      {/* Onboarding Modals */}
+      {showWelcomeModal && (
+        <WelcomeModal
+          role="admin"
+          onClose={() => setShowWelcomeModal(false)}
+          onRunAgent={handleWelcomeRunAgent}
+          onSkip={handleWelcomeSkip}
+        />
+      )}
+
+      {showAgentRunner && (
+        <AgentRunnerModal
+          onClose={handleAgentRunnerClose}
+          onComplete={handleAgentRunComplete}
+          isOnboarding={isOnboardingFlow}
+        />
+      )}
+
       <div className="p-8 max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -265,12 +327,22 @@ export default function AdminHomePage() {
               <p className="text-sm text-gray-500">Monitor organization health and activity</p>
             </div>
           </div>
-          <div className="text-xs text-gray-500 text-right">
-            <div>
-              Signed in as: <span className="font-mono">{identity?.auth_kind || 'unknown'}</span>
-            </div>
-            <div className="mt-1">
-              Organization: <span className="font-mono">{identity?.org_id || '—'}</span>
+          <div className="flex items-center gap-4">
+            {/* Run Agent Button */}
+            <button
+              onClick={() => setShowAgentRunner(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors shadow-sm"
+            >
+              <Sparkles className="w-4 h-4" />
+              Ask IncidentFox
+            </button>
+            <div className="text-xs text-gray-500 text-right">
+              <div>
+                Signed in as: <span className="font-mono">{identity?.auth_kind || 'unknown'}</span>
+              </div>
+              <div className="mt-1">
+                Organization: <span className="font-mono">{identity?.org_id || '—'}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -645,7 +717,22 @@ export default function AdminHomePage() {
         {/* Quick Actions */}
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <button
+              onClick={() => setShowAgentRunner(true)}
+              className="bg-gradient-to-br from-orange-500 to-amber-500 border border-orange-600 rounded-xl p-5 shadow-sm hover:from-orange-600 hover:to-amber-600 transition-all group text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-white/20 text-white">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-medium text-white">Ask IncidentFox</div>
+                  <div className="text-xs text-white/80">AI-powered investigation</div>
+                </div>
+              </div>
+            </button>
+
             <Link
               href="/admin/org-tree"
               className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm hover:border-orange-300 dark:hover:border-orange-700 transition-colors group"

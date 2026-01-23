@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useIdentity } from '@/lib/useIdentity';
 import { apiFetch } from '@/lib/apiClient';
+import { HelpTip } from '@/components/onboarding/HelpTip';
 import {
   Activity,
   CheckCircle,
@@ -153,6 +154,9 @@ export default function TeamAgentRunsPage() {
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-3">
             <Activity className="w-7 h-7 text-gray-500" />
             Agent Run History
+            <HelpTip id="agent-runs" position="right">
+              <strong>Agent Runs</strong> are individual AI investigation sessions. Each run uses tools like Grafana, Kubernetes, and your Knowledge Base to analyze incidents and provide recommendations.
+            </HelpTip>
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             View the history of AI agent invocations for your team.
@@ -191,17 +195,25 @@ export default function TeamAgentRunsPage() {
             ))}
           </select>
         </div>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-        >
-          <option value="all">All Status</option>
-          <option value="running">Running</option>
-          <option value="completed">Completed</option>
-          <option value="failed">Failed</option>
-          <option value="timeout">Timeout</option>
-        </select>
+        <div className="flex items-center gap-1">
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+          >
+            <option value="all">All Status</option>
+            <option value="running">Running</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+            <option value="timeout">Timeout</option>
+          </select>
+          <HelpTip id="run-status" position="bottom">
+            <strong>Running:</strong> Agent is actively investigating<br/>
+            <strong>Completed:</strong> Investigation finished successfully<br/>
+            <strong>Failed:</strong> Agent encountered an error<br/>
+            <strong>Timeout:</strong> Investigation exceeded time limit
+          </HelpTip>
+        </div>
       </div>
 
       {/* Runs List */}
@@ -276,13 +288,23 @@ export default function TeamAgentRunsPage() {
                 <div className="border-t border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-950">
                   <div className="grid grid-cols-3 gap-4 mb-4">
                     <div className="bg-white dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                      <div className="text-xs text-gray-500 mb-1">MTTD (Run Duration)</div>
+                      <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                        MTTD (Run Duration)
+                        <HelpTip id="mttd" position="top">
+                          <strong>Mean Time to Detect</strong> measures how long the agent took to analyze the incident. Lower is better.
+                        </HelpTip>
+                      </div>
                       <div className="text-lg font-semibold text-gray-900 dark:text-white">
                         {formatDuration(run.durationSeconds)}
                       </div>
                     </div>
                     <div className="bg-white dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                      <div className="text-xs text-gray-500 mb-1">Tool Calls</div>
+                      <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                        Tool Calls
+                        <HelpTip id="tool-calls" position="top">
+                          Number of tools the agent used (Grafana queries, K8s lookups, Knowledge Base searches, etc.)
+                        </HelpTip>
+                      </div>
                       <div className="text-lg font-semibold text-gray-900 dark:text-white">
                         {run.toolCallsCount || 0}
                       </div>
