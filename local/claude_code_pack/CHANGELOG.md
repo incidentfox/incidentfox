@@ -5,6 +5,78 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-01-23
+
+### Added
+
+#### New Tool Modules (57 new tools)
+
+- **GitHub (25+ tools)**: Complete GitHub integration for deployment correlation
+  - Repository info, commits, compare, time-range search
+  - Pull requests: list, get, commits, search
+  - Issues: list, get, search
+  - Workflows: runs, jobs, logs
+  - Deployments: list, status
+  - Releases: list, get
+  - Code: file contents, search, branches
+
+- **Slack (4 tools)**: Incident communication context
+  - `slack_search_messages` - Search messages with Slack operators
+  - `slack_get_channel_history` - Channel message history
+  - `slack_get_thread_replies` - Thread replies
+  - `slack_post_message` - Post incident updates
+
+- **PagerDuty (5 tools)**: Incident lifecycle management
+  - `pagerduty_get_incident` - Incident details
+  - `pagerduty_get_incident_log_entries` - Incident timeline
+  - `pagerduty_list_incidents` - List with filters
+  - `pagerduty_get_escalation_policy` - Escalation details
+  - `pagerduty_calculate_mttr` - Mean Time To Resolve metrics
+
+- **Grafana (6 tools)**: Dashboard-driven investigation
+  - `grafana_list_dashboards` - Find dashboards
+  - `grafana_get_dashboard` - Dashboard with panel queries
+  - `grafana_query_prometheus` - Query via Grafana datasource
+  - `grafana_list_datasources` - Available datasources
+  - `grafana_get_annotations` - Deployment/incident markers
+  - `grafana_get_alerts` - Alert rules and states
+
+- **Sentry (5 tools)**: Application error correlation
+  - `sentry_list_issues` - Error list with counts
+  - `sentry_get_issue_details` - Full error context
+  - `sentry_list_projects` - Organization projects
+  - `sentry_get_project_stats` - Error volume trends
+  - `sentry_list_releases` - Release correlation
+
+- **Log Analysis (7 tools)**: Sophisticated multi-backend analysis
+  - `log_get_statistics` - Aggregated stats (MANDATORY first step)
+  - `log_sample` - Intelligent sampling strategies
+  - `log_search_pattern` - Pattern search with context
+  - `log_around_timestamp` - Temporal correlation
+  - `log_correlate_events` - Error/deployment correlation
+  - `log_extract_signatures` - Cluster similar messages
+  - `log_detect_anomalies` - Volume anomaly detection
+  - Supports: Elasticsearch, Coralogix, Datadog, Splunk, CloudWatch
+
+- **Enhanced Anomaly Detection (5 tools)**: Advanced metric analysis with Prophet
+  - `forecast_metric` - Linear regression forecasting with confidence bounds
+  - `analyze_metric_distribution` - Percentile analysis, SLO insights, distribution shape
+  - `prophet_detect_anomalies` - Seasonality-aware anomaly detection
+  - `prophet_forecast` - Forecasting with uncertainty bounds
+  - `prophet_decompose` - Trend/seasonality/residual decomposition
+
+#### Configuration Enhancements
+
+- Added config status for all new integrations
+- Updated `save_credential` with all new credential keys
+- Auto-detection for log backends in log_analysis tools
+
+### Changed
+
+- Total tool count increased from 50+ to 85+
+- Updated README with comprehensive tool documentation
+- Updated Architecture section with new tool modules
+
 ## [1.0.0] - 2024-01-22
 
 ### Added

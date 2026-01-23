@@ -8,6 +8,9 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 
 COPY . /app
 
+# Upgrade wheel to fix CVE-2026-24049
+RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2"
+
 RUN pip install --no-cache-dir -e . \
     && pip install --no-cache-dir --upgrade \
     "urllib3>=2.6.3" \

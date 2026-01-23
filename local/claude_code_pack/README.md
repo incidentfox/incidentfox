@@ -4,7 +4,7 @@ A comprehensive SRE investigation toolkit for Claude Code. Bring production obse
 
 ## Features
 
-- **50+ Investigation Tools**: Kubernetes, AWS, Datadog, Prometheus, Docker, and more
+- **85+ Investigation Tools**: Kubernetes, AWS, Datadog, Prometheus, Docker, GitHub, Slack, PagerDuty, Grafana, Sentry, and more
 - **Service Catalog**: Personalize investigations with `.incidentfox.yaml`
 - **Unified Log Search**: Query across Datadog, CloudWatch, Elasticsearch, Loki
 - **Investigation History**: SQLite-based tracking with pattern learning
@@ -145,6 +145,35 @@ export ELASTICSEARCH_URL=http://elasticsearch:9200
 
 # Loki (optional)
 export LOKI_URL=http://loki:3100
+
+# GitHub
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+export GITHUB_REPOSITORY=owner/repo  # optional default
+
+# Slack
+export SLACK_BOT_TOKEN=xoxb-xxxxxxxxxxxx
+export SLACK_DEFAULT_CHANNEL=C01234ABCDE  # optional
+
+# PagerDuty
+export PAGERDUTY_API_KEY=your-pagerduty-api-key
+
+# Grafana
+export GRAFANA_URL=http://grafana:3000
+export GRAFANA_API_KEY=your-grafana-api-key
+
+# Sentry
+export SENTRY_AUTH_TOKEN=your-sentry-auth-token
+export SENTRY_ORGANIZATION=your-org-slug
+export SENTRY_PROJECT=your-project-slug  # optional
+
+# Coralogix
+export CORALOGIX_API_KEY=your-coralogix-api-key
+export CORALOGIX_REGION=cx498  # optional, default: cx498
+
+# Splunk
+export SPLUNK_HOST=splunk.example.com
+export SPLUNK_TOKEN=your-splunk-token
+export SPLUNK_PORT=8089  # optional, default: 8089
 ```
 
 ### Option 2: On-the-fly Configuration (Recommended)
@@ -276,12 +305,17 @@ known_issues:
 |------|-------------|
 | `get_active_alerts` | Aggregate alerts from Prometheus, Alertmanager, Datadog |
 
-### Anomaly Detection (3 tools)
+### Anomaly Detection (8 tools)
 | Tool | Description |
 |------|-------------|
 | `detect_anomalies` | Z-score based anomaly detection |
 | `correlate_metrics` | Find correlation between two metrics |
 | `find_change_point` | Detect when behavior changed |
+| `forecast_metric` | Linear regression forecasting with confidence bounds |
+| `analyze_metric_distribution` | Percentile analysis (p50/p90/p95/p99), SLO insights |
+| `prophet_detect_anomalies` | Seasonality-aware anomaly detection (requires Prophet) |
+| `prophet_forecast` | Forecasting with uncertainty bounds (requires Prophet) |
+| `prophet_decompose` | Trend/seasonality/residual decomposition (requires Prophet) |
 
 ### Git (6 tools)
 | Tool | Description |
@@ -292,6 +326,84 @@ known_issues:
 | `git_blame` | Show who changed each line |
 | `correlate_with_deployment` | Find commits around incident time |
 | `git_recent_changes` | Files changed in recent period |
+
+### GitHub (25+ tools)
+| Tool | Description |
+|------|-------------|
+| `github_get_repo` | Repository info and statistics |
+| `github_list_commits` | List recent commits |
+| `github_get_commit` | Get commit details with diff |
+| `github_compare_commits` | Compare branches/commits |
+| `github_search_commits_by_timerange` | Find commits in time window |
+| `github_list_prs` | List pull requests |
+| `github_get_pr` | Get PR details with comments |
+| `github_list_pr_commits` | Commits in a PR |
+| `github_search_prs` | Search PRs by query |
+| `github_list_issues` | List repository issues |
+| `github_get_issue` | Get issue details |
+| `github_search_issues` | Search issues by query |
+| `github_list_workflow_runs` | List GitHub Actions runs |
+| `github_get_workflow_run` | Get workflow run details |
+| `github_list_workflow_jobs` | Jobs in a workflow run |
+| `github_get_workflow_logs` | Download workflow logs |
+| `github_list_deployments` | List deployments |
+| `github_get_deployment_status` | Get deployment status |
+| `github_list_releases` | List releases |
+| `github_get_release` | Get release details |
+| `github_get_file_contents` | Read file from repo |
+| `github_search_code` | Search code in repository |
+| `github_list_branches` | List branches |
+| `github_get_branch` | Get branch protection info |
+| `github_correlate_deployment_with_incident` | Find deployments around incident time |
+
+### Slack (4 tools)
+| Tool | Description |
+|------|-------------|
+| `slack_search_messages` | Search messages for incident context |
+| `slack_get_channel_history` | Get channel message history |
+| `slack_get_thread_replies` | Get thread replies |
+| `slack_post_message` | Post updates during incidents |
+
+### PagerDuty (5 tools)
+| Tool | Description |
+|------|-------------|
+| `pagerduty_get_incident` | Get incident details |
+| `pagerduty_get_incident_log_entries` | Incident timeline/log entries |
+| `pagerduty_list_incidents` | List incidents with filters |
+| `pagerduty_get_escalation_policy` | Escalation policy details |
+| `pagerduty_calculate_mttr` | Calculate Mean Time To Resolve |
+
+### Grafana (6 tools)
+| Tool | Description |
+|------|-------------|
+| `grafana_list_dashboards` | List available dashboards |
+| `grafana_get_dashboard` | Get dashboard with panel queries |
+| `grafana_query_prometheus` | Query Prometheus via Grafana |
+| `grafana_list_datasources` | List configured datasources |
+| `grafana_get_annotations` | Get deployment/incident annotations |
+| `grafana_get_alerts` | Get Grafana alert rules and states |
+
+### Sentry (5 tools)
+| Tool | Description |
+|------|-------------|
+| `sentry_list_issues` | List issues/errors in a project |
+| `sentry_get_issue_details` | Detailed issue info and tags |
+| `sentry_list_projects` | List organization projects |
+| `sentry_get_project_stats` | Error volume statistics |
+| `sentry_list_releases` | List releases for correlation |
+
+### Log Analysis (7 tools - Multi-backend)
+| Tool | Description |
+|------|-------------|
+| `log_get_statistics` | Get aggregated stats (CALL FIRST!) |
+| `log_sample` | Intelligent log sampling |
+| `log_search_pattern` | Search for specific patterns |
+| `log_around_timestamp` | Get logs around an event |
+| `log_correlate_events` | Correlate errors with deployments/restarts |
+| `log_extract_signatures` | Cluster similar log messages |
+| `log_detect_anomalies` | Detect volume anomalies |
+
+Supported backends: Elasticsearch, Coralogix, Datadog, Splunk, CloudWatch (auto-detected)
 
 ### Docker (7 tools)
 | Tool | Description |
@@ -459,10 +571,21 @@ claude_code_pack/
 │   └── sre-principles/          # Evidence-based reasoning
 ├── commands/                     # Slash commands
 ├── hooks/                        # Remediation safety
-└── mcp-servers/incidentfox/     # Python MCP server (50+ tools)
+└── mcp-servers/incidentfox/     # Python MCP server (85+ tools)
     └── src/incidentfox_mcp/
         ├── server.py            # FastMCP entry point
         ├── tools/               # Tool implementations
+        │   ├── kubernetes.py    # K8s pod/deployment tools
+        │   ├── aws.py           # EC2, CloudWatch, ECS
+        │   ├── datadog.py       # Metrics, logs, APM
+        │   ├── prometheus.py    # PromQL queries, alerts
+        │   ├── github.py        # Repos, PRs, workflows, deployments
+        │   ├── slack.py         # Message search, channel history
+        │   ├── pagerduty.py     # Incidents, escalation, MTTR
+        │   ├── grafana.py       # Dashboards, annotations, alerts
+        │   ├── sentry.py        # Error tracking, releases
+        │   ├── log_analysis.py  # Multi-backend log analysis
+        │   └── ...              # And more
         └── resources/           # Service catalog, runbooks
 ```
 

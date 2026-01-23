@@ -8,7 +8,7 @@ import json
 
 from mcp.server.fastmcp import FastMCP
 
-from ..utils.config import CONFIG_FILE
+from ..utils.config import CONFIG_FILE, _load_env_file
 from ..utils.config import get_config_status as _get_config_status
 from ..utils.config import save_credential as _save_credential
 
@@ -31,6 +31,21 @@ def register_tools(mcp: FastMCP):
         - ALERTMANAGER_URL: Alertmanager URL
         - ELASTICSEARCH_URL: Elasticsearch URL
         - LOKI_URL: Loki URL
+        - GITHUB_TOKEN: GitHub personal access token
+        - GITHUB_REPOSITORY: Default GitHub repository (owner/repo)
+        - SLACK_BOT_TOKEN: Slack bot OAuth token
+        - SLACK_DEFAULT_CHANNEL: Default Slack channel ID
+        - PAGERDUTY_API_KEY: PagerDuty API key
+        - GRAFANA_URL: Grafana server URL
+        - GRAFANA_API_KEY: Grafana API key
+        - SENTRY_AUTH_TOKEN: Sentry authentication token
+        - SENTRY_ORGANIZATION: Sentry organization slug
+        - SENTRY_PROJECT: Default Sentry project slug
+        - CORALOGIX_API_KEY: Coralogix API key
+        - CORALOGIX_REGION: Coralogix region (default: cx498)
+        - SPLUNK_HOST: Splunk server host
+        - SPLUNK_TOKEN: Splunk authentication token
+        - SPLUNK_PORT: Splunk API port (default: 8089)
 
         Args:
             key: Configuration key (e.g., 'DATADOG_API_KEY')
@@ -85,17 +100,8 @@ def register_tools(mcp: FastMCP):
             JSON with confirmation message
         """
         try:
-            # Read existing config
-            existing = {}
-            if CONFIG_FILE.exists():
-                with open(CONFIG_FILE) as f:
-                    for line in f:
-                        line_stripped = line.strip()
-                        if not line_stripped or line_stripped.startswith("#"):
-                            continue
-                        if "=" in line_stripped:
-                            k, _, v = line_stripped.partition("=")
-                            existing[k.strip()] = v.strip()
+            # Read existing config (reuse _load_env_file for consistent quote handling)
+            existing = _load_env_file()
 
             # Check if key exists
             if key not in existing:
