@@ -1,0 +1,210 @@
+name: Deploy to EKS
+
+# Builds images, pushes to ECR, and deploys to EKS (us-west-2)
+# Manual trigger only for production safety
+
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'Services to build and deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - agent
+          - config-service
+          - orchestrator
+          - web-ui
+      skip_deploy:
+        description: 'Skip Helm deployment (build & push only)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REGISTRY: 103002841599.dkr.ecr.us-west-2.amazonaws.com
+  EKS_CLUSTER: incidentfox-demo
+  HELM_NAMESPACE: incidentfox
+
+jobs:
+  build-and-push:
+    name: Build & Push ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: agent
+            context: ./agent
+            dockerfile: ./agent/Dockerfile
+            image: incidentfox-agent
+          - service: config-service
+            context: ./config_service
+            dockerfile: ./config_service/Dockerfile
+            image: incidentfox-config-service
+          - service: orchestrator
+            context: ./orchestrator
+            dockerfile: ./orchestrator/Dockerfile
+            image: incidentfox-orchestrator
+          - service: web-ui
+            context: ./web_ui
+            dockerfile: ./web_ui/Dockerfile
+            image: incidentfox-web-ui
+
+    outputs:
+      agent-digest: ${{ steps.build-agent.outputs.digest }}
+      config-service-digest: ${{ steps.build-config-service.outputs.digest }}
+      orchestrator-digest: ${{ steps.build-orchestrator.outputs.digest }}
+      web-ui-digest: ${{ steps.build-web-ui.outputs.digest }}
+
+    steps:
+      - name: Check if service should be built
+        id: should-build
+        run: |
+          if [ "${{ github.event.inputs.services }}" = "all" ] || [ "${{ github.event.inputs.services }}" = "${{ matrix.service }}" ]; then
+            echo "build=true" >> $GITHUB_OUTPUT
+          else
+            echo "build=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout code
+        if: steps.should-build.outputs.build == 'true'
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        if: steps.should-build.outputs.build == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: steps.should-build.outputs.build == 'true'
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        if: steps.should-build.outputs.build == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push to ECR
+        if: steps.should-build.outputs.build == 'true'
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
+            ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Export digest
+        if: steps.should-build.outputs.build == 'true'
+        id: build-${{ matrix.service }}
+        run: |
+          echo "digest=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
+
+      - name: Summary
+        if: steps.should-build.outputs.build == 'true'
+        run: |
+          echo "## Built ${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: \`${{ env.ECR_REGISTRY }}/${{ matrix.image }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tags**: \`latest\`, \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Digest**: \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    name: Deploy to EKS
+    needs: build-and-push
+    if: ${{ github.event.inputs.skip_deploy != 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Deploy with Helm
+        working-directory: charts
+        run: |
+          helm upgrade --install incidentfox ./incidentfox \
+            -n ${{ env.HELM_NAMESPACE }} \
+            -f incidentfox/values.prod.yaml \
+            --no-hooks \
+            --force-conflicts \
+            --wait \
+            --timeout 10m
+
+      - name: Rollout restart deployments
+        run: |
+          # Force pods to pull new images
+          if [ "${{ github.event.inputs.services }}" = "all" ]; then
+            kubectl rollout restart deployment/incidentfox-agent \
+              deployment/incidentfox-config-service \
+              deployment/incidentfox-orchestrator \
+              deployment/incidentfox-web-ui \
+              -n ${{ env.HELM_NAMESPACE }}
+          else
+            kubectl rollout restart deployment/incidentfox-${{ github.event.inputs.services }} \
+              -n ${{ env.HELM_NAMESPACE }}
+          fi
+
+      - name: Wait for rollout
+        run: |
+          if [ "${{ github.event.inputs.services }}" = "all" ]; then
+            kubectl rollout status deployment/incidentfox-agent -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+            kubectl rollout status deployment/incidentfox-config-service -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+            kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+            kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+          else
+            kubectl rollout status deployment/incidentfox-${{ github.event.inputs.services }} -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+          fi
+
+      - name: Verify deployment
+        run: |
+          echo "## Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pods" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/instance=incidentfox' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Image Digests" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|orchestrator|web-ui)" >> $GITHUB_STEP_SUMMARY || true
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Summary
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployed to**: \`${{ env.EKS_CLUSTER }}\` in \`${{ env.AWS_REGION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Namespace**: \`${{ env.HELM_NAMESPACE }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
