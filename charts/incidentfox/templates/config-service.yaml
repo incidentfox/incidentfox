@@ -89,10 +89,10 @@ spec:
             httpGet:
               path: /health
               port: {{ .Values.services.configService.servicePort }}
-            initialDelaySeconds: {{ dig "services" "configService" "readinessProbe" "initialDelaySeconds" 5 .Values }}
-            periodSeconds: {{ dig "services" "configService" "readinessProbe" "periodSeconds" 10 .Values }}
-            timeoutSeconds: {{ dig "services" "configService" "readinessProbe" "timeoutSeconds" 5 .Values }}
-            failureThreshold: {{ dig "services" "configService" "readinessProbe" "failureThreshold" 5 .Values }}
+            initialDelaySeconds: {{ default 5 .Values.services.configService.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ default 10 .Values.services.configService.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ default 5 .Values.services.configService.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ default 5 .Values.services.configService.readinessProbe.failureThreshold }}
           {{- if .Values.services.configService.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
@@ -100,8 +100,8 @@ spec:
               port: {{ .Values.services.configService.servicePort }}
             initialDelaySeconds: {{ .Values.services.configService.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.services.configService.livenessProbe.periodSeconds }}
-            timeoutSeconds: {{ dig "services" "configService" "livenessProbe" "timeoutSeconds" 5 .Values }}
-            failureThreshold: {{ dig "services" "configService" "livenessProbe" "failureThreshold" 5 .Values }}
+            timeoutSeconds: {{ default 5 .Values.services.configService.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ default 5 .Values.services.configService.livenessProbe.failureThreshold }}
           {{- end }}
 ---
 apiVersion: v1

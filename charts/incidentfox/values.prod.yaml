@@ -158,3 +158,6 @@ services:
       enabled: false
     slack:
       enabled: true
+
+  dependencyService:
+    enabled: false  # Disabled due to architecture mismatch
