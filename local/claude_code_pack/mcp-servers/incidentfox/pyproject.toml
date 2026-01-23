@@ -10,6 +10,10 @@ dependencies = [
     "datadog-api-client>=2.20.0",
     "httpx>=0.25.0",
     "pyyaml>=6.0",
+    "slack-sdk>=3.27.0",
+    "PyGithub>=2.1.0",
+    "requests>=2.31.0",
+    "elasticsearch>=8.0.0",
 ]
 
 [project.scripts]
