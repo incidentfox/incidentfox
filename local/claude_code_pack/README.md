@@ -25,15 +25,28 @@ cd incidentfox/local/claude_code_pack
 
 ### 2. Try It
 
+**Option A: MCP Tools Only**
 ```bash
 claude
 ```
+Gives you ~100 MCP tools for querying infrastructure, logs, metrics, etc.
+
+**Option B: Full Plugin (Recommended)**
+```bash
+claude --plugin-dir /path/to/incidentfox/local/claude_code_pack
+```
+Gives you everything in Option A, plus:
+- `/incident` — Start a structured investigation
+- `/metrics` — Query metrics from configured sources
+- `/remediate` — Propose and execute remediation actions
+- 5 expert skills (investigation methodology, K8s debugging, AWS troubleshooting, log analysis, SRE principles)
+
+---
 
 **Quick start** — explore your infrastructure (try whichever applies):
 ```
 > Check my Kubernetes cluster health
 > Show my Grafana dashboards
-> List pods in the default namespace
 ```
 
 **Real work** — use these tools for actual tasks:
@@ -41,7 +54,6 @@ claude
 > Help me triage this alert: [paste alert]
 > Find AWS costs over the last month and explore reduction opportunities
 > Why did my GitHub Actions workflow fail? [paste url]
-> Search logs for "connection refused" errors
 ```
 
 ### 3. Configure Integrations
@@ -96,20 +108,6 @@ known_issues:
     solution: "Scale postgres replicas or increase pool size"
 EOF
 ```
-
-### Full Plugin Mode (skills + commands)
-
-For the full experience including skills and slash commands:
-
-```bash
-claude --plugin-dir /path/to/claude_code_pack
-```
-
-This gives you access to:
-- `/incident` - Start a structured investigation
-- `/metrics` - Query metrics from configured sources
-- `/remediate` - Propose and execute remediation actions
-- 5 expert skills (investigation methodology, K8s debugging, etc.)
 
 ### Manual Installation
 
