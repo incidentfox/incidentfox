@@ -556,9 +556,7 @@ async def _process_pagerduty_webhook(
     try:
         cfg: ConfigServiceClient = request.app.state.config_service
         agent_api: AgentApiClient = request.app.state.agent_api
-        audit_api = getattr(
-            request.app.state, "audit_api", None
-        )
+        audit_api = getattr(request.app.state, "audit_api", None)
         correlation_service: Optional[CorrelationServiceClient] = getattr(
             request.app.state, "correlation_service", None
         )
@@ -922,9 +920,7 @@ async def _process_incidentio_webhook(
     try:
         cfg: ConfigServiceClient = request.app.state.config_service
         agent_api: AgentApiClient = request.app.state.agent_api
-        audit_api = getattr(
-            request.app.state, "audit_api", None
-        )
+        audit_api = getattr(request.app.state, "audit_api", None)
         correlation_service: Optional[CorrelationServiceClient] = getattr(
             request.app.state, "correlation_service", None
         )
