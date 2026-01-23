@@ -34,10 +34,6 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 
 **Claude Code plugin with ~100 DevOps & SRE tools, skills, and commands** to investigate incidents, analyze costs, and debug CI/CD — all from your terminal.
 
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/0965d78d-3d6a-4fd4-809e-d9ada9d9ce2c" width="700" controls autoplay loop muted></video>
-</p>
-
 ```bash
 cd local/claude_code_pack
 ./install.sh
@@ -56,6 +52,12 @@ claude
 > Find AWS costs over the last month and explore reduction opportunities
 > Why did my GitHub Actions workflow fail? [paste url]
 ```
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/0965d78d-3d6a-4fd4-809e-d9ada9d9ce2c" width="700" controls autoplay loop muted></video>
+  <br>
+  <em>Investigating a PagerDuty alert with IncidentFox</em>
+</p>
 
 **Full docs:** [local/claude_code_pack/README.md](local/claude_code_pack/README.md)
 
