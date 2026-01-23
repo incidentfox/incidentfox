@@ -1,0 +1,379 @@
+# IncidentFox Claude Code Plugin
+
+A comprehensive SRE investigation toolkit for Claude Code. Bring production observability, incident investigation, and remediation capabilities directly into your AI-assisted workflow.
+
+## Features
+
+- **50+ Investigation Tools**: Kubernetes, AWS, Datadog, Prometheus, Docker, and more
+- **Service Catalog**: Personalize investigations with `.incidentfox.yaml`
+- **Unified Log Search**: Query across Datadog, CloudWatch, Elasticsearch, Loki
+- **Investigation History**: SQLite-based tracking with pattern learning
+- **Postmortem Generation**: Structured incident reports
+- **Blast Radius Analysis**: Understand service dependencies
+- **Cost Analysis**: AWS spending anomalies and rightsizing
+- **5 Expert Skills**: Investigation methodology, K8s debugging, AWS troubleshooting
+- **3 Commands**: `/incident`, `/metrics`, `/remediate`
+- **Dry-Run Mode**: Preview remediation actions before executing
+
+## Quick Start
+
+```bash
+# Install the plugin
+claude plugin install /path/to/claude_code_pack
+
+# Create a service catalog (optional but recommended)
+cat > .incidentfox.yaml << 'EOF'
+services:
+  api-gateway:
+    namespace: production
+    deployments: [api-gateway]
+    dependencies: [auth-service, user-service, postgres]
+    logs:
+      datadog: "service:api-gateway"
+
+known_issues:
+  - pattern: "connection refused.*postgres"
+    cause: "Database connection pool exhausted"
+    solution: "Scale postgres replicas or increase pool size"
+EOF
+
+# Start investigating!
+claude
+> /incident API latency increased 5x
+```
+
+## Configuration
+
+Set environment variables for the integrations you use:
+
+```bash
+# Kubernetes (usually auto-detected)
+export KUBECONFIG=~/.kube/config
+
+# AWS
+export AWS_REGION=us-east-1
+
+# Datadog
+export DATADOG_API_KEY=your-api-key
+export DATADOG_APP_KEY=your-app-key
+
+# Prometheus/Alertmanager
+export PROMETHEUS_URL=http://prometheus:9090
+export ALERTMANAGER_URL=http://alertmanager:9093
+
+# Elasticsearch (optional)
+export ELASTICSEARCH_URL=http://elasticsearch:9200
+
+# Loki (optional)
+export LOKI_URL=http://loki:3100
+```
+
+## Service Catalog (.incidentfox.yaml)
+
+Create a `.incidentfox.yaml` in your project root to personalize investigations:
+
+```yaml
+services:
+  payment-api:
+    namespace: production
+    deployments: [payment-api, payment-worker]
+    dependencies: [postgres, redis, stripe-api]
+    logs:
+      datadog: "service:payment-api"
+      cloudwatch: "/aws/eks/payment-api"
+    dashboards:
+      grafana: "https://grafana.example.com/d/abc123"
+    runbooks:
+      high-latency: "./runbooks/payment-latency.md"
+      oom-killed: "./runbooks/oom-debug.md"
+    oncall:
+      slack: "#payment-oncall"
+      pagerduty: "PABC123"
+
+alerts:
+  payment-high-latency:
+    service: payment-api
+    severity: P2
+    runbook: high-latency
+
+known_issues:
+  - pattern: "ConnectionResetError.*redis"
+    cause: "Redis connection pool exhaustion"
+    solution: "Scale redis replicas or increase pool size"
+    services: [payment-api, cart-service]
+```
+
+## Tools Reference
+
+### Kubernetes (7 tools)
+| Tool | Description |
+|------|-------------|
+| `list_pods` | List pods with status in a namespace |
+| `get_pod_logs` | Get logs from a pod |
+| `get_pod_events` | Get events for a pod (check before logs!) |
+| `describe_pod` | Detailed pod information |
+| `describe_deployment` | Deployment status and conditions |
+| `get_deployment_history` | Rollout history for rollback decisions |
+| `get_pod_resources` | Resource allocation vs actual usage |
+
+### AWS (5 tools)
+| Tool | Description |
+|------|-------------|
+| `describe_ec2_instance` | EC2 instance status and details |
+| `get_cloudwatch_logs` | CloudWatch log retrieval |
+| `query_cloudwatch_insights` | Advanced log queries with aggregation |
+| `get_cloudwatch_metrics` | CloudWatch metrics (CPU, memory, etc.) |
+| `list_ecs_tasks` | ECS/Fargate task status |
+
+### Datadog (3 tools)
+| Tool | Description |
+|------|-------------|
+| `query_datadog_metrics` | Query Datadog metrics |
+| `search_datadog_logs` | Search Datadog logs |
+| `get_service_apm_metrics` | APM metrics (request rate, latency, errors) |
+
+### Prometheus (4 tools)
+| Tool | Description |
+|------|-------------|
+| `query_prometheus` | Execute PromQL range queries |
+| `prometheus_instant_query` | Execute instant PromQL queries |
+| `get_prometheus_alerts` | Get firing alerts from Prometheus |
+| `get_alertmanager_alerts` | Get alerts from Alertmanager |
+
+### Unified Logs (2 tools)
+| Tool | Description |
+|------|-------------|
+| `search_logs` | Search across all configured log backends |
+| `get_log_backends` | List configured log backends |
+
+### Active Alerts (1 tool)
+| Tool | Description |
+|------|-------------|
+| `get_active_alerts` | Aggregate alerts from Prometheus, Alertmanager, Datadog |
+
+### Anomaly Detection (3 tools)
+| Tool | Description |
+|------|-------------|
+| `detect_anomalies` | Z-score based anomaly detection |
+| `correlate_metrics` | Find correlation between two metrics |
+| `find_change_point` | Detect when behavior changed |
+
+### Git (6 tools)
+| Tool | Description |
+|------|-------------|
+| `git_log` | Recent commit history |
+| `git_diff` | Show changes between commits |
+| `git_show` | Show specific commit details |
+| `git_blame` | Show who changed each line |
+| `correlate_with_deployment` | Find commits around incident time |
+| `git_recent_changes` | Files changed in recent period |
+
+### Docker (7 tools)
+| Tool | Description |
+|------|-------------|
+| `docker_ps` | List containers |
+| `docker_logs` | Get container logs |
+| `docker_inspect` | Container details (state, config, network) |
+| `docker_stats` | Resource usage statistics |
+| `docker_top` | List processes in container |
+| `docker_events` | Recent Docker events |
+| `docker_diff` | Filesystem changes in container |
+
+### Investigation History (8 tools)
+| Tool | Description |
+|------|-------------|
+| `start_investigation` | Start tracking an investigation |
+| `add_finding` | Add a finding to investigation |
+| `complete_investigation` | Complete with root cause/resolution |
+| `get_investigation` | Get investigation details |
+| `search_investigations` | Search past investigations |
+| `find_similar_investigations` | Find similar past incidents |
+| `record_pattern` | Record a known issue pattern |
+| `get_statistics` | Get investigation statistics |
+
+### Postmortem (3 tools)
+| Tool | Description |
+|------|-------------|
+| `generate_postmortem` | Generate structured postmortem |
+| `create_timeline_event` | Create timeline event |
+| `export_postmortem` | Export to file |
+
+### Blast Radius (3 tools)
+| Tool | Description |
+|------|-------------|
+| `get_blast_radius` | Estimate impact of service failure |
+| `get_service_dependencies` | Get upstream dependencies |
+| `get_dependency_graph` | Full service dependency graph |
+
+### Cost Analysis (4 tools)
+| Tool | Description |
+|------|-------------|
+| `get_cost_summary` | AWS cost breakdown by service |
+| `get_cost_anomalies` | Detect spending anomalies |
+| `get_ec2_rightsizing` | Instance rightsizing recommendations |
+| `get_daily_cost_trend` | Daily cost trend |
+
+### Remediation (3 tools with dry-run)
+| Tool | Description |
+|------|-------------|
+| `propose_pod_restart` | Restart a specific pod |
+| `propose_deployment_restart` | Rolling restart of a deployment |
+| `propose_scale_deployment` | Scale deployment replicas |
+
+All remediation tools support `dry_run=True` to preview without executing.
+
+### Service Catalog (3 tools)
+| Tool | Description |
+|------|-------------|
+| `get_service_info` | Get service details from catalog |
+| `check_known_issues` | Match error against known issues |
+| `get_runbook` | Get runbook contents |
+| `search_runbooks` | Search runbooks by keyword |
+
+## Skills
+
+| Skill | Description | Triggers |
+|-------|-------------|----------|
+| `investigate` | 5-phase systematic investigation methodology | "investigate", "debug", "incident" |
+| `k8s-debug` | Kubernetes debugging patterns (events before logs) | "pod", "deployment", "CrashLoopBackOff" |
+| `aws-troubleshoot` | AWS service troubleshooting patterns | "EC2", "Lambda", "CloudWatch" |
+| `log-analysis` | Partition-first log analysis methodology | "logs", "errors", "search" |
+| `sre-principles` | Evidence-based reasoning and communication | Always active during investigations |
+
+## Example Usage
+
+### Start an Investigation
+```
+> /incident Payment API returning 500 errors
+
+I'll start by tracking this investigation and gathering evidence...
+
+[start_investigation called]
+[get_active_alerts called - found 2 firing alerts]
+[search_logs called - found error spike at 14:32]
+[get_pod_events called - found OOMKilled events]
+```
+
+### Check Service Dependencies
+```
+> What's the blast radius if postgres goes down?
+
+[get_blast_radius called]
+
+The postgres service has HIGH blast radius:
+- Direct dependents: payment-api, user-service, order-service
+- Transitive impact: checkout-flow, mobile-app, admin-dashboard
+- Total affected: 6 services
+
+Recommendation: Ensure postgres has proper failover configured.
+```
+
+### Generate a Postmortem
+```
+> /postmortem
+
+[generate_postmortem called with investigation data]
+
+# Incident Postmortem: Payment API 500 Errors
+
+**Date:** 2024-01-22
+**Severity:** P2
+**Service:** payment-api
+
+## Summary
+Memory leak in cart serialization caused OOMKilled restarts.
+
+## Timeline
+| Time | Event |
+|------|-------|
+| 14:30 | Deployment v1.2.3 completed |
+| 14:32 | Error rate increased |
+| 14:35 | OOMKilled events began |
+...
+```
+
+### Dry-Run Remediation
+```
+> Restart the payment-api deployment (dry run first)
+
+[propose_deployment_restart called with dry_run=True]
+
+DRY RUN - Would execute:
+  kubectl rollout restart deployment/payment-api -n production
+
+Effect: All 5 pods will be restarted in a rolling fashion
+Current ready replicas: 5/5
+
+Proceed with actual restart? (call without dry_run=True)
+```
+
+## Local Development
+
+```bash
+# Install dependencies
+cd mcp-servers/incidentfox
+uv sync
+
+# Run the server
+uv run incidentfox-mcp
+
+# Test imports
+uv run python -c "from incidentfox_mcp.server import mcp; print(mcp.name)"
+```
+
+## Architecture
+
+```
+claude_code_pack/
+├── .claude-plugin/plugin.json   # Plugin manifest
+├── skills/                       # On-demand expertise injection
+│   ├── investigate/             # 5-phase methodology
+│   ├── k8s-debug/               # K8s patterns
+│   ├── aws-troubleshoot/        # AWS patterns
+│   ├── log-analysis/            # Partition-first logs
+│   └── sre-principles/          # Evidence-based reasoning
+├── commands/                     # Slash commands
+├── hooks/                        # Remediation safety
+└── mcp-servers/incidentfox/     # Python MCP server (50+ tools)
+    └── src/incidentfox_mcp/
+        ├── server.py            # FastMCP entry point
+        ├── tools/               # Tool implementations
+        └── resources/           # Service catalog, runbooks
+```
+
+## Data Storage
+
+Investigation history is stored locally:
+```
+~/.incidentfox/
+├── history.db          # SQLite: investigations, findings, patterns
+├── config.yaml         # User preferences (optional)
+└── logs/
+    └── remediation.log # Audit log for remediation actions
+```
+
+## Security
+
+- All remediation actions require confirmation via hooks
+- Dry-run mode available for all remediation tools
+- Read-only git access (no commits)
+- Credentials via environment variables (not stored in plugin)
+- Audit logs for all remediation actions
+- No data sent to external services (except configured integrations)
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new tools
+4. Submit a pull request
+
+## License
+
+MIT
+
+## Support
+
+- Issues: https://github.com/incidentfox/claude-code-pack/issues
+- Documentation: https://docs.incidentfox.ai
+- Full product: https://incidentfox.ai
