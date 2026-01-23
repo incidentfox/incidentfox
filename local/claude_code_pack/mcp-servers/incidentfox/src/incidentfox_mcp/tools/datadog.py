@@ -7,10 +7,11 @@ Provides tools for querying Datadog:
 """
 
 import json
-import os
 from datetime import datetime, timedelta
 
 from mcp.server.fastmcp import FastMCP
+
+from ..utils.config import get_env
 
 
 class DatadogConfigError(Exception):
@@ -21,9 +22,9 @@ class DatadogConfigError(Exception):
 
 
 def _get_datadog_config():
-    """Get Datadog configuration from environment."""
-    api_key = os.getenv("DATADOG_API_KEY")
-    app_key = os.getenv("DATADOG_APP_KEY")
+    """Get Datadog configuration from environment or config file."""
+    api_key = get_env("DATADOG_API_KEY")
+    app_key = get_env("DATADOG_APP_KEY")
 
     if not api_key or not app_key:
         missing = []
@@ -32,7 +33,8 @@ def _get_datadog_config():
         if not app_key:
             missing.append("DATADOG_APP_KEY")
         raise DatadogConfigError(
-            f"Datadog not configured. Set environment variables: {', '.join(missing)}"
+            f"Datadog not configured. Missing: {', '.join(missing)}. "
+            f"Use save_credential tool to set these, or export as environment variables."
         )
 
     return {"api_key": api_key, "app_key": app_key}
