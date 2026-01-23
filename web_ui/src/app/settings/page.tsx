@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useIdentity } from '@/lib/useIdentity';
 import { apiFetch } from '@/lib/apiClient';
+import { HelpTip } from '@/components/onboarding/HelpTip';
 import {
   Settings,
   Moon,
@@ -569,7 +570,12 @@ export default function SettingsPage() {
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Output Destinations</h2>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                      Output Destinations
+                      <HelpTip id="output-destinations" position="right">
+                        <strong>Output Destinations</strong> control where agent investigation results are posted. You can set default destinations (like a Slack channel) and override behavior based on how the agent was triggered.
+                      </HelpTip>
+                    </h2>
                     <p className="text-sm text-gray-500 mt-1">
                       Configure where agent results are delivered
                     </p>
@@ -806,7 +812,12 @@ export default function SettingsPage() {
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Telemetry Settings</h2>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                      Telemetry Settings
+                      <HelpTip id="telemetry-settings" position="right">
+                        <strong>Telemetry</strong> helps us improve IncidentFox by sharing anonymous usage metrics (agent run counts, success rates, performance). No personal data, prompts, or sensitive information is ever collected.
+                      </HelpTip>
+                    </h2>
                     <p className="text-sm text-gray-500 mt-1">
                       Help us improve IncidentFox by sharing anonymous usage data
                     </p>
@@ -927,7 +938,12 @@ export default function SettingsPage() {
                       <Zap className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">AI Pipeline</h2>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                        AI Pipeline
+                        <HelpTip id="ai-pipeline" position="right">
+                          <strong>AI Pipeline</strong> automatically processes your incident data (Slack discussions, Confluence runbooks, Google Docs) on a schedule and extracts learnings to build your Knowledge Base. This enables agents to reference past incidents and solutions.
+                        </HelpTip>
+                      </h2>
                       <p className="text-sm text-gray-500">
                         Automatically learn from incidents and build knowledge base
                       </p>
@@ -1234,7 +1250,12 @@ export default function SettingsPage() {
                       <Network className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Service Dependency Discovery</h2>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                        Service Dependency Discovery
+                        <HelpTip id="dependency-discovery" position="right">
+                          <strong>Dependency Discovery</strong> analyzes your observability data (traces, metrics) to automatically map service relationships. This helps agents understand how services connect and identify cascading failures during incidents.
+                        </HelpTip>
+                      </h2>
                       <p className="text-sm text-gray-500">
                         Automatically discover service dependencies from observability data
                       </p>
@@ -1342,7 +1363,12 @@ export default function SettingsPage() {
                       <Link2 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Alert Correlation</h2>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                        Alert Correlation
+                        <HelpTip id="alert-correlation" position="right">
+                          <strong>Alert Correlation</strong> groups related alerts together to reduce noise. It uses three methods: <em>temporal</em> (alerts within a time window), <em>topology</em> (alerts from related services), and <em>semantic</em> (alerts with similar descriptions).
+                        </HelpTip>
+                      </h2>
                       <p className="text-sm text-gray-500">
                         Automatically correlate related alerts using temporal, topology, and semantic analysis
                       </p>

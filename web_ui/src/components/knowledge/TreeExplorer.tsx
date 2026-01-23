@@ -35,6 +35,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/apiClient';
+import { HelpTip } from '@/components/onboarding/HelpTip';
 
 // Types matching API responses
 interface GraphNodeData {
@@ -696,6 +697,9 @@ export function TreeExplorer({ treeName = 'mega_ultra_v2' }: TreeExplorerProps) 
             <div className="flex items-center gap-2 mb-2">
               <Layers className="w-4 h-4 text-orange-500" />
               <span className="font-semibold text-gray-900 dark:text-white">{stats.tree}</span>
+              <HelpTip id="tree-stats" position="right">
+                <strong>RAPTOR Tree</strong> organizes your knowledge hierarchically. <em>Leaf nodes</em> (Layer 0) contain original content. Higher layers contain AI-generated <em>summaries</em> that group related information. Click nodes to expand and explore.
+              </HelpTip>
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-600 dark:text-gray-400">
               <span>Total Nodes:</span>
@@ -715,6 +719,9 @@ export function TreeExplorer({ treeName = 'mega_ultra_v2' }: TreeExplorerProps) 
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="flex items-center p-3 border-b border-gray-100 dark:border-gray-800">
               <Search className="w-4 h-4 text-gray-400 mr-2" />
+              <HelpTip id="tree-search" position="left">
+                <strong>Semantic search</strong> finds relevant content across all layers. Results are ranked by similarity score. Click a result to view details, or expand nodes in the tree to see the full context.
+              </HelpTip>
               <input
                 type="text"
                 value={searchQuery}
@@ -771,17 +778,22 @@ export function TreeExplorer({ treeName = 'mega_ultra_v2' }: TreeExplorerProps) 
           </div>
           
           {/* Q&A toggle */}
-          <button
-            onClick={() => setShowQA(!showQA)}
-            className={`mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-              showQA 
-                ? 'bg-orange-500 text-white shadow-lg' 
-                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-            }`}
-          >
-            <MessageSquare className="w-4 h-4" />
-            Ask the Knowledge Base
-          </button>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={() => setShowQA(!showQA)}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
+                showQA
+                  ? 'bg-orange-500 text-white shadow-lg'
+                  : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+            >
+              <MessageSquare className="w-4 h-4" />
+              Ask the Knowledge Base
+            </button>
+            <HelpTip id="tree-qa" position="left">
+              <strong>Q&A</strong> lets you ask natural language questions. The AI retrieves relevant context from your knowledge base and generates an answer with citations to the source documents.
+            </HelpTip>
+          </div>
         </div>
       </div>
       
