@@ -1531,6 +1531,7 @@ Always note:
 # Builder function for combining all shared sections
 # -----------------------------------------------------------------------------
 
+
 def build_agent_shared_sections(
     include_error_handling: bool = True,
     include_tool_limits: bool = True,
