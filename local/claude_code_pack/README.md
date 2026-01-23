@@ -119,7 +119,11 @@ claude mcp list
 
 ## Configuration
 
-Set environment variables for the integrations you use:
+IncidentFox supports two ways to configure credentials:
+
+### Option 1: Environment Variables (Traditional)
+
+Set environment variables before starting Claude:
 
 ```bash
 # Kubernetes (usually auto-detected)
@@ -141,6 +145,45 @@ export ELASTICSEARCH_URL=http://elasticsearch:9200
 
 # Loki (optional)
 export LOKI_URL=http://loki:3100
+```
+
+### Option 2: On-the-fly Configuration (Recommended)
+
+Configure credentials interactively during your session. When a tool needs credentials, Claude will ask for them and save them automatically.
+
+```
+You: Search Datadog logs for errors
+
+Claude: I need your Datadog API key. What is it?
+
+You: dd-api-abc123xyz
+
+Claude: Got it. And the app key?
+
+You: dd-app-xyz789abc
+
+Claude: Credentials saved. Searching logs...
+        Found 47 error events in the last hour.
+```
+
+Credentials are saved to `~/.incidentfox/.env` and persist across sessions.
+
+**Configuration Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `get_config_status` | Check which integrations are configured |
+| `save_credential` | Save a credential for future use |
+| `delete_credential` | Remove a saved credential |
+
+**Check your configuration:**
+```
+> What integrations are configured?
+
+Kubernetes: ✓ configured (using ~/.kube/config)
+AWS: ✓ configured (region: us-west-2)
+Datadog: ✗ not configured (missing DATADOG_API_KEY, DATADOG_APP_KEY)
+Prometheus: ✗ not configured (missing PROMETHEUS_URL)
 ```
 
 ## Service Catalog (.incidentfox.yaml)
@@ -179,6 +222,13 @@ known_issues:
 ```
 
 ## Tools Reference
+
+### Configuration (3 tools)
+| Tool | Description |
+|------|-------------|
+| `get_config_status` | Check which integrations are configured |
+| `save_credential` | Save a credential to persistent storage |
+| `delete_credential` | Remove a saved credential |
 
 ### Kubernetes (7 tools)
 | Tool | Description |

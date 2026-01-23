@@ -4,10 +4,11 @@ Tools for analyzing AWS costs and finding anomalies.
 """
 
 import json
-import os
 from datetime import datetime, timedelta
 
 from mcp.server.fastmcp import FastMCP
+
+from ..utils.config import get_env
 
 
 def _get_aws_session(region: str | None = None):
@@ -15,7 +16,7 @@ def _get_aws_session(region: str | None = None):
     import boto3
     from botocore.exceptions import NoCredentialsError
 
-    region = region or os.getenv("AWS_REGION", "us-east-1")
+    region = region or get_env("AWS_REGION") or "us-east-1"
 
     try:
         session = boto3.Session(region_name=region)

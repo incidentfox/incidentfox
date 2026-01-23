@@ -5,21 +5,22 @@ Many open-source users run Prometheus instead of commercial solutions.
 """
 
 import json
-import os
 from datetime import datetime, timedelta
 
 import httpx
 from mcp.server.fastmcp import FastMCP
 
+from ..utils.config import get_env
+
 
 def _get_prometheus_url() -> str | None:
-    """Get Prometheus URL from environment."""
-    return os.getenv("PROMETHEUS_URL") or os.getenv("PROM_URL")
+    """Get Prometheus URL from environment or config file."""
+    return get_env("PROMETHEUS_URL") or get_env("PROM_URL")
 
 
 def _get_alertmanager_url() -> str | None:
-    """Get Alertmanager URL from environment."""
-    return os.getenv("ALERTMANAGER_URL") or os.getenv("AM_URL")
+    """Get Alertmanager URL from environment or config file."""
+    return get_env("ALERTMANAGER_URL") or get_env("AM_URL")
 
 
 def register_tools(mcp: FastMCP):
@@ -387,8 +388,8 @@ def register_tools(mcp: FastMCP):
                 pass
 
         # Try Datadog
-        dd_api_key = os.getenv("DATADOG_API_KEY")
-        dd_app_key = os.getenv("DATADOG_APP_KEY")
+        dd_api_key = get_env("DATADOG_API_KEY")
+        dd_app_key = get_env("DATADOG_APP_KEY")
         if dd_api_key and dd_app_key:
             try:
                 from datadog_api_client import ApiClient, Configuration

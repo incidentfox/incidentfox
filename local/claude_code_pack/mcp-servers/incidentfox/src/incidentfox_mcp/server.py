@@ -34,6 +34,7 @@ from .tools import (
     anomaly,
     aws,
     blast_radius,
+    configuration,
     cost,
     datadog,
     docker,
@@ -50,6 +51,7 @@ from .tools import (
 mcp = FastMCP("incidentfox")
 
 # Register all tool modules
+configuration.register_tools(mcp)  # First, so users can check/set config
 kubernetes.register_tools(mcp)
 aws.register_tools(mcp)
 datadog.register_tools(mcp)

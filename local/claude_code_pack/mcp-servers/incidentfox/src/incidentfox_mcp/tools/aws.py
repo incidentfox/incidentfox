@@ -9,13 +9,14 @@ Provides tools for investigating AWS infrastructure:
 """
 
 import json
-import os
 import time
 from datetime import datetime, timedelta
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from mcp.server.fastmcp import FastMCP
+
+from ..utils.config import get_env
 
 
 class AWSConfigError(Exception):
@@ -30,12 +31,13 @@ def _get_aws_session(region: str | None = None):
 
     Supports:
     - Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+    - ~/.incidentfox/.env file
     - ~/.aws/credentials file
     - IAM instance profile (for EC2)
     - IAM task role (for ECS/Fargate)
     """
-    region = region or os.getenv(
-        "AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+    region = (
+        region or get_env("AWS_REGION") or get_env("AWS_DEFAULT_REGION") or "us-east-1"
     )
 
     try:

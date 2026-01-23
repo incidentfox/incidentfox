@@ -11,29 +11,30 @@ Automatically detects which backends are configured and queries them.
 """
 
 import json
-import os
 from datetime import datetime, timedelta
 
 from mcp.server.fastmcp import FastMCP
+
+from ..utils.config import get_env
 
 
 def _detect_backends() -> list[str]:
     """Detect which log backends are configured."""
     backends = []
 
-    if os.getenv("DATADOG_API_KEY") and os.getenv("DATADOG_APP_KEY"):
+    if get_env("DATADOG_API_KEY") and get_env("DATADOG_APP_KEY"):
         backends.append("datadog")
 
     if _has_aws_credentials():
         backends.append("cloudwatch")
 
-    if os.getenv("ELASTICSEARCH_URL") or os.getenv("ES_URL"):
+    if get_env("ELASTICSEARCH_URL") or get_env("ES_URL"):
         backends.append("elasticsearch")
 
-    if os.getenv("LOKI_URL"):
+    if get_env("LOKI_URL"):
         backends.append("loki")
 
-    if os.getenv("LOG_PATH") or os.getenv("LOG_FILE"):
+    if get_env("LOG_PATH") or get_env("LOG_FILE"):
         backends.append("local")
 
     return backends
@@ -41,7 +42,7 @@ def _detect_backends() -> list[str]:
 
 def _has_aws_credentials() -> bool:
     """Check if AWS credentials are available."""
-    if os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"):
+    if get_env("AWS_ACCESS_KEY_ID") and get_env("AWS_SECRET_ACCESS_KEY"):
         return True
     # Check for default credentials file
     from pathlib import Path
@@ -66,8 +67,8 @@ def _search_datadog(
         from datadog_api_client.v2.model.logs_sort import LogsSort
 
         config = Configuration()
-        config.api_key["apiKeyAuth"] = os.getenv("DATADOG_API_KEY")
-        config.api_key["appKeyAuth"] = os.getenv("DATADOG_APP_KEY")
+        config.api_key["apiKeyAuth"] = get_env("DATADOG_API_KEY")
+        config.api_key["appKeyAuth"] = get_env("DATADOG_APP_KEY")
 
         # Build query
         full_query = query
@@ -124,14 +125,14 @@ def _search_cloudwatch(
         import boto3
 
         session = boto3.Session(
-            region_name=os.getenv(
-                "AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-            )
+            region_name=get_env("AWS_REGION")
+            or get_env("AWS_DEFAULT_REGION")
+            or "us-east-1"
         )
         logs_client = session.client("logs")
 
         # Determine log group
-        log_group = os.getenv("CLOUDWATCH_LOG_GROUP")
+        log_group = get_env("CLOUDWATCH_LOG_GROUP")
         if service and not log_group:
             # Try common patterns
             log_group = f"/aws/eks/{service}"
@@ -201,10 +202,10 @@ def _search_elasticsearch(
     try:
         import httpx
 
-        es_url = os.getenv("ELASTICSEARCH_URL") or os.getenv("ES_URL")
-        es_index = os.getenv("ES_INDEX", "logs-*")
-        es_user = os.getenv("ES_USER")
-        es_password = os.getenv("ES_PASSWORD")
+        es_url = get_env("ELASTICSEARCH_URL") or get_env("ES_URL")
+        es_index = get_env("ES_INDEX") or "logs-*"
+        es_user = get_env("ES_USER")
+        es_password = get_env("ES_PASSWORD")
 
         auth = None
         if es_user and es_password:
@@ -273,7 +274,7 @@ def _search_loki(query: str, service: str | None, hours_ago: int, limit: int) ->
     try:
         import httpx
 
-        loki_url = os.getenv("LOKI_URL")
+        loki_url = get_env("LOKI_URL")
 
         # Build LogQL query
         if service:
@@ -329,7 +330,7 @@ def _search_local(query: str, service: str | None, hours_ago: int, limit: int) -
         import re
         from pathlib import Path
 
-        log_path = os.getenv("LOG_PATH") or os.getenv("LOG_FILE")
+        log_path = get_env("LOG_PATH") or get_env("LOG_FILE")
         if not log_path:
             return {"backend": "local", "error": "LOG_PATH not set"}
 

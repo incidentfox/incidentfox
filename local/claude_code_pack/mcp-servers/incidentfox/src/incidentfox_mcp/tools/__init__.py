@@ -4,6 +4,7 @@ from . import (
     anomaly,
     aws,
     blast_radius,
+    configuration,
     cost,
     datadog,
     docker,
@@ -17,6 +18,7 @@ from . import (
 )
 
 __all__ = [
+    "configuration",
     "kubernetes",
     "aws",
     "datadog",

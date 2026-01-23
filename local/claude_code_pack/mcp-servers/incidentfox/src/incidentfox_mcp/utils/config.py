@@ -1,11 +1,168 @@
 """Configuration utilities for IncidentFox MCP Server.
 
-All configuration is via environment variables for simplicity.
+Configuration is loaded from:
+1. ~/.incidentfox/.env file (persistent, user-editable)
+2. Environment variables (override file values)
+
+This allows credentials to be saved mid-session and persist across sessions.
 """
 
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
+# Persistent config file location
+CONFIG_DIR = Path.home() / ".incidentfox"
+CONFIG_FILE = CONFIG_DIR / ".env"
+
+
+def _load_env_file() -> dict[str, str]:
+    """Load configuration from ~/.incidentfox/.env file.
+
+    Returns a dict of key-value pairs. Does NOT modify os.environ.
+    """
+    config = {}
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE) as f:
+            for line in f:
+                line = line.strip()
+                # Skip comments and empty lines
+                if not line or line.startswith("#"):
+                    continue
+                # Parse KEY=VALUE
+                if "=" in line:
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip()
+                    # Remove quotes if present
+                    if value and value[0] in ('"', "'") and value[-1] == value[0]:
+                        value = value[1:-1]
+                    config[key] = value
+    return config
+
+
+def get_env(key: str, default: str | None = None) -> str | None:
+    """Get a config value, checking .env file then environment.
+
+    Priority:
+    1. Environment variable (allows override)
+    2. ~/.incidentfox/.env file (persistent storage)
+    3. Default value
+    """
+    # Environment variables take precedence
+    env_value = os.environ.get(key)
+    if env_value:
+        return env_value
+
+    # Then check .env file
+    file_config = _load_env_file()
+    if key in file_config:
+        return file_config[key]
+
+    return default
+
+
+def save_credential(key: str, value: str) -> None:
+    """Save a credential to ~/.incidentfox/.env file.
+
+    Creates the directory and file if they don't exist.
+    Updates existing keys, appends new ones.
+    """
+    # Ensure directory exists
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Read existing config
+    existing = {}
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE) as f:
+            for line in f:
+                line_stripped = line.strip()
+                if not line_stripped or line_stripped.startswith("#"):
+                    continue
+                if "=" in line_stripped:
+                    k, _, v = line_stripped.partition("=")
+                    existing[k.strip()] = v.strip()
+
+    # Update or add the key
+    existing[key] = value
+
+    # Write back
+    with open(CONFIG_FILE, "w") as f:
+        f.write("# IncidentFox Configuration\n")
+        f.write("# Generated automatically - you can edit this file\n\n")
+        for k, v in sorted(existing.items()):
+            # Quote values with spaces
+            if " " in v or not v:
+                f.write(f'{k}="{v}"\n')
+            else:
+                f.write(f"{k}={v}\n")
+
+
+def get_config_status() -> dict:
+    """Get status of all configured integrations.
+
+    Returns a dict showing which integrations are configured.
+    """
+    file_config = _load_env_file()
+
+    def is_set(key: str) -> bool:
+        return bool(os.environ.get(key) or file_config.get(key))
+
+    return {
+        "config_file": str(CONFIG_FILE),
+        "config_file_exists": CONFIG_FILE.exists(),
+        "integrations": {
+            "kubernetes": {
+                "configured": is_set("KUBECONFIG")
+                or Path.home().joinpath(".kube/config").exists(),
+                "variables": {
+                    "KUBECONFIG": "set" if is_set("KUBECONFIG") else "using default",
+                    "K8S_CONTEXT": (
+                        "set" if is_set("K8S_CONTEXT") else "not set (optional)"
+                    ),
+                },
+            },
+            "aws": {
+                "configured": True,  # Uses default credential chain
+                "variables": {
+                    "AWS_REGION": get_env("AWS_REGION", "us-east-1"),
+                },
+            },
+            "datadog": {
+                "configured": is_set("DATADOG_API_KEY") and is_set("DATADOG_APP_KEY"),
+                "variables": {
+                    "DATADOG_API_KEY": (
+                        "set" if is_set("DATADOG_API_KEY") else "NOT SET"
+                    ),
+                    "DATADOG_APP_KEY": (
+                        "set" if is_set("DATADOG_APP_KEY") else "NOT SET"
+                    ),
+                },
+            },
+            "prometheus": {
+                "configured": is_set("PROMETHEUS_URL") or is_set("PROM_URL"),
+                "variables": {
+                    "PROMETHEUS_URL": get_env("PROMETHEUS_URL")
+                    or get_env("PROM_URL")
+                    or "NOT SET",
+                },
+            },
+            "elasticsearch": {
+                "configured": is_set("ELASTICSEARCH_URL") or is_set("ES_URL"),
+                "variables": {
+                    "ELASTICSEARCH_URL": get_env("ELASTICSEARCH_URL")
+                    or get_env("ES_URL")
+                    or "NOT SET",
+                },
+            },
+            "loki": {
+                "configured": is_set("LOKI_URL"),
+                "variables": {
+                    "LOKI_URL": get_env("LOKI_URL") or "NOT SET",
+                },
+            },
+        },
+    }
 
 
 class ConfigError(Exception):
@@ -29,10 +186,10 @@ class KubernetesConfig:
     @classmethod
     def from_env(cls) -> "KubernetesConfig":
         return cls(
-            kubeconfig_path=os.getenv(
+            kubeconfig_path=get_env(
                 "KUBECONFIG", str(Path.home() / ".kube" / "config")
             ),
-            context=os.getenv("K8S_CONTEXT"),
+            context=get_env("K8S_CONTEXT"),
         )
 
     def validate(self) -> None:
@@ -58,9 +215,9 @@ class AWSConfig:
     @classmethod
     def from_env(cls) -> "AWSConfig":
         return cls(
-            region=os.getenv(
-                "AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-            ),
+            region=get_env("AWS_REGION")
+            or get_env("AWS_DEFAULT_REGION")
+            or "us-east-1",
         )
 
 
@@ -74,8 +231,8 @@ class DatadogConfig:
     @classmethod
     def from_env(cls) -> "DatadogConfig":
         return cls(
-            api_key=os.getenv("DATADOG_API_KEY"),
-            app_key=os.getenv("DATADOG_APP_KEY"),
+            api_key=get_env("DATADOG_API_KEY"),
+            app_key=get_env("DATADOG_APP_KEY"),
         )
 
     def validate(self) -> None:
@@ -90,12 +247,33 @@ class DatadogConfig:
 
 
 @dataclass
+class PrometheusConfig:
+    """Prometheus configuration."""
+
+    url: str | None
+    alertmanager_url: str | None
+
+    @classmethod
+    def from_env(cls) -> "PrometheusConfig":
+        return cls(
+            url=get_env("PROMETHEUS_URL") or get_env("PROM_URL"),
+            alertmanager_url=get_env("ALERTMANAGER_URL") or get_env("AM_URL"),
+        )
+
+    def validate(self) -> None:
+        """Validate Prometheus config is available."""
+        if not self.url:
+            raise ConfigError("prometheus", ["PROMETHEUS_URL"])
+
+
+@dataclass
 class Config:
     """Complete configuration for IncidentFox MCP."""
 
     kubernetes: KubernetesConfig
     aws: AWSConfig
     datadog: DatadogConfig
+    prometheus: PrometheusConfig
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -103,15 +281,14 @@ class Config:
             kubernetes=KubernetesConfig.from_env(),
             aws=AWSConfig.from_env(),
             datadog=DatadogConfig.from_env(),
+            prometheus=PrometheusConfig.from_env(),
         )
 
 
-_config: Config | None = None
-
-
 def get_config() -> Config:
-    """Get or create configuration singleton."""
-    global _config
-    if _config is None:
-        _config = Config.from_env()
-    return _config
+    """Get configuration - reloads from .env file each time.
+
+    No caching - always reads fresh values so mid-session
+    credential updates work immediately.
+    """
+    return Config.from_env()
