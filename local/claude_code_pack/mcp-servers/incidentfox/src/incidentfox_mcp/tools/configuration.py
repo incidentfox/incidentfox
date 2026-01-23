@@ -8,7 +8,7 @@ import json
 
 from mcp.server.fastmcp import FastMCP
 
-from ..utils.config import CONFIG_FILE
+from ..utils.config import CONFIG_FILE, _load_env_file
 from ..utils.config import get_config_status as _get_config_status
 from ..utils.config import save_credential as _save_credential
 
@@ -100,17 +100,8 @@ def register_tools(mcp: FastMCP):
             JSON with confirmation message
         """
         try:
-            # Read existing config
-            existing = {}
-            if CONFIG_FILE.exists():
-                with open(CONFIG_FILE) as f:
-                    for line in f:
-                        line_stripped = line.strip()
-                        if not line_stripped or line_stripped.startswith("#"):
-                            continue
-                        if "=" in line_stripped:
-                            k, _, v = line_stripped.partition("=")
-                            existing[k.strip()] = v.strip()
+            # Read existing config (reuse _load_env_file for consistent quote handling)
+            existing = _load_env_file()
 
             # Check if key exists
             if key not in existing:

@@ -71,17 +71,8 @@ def save_credential(key: str, value: str) -> None:
     # Ensure directory exists
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Read existing config
-    existing = {}
-    if CONFIG_FILE.exists():
-        with open(CONFIG_FILE) as f:
-            for line in f:
-                line_stripped = line.strip()
-                if not line_stripped or line_stripped.startswith("#"):
-                    continue
-                if "=" in line_stripped:
-                    k, _, v = line_stripped.partition("=")
-                    existing[k.strip()] = v.strip()
+    # Read existing config (reuse _load_env_file to ensure consistent quote handling)
+    existing = _load_env_file()
 
     # Update or add the key
     existing[key] = value
