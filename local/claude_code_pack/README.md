@@ -1,23 +1,21 @@
-# IncidentFox Claude Code Plugin
+# IncidentFox for Claude Code
 
-A comprehensive SRE investigation toolkit for Claude Code. Bring production observability, incident investigation, and remediation capabilities directly into your AI-assisted workflow.
+**85+ DevOps & SRE tools for Claude Code.** Query your infrastructure, investigate incidents, analyze costs, and debug CI/CD — all from your terminal.
 
-## Features
+## What You Can Do
 
-- **85+ Investigation Tools**: Kubernetes, AWS, Datadog, Prometheus, Docker, GitHub, Slack, PagerDuty, Grafana, Sentry, and more
-- **Service Catalog**: Personalize investigations with `.incidentfox.yaml`
-- **Unified Log Search**: Query across Datadog, CloudWatch, Elasticsearch, Loki
-- **Investigation History**: SQLite-based tracking with pattern learning
-- **Postmortem Generation**: Structured incident reports
-- **Blast Radius Analysis**: Understand service dependencies
-- **Cost Analysis**: AWS spending anomalies and rightsizing
-- **5 Expert Skills**: Investigation methodology, K8s debugging, AWS troubleshooting
-- **3 Commands**: `/incident`, `/metrics`, `/remediate`
-- **Dry-Run Mode**: Preview remediation actions before executing
+| Use Case | Example Prompt |
+|----------|----------------|
+| **Check Infrastructure** | "Check my Kubernetes cluster health" |
+| **Alert Triage** | "Help me investigate this alert: [paste]" |
+| **AWS Cost Optimization** | "Analyze my AWS costs and find savings" |
+| **CI/CD Debugging** | "Why did my GitHub workflow fail?" |
+| **Incident Investigation** | "What's causing high latency in payments?" |
+| **Log Analysis** | "Search Datadog logs for errors in the last hour" |
 
 ## Quick Start
 
-### Installation
+### 1. Install (2 minutes)
 
 ```bash
 git clone https://github.com/incidentfox/incidentfox.git
@@ -25,7 +23,50 @@ cd incidentfox/local/claude_code_pack
 ./install.sh
 ```
 
-That's it! The install script will:
+### 2. Try It
+
+```bash
+claude
+```
+
+**Read-only commands to explore** (safe to run anytime):
+```
+> Check my Kubernetes cluster health
+> List pods in the default namespace
+> What integrations are configured?
+> Show my AWS cost summary
+> List recent GitHub deployments
+```
+
+**Investigation commands** (when something's wrong):
+```
+> Help me investigate high latency in the payment service
+> What's causing these OOMKilled errors?
+> Search logs for "connection refused" errors
+```
+
+### 3. Configure Integrations
+
+Tools auto-detect what's available. Missing credentials? Add them on-the-fly:
+
+```
+> Search Datadog logs for errors
+
+Claude: I need your Datadog API key to search logs.
+
+> Here's my API key: dd-api-xxxxx
+
+Claude: Saved. Now searching...
+```
+
+Or check what's configured:
+```
+> What integrations are configured?
+```
+
+## Installation Details
+
+The install script will:
 1. Check prerequisites ([uv](https://github.com/astral-sh/uv) and Claude Code CLI)
 2. Install Python dependencies
 3. Add the MCP server to Claude Code globally
@@ -55,14 +96,6 @@ known_issues:
     cause: "Database connection pool exhausted"
     solution: "Scale postgres replicas or increase pool size"
 EOF
-```
-
-### Start Investigating!
-
-```bash
-claude
-> What pods are running in the default namespace?
-> Help me investigate high latency in the payment service
 ```
 
 ### Full Plugin Mode (skills + commands)
@@ -599,6 +632,62 @@ Investigation history is stored locally:
 └── logs/
     └── remediation.log # Audit log for remediation actions
 ```
+
+## Auto-Approve MCP Tools (Skip Permission Prompts)
+
+By default, Claude Code asks for permission each time an MCP tool is used. You can pre-approve IncidentFox tools to skip these prompts.
+
+### Option 1: Command Line Flag
+
+```bash
+claude --allowedTools "mcp__incidentfox__*"
+```
+
+This allows all IncidentFox tools for the session. You can be more specific:
+
+```bash
+# Allow only read-only tools
+claude --allowedTools "mcp__incidentfox__list_pods,mcp__incidentfox__get_pod_logs,mcp__incidentfox__search_logs"
+```
+
+### Option 2: Settings File (Persistent)
+
+Add to your Claude Code settings (`~/.claude/settings.json` or project `.claude/settings.json`):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__incidentfox__*"
+    ]
+  }
+}
+```
+
+Or allow specific tool categories:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__incidentfox__list_*",
+      "mcp__incidentfox__get_*",
+      "mcp__incidentfox__search_*",
+      "mcp__incidentfox__describe_*",
+      "mcp__incidentfox__query_*"
+    ],
+    "deny": [
+      "mcp__incidentfox__propose_*"
+    ]
+  }
+}
+```
+
+### Option 3: Trust for Current Project
+
+When Claude asks for permission, select "Always allow for this project" to auto-approve that specific tool going forward.
+
+> **Note:** Remediation tools (`propose_pod_restart`, `propose_deployment_restart`, `propose_scale_deployment`) have additional confirmation hooks that run even with auto-approval enabled. This ensures you always confirm before making changes to your infrastructure.
 
 ## Security
 

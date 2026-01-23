@@ -1,23 +1,24 @@
 # IncidentFox Local
 
-Run IncidentFox AI SRE locally. Choose your preferred setup:
-
-| Option | Best For | Setup Time | Infrastructure |
-|--------|----------|------------|----------------|
-| **[Claude Code Plugin](#claude-code-plugin)** | Most users | 2 minutes | None |
-| **[Local CLI](#local-cli)** | Advanced customization | 10+ minutes | Docker required |
-
----
+AI-powered SRE tools for your terminal.
 
 ## Claude Code Plugin
 
-**Recommended for most users.** Zero infrastructure, works directly in Claude Code with 85+ SRE tools.
+**85+ DevOps & SRE tools for Claude Code.** Query your infrastructure, investigate incidents, analyze costs, and debug CI/CD — all from your terminal.
 
 ### Quick Start
 
 ```bash
 cd claude_code_pack
 ./install.sh
+claude
+```
+
+Then try:
+```
+> Check my Kubernetes cluster health
+> What integrations are configured?
+> Analyze my AWS costs for the past 30 days
 ```
 
 ### What You Get
@@ -28,64 +29,22 @@ cd claude_code_pack
 - Postmortem generation
 - No Docker, no services to manage
 
-### Learn More
-
-See **[claude_code_pack/README.md](./claude_code_pack/README.md)** for full documentation.
+**Full documentation:** [claude_code_pack/README.md](./claude_code_pack/README.md)
 
 ---
 
-## Local CLI
+<details>
+<summary><strong>Local CLI (Experimental)</strong></summary>
 
-**For advanced users** who want maximum customization, custom agents, or self-hosted infrastructure.
+> **Warning:** The local CLI is in early development and not recommended for production use. For a stable experience, use the Claude Code plugin above.
 
-> **Note:** The local CLI is still in early development. For a more stable experience, use the Claude Code plugin above.
+The local CLI is a self-hosted multi-agent system for advanced users who need:
+- Custom agent behavior and prompts
+- Self-hosted infrastructure
+- Non-Claude LLM providers
 
-### Quick Start
+**Requirements:** Docker, Docker Compose, OpenAI API key
 
-```bash
-make quickstart
-```
+**Documentation:** [incidentfox_cli/README.md](./incidentfox_cli/README.md)
 
-### What You Get
-
-- Multi-agent architecture (Planner + specialized sub-agents)
-- Self-hosted services (PostgreSQL, Config Service, Agent)
-- Full control over prompts and agent behavior
-- Web UI for configuration
-
-### Requirements
-
-- Docker & Docker Compose
-- OpenAI API key
-
-### Learn More
-
-See **[incidentfox_cli/README.md](./incidentfox_cli/README.md)** for full documentation.
-
----
-
-## Comparison
-
-| Feature | Claude Code Plugin | Local CLI |
-|---------|-------------------|-----------|
-| Setup complexity | Simple (2 min) | Complex (requires Docker) |
-| Infrastructure | None | PostgreSQL + Services |
-| Tools | 85+ MCP tools | 50+ function tools |
-| LLM | Claude (via Claude Code) | OpenAI (configurable) |
-| Customization | Limited | Full control |
-| Stability | Stable | Early development |
-| Cost | Claude Code subscription | OpenAI API costs |
-
-## Which Should I Use?
-
-**Use Claude Code Plugin if you:**
-- Want the fastest setup
-- Already use Claude Code
-- Don't need custom agents
-- Want a stable, tested experience
-
-**Use Local CLI if you:**
-- Need custom agent behavior
-- Want to self-host everything
-- Need to use a specific LLM provider
-- Are comfortable with Docker and early-stage software
+</details>
