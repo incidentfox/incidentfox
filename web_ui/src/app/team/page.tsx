@@ -24,15 +24,13 @@ import {
   Wrench,
   LayoutTemplate,
   GitPullRequest,
-  Network,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface TeamStats {
   totalRuns: number;
   successRate: number;
-  activeAgents: number;
-  knowledgeDocs: number;
+  avgMttdSeconds: number | null;
   runsThisWeek: number;
   runsPrevWeek: number;
   trend: 'up' | 'down' | 'stable';
@@ -232,7 +230,7 @@ export default function TeamDashboardPage() {
         {/* Team Overview Stats */}
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Team Overview</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
@@ -272,24 +270,19 @@ export default function TeamDashboardPage() {
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-gray-500">Active Agents</div>
+                  <div className="text-sm text-gray-500">Avg MTTD</div>
                   <div className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
-                    {stats?.activeAgents || 0}
+                    {stats?.avgMttdSeconds != null
+                      ? stats.avgMttdSeconds < 60
+                        ? `${Math.round(stats.avgMttdSeconds)}s`
+                        : stats.avgMttdSeconds < 3600
+                        ? `${Math.round(stats.avgMttdSeconds / 60)}m`
+                        : `${(stats.avgMttdSeconds / 3600).toFixed(1)}h`
+                      : 'N/A'}
                   </div>
+                  <div className="text-xs text-gray-400 mt-1">Last 30 days</div>
                 </div>
-                <Network className="w-10 h-10 text-gray-400 opacity-80" />
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-gray-500">Knowledge Docs</div>
-                  <div className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
-                    {stats?.knowledgeDocs || 0}
-                  </div>
-                </div>
-                <BookOpen className="w-10 h-10 text-gray-400 opacity-80" />
+                <Clock className="w-10 h-10 text-gray-400 opacity-80" />
               </div>
             </div>
           </div>
