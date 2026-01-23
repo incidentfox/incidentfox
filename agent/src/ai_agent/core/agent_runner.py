@@ -28,6 +28,7 @@ from .config import get_config
 from .errors import TimeoutError
 from .logging import get_correlation_id, get_logger, set_correlation_id
 from .metrics import get_metrics_collector
+from .trace_recorder import TraceRecorderHooks, record_trace
 
 logger = get_logger(__name__)
 
@@ -444,6 +445,12 @@ class AgentRunner(Generic[T]):
             task_name="record_agent_run_start",
         )
 
+        # Create trace recorder hooks to capture tool calls
+        trace_hooks = TraceRecorderHooks(
+            run_id=run_id,
+            agent_name=agent_name,
+        )
+
         try:
             # Execute with timeout
             run_result = await asyncio.wait_for(
@@ -454,6 +461,7 @@ class AgentRunner(Generic[T]):
                     user_message,
                     context=context,
                     max_turns=(exec_ctx.max_turns or 200),
+                    hooks=trace_hooks,
                 ),
                 timeout=exec_ctx.timeout or self.timeout,
             )
@@ -483,6 +491,9 @@ class AgentRunner(Generic[T]):
             if output is None:
                 output = getattr(run_result, "final_output", None)
 
+            # Get trace data for tool calls count
+            trace_data = trace_hooks.get_trace_data()
+
             # Record run completion
             _track_background_task(
                 _record_agent_run_complete(
@@ -490,18 +501,15 @@ class AgentRunner(Generic[T]):
                     status="completed",
                     duration_seconds=duration,
                     output_summary=str(output)[:1000] if output else "",
-                    tool_calls_count=len(getattr(run_result, "tool_calls", []) or []),
+                    tool_calls_count=len(trace_data.tool_calls),
                 ),
                 task_name="record_agent_run_complete",
             )
 
-            # Record detailed tool calls for AI pipeline analysis
+            # Record detailed tool calls from trace hooks
             _track_background_task(
-                _record_detailed_tool_calls(
-                    run_id=run_id,
-                    run_result=run_result,
-                ),
-                task_name="record_detailed_tool_calls",
+                record_trace(run_id, trace_data),
+                task_name="record_trace",
             )
 
             return AgentResult(

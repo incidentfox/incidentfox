@@ -259,6 +259,8 @@ class ToolCallItem(BaseModel):
 
     id: str
     tool_name: str
+    agent_name: Optional[str] = None
+    parent_agent: Optional[str] = None
     tool_input: Optional[Dict[str, Any]] = None
     tool_output: Optional[str] = None
     started_at: Optional[datetime] = None
@@ -281,6 +283,8 @@ class ToolCallResponse(BaseModel):
     id: str
     run_id: str
     tool_name: str
+    agent_name: Optional[str] = None
+    parent_agent: Optional[str] = None
     tool_input: Optional[Dict[str, Any]] = None
     tool_output: Optional[str] = None
     started_at: datetime
@@ -320,6 +324,8 @@ def record_tool_calls(
         {
             "id": tc.id,
             "tool_name": tc.tool_name,
+            "agent_name": tc.agent_name,
+            "parent_agent": tc.parent_agent,
             "tool_input": tc.tool_input,
             "tool_output": tc.tool_output,
             "started_at": tc.started_at,
@@ -347,6 +353,8 @@ def record_tool_calls(
                 id=tc.id,
                 run_id=tc.run_id,
                 tool_name=tc.tool_name,
+                agent_name=tc.agent_name,
+                parent_agent=tc.parent_agent,
                 tool_input=tc.tool_input,
                 tool_output=tc.tool_output,
                 started_at=tc.started_at,

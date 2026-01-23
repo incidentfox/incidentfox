@@ -196,6 +196,12 @@ async def _process_github_webhook(
         repo=repo_full_name,
     )
 
+    # Track whether agent run was created so we can mark it failed on exception
+    agent_run_created = False
+    run_id = None
+    org_id = None
+    audit_api = None
+
     try:
         cfg: ConfigServiceClient = request.app.state.config_service
         agent_api: AgentApiClient = request.app.state.agent_api
@@ -359,6 +365,7 @@ async def _process_github_webhook(
                     "is_pr": bool(pr_number),
                 },
             )
+            agent_run_created = True
 
         # Run agent with session resumption
         # OpenAIConversationsSession uses pr_number as conversation_id
@@ -408,6 +415,22 @@ async def _process_github_webhook(
             event_type=event_type,
             error=str(e),
         )
+        # Mark agent run as failed if it was created
+        if agent_run_created and audit_api and run_id and org_id:
+            try:
+                audit_api.complete_agent_run(
+                    org_id=org_id,
+                    run_id=run_id,
+                    status="failed",
+                    error_message=str(e)[:500],
+                )
+            except Exception as completion_err:
+                _log(
+                    "github_webhook_failed_completion_error",
+                    correlation_id=correlation_id,
+                    run_id=run_id,
+                    error=str(completion_err),
+                )
 
 
 def _build_github_message(event_type: str, payload: dict) -> str:
@@ -524,12 +547,16 @@ async def _process_pagerduty_webhook(
         service_id=service_id,
     )
 
+    # Track whether agent run was created so we can mark it failed on exception
+    agent_run_created = False
+    run_id = None
+    org_id = None
+    audit_api = None
+
     try:
         cfg: ConfigServiceClient = request.app.state.config_service
         agent_api: AgentApiClient = request.app.state.agent_api
-        audit_api: Optional[AuditApiClient] = getattr(
-            request.app.state, "audit_api", None
-        )
+        audit_api = getattr(request.app.state, "audit_api", None)
         correlation_service: Optional[CorrelationServiceClient] = getattr(
             request.app.state, "correlation_service", None
         )
@@ -685,6 +712,7 @@ async def _process_pagerduty_webhook(
                     "correlation": correlation_context,
                 },
             )
+            agent_run_created = True
 
         # Build context with optional correlation data
         agent_context: dict = {
@@ -736,6 +764,22 @@ async def _process_pagerduty_webhook(
             correlation_id=correlation_id,
             error=str(e),
         )
+        # Mark agent run as failed if it was created
+        if agent_run_created and audit_api and run_id and org_id:
+            try:
+                audit_api.complete_agent_run(
+                    org_id=org_id,
+                    run_id=run_id,
+                    status="failed",
+                    error_message=str(e)[:500],
+                )
+            except Exception as completion_err:
+                _log(
+                    "pagerduty_webhook_failed_completion_error",
+                    correlation_id=correlation_id,
+                    run_id=run_id,
+                    error=str(completion_err),
+                )
 
 
 # ============================================================================
@@ -867,12 +911,16 @@ async def _process_incidentio_webhook(
         event_type=event_type,
     )
 
+    # Track whether agent run was created so we can mark it failed on exception
+    agent_run_created = False
+    run_id = None
+    org_id = None
+    audit_api = None
+
     try:
         cfg: ConfigServiceClient = request.app.state.config_service
         agent_api: AgentApiClient = request.app.state.agent_api
-        audit_api: Optional[AuditApiClient] = getattr(
-            request.app.state, "audit_api", None
-        )
+        audit_api = getattr(request.app.state, "audit_api", None)
         correlation_service: Optional[CorrelationServiceClient] = getattr(
             request.app.state, "correlation_service", None
         )
@@ -1046,6 +1094,7 @@ async def _process_incidentio_webhook(
                     "correlation": correlation_context,
                 },
             )
+            agent_run_created = True
 
         # Build context with optional correlation data
         agent_context: dict = {
@@ -1096,6 +1145,22 @@ async def _process_incidentio_webhook(
             correlation_id=correlation_id,
             error=str(e),
         )
+        # Mark agent run as failed if it was created
+        if agent_run_created and audit_api and run_id and org_id:
+            try:
+                audit_api.complete_agent_run(
+                    org_id=org_id,
+                    run_id=run_id,
+                    status="failed",
+                    error_message=str(e)[:500],
+                )
+            except Exception as completion_err:
+                _log(
+                    "incidentio_webhook_failed_completion_error",
+                    correlation_id=correlation_id,
+                    run_id=run_id,
+                    error=str(completion_err),
+                )
 
 
 # ============================================================================

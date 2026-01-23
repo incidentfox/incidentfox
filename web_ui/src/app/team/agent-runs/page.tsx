@@ -20,6 +20,7 @@ import {
   Filter,
   Calendar,
 } from 'lucide-react';
+import TraceViewer from '@/components/TraceViewer';
 
 interface AgentRun {
   id: string;
@@ -335,7 +336,10 @@ export default function TeamAgentRunsPage() {
                     </div>
                   )}
 
-                  <div className="text-xs text-gray-400 flex items-center gap-4">
+                  {/* Trace Viewer */}
+                  <TraceViewer runId={run.id} correlationId={run.correlationId} />
+
+                  <div className="text-xs text-gray-400 flex items-center gap-4 mt-4">
                     <span>Correlation ID: {run.correlationId}</span>
                     <span>Started: {new Date(run.startedAt).toLocaleString()}</span>
                     {run.completedAt && <span>Completed: {new Date(run.completedAt).toLocaleString()}</span>}

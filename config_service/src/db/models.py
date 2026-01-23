@@ -564,6 +564,10 @@ class AgentToolCall(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     run_id: Mapped[str] = mapped_column(String(64), nullable=False)
 
+    # Agent info (for sub-agent tracking)
+    agent_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    parent_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
     # Tool info
     tool_name: Mapped[str] = mapped_column(String(128), nullable=False)
     tool_input: Mapped[Optional[dict]] = mapped_column(

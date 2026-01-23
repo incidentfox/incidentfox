@@ -743,6 +743,96 @@ async def get_agent_run(
 
 
 # =============================================================================
+# Agent Run Trace (Tool Calls)
+# =============================================================================
+
+
+class ToolCallTraceItem(BaseModel):
+    """Single tool call in a trace."""
+
+    id: str
+    toolName: str
+    agentName: Optional[str] = None
+    parentAgent: Optional[str] = None
+    toolInput: Optional[Dict[str, Any]] = None
+    toolOutput: Optional[str] = None
+    startedAt: str
+    durationMs: Optional[int] = None
+    status: str
+    errorMessage: Optional[str] = None
+    sequenceNumber: int
+
+
+class AgentRunTraceResponse(BaseModel):
+    """Response model for agent run trace."""
+
+    runId: str
+    toolCalls: List[ToolCallTraceItem]
+    total: int
+
+
+@router.get("/agent-runs/{run_id}/trace", response_model=AgentRunTraceResponse)
+async def get_agent_run_trace(
+    run_id: str,
+    db: Session = Depends(get_db),
+    team: TeamPrincipal = Depends(require_team_auth),
+):
+    """
+    Get detailed trace (tool calls) for a specific agent run.
+
+    Returns all tool calls made during the run, including:
+    - Tool name and arguments
+    - Which agent made the call (for sub-agent tracking)
+    - Output/result (truncated)
+    - Duration and status
+    """
+    from src.db.models import AgentToolCall
+
+    # First verify the run belongs to this team
+    run = (
+        db.query(AgentRun)
+        .filter(
+            AgentRun.id == run_id,
+            AgentRun.org_id == team.org_id,
+            AgentRun.team_node_id == team.team_node_id,
+        )
+        .first()
+    )
+
+    if not run:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+
+    # Get tool calls for this run
+    tool_calls = (
+        db.query(AgentToolCall)
+        .filter(AgentToolCall.run_id == run_id)
+        .order_by(AgentToolCall.sequence_number)
+        .all()
+    )
+
+    return AgentRunTraceResponse(
+        runId=run_id,
+        toolCalls=[
+            ToolCallTraceItem(
+                id=tc.id,
+                toolName=tc.tool_name,
+                agentName=tc.agent_name,
+                parentAgent=tc.parent_agent,
+                toolInput=tc.tool_input,
+                toolOutput=tc.tool_output[:1000] if tc.tool_output else None,
+                startedAt=tc.started_at.isoformat() if tc.started_at else "",
+                durationMs=tc.duration_ms,
+                status=tc.status,
+                errorMessage=tc.error_message,
+                sequenceNumber=tc.sequence_number,
+            )
+            for tc in tool_calls
+        ],
+        total=len(tool_calls),
+    )
+
+
+# =============================================================================
 # Tools Catalog
 # =============================================================================
 
