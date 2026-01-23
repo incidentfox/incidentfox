@@ -106,11 +106,11 @@ def search_coralogix_logs(
     Common fields:
     - $l.applicationname: Application/environment name
     - $l.subsystemname: Service name (matches your service naming)
-    - $m.severity: "1"-"6" (1=Debug, 5=Error, 6=Critical)
+    - $m.severity: Use unquoted uppercase values: DEBUG, VERBOSE, INFO, WARNING, ERROR, CRITICAL
 
     Example queries:
     - List all services: "source logs | groupby $l.subsystemname aggregate count() as cnt | orderby cnt desc | limit 20"
-    - Get service errors: "source logs | filter $l.subsystemname == '<service>' | filter $m.severity >= '5' | limit 50"
+    - Get service errors: "source logs | filter $l.subsystemname == '<service>' | filter $m.severity == ERROR || $m.severity == CRITICAL | limit 50"
     - Search for text: "source logs | filter $d.logRecord.body contains 'error' | limit 20"
 
     Args:
@@ -237,8 +237,11 @@ def get_coralogix_error_logs(
 
     # Search for error-related content OR high severity
     # $d ~~ 'pattern' does full-text search on the document
-    severity_threshold = "4" if include_warnings else "5"
-    query += f" | filter $m.severity >= '{severity_threshold}' || $d ~~ 'Error' || $d ~~ 'failed' || $d ~~ 'exception'"
+    # Use unquoted uppercase severity names (Coralogix requirement)
+    if include_warnings:
+        query += " | filter $m.severity == WARNING || $m.severity == ERROR || $m.severity == CRITICAL || $d ~~ 'Error' || $d ~~ 'failed' || $d ~~ 'exception'"
+    else:
+        query += " | filter $m.severity == ERROR || $m.severity == CRITICAL || $d ~~ 'Error' || $d ~~ 'failed' || $d ~~ 'exception'"
 
     query += f" | limit {limit}"
 
@@ -269,8 +272,8 @@ def get_coralogix_alerts(
     logger.info("Fetching Coralogix alerts via DataPrime query...")
 
     # Query for warning and error level logs as "alerts"
-    # Coralogix severity: 4=Warning, 5=Error, 6=Critical
-    query = "source logs | filter $m.severity == '4' || $m.severity == '5' || $m.severity == '6'"
+    # Use unquoted uppercase severity names (Coralogix requirement)
+    query = "source logs | filter $m.severity == WARNING || $m.severity == ERROR || $m.severity == CRITICAL"
     query += f" | limit {limit}"
 
     return search_coralogix_logs(query, time_range_minutes=60, limit=limit)
@@ -541,8 +544,9 @@ def coralogix_get_alert_history(
     logger.info(f"Fetching Coralogix alert history for: {alert_name or 'all alerts'}")
 
     try:
-        # Query for alert-level logs (severity 4-6)
-        query = "source logs | filter $m.severity >= '4'"
+        # Query for alert-level logs (WARNING, ERROR, CRITICAL)
+        # Use unquoted uppercase severity names (Coralogix requirement)
+        query = "source logs | filter $m.severity == WARNING || $m.severity == ERROR || $m.severity == CRITICAL"
 
         if alert_name:
             query += f" | filter $d ~~ '{alert_name}'"

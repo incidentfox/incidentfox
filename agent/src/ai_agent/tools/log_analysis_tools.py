@@ -635,10 +635,11 @@ class CoralogixBackend(LogBackend):
             if sev in error_severities:
                 error_count += cnt
 
-        # Get top patterns
-        pattern_query = "source logs | filter $m.severity >= '5' | groupby $d.logRecord.body aggregate count() as cnt | orderby cnt desc | limit 10"
+        # Get top patterns - use unquoted uppercase severity names (Coralogix requirement)
+        # Cast body to string for groupby
+        pattern_query = "source logs | filter $m.severity == ERROR || $m.severity == CRITICAL | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
         if service:
-            pattern_query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity >= '5' | groupby $d.logRecord.body aggregate count() as cnt | orderby cnt desc | limit 10"
+            pattern_query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity == ERROR || $m.severity == CRITICAL | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
 
         pattern_results = self._query(pattern_query, start_time, end_time, limit=10)
         top_patterns = [
@@ -669,9 +670,10 @@ class CoralogixBackend(LogBackend):
     ) -> dict[str, Any]:
         """Sample Coralogix logs."""
         if strategy == "errors_only":
-            query = f"source logs | filter $m.severity >= '5' | limit {sample_size}"
+            # Use unquoted uppercase severity names (Coralogix requirement)
+            query = f"source logs | filter $m.severity == ERROR || $m.severity == CRITICAL | limit {sample_size}"
             if service:
-                query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity >= '5' | limit {sample_size}"
+                query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity == ERROR || $m.severity == CRITICAL | limit {sample_size}"
         else:
             query = f"source logs | limit {sample_size}"
             if service:
