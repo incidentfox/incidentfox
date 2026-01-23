@@ -47,7 +47,7 @@ def _build_dependency_graph(catalog: dict) -> tuple[dict, dict]:
     services = catalog.get("services", {})
 
     dependencies = {}  # service -> what it depends on
-    dependents = {}    # service -> what depends on it
+    dependents = {}  # service -> what depends on it
 
     for service_name, config in services.items():
         deps = config.get("dependencies", [])
@@ -104,25 +104,34 @@ def register_tools(mcp: FastMCP):
         catalog = _load_catalog()
 
         if not catalog:
-            return json.dumps({
-                "error": "No service catalog found",
-                "hint": "Create .incidentfox.yaml with service dependencies",
-                "example": {
-                    "services": {
-                        "api-gateway": {"dependencies": ["auth-service", "user-service"]},
-                        "payment-api": {"dependencies": ["postgres", "redis"]},
-                    }
-                },
-            })
+            return json.dumps(
+                {
+                    "error": "No service catalog found",
+                    "hint": "Create .incidentfox.yaml with service dependencies",
+                    "example": {
+                        "services": {
+                            "api-gateway": {
+                                "dependencies": ["auth-service", "user-service"]
+                            },
+                            "payment-api": {"dependencies": ["postgres", "redis"]},
+                        }
+                    },
+                }
+            )
 
         services = catalog.get("services", {})
 
-        if service not in services and service not in _build_dependency_graph(catalog)[1]:
+        if (
+            service not in services
+            and service not in _build_dependency_graph(catalog)[1]
+        ):
             available = list(services.keys())
-            return json.dumps({
-                "error": f"Service '{service}' not found in catalog",
-                "available_services": available,
-            })
+            return json.dumps(
+                {
+                    "error": f"Service '{service}' not found in catalog",
+                    "available_services": available,
+                }
+            )
 
         dependencies, dependents = _build_dependency_graph(catalog)
 
@@ -137,12 +146,14 @@ def register_tools(mcp: FastMCP):
         affected_details = []
         for svc in direct + transitive:
             config = services.get(svc, {})
-            affected_details.append({
-                "service": svc,
-                "type": "direct" if svc in direct else "transitive",
-                "has_oncall": "oncall" in config,
-                "namespace": config.get("namespace"),
-            })
+            affected_details.append(
+                {
+                    "service": svc,
+                    "type": "direct" if svc in direct else "transitive",
+                    "has_oncall": "oncall" in config,
+                    "namespace": config.get("namespace"),
+                }
+            )
 
         # Calculate severity based on number of affected services
         total_affected = len(direct) + len(transitive)
@@ -159,20 +170,25 @@ def register_tools(mcp: FastMCP):
             severity = "critical"
             severity_reason = f"Widespread impact on {total_affected} services"
 
-        return json.dumps({
-            "service": service,
-            "blast_radius": {
-                "direct_dependents": direct,
-                "direct_count": len(direct),
-                "transitive_dependents": transitive,
-                "transitive_count": len(transitive),
-                "total_affected": total_affected,
+        return json.dumps(
+            {
+                "service": service,
+                "blast_radius": {
+                    "direct_dependents": direct,
+                    "direct_count": len(direct),
+                    "transitive_dependents": transitive,
+                    "transitive_count": len(transitive),
+                    "total_affected": total_affected,
+                },
+                "severity": severity,
+                "severity_reason": severity_reason,
+                "affected_services": affected_details,
+                "recommendations": _get_recommendations(
+                    service, direct, transitive, catalog
+                ),
             },
-            "severity": severity,
-            "severity_reason": severity_reason,
-            "affected_services": affected_details,
-            "recommendations": _get_recommendations(service, direct, transitive, catalog),
-        }, indent=2)
+            indent=2,
+        )
 
     @mcp.tool()
     def get_service_dependencies(service: str) -> str:
@@ -187,19 +203,23 @@ def register_tools(mcp: FastMCP):
         catalog = _load_catalog()
 
         if not catalog:
-            return json.dumps({
-                "error": "No service catalog found",
-                "hint": "Create .incidentfox.yaml",
-            })
+            return json.dumps(
+                {
+                    "error": "No service catalog found",
+                    "hint": "Create .incidentfox.yaml",
+                }
+            )
 
         services = catalog.get("services", {})
         config = services.get(service, {})
 
         if not config:
-            return json.dumps({
-                "error": f"Service '{service}' not found",
-                "available_services": list(services.keys()),
-            })
+            return json.dumps(
+                {
+                    "error": f"Service '{service}' not found",
+                    "available_services": list(services.keys()),
+                }
+            )
 
         deps = config.get("dependencies", [])
 
@@ -207,17 +227,22 @@ def register_tools(mcp: FastMCP):
         dep_details = []
         for dep in deps:
             dep_config = services.get(dep, {})
-            dep_details.append({
-                "service": dep,
-                "in_catalog": dep in services,
-                "namespace": dep_config.get("namespace") if dep_config else None,
-            })
+            dep_details.append(
+                {
+                    "service": dep,
+                    "in_catalog": dep in services,
+                    "namespace": dep_config.get("namespace") if dep_config else None,
+                }
+            )
 
-        return json.dumps({
-            "service": service,
-            "dependency_count": len(deps),
-            "dependencies": dep_details,
-        }, indent=2)
+        return json.dumps(
+            {
+                "service": service,
+                "dependency_count": len(deps),
+                "dependencies": dep_details,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def get_dependency_graph() -> str:
@@ -229,9 +254,11 @@ def register_tools(mcp: FastMCP):
         catalog = _load_catalog()
 
         if not catalog:
-            return json.dumps({
-                "error": "No service catalog found",
-            })
+            return json.dumps(
+                {
+                    "error": "No service catalog found",
+                }
+            )
 
         dependencies, dependents = _build_dependency_graph(catalog)
 
@@ -239,11 +266,13 @@ def register_tools(mcp: FastMCP):
         graph = []
 
         for service_name in services:
-            graph.append({
-                "service": service_name,
-                "depends_on": dependencies.get(service_name, []),
-                "depended_by": dependents.get(service_name, []),
-            })
+            graph.append(
+                {
+                    "service": service_name,
+                    "depends_on": dependencies.get(service_name, []),
+                    "depended_by": dependents.get(service_name, []),
+                }
+            )
 
         # Find critical services (many dependents)
         critical = sorted(
@@ -252,14 +281,16 @@ def register_tools(mcp: FastMCP):
             reverse=True,
         )[:5]
 
-        return json.dumps({
-            "service_count": len(services),
-            "graph": graph,
-            "most_critical": [
-                {"service": s, "dependent_count": c}
-                for s, c in critical if c > 0
-            ],
-        }, indent=2)
+        return json.dumps(
+            {
+                "service_count": len(services),
+                "graph": graph,
+                "most_critical": [
+                    {"service": s, "dependent_count": c} for s, c in critical if c > 0
+                ],
+            },
+            indent=2,
+        )
 
 
 def _get_recommendations(
@@ -293,8 +324,6 @@ def _get_recommendations(
 
     # Check for dashboards
     if service_config.get("dashboards"):
-        recommendations.append(
-            f"Check {service} dashboards for current state."
-        )
+        recommendations.append(f"Check {service} dashboards for current state.")
 
     return recommendations

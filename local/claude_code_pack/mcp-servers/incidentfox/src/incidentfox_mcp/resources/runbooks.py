@@ -37,11 +37,13 @@ def _list_runbooks() -> list[dict]:
     for path in runbooks_dir.glob("**/*.md"):
         relative = path.relative_to(runbooks_dir)
         name = str(relative).replace(".md", "").replace("/", "-")
-        runbooks.append({
-            "name": name,
-            "path": str(path),
-            "relative": str(relative),
-        })
+        runbooks.append(
+            {
+                "name": name,
+                "path": str(path),
+                "relative": str(relative),
+            }
+        )
 
     return runbooks
 
@@ -110,11 +112,13 @@ The IncidentFox agent will reference these during investigations.
 
         # Not found
         available = [rb["name"] for rb in runbooks]
-        return json.dumps({
-            "error": f"Runbook '{name}' not found",
-            "available_runbooks": available,
-            "hint": "Create runbooks in a runbooks/ directory"
-        })
+        return json.dumps(
+            {
+                "error": f"Runbook '{name}' not found",
+                "available_runbooks": available,
+                "hint": "Create runbooks in a runbooks/ directory",
+            }
+        )
 
     @mcp.tool()
     def search_runbooks(query: str) -> str:
@@ -130,10 +134,12 @@ The IncidentFox agent will reference these during investigations.
 
         runbooks = _list_runbooks()
         if not runbooks:
-            return json.dumps({
-                "matches": [],
-                "hint": "No runbooks found. Create a runbooks/ directory."
-            })
+            return json.dumps(
+                {
+                    "matches": [],
+                    "hint": "No runbooks found. Create a runbooks/ directory.",
+                }
+            )
 
         matches = []
         query_lower = query.lower()
@@ -155,17 +161,22 @@ The IncidentFox agent will reference these during investigations.
                             excerpt = "\n".join(lines[start:end])
                             relevant_lines.append(excerpt)
 
-                    matches.append({
-                        "name": rb["name"],
-                        "path": rb["relative"],
-                        "excerpts": relevant_lines[:3],  # Limit excerpts
-                    })
+                    matches.append(
+                        {
+                            "name": rb["name"],
+                            "path": rb["relative"],
+                            "excerpts": relevant_lines[:3],  # Limit excerpts
+                        }
+                    )
 
             except Exception:
                 continue
 
-        return json.dumps({
-            "query": query,
-            "match_count": len(matches),
-            "matches": matches,
-        }, indent=2)
+        return json.dumps(
+            {
+                "query": query,
+                "match_count": len(matches),
+                "matches": matches,
+            },
+            indent=2,
+        )

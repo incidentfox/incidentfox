@@ -60,10 +60,13 @@ def register_tools(mcp: FastMCP):
                 except json.JSONDecodeError:
                     pass
 
-        return json.dumps({
-            "container_count": len(containers),
-            "containers": containers,
-        }, indent=2)
+        return json.dumps(
+            {
+                "container_count": len(containers),
+                "containers": containers,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def docker_logs(
@@ -91,21 +94,26 @@ def register_tools(mcp: FastMCP):
         stdout, stderr, rc = _run_docker_command(args)
 
         if rc != 0:
-            return json.dumps({
-                "error": stderr or f"Failed to get logs for {container}",
-                "container": container,
-            })
+            return json.dumps(
+                {
+                    "error": stderr or f"Failed to get logs for {container}",
+                    "container": container,
+                }
+            )
 
         # Return both stdout and stderr (docker logs outputs to stderr for some apps)
         logs = stdout if stdout else stderr
 
-        return json.dumps({
-            "container": container,
-            "tail": tail,
-            "since": since,
-            "log_lines": len(logs.split("\n")),
-            "logs": logs,
-        }, indent=2)
+        return json.dumps(
+            {
+                "container": container,
+                "tail": tail,
+                "since": since,
+                "log_lines": len(logs.split("\n")),
+                "logs": logs,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def docker_inspect(container: str) -> str:
@@ -120,10 +128,12 @@ def register_tools(mcp: FastMCP):
         stdout, stderr, rc = _run_docker_command(["inspect", container])
 
         if rc != 0:
-            return json.dumps({
-                "error": stderr or f"Failed to inspect {container}",
-                "container": container,
-            })
+            return json.dumps(
+                {
+                    "error": stderr or f"Failed to inspect {container}",
+                    "container": container,
+                }
+            )
 
         try:
             data = json.loads(stdout)
@@ -156,10 +166,14 @@ def register_tools(mcp: FastMCP):
                     ),
                 },
                 "network": {
-                    "ip_address": container_info.get("NetworkSettings", {}).get("IPAddress"),
+                    "ip_address": container_info.get("NetworkSettings", {}).get(
+                        "IPAddress"
+                    ),
                     "ports": container_info.get("NetworkSettings", {}).get("Ports"),
                     "networks": list(
-                        container_info.get("NetworkSettings", {}).get("Networks", {}).keys()
+                        container_info.get("NetworkSettings", {})
+                        .get("Networks", {})
+                        .keys()
                     ),
                 },
                 "mounts": [
@@ -196,9 +210,11 @@ def register_tools(mcp: FastMCP):
         stdout, stderr, rc = _run_docker_command(args)
 
         if rc != 0:
-            return json.dumps({
-                "error": stderr or "Failed to get stats",
-            })
+            return json.dumps(
+                {
+                    "error": stderr or "Failed to get stats",
+                }
+            )
 
         # Parse JSON lines
         stats = []
@@ -209,10 +225,13 @@ def register_tools(mcp: FastMCP):
                 except json.JSONDecodeError:
                     pass
 
-        return json.dumps({
-            "container_count": len(stats),
-            "stats": stats,
-        }, indent=2)
+        return json.dumps(
+            {
+                "container_count": len(stats),
+                "stats": stats,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def docker_top(container: str) -> str:
@@ -227,17 +246,21 @@ def register_tools(mcp: FastMCP):
         stdout, stderr, rc = _run_docker_command(["top", container])
 
         if rc != 0:
-            return json.dumps({
-                "error": stderr or f"Failed to get processes for {container}",
-                "container": container,
-            })
+            return json.dumps(
+                {
+                    "error": stderr or f"Failed to get processes for {container}",
+                    "container": container,
+                }
+            )
 
         lines = stdout.strip().split("\n")
         if len(lines) < 2:
-            return json.dumps({
-                "container": container,
-                "processes": [],
-            })
+            return json.dumps(
+                {
+                    "container": container,
+                    "processes": [],
+                }
+            )
 
         # Parse the output
         headers = lines[0].split()
@@ -248,11 +271,14 @@ def register_tools(mcp: FastMCP):
                 process = dict(zip(headers, parts))
                 processes.append(process)
 
-        return json.dumps({
-            "container": container,
-            "process_count": len(processes),
-            "processes": processes,
-        }, indent=2)
+        return json.dumps(
+            {
+                "container": container,
+                "process_count": len(processes),
+                "processes": processes,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def docker_events(since: str = "1h", until: str | None = None) -> str:
@@ -274,9 +300,11 @@ def register_tools(mcp: FastMCP):
         stdout, stderr, rc = _run_docker_command(args)
 
         if rc != 0:
-            return json.dumps({
-                "error": stderr or "Failed to get events",
-            })
+            return json.dumps(
+                {
+                    "error": stderr or "Failed to get events",
+                }
+            )
 
         # Parse JSON lines
         events = []
@@ -287,11 +315,14 @@ def register_tools(mcp: FastMCP):
                 except json.JSONDecodeError:
                     pass
 
-        return json.dumps({
-            "since": since,
-            "event_count": len(events),
-            "events": events,
-        }, indent=2)
+        return json.dumps(
+            {
+                "since": since,
+                "event_count": len(events),
+                "events": events,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def docker_diff(container: str) -> str:
@@ -306,10 +337,12 @@ def register_tools(mcp: FastMCP):
         stdout, stderr, rc = _run_docker_command(["diff", container])
 
         if rc != 0:
-            return json.dumps({
-                "error": stderr or f"Failed to get diff for {container}",
-                "container": container,
-            })
+            return json.dumps(
+                {
+                    "error": stderr or f"Failed to get diff for {container}",
+                    "container": container,
+                }
+            )
 
         changes = {"added": [], "changed": [], "deleted": []}
 
@@ -324,11 +357,14 @@ def register_tools(mcp: FastMCP):
                 elif change_type == "D":
                     changes["deleted"].append(path)
 
-        return json.dumps({
-            "container": container,
-            "total_changes": sum(len(v) for v in changes.values()),
-            "changes": changes,
-        }, indent=2)
+        return json.dumps(
+            {
+                "container": container,
+                "total_changes": sum(len(v) for v in changes.values()),
+                "changes": changes,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def docker_exec(container: str, command: str) -> str:
@@ -345,6 +381,7 @@ def register_tools(mcp: FastMCP):
         """
         # Split command into args
         import shlex
+
         try:
             cmd_args = shlex.split(command)
         except ValueError:
@@ -352,10 +389,13 @@ def register_tools(mcp: FastMCP):
 
         stdout, stderr, rc = _run_docker_command(["exec", container] + cmd_args)
 
-        return json.dumps({
-            "container": container,
-            "command": command,
-            "exit_code": rc,
-            "stdout": stdout,
-            "stderr": stderr,
-        }, indent=2)
+        return json.dumps(
+            {
+                "container": container,
+                "command": command,
+                "exit_code": rc,
+                "stdout": stdout,
+                "stderr": stderr,
+            },
+            indent=2,
+        )

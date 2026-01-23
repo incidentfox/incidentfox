@@ -113,7 +113,9 @@ known_issues:
                 if "deployments" in config:
                     output.append(f"- Deployments: {', '.join(config['deployments'])}")
                 if "dependencies" in config:
-                    output.append(f"- Dependencies: {', '.join(config['dependencies'])}")
+                    output.append(
+                        f"- Dependencies: {', '.join(config['dependencies'])}"
+                    )
                 if "logs" in config:
                     output.append("- Logs:")
                     for backend, query in config["logs"].items():
@@ -155,7 +157,9 @@ known_issues:
                 output.append(f"- Cause: {issue.get('cause', 'Unknown')}")
                 output.append(f"- Solution: {issue.get('solution', 'N/A')}")
                 if "services" in issue:
-                    output.append(f"- Affected services: {', '.join(issue['services'])}")
+                    output.append(
+                        f"- Affected services: {', '.join(issue['services'])}"
+                    )
                 output.append("")
 
         return "\n".join(output)
@@ -176,18 +180,22 @@ known_issues:
 
         catalog = _load_catalog()
         if not catalog:
-            return json.dumps({
-                "error": "No .incidentfox.yaml found",
-                "hint": "Create a service catalog file to personalize investigations"
-            })
+            return json.dumps(
+                {
+                    "error": "No .incidentfox.yaml found",
+                    "hint": "Create a service catalog file to personalize investigations",
+                }
+            )
 
         services = catalog.get("services", {})
         if service_name not in services:
             available = list(services.keys())
-            return json.dumps({
-                "error": f"Service '{service_name}' not found in catalog",
-                "available_services": available
-            })
+            return json.dumps(
+                {
+                    "error": f"Service '{service_name}' not found in catalog",
+                    "available_services": available,
+                }
+            )
 
         service = services[service_name]
 
@@ -200,16 +208,20 @@ known_issues:
 
         # Find related known issues
         related_issues = [
-            issue for issue in catalog.get("known_issues", [])
+            issue
+            for issue in catalog.get("known_issues", [])
             if service_name in issue.get("services", [])
         ]
 
-        return json.dumps({
-            "service": service_name,
-            "config": service,
-            "related_alerts": related_alerts,
-            "known_issues": related_issues,
-        }, indent=2)
+        return json.dumps(
+            {
+                "service": service_name,
+                "config": service,
+                "related_alerts": related_alerts,
+                "known_issues": related_issues,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def check_known_issues(error_message: str) -> str:
@@ -226,34 +238,43 @@ known_issues:
 
         catalog = _load_catalog()
         if not catalog:
-            return json.dumps({
-                "matches": [],
-                "hint": "No .incidentfox.yaml found - create one to track known issues"
-            })
+            return json.dumps(
+                {
+                    "matches": [],
+                    "hint": "No .incidentfox.yaml found - create one to track known issues",
+                }
+            )
 
         matches = []
         for issue in catalog.get("known_issues", []):
             pattern = issue.get("pattern", "")
             try:
                 if re.search(pattern, error_message, re.IGNORECASE):
-                    matches.append({
-                        "pattern": pattern,
-                        "cause": issue.get("cause"),
-                        "solution": issue.get("solution"),
-                        "affected_services": issue.get("services", []),
-                    })
+                    matches.append(
+                        {
+                            "pattern": pattern,
+                            "cause": issue.get("cause"),
+                            "solution": issue.get("solution"),
+                            "affected_services": issue.get("services", []),
+                        }
+                    )
             except re.error:
                 # Invalid regex, try simple substring match
                 if pattern.lower() in error_message.lower():
-                    matches.append({
-                        "pattern": pattern,
-                        "cause": issue.get("cause"),
-                        "solution": issue.get("solution"),
-                        "affected_services": issue.get("services", []),
-                    })
+                    matches.append(
+                        {
+                            "pattern": pattern,
+                            "cause": issue.get("cause"),
+                            "solution": issue.get("solution"),
+                            "affected_services": issue.get("services", []),
+                        }
+                    )
 
-        return json.dumps({
-            "query": error_message[:200],  # Truncate for readability
-            "matches": matches,
-            "match_count": len(matches),
-        }, indent=2)
+        return json.dumps(
+            {
+                "query": error_message[:200],  # Truncate for readability
+                "matches": matches,
+                "match_count": len(matches),
+            },
+            indent=2,
+        )

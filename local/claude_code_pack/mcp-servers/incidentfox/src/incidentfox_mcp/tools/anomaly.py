@@ -130,9 +130,9 @@ def register_tools(mcp: FastMCP):
             mean_a = statistics.mean(data_a)
             mean_b = statistics.mean(data_b)
 
-            covariance = sum(
-                (data_a[i] - mean_a) * (data_b[i] - mean_b) for i in range(n)
-            ) / n
+            covariance = (
+                sum((data_a[i] - mean_a) * (data_b[i] - mean_b) for i in range(n)) / n
+            )
 
             std_a = statistics.stdev(data_a)
             std_b = statistics.stdev(data_b)
@@ -157,7 +157,10 @@ def register_tools(mcp: FastMCP):
 
             return json.dumps(
                 {
-                    "metrics": {name_a: {"mean": round(mean_a, 4), "std": round(std_a, 4)}, name_b: {"mean": round(mean_b, 4), "std": round(std_b, 4)}},
+                    "metrics": {
+                        name_a: {"mean": round(mean_a, 4), "std": round(std_a, 4)},
+                        name_b: {"mean": round(mean_b, 4), "std": round(std_b, 4)},
+                    },
                     "correlation": round(correlation, 4),
                     "interpretation": f"{strength} {direction} correlation",
                     "data_points": n,
@@ -224,9 +227,11 @@ def register_tools(mcp: FastMCP):
                             "mean_before": round(mean_before, 4),
                             "mean_after": round(mean_after, 4),
                             "change": round(change, 4),
-                            "change_percent": round((change / mean_before) * 100, 2)
-                            if mean_before != 0
-                            else None,
+                            "change_percent": (
+                                round((change / mean_before) * 100, 2)
+                                if mean_before != 0
+                                else None
+                            ),
                             "direction": "increase" if change > 0 else "decrease",
                         }
                     )

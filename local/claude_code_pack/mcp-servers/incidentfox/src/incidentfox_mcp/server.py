@@ -26,25 +26,25 @@ Total: 50+ tools
 
 from mcp.server.fastmcp import FastMCP
 
-# Tool modules
-from .tools import (
-    kubernetes,
-    aws,
-    datadog,
-    anomaly,
-    git,
-    remediation,
-    unified_logs,
-    prometheus,
-    history,
-    docker,
-    postmortem,
-    blast_radius,
-    cost,
-)
-
 # Resource modules
 from .resources import register_all_resources
+
+# Tool modules
+from .tools import (
+    anomaly,
+    aws,
+    blast_radius,
+    cost,
+    datadog,
+    docker,
+    git,
+    history,
+    kubernetes,
+    postmortem,
+    prometheus,
+    remediation,
+    unified_logs,
+)
 
 # Initialize FastMCP server
 mcp = FastMCP("incidentfox")

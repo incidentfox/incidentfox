@@ -118,21 +118,27 @@ def register_tools(mcp: FastMCP):
         conn = sqlite3.connect(_get_db_path())
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO investigations (id, started_at, service, summary, severity, tags, status)
             VALUES (?, ?, ?, ?, ?, ?, 'in_progress')
-        """, (investigation_id, now, service, summary, severity, tags))
+        """,
+            (investigation_id, now, service, summary, severity, tags),
+        )
 
         conn.commit()
         conn.close()
 
-        return json.dumps({
-            "investigation_id": investigation_id,
-            "started_at": now,
-            "service": service,
-            "status": "in_progress",
-            "message": f"Investigation {investigation_id} started. Use this ID to add findings and complete the investigation.",
-        }, indent=2)
+        return json.dumps(
+            {
+                "investigation_id": investigation_id,
+                "started_at": now,
+                "service": service,
+                "status": "in_progress",
+                "message": f"Investigation {investigation_id} started. Use this ID to add findings and complete the investigation.",
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def add_finding(
@@ -159,28 +165,38 @@ def register_tools(mcp: FastMCP):
         cursor = conn.cursor()
 
         # Verify investigation exists
-        cursor.execute("SELECT id FROM investigations WHERE id = ?", (investigation_id,))
+        cursor.execute(
+            "SELECT id FROM investigations WHERE id = ?", (investigation_id,)
+        )
         if not cursor.fetchone():
             conn.close()
-            return json.dumps({
-                "error": f"Investigation {investigation_id} not found",
-            })
+            return json.dumps(
+                {
+                    "error": f"Investigation {investigation_id} not found",
+                }
+            )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO findings (id, investigation_id, timestamp, type, title, data)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (finding_id, investigation_id, now, finding_type, title, data))
+        """,
+            (finding_id, investigation_id, now, finding_type, title, data),
+        )
 
         conn.commit()
         conn.close()
 
-        return json.dumps({
-            "finding_id": finding_id,
-            "investigation_id": investigation_id,
-            "type": finding_type,
-            "title": title,
-            "timestamp": now,
-        }, indent=2)
+        return json.dumps(
+            {
+                "finding_id": finding_id,
+                "investigation_id": investigation_id,
+                "type": finding_type,
+                "title": title,
+                "timestamp": now,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def complete_investigation(
@@ -207,17 +223,23 @@ def register_tools(mcp: FastMCP):
 
         # Update investigation
         if summary:
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE investigations
                 SET ended_at = ?, root_cause = ?, resolution = ?, summary = ?, status = 'completed'
                 WHERE id = ?
-            """, (now, root_cause, resolution, summary, investigation_id))
+            """,
+                (now, root_cause, resolution, summary, investigation_id),
+            )
         else:
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE investigations
                 SET ended_at = ?, root_cause = ?, resolution = ?, status = 'completed'
                 WHERE id = ?
-            """, (now, root_cause, resolution, investigation_id))
+            """,
+                (now, root_cause, resolution, investigation_id),
+            )
 
         if cursor.rowcount == 0:
             conn.close()
@@ -226,13 +248,16 @@ def register_tools(mcp: FastMCP):
         conn.commit()
         conn.close()
 
-        return json.dumps({
-            "investigation_id": investigation_id,
-            "status": "completed",
-            "root_cause": root_cause,
-            "resolution": resolution,
-            "ended_at": now,
-        }, indent=2)
+        return json.dumps(
+            {
+                "investigation_id": investigation_id,
+                "status": "completed",
+                "root_cause": root_cause,
+                "resolution": resolution,
+                "ended_at": now,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def get_investigation(investigation_id: str) -> str:
@@ -258,9 +283,12 @@ def register_tools(mcp: FastMCP):
         investigation = dict(row)
 
         # Get findings
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM findings WHERE investigation_id = ? ORDER BY timestamp
-        """, (investigation_id,))
+        """,
+            (investigation_id,),
+        )
         findings = [dict(r) for r in cursor.fetchall()]
 
         conn.close()
@@ -307,29 +335,36 @@ def register_tools(mcp: FastMCP):
             params.append(service)
 
         from datetime import timedelta
+
         cutoff = (datetime.utcnow() - timedelta(days=days_ago)).isoformat() + "Z"
         conditions.append("started_at >= ?")
         params.append(cutoff)
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
 
-        cursor.execute(f"""
+        cursor.execute(
+            f"""
             SELECT * FROM investigations
             WHERE {where_clause}
             ORDER BY started_at DESC
             LIMIT ?
-        """, params + [limit])
+        """,
+            params + [limit],
+        )
 
         investigations = [dict(r) for r in cursor.fetchall()]
         conn.close()
 
-        return json.dumps({
-            "query": query,
-            "service": service,
-            "days_ago": days_ago,
-            "count": len(investigations),
-            "investigations": investigations,
-        }, indent=2)
+        return json.dumps(
+            {
+                "query": query,
+                "service": service,
+                "days_ago": days_ago,
+                "count": len(investigations),
+                "investigations": investigations,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def find_similar_investigations(
@@ -363,12 +398,15 @@ def register_tools(mcp: FastMCP):
         where_clause = " AND ".join(conditions)
 
         # Get completed investigations
-        cursor.execute(f"""
+        cursor.execute(
+            f"""
             SELECT * FROM investigations
             WHERE {where_clause}
             ORDER BY started_at DESC
             LIMIT 100
-        """, params)
+        """,
+            params,
+        )
 
         candidates = [dict(r) for r in cursor.fetchall()]
 
@@ -385,7 +423,9 @@ def register_tools(mcp: FastMCP):
                 if inv.get("summary") and error_lower in inv["summary"].lower():
                     score += 5
                 # Check tags
-                if inv.get("tags") and any(t in error_lower for t in (inv["tags"] or "").split(",")):
+                if inv.get("tags") and any(
+                    t in error_lower for t in (inv["tags"] or "").split(",")
+                ):
                     score += 3
 
                 if score > 0:
@@ -398,14 +438,17 @@ def register_tools(mcp: FastMCP):
 
         conn.close()
 
-        return json.dumps({
-            "query": {
-                "error_message": error_message[:100] if error_message else None,
-                "service": service,
+        return json.dumps(
+            {
+                "query": {
+                    "error_message": error_message[:100] if error_message else None,
+                    "service": service,
+                },
+                "similar_count": len(similar),
+                "similar_investigations": similar,
             },
-            "similar_count": len(similar),
-            "similar_investigations": similar,
-        }, indent=2)
+            indent=2,
+        )
 
     @mcp.tool()
     def record_pattern(
@@ -434,38 +477,50 @@ def register_tools(mcp: FastMCP):
         cursor = conn.cursor()
 
         # Check if similar pattern exists
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT id, occurrence_count FROM known_patterns WHERE pattern = ?
-        """, (pattern,))
+        """,
+            (pattern,),
+        )
         existing = cursor.fetchone()
 
         if existing:
             # Update existing pattern
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE known_patterns
                 SET occurrence_count = occurrence_count + 1, last_seen = ?, cause = ?, solution = ?
                 WHERE id = ?
-            """, (now, cause, solution, existing[0]))
+            """,
+                (now, cause, solution, existing[0]),
+            )
             pattern_id = existing[0]
             message = f"Updated existing pattern (seen {existing[1] + 1} times)"
         else:
             # Create new pattern
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO known_patterns (id, pattern, cause, solution, services, created_at, last_seen)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (pattern_id, pattern, cause, solution, services, now, now))
+            """,
+                (pattern_id, pattern, cause, solution, services, now, now),
+            )
             message = "New pattern recorded"
 
         conn.commit()
         conn.close()
 
-        return json.dumps({
-            "pattern_id": pattern_id,
-            "pattern": pattern,
-            "cause": cause,
-            "solution": solution,
-            "message": message,
-        }, indent=2)
+        return json.dumps(
+            {
+                "pattern_id": pattern_id,
+                "pattern": pattern,
+                "cause": cause,
+                "solution": solution,
+                "message": message,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def get_statistics() -> str:
@@ -520,10 +575,13 @@ def register_tools(mcp: FastMCP):
 
         conn.close()
 
-        return json.dumps({
-            "total_investigations": total,
-            "by_status": by_status,
-            "top_services": top_services,
-            "known_patterns": patterns,
-            "recent_investigations": recent,
-        }, indent=2)
+        return json.dumps(
+            {
+                "total_investigations": total,
+                "by_status": by_status,
+                "top_services": top_services,
+                "known_patterns": patterns,
+                "recent_investigations": recent,
+            },
+            indent=2,
+        )

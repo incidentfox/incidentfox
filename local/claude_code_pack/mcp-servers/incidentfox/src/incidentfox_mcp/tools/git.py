@@ -130,18 +130,24 @@ def register_tools(mcp: FastMCP):
             return json.dumps({"error": output})
 
         if stat_only:
-            return json.dumps({
+            return json.dumps(
+                {
+                    "ref1": ref1,
+                    "ref2": ref2,
+                    "stat": output,
+                },
+                indent=2,
+            )
+
+        return json.dumps(
+            {
                 "ref1": ref1,
                 "ref2": ref2,
-                "stat": output,
-            }, indent=2)
-
-        return json.dumps({
-            "ref1": ref1,
-            "ref2": ref2,
-            "diff": output[:10000] if len(output) > 10000 else output,  # Limit size
-            "truncated": len(output) > 10000,
-        }, indent=2)
+                "diff": output[:10000] if len(output) > 10000 else output,  # Limit size
+                "truncated": len(output) > 10000,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def git_show(commit: str = "HEAD") -> str:
@@ -206,7 +212,9 @@ def register_tools(mcp: FastMCP):
                 until = incident_time
             else:
                 # ISO time
-                incident_dt = datetime.fromisoformat(incident_time.replace("Z", "+00:00"))
+                incident_dt = datetime.fromisoformat(
+                    incident_time.replace("Z", "+00:00")
+                )
                 window_start = incident_dt - timedelta(hours=hours_before)
                 since = window_start.isoformat()
                 until = incident_dt.isoformat()
@@ -232,28 +240,43 @@ def register_tools(mcp: FastMCP):
                 continue
             parts = line.split("|", 3)
             if len(parts) >= 4:
-                commits.append({
-                    "hash": parts[0][:8],
-                    "author": parts[1],
-                    "date": parts[2],
-                    "message": parts[3],
-                })
+                commits.append(
+                    {
+                        "hash": parts[0][:8],
+                        "author": parts[1],
+                        "date": parts[2],
+                        "message": parts[3],
+                    }
+                )
 
         # Identify potentially risky commits
-        risky_keywords = ["fix", "hotfix", "bug", "revert", "urgent", "critical", "breaking"]
+        risky_keywords = [
+            "fix",
+            "hotfix",
+            "bug",
+            "revert",
+            "urgent",
+            "critical",
+            "breaking",
+        ]
         for commit in commits:
             msg_lower = commit["message"].lower()
-            commit["risk_indicators"] = [
-                kw for kw in risky_keywords if kw in msg_lower
-            ]
+            commit["risk_indicators"] = [kw for kw in risky_keywords if kw in msg_lower]
 
-        return json.dumps({
-            "incident_time": incident_time,
-            "search_window": f"{hours_before} hours before",
-            "commit_count": len(commits),
-            "commits": commits,
-            "recommendation": "Review commits with risk indicators first" if any(c["risk_indicators"] for c in commits) else None,
-        }, indent=2)
+        return json.dumps(
+            {
+                "incident_time": incident_time,
+                "search_window": f"{hours_before} hours before",
+                "commit_count": len(commits),
+                "commits": commits,
+                "recommendation": (
+                    "Review commits with risk indicators first"
+                    if any(c["risk_indicators"] for c in commits)
+                    else None
+                ),
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def git_blame(
@@ -294,6 +317,7 @@ def register_tools(mcp: FastMCP):
                 current["author"] = line[7:]
             elif line.startswith("author-time "):
                 from datetime import datetime
+
                 ts = int(line[12:])
                 current["date"] = datetime.fromtimestamp(ts).isoformat()
             elif line.startswith("summary "):
@@ -301,12 +325,15 @@ def register_tools(mcp: FastMCP):
             elif len(line) == 40:  # Commit hash
                 current["hash"] = line[:8]
 
-        return json.dumps({
-            "file": file_path,
-            "line_count": len(lines),
-            "lines": lines[:100],  # Limit output
-            "truncated": len(lines) > 100,
-        }, indent=2)
+        return json.dumps(
+            {
+                "file": file_path,
+                "line_count": len(lines),
+                "lines": lines[:100],  # Limit output
+                "truncated": len(lines) > 100,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def git_recent_changes(hours: int = 24, path: str | None = None) -> str:
@@ -344,12 +371,14 @@ def register_tools(mcp: FastMCP):
         # Sort by change count
         sorted_files = sorted(file_counts.items(), key=lambda x: x[1], reverse=True)
 
-        return json.dumps({
-            "hours": hours,
-            "path_filter": path,
-            "files_changed": len(sorted_files),
-            "most_changed": [
-                {"file": f, "changes": c}
-                for f, c in sorted_files[:20]
-            ],
-        }, indent=2)
+        return json.dumps(
+            {
+                "hours": hours,
+                "path_filter": path,
+                "files_changed": len(sorted_files),
+                "most_changed": [
+                    {"file": f, "changes": c} for f, c in sorted_files[:20]
+                ],
+            },
+            indent=2,
+        )

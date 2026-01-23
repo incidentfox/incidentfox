@@ -45,18 +45,23 @@ def _has_aws_credentials() -> bool:
         return True
     # Check for default credentials file
     from pathlib import Path
+
     if (Path.home() / ".aws" / "credentials").exists():
         return True
     return False
 
 
-def _search_datadog(query: str, service: str | None, hours_ago: int, limit: int) -> dict:
+def _search_datadog(
+    query: str, service: str | None, hours_ago: int, limit: int
+) -> dict:
     """Search Datadog logs."""
     try:
         from datadog_api_client import ApiClient, Configuration
         from datadog_api_client.v2.api.logs_api import LogsApi
         from datadog_api_client.v2.model.logs_list_request import LogsListRequest
-        from datadog_api_client.v2.model.logs_list_request_page import LogsListRequestPage
+        from datadog_api_client.v2.model.logs_list_request_page import (
+            LogsListRequestPage,
+        )
         from datadog_api_client.v2.model.logs_query_filter import LogsQueryFilter
         from datadog_api_client.v2.model.logs_sort import LogsSort
 
@@ -89,12 +94,14 @@ def _search_datadog(query: str, service: str | None, hours_ago: int, limit: int)
         logs = []
         for log in response.data or []:
             attrs = log.attributes
-            logs.append({
-                "timestamp": str(attrs.timestamp) if attrs.timestamp else None,
-                "service": attrs.service,
-                "status": attrs.status,
-                "message": attrs.message,
-            })
+            logs.append(
+                {
+                    "timestamp": str(attrs.timestamp) if attrs.timestamp else None,
+                    "service": attrs.service,
+                    "status": attrs.status,
+                    "message": attrs.message,
+                }
+            )
 
         return {
             "backend": "datadog",
@@ -107,14 +114,19 @@ def _search_datadog(query: str, service: str | None, hours_ago: int, limit: int)
         return {"backend": "datadog", "error": str(e)}
 
 
-def _search_cloudwatch(query: str, service: str | None, hours_ago: int, limit: int) -> dict:
+def _search_cloudwatch(
+    query: str, service: str | None, hours_ago: int, limit: int
+) -> dict:
     """Search CloudWatch logs using Logs Insights."""
     try:
         import time
+
         import boto3
 
         session = boto3.Session(
-            region_name=os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
+            region_name=os.getenv(
+                "AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+            )
         )
         logs_client = session.client("logs")
 
@@ -182,7 +194,9 @@ def _search_cloudwatch(query: str, service: str | None, hours_ago: int, limit: i
         return {"backend": "cloudwatch", "error": str(e)}
 
 
-def _search_elasticsearch(query: str, service: str | None, hours_ago: int, limit: int) -> dict:
+def _search_elasticsearch(
+    query: str, service: str | None, hours_ago: int, limit: int
+) -> dict:
     """Search Elasticsearch logs."""
     try:
         import httpx
@@ -233,12 +247,14 @@ def _search_elasticsearch(query: str, service: str | None, hours_ago: int, limit
         logs = []
         for hit in data.get("hits", {}).get("hits", []):
             source = hit.get("_source", {})
-            logs.append({
-                "timestamp": source.get("@timestamp"),
-                "message": source.get("message"),
-                "service": source.get("service"),
-                "level": source.get("level"),
-            })
+            logs.append(
+                {
+                    "timestamp": source.get("@timestamp"),
+                    "message": source.get("message"),
+                    "service": source.get("service"),
+                    "level": source.get("level"),
+                }
+            )
 
         return {
             "backend": "elasticsearch",
@@ -288,11 +304,13 @@ def _search_loki(query: str, service: str | None, hours_ago: int, limit: int) ->
         for stream in data.get("data", {}).get("result", []):
             labels = stream.get("stream", {})
             for value in stream.get("values", []):
-                logs.append({
-                    "timestamp": value[0],
-                    "message": value[1],
-                    "labels": labels,
-                })
+                logs.append(
+                    {
+                        "timestamp": value[0],
+                        "message": value[1],
+                        "labels": labels,
+                    }
+                )
 
         return {
             "backend": "loki",
@@ -333,10 +351,12 @@ def _search_local(query: str, service: str | None, hours_ago: int, limit: int) -
                 with open(file) as f:
                     for line in f:
                         if pattern.search(line):
-                            logs.append({
-                                "file": str(file),
-                                "message": line.strip(),
-                            })
+                            logs.append(
+                                {
+                                    "file": str(file),
+                                    "message": line.strip(),
+                                }
+                            )
                             if len(logs) >= limit:
                                 break
             except Exception:
@@ -386,17 +406,19 @@ def register_tools(mcp: FastMCP):
         detected = _detect_backends()
 
         if not detected:
-            return json.dumps({
-                "error": "No log backends configured",
-                "hint": "Set environment variables for at least one backend:",
-                "backends": {
-                    "datadog": "DATADOG_API_KEY, DATADOG_APP_KEY",
-                    "cloudwatch": "AWS credentials + CLOUDWATCH_LOG_GROUP",
-                    "elasticsearch": "ELASTICSEARCH_URL or ES_URL",
-                    "loki": "LOKI_URL",
-                    "local": "LOG_PATH or LOG_FILE",
-                },
-            })
+            return json.dumps(
+                {
+                    "error": "No log backends configured",
+                    "hint": "Set environment variables for at least one backend:",
+                    "backends": {
+                        "datadog": "DATADOG_API_KEY, DATADOG_APP_KEY",
+                        "cloudwatch": "AWS credentials + CLOUDWATCH_LOG_GROUP",
+                        "elasticsearch": "ELASTICSEARCH_URL or ES_URL",
+                        "loki": "LOKI_URL",
+                        "local": "LOG_PATH or LOG_FILE",
+                    },
+                }
+            )
 
         # Filter backends if specified
         if backends:
@@ -426,15 +448,18 @@ def register_tools(mcp: FastMCP):
         errors = [r for r in results if "error" in r]
         successful = [r for r in results if "error" not in r]
 
-        return json.dumps({
-            "query": query,
-            "service": service,
-            "time_range": f"last {hours_ago} hour(s)",
-            "backends_queried": detected,
-            "total_logs_found": total_logs,
-            "results": successful,
-            "errors": errors if errors else None,
-        }, indent=2)
+        return json.dumps(
+            {
+                "query": query,
+                "service": service,
+                "time_range": f"last {hours_ago} hour(s)",
+                "backends_queried": detected,
+                "total_logs_found": total_logs,
+                "results": successful,
+                "errors": errors if errors else None,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def get_log_backends() -> str:
@@ -467,7 +492,10 @@ def register_tools(mcp: FastMCP):
             },
         }
 
-        return json.dumps({
-            "configured_backends": detected,
-            "all_backends": all_backends,
-        }, indent=2)
+        return json.dumps(
+            {
+                "configured_backends": detected,
+                "all_backends": all_backends,
+            },
+            indent=2,
+        )

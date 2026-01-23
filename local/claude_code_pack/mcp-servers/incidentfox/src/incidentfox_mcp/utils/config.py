@@ -29,7 +29,9 @@ class KubernetesConfig:
     @classmethod
     def from_env(cls) -> "KubernetesConfig":
         return cls(
-            kubeconfig_path=os.getenv("KUBECONFIG", str(Path.home() / ".kube" / "config")),
+            kubeconfig_path=os.getenv(
+                "KUBECONFIG", str(Path.home() / ".kube" / "config")
+            ),
             context=os.getenv("K8S_CONTEXT"),
         )
 
@@ -42,7 +44,9 @@ class KubernetesConfig:
             return
         if in_cluster.exists():
             return
-        raise ConfigError("kubernetes", ["KUBECONFIG (file not found, not running in-cluster)"])
+        raise ConfigError(
+            "kubernetes", ["KUBECONFIG (file not found, not running in-cluster)"]
+        )
 
 
 @dataclass
@@ -54,7 +58,9 @@ class AWSConfig:
     @classmethod
     def from_env(cls) -> "AWSConfig":
         return cls(
-            region=os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")),
+            region=os.getenv(
+                "AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+            ),
         )
 
 

@@ -34,7 +34,9 @@ def _get_aws_session(region: str | None = None):
     - IAM instance profile (for EC2)
     - IAM task role (for ECS/Fargate)
     """
-    region = region or os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
+    region = region or os.getenv(
+        "AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+    )
 
     try:
         session = boto3.Session(region_name=region)
@@ -82,9 +84,7 @@ def register_tools(mcp: FastMCP):
                 "private_ip": instance.get("PrivateIpAddress"),
                 "public_ip": instance.get("PublicIpAddress"),
                 "launch_time": str(instance["LaunchTime"]),
-                "tags": {
-                    tag["Key"]: tag["Value"] for tag in instance.get("Tags", [])
-                },
+                "tags": {tag["Key"]: tag["Value"] for tag in instance.get("Tags", [])},
             }
             return json.dumps(result, indent=2)
 
@@ -193,7 +193,9 @@ def register_tools(mcp: FastMCP):
             logs = session.client("logs")
 
             end_time = int(datetime.utcnow().timestamp())
-            start_time = int((datetime.utcnow() - timedelta(hours=hours_ago)).timestamp())
+            start_time = int(
+                (datetime.utcnow() - timedelta(hours=hours_ago)).timestamp()
+            )
 
             # Start query
             response = logs.start_query(
@@ -305,7 +307,9 @@ def register_tools(mcp: FastMCP):
         except AWSConfigError as e:
             return json.dumps({"error": str(e), "config_required": True})
         except ClientError as e:
-            return json.dumps({"error": str(e), "namespace": namespace, "metric": metric_name})
+            return json.dumps(
+                {"error": str(e), "namespace": namespace, "metric": metric_name}
+            )
 
     @mcp.tool()
     def list_ecs_tasks(

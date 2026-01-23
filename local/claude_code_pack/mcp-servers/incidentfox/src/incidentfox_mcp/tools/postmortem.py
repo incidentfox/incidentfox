@@ -58,8 +58,7 @@ def register_tools(mcp: FastMCP):
                 cursor = conn.cursor()
 
                 cursor.execute(
-                    "SELECT * FROM investigations WHERE id = ?",
-                    (investigation_id,)
+                    "SELECT * FROM investigations WHERE id = ?", (investigation_id,)
                 )
                 row = cursor.fetchone()
 
@@ -72,22 +71,27 @@ def register_tools(mcp: FastMCP):
                     severity = severity or inv.get("severity", "P2")
 
                     # Get findings for timeline
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         SELECT timestamp, type, title, data
                         FROM findings
                         WHERE investigation_id = ?
                         ORDER BY timestamp
-                    """, (investigation_id,))
+                    """,
+                        (investigation_id,),
+                    )
                     findings = [dict(r) for r in cursor.fetchall()]
 
                     if not timeline and findings:
                         timeline_events = []
                         for f in findings:
-                            timeline_events.append({
-                                "time": f["timestamp"],
-                                "event": f["title"],
-                                "type": f["type"],
-                            })
+                            timeline_events.append(
+                                {
+                                    "time": f["timestamp"],
+                                    "event": f["title"],
+                                    "type": f["type"],
+                                }
+                            )
                         timeline = json.dumps(timeline_events)
 
                 conn.close()
@@ -103,18 +107,21 @@ def register_tools(mcp: FastMCP):
         now = datetime.utcnow().strftime("%Y-%m-%d")
 
         if format == "json":
-            return json.dumps({
-                "title": f"Incident Postmortem: {summary or 'Untitled'}",
-                "date": now,
-                "severity": severity,
-                "service": service,
-                "summary": summary,
-                "impact": impact,
-                "timeline": timeline_events,
-                "root_cause": root_cause,
-                "resolution": resolution,
-                "action_items": [],
-            }, indent=2)
+            return json.dumps(
+                {
+                    "title": f"Incident Postmortem: {summary or 'Untitled'}",
+                    "date": now,
+                    "severity": severity,
+                    "service": service,
+                    "summary": summary,
+                    "impact": impact,
+                    "timeline": timeline_events,
+                    "root_cause": root_cause,
+                    "resolution": resolution,
+                    "action_items": [],
+                },
+                indent=2,
+            )
 
         # Generate Markdown
         doc = []
@@ -194,11 +201,14 @@ def register_tools(mcp: FastMCP):
         Returns:
             JSON event object to add to timeline.
         """
-        return json.dumps({
-            "time": time,
-            "event": event,
-            "type": event_type,
-        }, indent=2)
+        return json.dumps(
+            {
+                "time": time,
+                "event": event,
+                "type": event_type,
+            },
+            indent=2,
+        )
 
     @mcp.tool()
     def export_postmortem(
@@ -231,14 +241,19 @@ def register_tools(mcp: FastMCP):
             with open(output_path, "w") as f:
                 f.write(postmortem)
 
-            return json.dumps({
-                "status": "success",
-                "file": output_path,
-                "investigation_id": investigation_id,
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "success",
+                    "file": output_path,
+                    "investigation_id": investigation_id,
+                },
+                indent=2,
+            )
 
         except Exception as e:
-            return json.dumps({
-                "error": f"Failed to write file: {e}",
-                "path": output_path,
-            })
+            return json.dumps(
+                {
+                    "error": f"Failed to write file: {e}",
+                    "path": output_path,
+                }
+            )

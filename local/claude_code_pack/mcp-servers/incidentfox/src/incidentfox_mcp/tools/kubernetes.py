@@ -13,10 +13,10 @@ Provides tools for investigating Kubernetes clusters:
 import json
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
 from kubernetes import client
 from kubernetes import config as k8s_config
 from kubernetes.client.rest import ApiException
+from mcp.server.fastmcp import FastMCP
 
 
 class K8sConfigError(Exception):
@@ -297,9 +297,7 @@ def register_tools(mcp: FastMCP):
             )
 
     @mcp.tool()
-    def get_deployment_history(
-        deployment_name: str, namespace: str = "default"
-    ) -> str:
+    def get_deployment_history(deployment_name: str, namespace: str = "default") -> str:
         """Get deployment rollout history.
 
         Shows all replica sets with their revisions, useful for rollback decisions.
@@ -391,7 +389,9 @@ def register_tools(mcp: FastMCP):
                             c.resources.requests
                         )
                     if c.resources.limits:
-                        container_info["allocation"]["limits"] = dict(c.resources.limits)
+                        container_info["allocation"]["limits"] = dict(
+                            c.resources.limits
+                        )
 
                 containers_data.append(container_info)
 

@@ -12,10 +12,10 @@ Tools:
 import json
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
 from kubernetes import client
 from kubernetes import config as k8s_config
 from kubernetes.client.rest import ApiException
+from mcp.server.fastmcp import FastMCP
 
 
 class K8sConfigError(Exception):
@@ -122,10 +122,17 @@ def register_tools(mcp: FastMCP):
             )
 
         except K8sConfigError as e:
-            return json.dumps({"error": str(e), "config_required": True, "executed": False})
+            return json.dumps(
+                {"error": str(e), "config_required": True, "executed": False}
+            )
         except ApiException as e:
             return json.dumps(
-                {"error": str(e), "pod": pod_name, "namespace": namespace, "executed": False}
+                {
+                    "error": str(e),
+                    "pod": pod_name,
+                    "namespace": namespace,
+                    "executed": False,
+                }
             )
 
     @mcp.tool()
@@ -216,7 +223,9 @@ def register_tools(mcp: FastMCP):
             )
 
         except K8sConfigError as e:
-            return json.dumps({"error": str(e), "config_required": True, "executed": False})
+            return json.dumps(
+                {"error": str(e), "config_required": True, "executed": False}
+            )
         except ApiException as e:
             return json.dumps(
                 {
@@ -312,7 +321,9 @@ def register_tools(mcp: FastMCP):
             )
 
         except K8sConfigError as e:
-            return json.dumps({"error": str(e), "config_required": True, "executed": False})
+            return json.dumps(
+                {"error": str(e), "config_required": True, "executed": False}
+            )
         except ApiException as e:
             return json.dumps(
                 {

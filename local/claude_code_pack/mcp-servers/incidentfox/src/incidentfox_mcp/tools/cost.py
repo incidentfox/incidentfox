@@ -40,7 +40,9 @@ def register_tools(mcp: FastMCP):
         """
         try:
             session = _get_aws_session()
-            ce = session.client("ce", region_name="us-east-1")  # Cost Explorer is global
+            ce = session.client(
+                "ce", region_name="us-east-1"
+            )  # Cost Explorer is global
 
             end = datetime.utcnow().date()
             start = end - timedelta(days=days)
@@ -72,19 +74,24 @@ def register_tools(mcp: FastMCP):
 
             total = sum(service_costs.values())
 
-            return json.dumps({
-                "period": f"Last {days} days",
-                "total_cost": round(total, 2),
-                "currency": "USD",
-                "top_services": [
-                    {
-                        "service": svc,
-                        "cost": round(cost, 2),
-                        "percentage": round(cost / total * 100, 1) if total > 0 else 0,
-                    }
-                    for svc, cost in sorted_costs[:10]
-                ],
-            }, indent=2)
+            return json.dumps(
+                {
+                    "period": f"Last {days} days",
+                    "total_cost": round(total, 2),
+                    "currency": "USD",
+                    "top_services": [
+                        {
+                            "service": svc,
+                            "cost": round(cost, 2),
+                            "percentage": (
+                                round(cost / total * 100, 1) if total > 0 else 0
+                            ),
+                        }
+                        for svc, cost in sorted_costs[:10]
+                    ],
+                },
+                indent=2,
+            )
 
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -161,22 +168,29 @@ def register_tools(mcp: FastMCP):
                 if baseline_avg > 1:  # Only check services with meaningful baseline
                     change_pct = (recent_avg - baseline_avg) / baseline_avg * 100
                     if change_pct > 50:  # >50% increase
-                        anomalies.append({
-                            "service": service,
-                            "baseline_daily_avg": round(baseline_avg, 2),
-                            "recent_daily_avg": round(recent_avg, 2),
-                            "change_percent": round(change_pct, 1),
-                            "estimated_monthly_impact": round((recent_avg - baseline_avg) * 30, 2),
-                        })
+                        anomalies.append(
+                            {
+                                "service": service,
+                                "baseline_daily_avg": round(baseline_avg, 2),
+                                "recent_daily_avg": round(recent_avg, 2),
+                                "change_percent": round(change_pct, 1),
+                                "estimated_monthly_impact": round(
+                                    (recent_avg - baseline_avg) * 30, 2
+                                ),
+                            }
+                        )
 
             anomalies.sort(key=lambda x: x["change_percent"], reverse=True)
 
-            return json.dumps({
-                "period_analyzed": f"Last {days} days vs previous {baseline_days} days",
-                "anomaly_count": len(anomalies),
-                "anomalies": anomalies,
-                "threshold": "50% increase from baseline",
-            }, indent=2)
+            return json.dumps(
+                {
+                    "period_analyzed": f"Last {days} days vs previous {baseline_days} days",
+                    "anomaly_count": len(anomalies),
+                    "anomalies": anomalies,
+                    "threshold": "50% increase from baseline",
+                },
+                indent=2,
+            )
 
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -207,27 +221,32 @@ def register_tools(mcp: FastMCP):
                 modify = rec.get("ModifyRecommendationDetail", {})
                 target = modify.get("TargetInstances", [{}])[0] if modify else {}
 
-                recommendations.append({
-                    "instance_id": current.get("ResourceId"),
-                    "current_type": current.get("InstanceType"),
-                    "recommended_type": target.get("InstanceType"),
-                    "recommendation": rec.get("RightsizingType"),
-                    "estimated_monthly_savings": float(
-                        target.get("EstimatedMonthlySavings", {}).get("Value", 0)
-                    ),
-                    "cpu_utilization": current.get("ResourceUtilization", {})
+                recommendations.append(
+                    {
+                        "instance_id": current.get("ResourceId"),
+                        "current_type": current.get("InstanceType"),
+                        "recommended_type": target.get("InstanceType"),
+                        "recommendation": rec.get("RightsizingType"),
+                        "estimated_monthly_savings": float(
+                            target.get("EstimatedMonthlySavings", {}).get("Value", 0)
+                        ),
+                        "cpu_utilization": current.get("ResourceUtilization", {})
                         .get("EC2ResourceUtilization", {})
                         .get("MaxCpuUtilizationPercentage"),
-                })
+                    }
+                )
 
             total_savings = sum(r["estimated_monthly_savings"] for r in recommendations)
 
-            return json.dumps({
-                "region": region,
-                "recommendation_count": len(recommendations),
-                "total_monthly_savings": round(total_savings, 2),
-                "recommendations": recommendations[:20],  # Limit output
-            }, indent=2)
+            return json.dumps(
+                {
+                    "region": region,
+                    "recommendation_count": len(recommendations),
+                    "total_monthly_savings": round(total_savings, 2),
+                    "recommendations": recommendations[:20],  # Limit output
+                },
+                indent=2,
+            )
 
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -262,25 +281,38 @@ def register_tools(mcp: FastMCP):
             for result in response.get("ResultsByTime", []):
                 date = result["TimePeriod"]["Start"]
                 cost = float(result["Total"]["UnblendedCost"]["Amount"])
-                daily_costs.append({
-                    "date": date,
-                    "cost": round(cost, 2),
-                })
+                daily_costs.append(
+                    {
+                        "date": date,
+                        "cost": round(cost, 2),
+                    }
+                )
 
             # Calculate trend
             if len(daily_costs) >= 2:
-                first_half = sum(d["cost"] for d in daily_costs[:len(daily_costs)//2])
-                second_half = sum(d["cost"] for d in daily_costs[len(daily_costs)//2:])
+                first_half = sum(
+                    d["cost"] for d in daily_costs[: len(daily_costs) // 2]
+                )
+                second_half = sum(
+                    d["cost"] for d in daily_costs[len(daily_costs) // 2 :]
+                )
                 trend = "increasing" if second_half > first_half else "decreasing"
             else:
                 trend = "insufficient data"
 
-            return json.dumps({
-                "period": f"Last {days} days",
-                "trend": trend,
-                "daily_costs": daily_costs,
-                "average_daily": round(sum(d["cost"] for d in daily_costs) / len(daily_costs), 2) if daily_costs else 0,
-            }, indent=2)
+            return json.dumps(
+                {
+                    "period": f"Last {days} days",
+                    "trend": trend,
+                    "daily_costs": daily_costs,
+                    "average_daily": (
+                        round(sum(d["cost"] for d in daily_costs) / len(daily_costs), 2)
+                        if daily_costs
+                        else 0
+                    ),
+                },
+                indent=2,
+            )
 
         except Exception as e:
             return json.dumps({"error": str(e)})

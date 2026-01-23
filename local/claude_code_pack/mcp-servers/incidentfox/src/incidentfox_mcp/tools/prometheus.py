@@ -49,10 +49,12 @@ def register_tools(mcp: FastMCP):
         """
         prom_url = _get_prometheus_url()
         if not prom_url:
-            return json.dumps({
-                "error": "Prometheus not configured",
-                "hint": "Set PROMETHEUS_URL environment variable",
-            })
+            return json.dumps(
+                {
+                    "error": "Prometheus not configured",
+                    "hint": "Set PROMETHEUS_URL environment variable",
+                }
+            )
 
         try:
             now = datetime.utcnow()
@@ -74,10 +76,12 @@ def register_tools(mcp: FastMCP):
                 data = response.json()
 
             if data.get("status") != "success":
-                return json.dumps({
-                    "error": data.get("error", "Query failed"),
-                    "errorType": data.get("errorType"),
-                })
+                return json.dumps(
+                    {
+                        "error": data.get("error", "Query failed"),
+                        "errorType": data.get("errorType"),
+                    }
+                )
 
             result_type = data.get("data", {}).get("resultType")
             results = data.get("data", {}).get("result", [])
@@ -91,21 +95,32 @@ def register_tools(mcp: FastMCP):
                 # Get latest value for summary
                 latest = values[-1] if values else None
 
-                formatted.append({
-                    "metric": metric,
-                    "latest_value": float(latest[1]) if latest else None,
-                    "latest_time": datetime.fromtimestamp(float(latest[0])).isoformat() if latest else None,
-                    "sample_count": len(values),
-                    "values": values[-10:] if len(values) > 10 else values,  # Last 10 for context
-                })
+                formatted.append(
+                    {
+                        "metric": metric,
+                        "latest_value": float(latest[1]) if latest else None,
+                        "latest_time": (
+                            datetime.fromtimestamp(float(latest[0])).isoformat()
+                            if latest
+                            else None
+                        ),
+                        "sample_count": len(values),
+                        "values": (
+                            values[-10:] if len(values) > 10 else values
+                        ),  # Last 10 for context
+                    }
+                )
 
-            return json.dumps({
-                "query": query,
-                "result_type": result_type,
-                "series_count": len(formatted),
-                "time_range": f"last {hours_ago} hour(s)",
-                "results": formatted,
-            }, indent=2)
+            return json.dumps(
+                {
+                    "query": query,
+                    "result_type": result_type,
+                    "series_count": len(formatted),
+                    "time_range": f"last {hours_ago} hour(s)",
+                    "results": formatted,
+                },
+                indent=2,
+            )
 
         except httpx.HTTPError as e:
             return json.dumps({"error": f"HTTP error: {e}"})
@@ -124,10 +139,12 @@ def register_tools(mcp: FastMCP):
         """
         prom_url = _get_prometheus_url()
         if not prom_url:
-            return json.dumps({
-                "error": "Prometheus not configured",
-                "hint": "Set PROMETHEUS_URL environment variable",
-            })
+            return json.dumps(
+                {
+                    "error": "Prometheus not configured",
+                    "hint": "Set PROMETHEUS_URL environment variable",
+                }
+            )
 
         try:
             with httpx.Client(timeout=30.0) as client:
@@ -139,9 +156,11 @@ def register_tools(mcp: FastMCP):
                 data = response.json()
 
             if data.get("status") != "success":
-                return json.dumps({
-                    "error": data.get("error", "Query failed"),
-                })
+                return json.dumps(
+                    {
+                        "error": data.get("error", "Query failed"),
+                    }
+                )
 
             results = data.get("data", {}).get("result", [])
 
@@ -150,17 +169,26 @@ def register_tools(mcp: FastMCP):
                 metric = item.get("metric", {})
                 value = item.get("value", [])
 
-                formatted.append({
-                    "metric": metric,
-                    "value": float(value[1]) if len(value) > 1 else None,
-                    "timestamp": datetime.fromtimestamp(float(value[0])).isoformat() if value else None,
-                })
+                formatted.append(
+                    {
+                        "metric": metric,
+                        "value": float(value[1]) if len(value) > 1 else None,
+                        "timestamp": (
+                            datetime.fromtimestamp(float(value[0])).isoformat()
+                            if value
+                            else None
+                        ),
+                    }
+                )
 
-            return json.dumps({
-                "query": query,
-                "result_count": len(formatted),
-                "results": formatted,
-            }, indent=2)
+            return json.dumps(
+                {
+                    "query": query,
+                    "result_count": len(formatted),
+                    "results": formatted,
+                },
+                indent=2,
+            )
 
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -174,10 +202,12 @@ def register_tools(mcp: FastMCP):
         """
         prom_url = _get_prometheus_url()
         if not prom_url:
-            return json.dumps({
-                "error": "Prometheus not configured",
-                "hint": "Set PROMETHEUS_URL environment variable",
-            })
+            return json.dumps(
+                {
+                    "error": "Prometheus not configured",
+                    "hint": "Set PROMETHEUS_URL environment variable",
+                }
+            )
 
         try:
             with httpx.Client(timeout=30.0) as client:
@@ -196,21 +226,26 @@ def register_tools(mcp: FastMCP):
 
             formatted_alerts = []
             for alert in alerts:
-                formatted_alerts.append({
-                    "name": alert.get("labels", {}).get("alertname"),
-                    "state": alert.get("state"),
-                    "severity": alert.get("labels", {}).get("severity"),
-                    "labels": alert.get("labels"),
-                    "annotations": alert.get("annotations"),
-                    "active_at": alert.get("activeAt"),
-                })
+                formatted_alerts.append(
+                    {
+                        "name": alert.get("labels", {}).get("alertname"),
+                        "state": alert.get("state"),
+                        "severity": alert.get("labels", {}).get("severity"),
+                        "labels": alert.get("labels"),
+                        "annotations": alert.get("annotations"),
+                        "active_at": alert.get("activeAt"),
+                    }
+                )
 
-            return json.dumps({
-                "firing_count": len(firing),
-                "pending_count": len(pending),
-                "total_alerts": len(alerts),
-                "alerts": formatted_alerts,
-            }, indent=2)
+            return json.dumps(
+                {
+                    "firing_count": len(firing),
+                    "pending_count": len(pending),
+                    "total_alerts": len(alerts),
+                    "alerts": formatted_alerts,
+                },
+                indent=2,
+            )
 
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -223,10 +258,12 @@ def register_tools(mcp: FastMCP):
         """
         am_url = _get_alertmanager_url()
         if not am_url:
-            return json.dumps({
-                "error": "Alertmanager not configured",
-                "hint": "Set ALERTMANAGER_URL environment variable",
-            })
+            return json.dumps(
+                {
+                    "error": "Alertmanager not configured",
+                    "hint": "Set ALERTMANAGER_URL environment variable",
+                }
+            )
 
         try:
             with httpx.Client(timeout=30.0) as client:
@@ -236,28 +273,35 @@ def register_tools(mcp: FastMCP):
 
             # Categorize
             active = [a for a in alerts if a.get("status", {}).get("state") == "active"]
-            suppressed = [a for a in alerts if a.get("status", {}).get("state") == "suppressed"]
+            suppressed = [
+                a for a in alerts if a.get("status", {}).get("state") == "suppressed"
+            ]
 
             formatted = []
             for alert in alerts:
-                formatted.append({
-                    "name": alert.get("labels", {}).get("alertname"),
-                    "state": alert.get("status", {}).get("state"),
-                    "severity": alert.get("labels", {}).get("severity"),
-                    "labels": alert.get("labels"),
-                    "annotations": alert.get("annotations"),
-                    "starts_at": alert.get("startsAt"),
-                    "ends_at": alert.get("endsAt"),
-                    "silenced_by": alert.get("status", {}).get("silencedBy"),
-                    "inhibited_by": alert.get("status", {}).get("inhibitedBy"),
-                })
+                formatted.append(
+                    {
+                        "name": alert.get("labels", {}).get("alertname"),
+                        "state": alert.get("status", {}).get("state"),
+                        "severity": alert.get("labels", {}).get("severity"),
+                        "labels": alert.get("labels"),
+                        "annotations": alert.get("annotations"),
+                        "starts_at": alert.get("startsAt"),
+                        "ends_at": alert.get("endsAt"),
+                        "silenced_by": alert.get("status", {}).get("silencedBy"),
+                        "inhibited_by": alert.get("status", {}).get("inhibitedBy"),
+                    }
+                )
 
-            return json.dumps({
-                "active_count": len(active),
-                "suppressed_count": len(suppressed),
-                "total_alerts": len(alerts),
-                "alerts": formatted,
-            }, indent=2)
+            return json.dumps(
+                {
+                    "active_count": len(active),
+                    "suppressed_count": len(suppressed),
+                    "total_alerts": len(alerts),
+                    "alerts": formatted,
+                },
+                indent=2,
+            )
 
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -294,14 +338,18 @@ def register_tools(mcp: FastMCP):
                             labels = alert.get("labels", {})
                             if service and labels.get("service") != service:
                                 continue
-                            results.append({
-                                "source": "prometheus",
-                                "name": labels.get("alertname"),
-                                "severity": labels.get("severity"),
-                                "service": labels.get("service"),
-                                "description": alert.get("annotations", {}).get("description"),
-                                "active_at": alert.get("activeAt"),
-                            })
+                            results.append(
+                                {
+                                    "source": "prometheus",
+                                    "name": labels.get("alertname"),
+                                    "severity": labels.get("severity"),
+                                    "service": labels.get("service"),
+                                    "description": alert.get("annotations", {}).get(
+                                        "description"
+                                    ),
+                                    "active_at": alert.get("activeAt"),
+                                }
+                            )
             except Exception:
                 pass
 
@@ -313,20 +361,28 @@ def register_tools(mcp: FastMCP):
                     response = client.get(f"{am_url}/api/v2/alerts")
                     if response.status_code == 200:
                         alerts = response.json()
-                        active = [a for a in alerts if a.get("status", {}).get("state") == "active"]
+                        active = [
+                            a
+                            for a in alerts
+                            if a.get("status", {}).get("state") == "active"
+                        ]
 
                         for alert in active:
                             labels = alert.get("labels", {})
                             if service and labels.get("service") != service:
                                 continue
-                            results.append({
-                                "source": "alertmanager",
-                                "name": labels.get("alertname"),
-                                "severity": labels.get("severity"),
-                                "service": labels.get("service"),
-                                "description": alert.get("annotations", {}).get("description"),
-                                "starts_at": alert.get("startsAt"),
-                            })
+                            results.append(
+                                {
+                                    "source": "alertmanager",
+                                    "name": labels.get("alertname"),
+                                    "severity": labels.get("severity"),
+                                    "service": labels.get("service"),
+                                    "description": alert.get("annotations", {}).get(
+                                        "description"
+                                    ),
+                                    "starts_at": alert.get("startsAt"),
+                                }
+                            )
             except Exception:
                 pass
 
@@ -351,13 +407,19 @@ def register_tools(mcp: FastMCP):
                             name = monitor.name or ""
                             if service and service.lower() not in name.lower():
                                 continue
-                            results.append({
-                                "source": "datadog",
-                                "name": name,
-                                "severity": "critical" if monitor.overall_state == "Alert" else "warning",
-                                "state": monitor.overall_state,
-                                "type": monitor.type,
-                            })
+                            results.append(
+                                {
+                                    "source": "datadog",
+                                    "name": name,
+                                    "severity": (
+                                        "critical"
+                                        if monitor.overall_state == "Alert"
+                                        else "warning"
+                                    ),
+                                    "state": monitor.overall_state,
+                                    "type": monitor.type,
+                                }
+                            )
             except Exception:
                 pass
 
@@ -365,13 +427,16 @@ def register_tools(mcp: FastMCP):
         severity_order = {"critical": 0, "error": 1, "warning": 2, "info": 3}
         results.sort(key=lambda x: severity_order.get(x.get("severity", "info"), 4))
 
-        return json.dumps({
-            "service_filter": service,
-            "total_alerts": len(results),
-            "alerts": results,
-            "sources_checked": {
-                "prometheus": bool(prom_url),
-                "alertmanager": bool(am_url),
-                "datadog": bool(dd_api_key and dd_app_key),
+        return json.dumps(
+            {
+                "service_filter": service,
+                "total_alerts": len(results),
+                "alerts": results,
+                "sources_checked": {
+                    "prometheus": bool(prom_url),
+                    "alertmanager": bool(am_url),
+                    "datadog": bool(dd_api_key and dd_app_key),
+                },
             },
-        }, indent=2)
+            indent=2,
+        )
