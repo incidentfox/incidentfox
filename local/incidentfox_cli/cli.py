@@ -2713,19 +2713,30 @@ async def run_with_streaming(
             console.print()
             should_retry = await display_config_issues(config_issues, session, client)
             if should_retry:
+                # Build list of configured integrations for the retry hint
+                configured_integrations = [
+                    issue.get("integration", "unknown").upper()
+                    for issue in config_issues
+                ]
+                integrations_str = ", ".join(configured_integrations)
+
                 # Retry with conversation_id to resume from where we left off
+                # Append hint so agent knows config is now available
                 if current_conversation_id:
                     console.print(
                         "\n[dim]Resuming your query with new configuration (previous work preserved)...[/dim]\n"
                     )
+                    retry_message = f"{message}\n\n[{integrations_str} configuration updated. Please retry.]"
                 else:
                     console.print(
                         "\n[dim]Retrying your query with new configuration...[/dim]\n"
                     )
+                    retry_message = message  # No context, just retry as-is
+
                 return await run_with_streaming(
                     client,
                     agent_name,
-                    message,
+                    retry_message,
                     session,
                     previous_response_id=current_conversation_id,
                     local_context=local_context,
