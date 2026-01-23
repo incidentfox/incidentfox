@@ -27,13 +27,15 @@ export interface StreamEvent {
 }
 
 interface UseAgentStreamOptions {
+  /** Agent name to use. If not provided, uses team's configured entrance_agent from config. */
   agentName?: string;
   onComplete?: (output: string) => void;
   onError?: (error: string) => void;
 }
 
 export function useAgentStream(options: UseAgentStreamOptions = {}) {
-  const { agentName = 'investigation_agent', onComplete, onError } = options;
+  // Note: If agentName is undefined, the API route will fetch the team's entrance_agent from config
+  const { agentName, onComplete, onError } = options;
 
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -80,7 +82,8 @@ export function useAgentStream(options: UseAgentStreamOptions = {}) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: userMessage,
-          agent_name: agentName,
+          // Only include agent_name if explicitly provided; otherwise API uses team's entrance_agent
+          ...(agentName && { agent_name: agentName }),
           previous_response_id: lastResponseIdRef.current,
         }),
         signal: abortControllerRef.current.signal,

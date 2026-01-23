@@ -3,6 +3,32 @@ import { NextRequest } from 'next/server';
 export const runtime = 'nodejs';
 
 const AGENT_SERVICE_URL = process.env.AGENT_SERVICE_URL || process.env.ORCHESTRATOR_URL || 'http://localhost:8081';
+const CONFIG_SERVICE_URL = process.env.CONFIG_SERVICE_URL || 'http://localhost:8080';
+
+/**
+ * Fetch the team's entrance_agent from config service.
+ * Falls back to 'planner' if config fetch fails.
+ */
+async function getEntranceAgent(token: string): Promise<string> {
+  try {
+    const res = await fetch(`${CONFIG_SERVICE_URL}/api/v1/config/me`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      cache: 'no-store',
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      // v2 API returns {effective_config: {...}}, extract if present
+      const config = data.effective_config || data;
+      return config.entrance_agent || 'planner';
+    }
+  } catch (e) {
+    // Silently fall back to default
+  }
+  return 'planner';
+}
 
 export async function POST(request: NextRequest) {
   const token = request.cookies.get('incidentfox_session_token')?.value;
@@ -16,7 +42,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { message, agent_name = 'investigation_agent', previous_response_id, max_turns = 20, timeout = 300 } = body;
+
+    // Get entrance_agent from team config if agent_name not explicitly provided
+    const defaultAgent = body.agent_name ? body.agent_name : await getEntranceAgent(token);
+    const { message, previous_response_id, max_turns = 20, timeout = 300 } = body;
+    const agent_name = defaultAgent;
 
     if (!message) {
       return new Response(JSON.stringify({ error: 'Missing message' }), {
