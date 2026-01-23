@@ -350,7 +350,9 @@ def register_tools(mcp: FastMCP):
             elif final_forecast < data[-1] * 0.5:
                 warning = f"Warning: {metric_name} is projected to drop significantly. Verify this is expected."
             elif final_forecast < 0:
-                warning = "Warning: Forecast shows negative values which may be unrealistic."
+                warning = (
+                    "Warning: Forecast shows negative values which may be unrealistic."
+                )
 
             return json.dumps(
                 {
@@ -448,7 +450,9 @@ def register_tools(mcp: FastMCP):
             elif p95_vs_p50 > 2:
                 slo_insight = f"p95 is {p95_vs_p50:.1f}x higher than p50, showing significant variance. The long tail may impact user experience."
             else:
-                slo_insight = f"Distribution is relatively tight. p95={p95:.2f}, p99={p99:.2f}."
+                slo_insight = (
+                    f"Distribution is relatively tight. p95={p95:.2f}, p99={p99:.2f}."
+                )
 
             return json.dumps(
                 {
@@ -536,9 +540,7 @@ def register_tools(mcp: FastMCP):
                 )
 
             if len(values_list) < 10:
-                return json.dumps(
-                    {"error": "Need at least 10 data points for Prophet"}
-                )
+                return json.dumps({"error": "Need at least 10 data points for Prophet"})
 
             # Create DataFrame for Prophet (requires 'ds' and 'y' columns)
             df = pd.DataFrame(
@@ -629,7 +631,9 @@ def register_tools(mcp: FastMCP):
 
             if abs(trend_change_pct) > 5:
                 direction = "increasing" if trend_change_pct > 0 else "decreasing"
-                insight += f" Overall trend is {direction} by {abs(trend_change_pct):.1f}%."
+                insight += (
+                    f" Overall trend is {direction} by {abs(trend_change_pct):.1f}%."
+                )
 
             return json.dumps(
                 {
@@ -837,9 +841,7 @@ def register_tools(mcp: FastMCP):
         """
         if not _is_prophet_available():
             return json.dumps(
-                {
-                    "error": "Prophet not installed. Install with: pip install prophet"
-                }
+                {"error": "Prophet not installed. Install with: pip install prophet"}
             )
 
         try:
@@ -917,9 +919,7 @@ def register_tools(mcp: FastMCP):
             )
 
             # Variance decomposition (approximate)
-            total_var = (
-                statistics.variance(values_list) if len(values_list) > 1 else 1
-            )
+            total_var = statistics.variance(values_list) if len(values_list) > 1 else 1
             residual_var = statistics.variance(residuals) if len(residuals) > 1 else 0
             explained_var = 1 - (residual_var / total_var) if total_var > 0 else 0
 
