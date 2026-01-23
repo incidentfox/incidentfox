@@ -1,6 +1,6 @@
 # IncidentFox - SRE Tools for Claude Code
 
-You have access to **85+ SRE investigation tools** via the IncidentFox MCP server. These tools help with:
+You have access to **~100 DevOps & SRE tools** via the IncidentFox MCP server. These tools help with:
 
 - **Kubernetes** - Pods, deployments, logs, events, resources
 - **AWS** - EC2, CloudWatch, ECS, cost analysis
@@ -15,7 +15,6 @@ Explore your infrastructure (try whichever applies):
 ```
 Check my Kubernetes cluster health
 Show my Grafana dashboards
-What integrations are configured?
 ```
 
 ## Real Work
@@ -25,9 +24,8 @@ Use these tools for actual tasks:
 | Use Case | Example |
 |----------|---------|
 | **Alert Triage** | "Help me triage this alert: [paste]" |
-| **Cost Optimization** | "Find AWS cost reduction opportunities" |
-| **CI/CD Debugging** | "Why did my GitHub Actions workflow fail?" |
-| **Incident Investigation** | "Investigate high latency in payments" |
+| **Cost Optimization** | "Find AWS costs over the last month and explore reduction opportunities" |
+| **CI/CD Debugging** | "Why did my GitHub Actions workflow fail? [paste url]" |
 | **Log Analysis** | "Search logs for connection errors" |
 
 ## Configuration

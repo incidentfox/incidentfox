@@ -4,7 +4,7 @@ AI-powered SRE tools for your terminal.
 
 ## Claude Code Plugin
 
-**85+ DevOps & SRE tools for Claude Code.** Query your infrastructure, investigate incidents, analyze costs, and debug CI/CD — all from your terminal.
+**Claude Code plugin with ~100 DevOps & SRE tools, skills, and commands** to investigate incidents, analyze costs, and debug CI/CD — all from your terminal.
 
 ### Quick Start
 
@@ -18,14 +18,13 @@ claude
 ```
 > Check my Kubernetes cluster health
 > Show my Grafana dashboards
-> What integrations are configured?
 ```
 
 **Real work** — use these tools for actual tasks:
 ```
 > Help me triage this alert: [paste alert]
-> Find AWS cost reduction opportunities
-> Why did my GitHub Actions workflow fail?
+> Find AWS costs over the last month and explore reduction opportunities
+> Why did my GitHub Actions workflow fail? [paste url]
 ```
 
 ### What You Get
