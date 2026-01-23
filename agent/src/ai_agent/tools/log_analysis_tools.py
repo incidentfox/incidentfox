@@ -533,7 +533,22 @@ class CoralogixBackend(LogBackend):
                     try:
                         obj = json.loads(line)
                         if "result" in obj and "results" in obj["result"]:
-                            results.extend(obj["result"]["results"])
+                            for item in obj["result"]["results"]:
+                                # Parse userData JSON string if present
+                                if "userData" in item:
+                                    try:
+                                        user_data = json.loads(item["userData"])
+                                        # Merge labels into user_data for easier access
+                                        for label in item.get("labels", []):
+                                            user_data[label["key"]] = label["value"]
+                                        # Merge metadata into user_data
+                                        for meta in item.get("metadata", []):
+                                            user_data[meta["key"]] = meta["value"]
+                                        results.append(user_data)
+                                    except json.JSONDecodeError:
+                                        results.append(item)
+                                else:
+                                    results.append(item)
                     except json.JSONDecodeError:
                         continue
 
@@ -550,6 +565,8 @@ class CoralogixBackend(LogBackend):
 
         results = self._query(query, start_time, end_time, limit=20)
 
+        # Coralogix returns severity as strings like "Info", "Error", "Warning", "Critical"
+        # or as numeric strings "1"-"6" depending on configuration
         severity_map = {
             "1": "DEBUG",
             "2": "VERBOSE",
@@ -558,16 +575,19 @@ class CoralogixBackend(LogBackend):
             "5": "ERROR",
             "6": "CRITICAL",
         }
+        error_severities = {"5", "6", "Error", "Critical", "ERROR", "CRITICAL"}
         severity_dist = {}
         total_count = 0
         error_count = 0
 
         for r in results:
-            sev = r.get("severity", "")
-            cnt = r.get("cnt", 0)
-            severity_dist[severity_map.get(sev, sev)] = cnt
+            sev = str(r.get("severity", ""))
+            cnt = int(r.get("cnt", 0))
+            # Normalize severity name
+            display_sev = severity_map.get(sev, sev)
+            severity_dist[display_sev] = cnt
             total_count += cnt
-            if sev in ["5", "6"]:
+            if sev in error_severities:
                 error_count += cnt
 
         # Get top patterns
