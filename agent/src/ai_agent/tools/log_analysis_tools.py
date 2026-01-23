@@ -483,12 +483,29 @@ class CoralogixBackend(LogBackend):
         if context:
             config = context.get_integration_config("coralogix")
             if config and config.get("api_key"):
+                api_key = config.get("api_key", "")
+                region = config.get("region", "cx498")
+                logger.info(
+                    "coralogix_config_loaded",
+                    source="execution_context",
+                    region=region,
+                    api_key_prefix=api_key[:10] + "..." if api_key else "None",
+                    api_key_length=len(api_key),
+                )
                 return config
 
         if os.getenv("CORALOGIX_API_KEY"):
+            api_key = os.getenv("CORALOGIX_API_KEY")
+            region = os.getenv("CORALOGIX_REGION", "cx498")
+            logger.info(
+                "coralogix_config_loaded",
+                source="environment",
+                region=region,
+                api_key_prefix=api_key[:10] + "..." if api_key else "None",
+            )
             return {
-                "api_key": os.getenv("CORALOGIX_API_KEY"),
-                "region": os.getenv("CORALOGIX_REGION", "cx498"),
+                "api_key": api_key,
+                "region": region,
             }
 
         raise IntegrationNotConfiguredError(
@@ -524,9 +541,36 @@ class CoralogixBackend(LogBackend):
             "limit": limit,
         }
 
+        logger.info(
+            "coralogix_query_request",
+            url=url,
+            region=region,
+            query=query[:200],
+            api_key_prefix=api_key[:15] + "..." if api_key else "None",
+            start_time=payload["metadata"]["startDate"],
+            end_time=payload["metadata"]["endDate"],
+        )
+
         with httpx.Client(timeout=30.0) as client:
             response = client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
+            logger.info(
+                "coralogix_query_response",
+                status_code=response.status_code,
+                response_length=len(response.text),
+            )
+            if response.status_code >= 400:
+                error_detail = response.text[:1000] if response.text else "No details"
+                logger.error(
+                    "coralogix_query_failed",
+                    status_code=response.status_code,
+                    region=region,
+                    api_key_prefix=api_key[:15] + "...",
+                    error_detail=error_detail,
+                    query=query,
+                )
+                raise Exception(
+                    f"Coralogix API error {response.status_code} (region={region}, key={api_key[:15]}...): {error_detail}"
+                )
 
             results = []
             for line in response.text.strip().split("\n"):
