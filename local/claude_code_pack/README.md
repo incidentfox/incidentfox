@@ -6,12 +6,13 @@ A comprehensive SRE investigation toolkit for Claude Code. Bring production obse
 
 - **50+ Investigation Tools**: Kubernetes, AWS, Datadog, Prometheus, Docker, and more
 - **Service Catalog**: Personalize investigations with `.incidentfox.yaml`
+- **Self-Learning Catalog**: Automatically discovers services and patterns during investigations
 - **Unified Log Search**: Query across Datadog, CloudWatch, Elasticsearch, Loki
 - **Investigation History**: SQLite-based tracking with pattern learning
 - **Postmortem Generation**: Structured incident reports
 - **Blast Radius Analysis**: Understand service dependencies
 - **Cost Analysis**: AWS spending anomalies and rightsizing
-- **5 Expert Skills**: Investigation methodology, K8s debugging, AWS troubleshooting
+- **7 Expert Skills**: Investigation methodology, K8s debugging, AWS troubleshooting, catalog management
 - **3 Commands**: `/incident`, `/metrics`, `/remediate`
 - **Dry-Run Mode**: Preview remediation actions before executing
 
@@ -188,14 +189,50 @@ Prometheus: ✗ not configured (missing PROMETHEUS_URL)
 
 ## Service Catalog (.incidentfox.yaml)
 
-Create a `.incidentfox.yaml` in your project root to personalize investigations:
+Create a `.incidentfox.yaml` in your project root to personalize investigations.
+
+### Quick Start
+
+Run `/init-catalog` to automatically scan your Kubernetes cluster and generate an initial catalog.
+
+### Full Example
 
 ```yaml
 services:
   payment-api:
+    # === Basic Info ===
+    description: "Processes all credit card transactions via Stripe"
+    team: payments
+    criticality: P1  # P1 (critical) / P2 (high) / P3 (medium) / P4 (low)
+
+    # === Infrastructure ===
     namespace: production
     deployments: [payment-api, payment-worker]
     dependencies: [postgres, redis, stripe-api]
+
+    # === Classification ===
+    data_sensitivity: high  # none/low/medium/high (PII, PCI, etc.)
+    sla: "99.99%"
+
+    # === Deployment ===
+    deployment:
+      method: argocd  # argocd, helm, kubectl, ecs, etc.
+      repo: "github.com/company/infra/apps/payment-api"
+      rollback: "argocd app rollback payment-api"
+
+    # === Architecture ===
+    architecture:
+      type: stateless  # stateless, stateful, event-driven
+      patterns: [circuit-breaker, retry]
+      external_apis: [stripe, sendgrid]
+
+    # === Operational Notes ===
+    notes: |
+      - PCI compliant - never dump raw request logs
+      - Peak load: 10am-2pm EST
+      - Circuit breaker to inventory-service opens after 5 failures
+
+    # === Observability ===
     logs:
       datadog: "service:payment-api"
       cloudwatch: "/aws/eks/payment-api"
@@ -220,6 +257,15 @@ known_issues:
     solution: "Scale redis replicas or increase pool size"
     services: [payment-api, cart-service]
 ```
+
+### Self-Learning Catalog
+
+As you investigate incidents, Claude automatically discovers:
+- **Services**: New services found in your cluster
+- **Dependencies**: Relationships inferred from logs and traces
+- **Known Issues**: Patterns that keep recurring
+
+Run `/sync-catalog` to review and approve discoveries before adding them to your catalog.
 
 ## Tools Reference
 
@@ -316,6 +362,15 @@ known_issues:
 | `record_pattern` | Record a known issue pattern |
 | `get_statistics` | Get investigation statistics |
 
+### Discovery & Self-Learning (5 tools)
+| Tool | Description |
+|------|-------------|
+| `record_discovered_service` | Record a service found during investigation |
+| `record_discovered_dependency` | Record a service dependency with evidence |
+| `suggest_known_issue` | Suggest an error pattern for the catalog |
+| `get_pending_discoveries` | List discoveries awaiting sync |
+| `mark_discoveries_synced` | Mark discoveries as synced to catalog |
+
 ### Postmortem (3 tools)
 | Tool | Description |
 |------|-------------|
@@ -364,6 +419,8 @@ All remediation tools support `dry_run=True` to preview without executing.
 | `aws-troubleshoot` | AWS service troubleshooting patterns | "EC2", "Lambda", "CloudWatch" |
 | `log-analysis` | Partition-first log analysis methodology | "logs", "errors", "search" |
 | `sre-principles` | Evidence-based reasoning and communication | Always active during investigations |
+| `init-catalog` | Bootstrap service catalog from Kubernetes | `/init-catalog` |
+| `sync-catalog` | Review and approve discovered infrastructure | `/sync-catalog` |
 
 ## Example Usage
 
@@ -456,26 +513,35 @@ claude_code_pack/
 │   ├── k8s-debug/               # K8s patterns
 │   ├── aws-troubleshoot/        # AWS patterns
 │   ├── log-analysis/            # Partition-first logs
-│   └── sre-principles/          # Evidence-based reasoning
+│   ├── sre-principles/          # Evidence-based reasoning
+│   ├── init-catalog/            # Bootstrap service catalog
+│   └── sync-catalog/            # Sync discovered infrastructure
 ├── commands/                     # Slash commands
 ├── hooks/                        # Remediation safety
 └── mcp-servers/incidentfox/     # Python MCP server (50+ tools)
     └── src/incidentfox_mcp/
         ├── server.py            # FastMCP entry point
         ├── tools/               # Tool implementations
+        │   └── history.py       # Investigation + discovery storage
         └── resources/           # Service catalog, runbooks
 ```
 
 ## Data Storage
 
-Investigation history is stored locally:
+Investigation history and discoveries are stored locally:
 ```
 ~/.incidentfox/
-├── history.db          # SQLite: investigations, findings, patterns
+├── history.db          # SQLite database containing:
+│                       #   - investigations, findings, patterns
+│                       #   - discovered_services (pending sync)
+│                       #   - discovered_dependencies (pending sync)
+│                       #   - suggested_known_issues (pending sync)
 ├── config.yaml         # User preferences (optional)
 └── logs/
     └── remediation.log # Audit log for remediation actions
 ```
+
+The discovery tables enable self-learning: as you investigate incidents, Claude records what it learns. Run `/sync-catalog` to review and approve discoveries before adding them to `.incidentfox.yaml`.
 
 ## Security
 

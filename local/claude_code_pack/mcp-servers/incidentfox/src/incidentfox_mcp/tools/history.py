@@ -1,7 +1,12 @@
-"""Investigation History.
+"""Investigation History and Discovery Storage.
 
-Local SQLite-based storage for investigation history.
-Enables "what did I investigate last week?" and pattern learning.
+Local SQLite-based storage for:
+- Investigation history ("what did I investigate last week?")
+- Pattern learning (known issues)
+- Infrastructure discovery (services, dependencies found during investigations)
+
+The discovery tables enable Claude to learn about your infrastructure over time
+and suggest updates to .incidentfox.yaml via the /sync-catalog command.
 """
 
 import json
@@ -64,6 +69,52 @@ def _init_db():
             occurrence_count INTEGER DEFAULT 1,
             last_seen TEXT,
             created_at TEXT NOT NULL
+        )
+    """)
+
+    # === Discovery Tables (for self-learning) ===
+
+    # Discovered services - services found during investigations
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS discovered_services (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            namespace TEXT,
+            deployments TEXT,
+            description TEXT,
+            team TEXT,
+            discovered_at TEXT NOT NULL,
+            source_tool TEXT,
+            synced_at TEXT
+        )
+    """)
+
+    # Discovered dependencies - service relationships inferred from investigations
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS discovered_dependencies (
+            id TEXT PRIMARY KEY,
+            from_service TEXT NOT NULL,
+            to_service TEXT NOT NULL,
+            evidence TEXT,
+            confidence REAL DEFAULT 0.5,
+            discovered_at TEXT NOT NULL,
+            synced_at TEXT,
+            UNIQUE(from_service, to_service)
+        )
+    """)
+
+    # Suggested known issues - patterns that could be added to .incidentfox.yaml
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS suggested_known_issues (
+            id TEXT PRIMARY KEY,
+            pattern TEXT NOT NULL UNIQUE,
+            cause TEXT,
+            solution TEXT,
+            services TEXT,
+            occurrences INTEGER DEFAULT 1,
+            investigation_ids TEXT,
+            discovered_at TEXT NOT NULL,
+            synced_at TEXT
         )
     """)
 
@@ -582,6 +633,428 @@ def register_tools(mcp: FastMCP):
                 "top_services": top_services,
                 "known_patterns": patterns,
                 "recent_investigations": recent,
+            },
+            indent=2,
+        )
+
+    # ==========================================================================
+    # Discovery Tools - For self-learning infrastructure catalog
+    # ==========================================================================
+
+    @mcp.tool()
+    def record_discovered_service(
+        name: str,
+        namespace: str | None = None,
+        deployments: str | None = None,
+        description: str | None = None,
+        team: str | None = None,
+        source_tool: str | None = None,
+    ) -> str:
+        """Record a discovered service for later sync to .incidentfox.yaml.
+
+        Call this when you discover a service during investigation that isn't
+        in the service catalog. The user can later review and approve discoveries
+        using the /sync-catalog command.
+
+        Args:
+            name: Service name (e.g., "payment-api")
+            namespace: Kubernetes namespace (e.g., "production")
+            deployments: JSON array of deployment names (e.g., '["payment-api", "payment-worker"]')
+            description: Brief description of what the service does
+            team: Team that owns the service
+            source_tool: Tool that discovered this (e.g., "list_pods")
+
+        Returns:
+            Confirmation of recorded discovery.
+        """
+        conn = sqlite3.connect(_get_db_path())
+        cursor = conn.cursor()
+
+        now = datetime.utcnow().isoformat() + "Z"
+
+        # Check if already exists
+        cursor.execute(
+            "SELECT id, namespace, deployments FROM discovered_services WHERE name = ?",
+            (name,),
+        )
+        existing = cursor.fetchone()
+
+        if existing:
+            # Update with any new info
+            updates = []
+            params = []
+            if namespace and not existing[1]:
+                updates.append("namespace = ?")
+                params.append(namespace)
+            if deployments and not existing[2]:
+                updates.append("deployments = ?")
+                params.append(deployments)
+            if description:
+                updates.append("description = ?")
+                params.append(description)
+            if team:
+                updates.append("team = ?")
+                params.append(team)
+
+            if updates:
+                params.append(name)
+                cursor.execute(
+                    f"UPDATE discovered_services SET {', '.join(updates)} WHERE name = ?",
+                    params,
+                )
+                conn.commit()
+
+            conn.close()
+            return json.dumps(
+                {
+                    "status": "updated",
+                    "service": name,
+                    "message": f"Updated existing discovery for {name}",
+                },
+                indent=2,
+            )
+
+        # Insert new discovery
+        service_id = str(uuid.uuid4())[:8]
+        cursor.execute(
+            """
+            INSERT INTO discovered_services
+            (id, name, namespace, deployments, description, team, discovered_at, source_tool)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                service_id,
+                name,
+                namespace,
+                deployments,
+                description,
+                team,
+                now,
+                source_tool,
+            ),
+        )
+
+        conn.commit()
+        conn.close()
+
+        return json.dumps(
+            {
+                "status": "recorded",
+                "id": service_id,
+                "service": name,
+                "message": f"Discovered service '{name}' recorded. Run /sync-catalog to add to .incidentfox.yaml",
+            },
+            indent=2,
+        )
+
+    @mcp.tool()
+    def record_discovered_dependency(
+        from_service: str,
+        to_service: str,
+        evidence: str | None = None,
+        confidence: float = 0.5,
+    ) -> str:
+        """Record a discovered dependency between services.
+
+        Call this when you discover that one service depends on another
+        (e.g., from logs, traces, or error messages).
+
+        Args:
+            from_service: Service that depends on another (e.g., "payment-api")
+            to_service: Service being depended on (e.g., "postgres")
+            evidence: How this was discovered (e.g., "Connection error in logs")
+            confidence: Confidence score 0.0-1.0 (default 0.5)
+
+        Returns:
+            Confirmation of recorded dependency.
+        """
+        conn = sqlite3.connect(_get_db_path())
+        cursor = conn.cursor()
+
+        now = datetime.utcnow().isoformat() + "Z"
+
+        # Check if exists
+        cursor.execute(
+            """
+            SELECT id, confidence, evidence FROM discovered_dependencies
+            WHERE from_service = ? AND to_service = ?
+        """,
+            (from_service, to_service),
+        )
+        existing = cursor.fetchone()
+
+        if existing:
+            # Update confidence if higher, append evidence
+            new_confidence = max(existing[1] or 0, confidence)
+            new_evidence = existing[2]
+            if evidence:
+                if new_evidence:
+                    new_evidence = f"{new_evidence}; {evidence}"
+                else:
+                    new_evidence = evidence
+
+            cursor.execute(
+                """
+                UPDATE discovered_dependencies
+                SET confidence = ?, evidence = ?
+                WHERE id = ?
+            """,
+                (new_confidence, new_evidence, existing[0]),
+            )
+            conn.commit()
+            conn.close()
+
+            return json.dumps(
+                {
+                    "status": "updated",
+                    "dependency": f"{from_service} -> {to_service}",
+                    "confidence": new_confidence,
+                },
+                indent=2,
+            )
+
+        # Insert new
+        dep_id = str(uuid.uuid4())[:8]
+        cursor.execute(
+            """
+            INSERT INTO discovered_dependencies
+            (id, from_service, to_service, evidence, confidence, discovered_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """,
+            (dep_id, from_service, to_service, evidence, confidence, now),
+        )
+
+        conn.commit()
+        conn.close()
+
+        return json.dumps(
+            {
+                "status": "recorded",
+                "id": dep_id,
+                "dependency": f"{from_service} -> {to_service}",
+                "confidence": confidence,
+                "message": "Dependency recorded. Run /sync-catalog to add to .incidentfox.yaml",
+            },
+            indent=2,
+        )
+
+    @mcp.tool()
+    def suggest_known_issue(
+        pattern: str,
+        cause: str,
+        solution: str,
+        services: str | None = None,
+        investigation_id: str | None = None,
+    ) -> str:
+        """Suggest a known issue pattern for the service catalog.
+
+        Call this after resolving an incident that might recur. The pattern
+        will be stored as a suggestion and can be added to .incidentfox.yaml
+        via /sync-catalog.
+
+        Args:
+            pattern: Regex pattern matching the error (e.g., "OOMKilled.*payment")
+            cause: Root cause explanation
+            solution: How to fix it
+            services: JSON array of affected services (e.g., '["payment-api"]')
+            investigation_id: ID of investigation that discovered this
+
+        Returns:
+            Confirmation of recorded suggestion.
+        """
+        conn = sqlite3.connect(_get_db_path())
+        cursor = conn.cursor()
+
+        now = datetime.utcnow().isoformat() + "Z"
+
+        # Check for existing pattern
+        cursor.execute(
+            "SELECT id, occurrences, investigation_ids FROM suggested_known_issues WHERE pattern = ?",
+            (pattern,),
+        )
+        existing = cursor.fetchone()
+
+        if existing:
+            occurrences = existing[1] + 1
+            inv_ids = json.loads(existing[2] or "[]")
+            if investigation_id and investigation_id not in inv_ids:
+                inv_ids.append(investigation_id)
+
+            cursor.execute(
+                """
+                UPDATE suggested_known_issues
+                SET occurrences = ?, investigation_ids = ?, cause = ?, solution = ?, services = ?
+                WHERE id = ?
+            """,
+                (
+                    occurrences,
+                    json.dumps(inv_ids),
+                    cause,
+                    solution,
+                    services,
+                    existing[0],
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+            return json.dumps(
+                {
+                    "status": "updated",
+                    "pattern": pattern,
+                    "occurrences": occurrences,
+                    "message": f"Pattern seen {occurrences} times. Run /sync-catalog to add to .incidentfox.yaml",
+                },
+                indent=2,
+            )
+
+        # Insert new
+        issue_id = str(uuid.uuid4())[:8]
+        inv_ids = [investigation_id] if investigation_id else []
+
+        cursor.execute(
+            """
+            INSERT INTO suggested_known_issues
+            (id, pattern, cause, solution, services, occurrences, investigation_ids, discovered_at)
+            VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+        """,
+            (issue_id, pattern, cause, solution, services, json.dumps(inv_ids), now),
+        )
+
+        conn.commit()
+        conn.close()
+
+        return json.dumps(
+            {
+                "status": "recorded",
+                "id": issue_id,
+                "pattern": pattern,
+                "message": "Known issue suggestion recorded. Run /sync-catalog to add to .incidentfox.yaml",
+            },
+            indent=2,
+        )
+
+    @mcp.tool()
+    def get_pending_discoveries() -> str:
+        """Get all discoveries not yet synced to .incidentfox.yaml.
+
+        Returns services, dependencies, and known issues that have been
+        discovered but not yet added to the service catalog.
+
+        Returns:
+            JSON with pending discoveries organized by type.
+        """
+        conn = sqlite3.connect(_get_db_path())
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Pending services
+        cursor.execute(
+            "SELECT * FROM discovered_services WHERE synced_at IS NULL ORDER BY discovered_at DESC"
+        )
+        services = [dict(r) for r in cursor.fetchall()]
+
+        # Pending dependencies
+        cursor.execute(
+            "SELECT * FROM discovered_dependencies WHERE synced_at IS NULL ORDER BY confidence DESC"
+        )
+        dependencies = [dict(r) for r in cursor.fetchall()]
+
+        # Pending known issues
+        cursor.execute(
+            "SELECT * FROM suggested_known_issues WHERE synced_at IS NULL ORDER BY occurrences DESC"
+        )
+        known_issues = [dict(r) for r in cursor.fetchall()]
+
+        conn.close()
+
+        total = len(services) + len(dependencies) + len(known_issues)
+
+        return json.dumps(
+            {
+                "total_pending": total,
+                "services": {
+                    "count": len(services),
+                    "items": services,
+                },
+                "dependencies": {
+                    "count": len(dependencies),
+                    "items": dependencies,
+                },
+                "known_issues": {
+                    "count": len(known_issues),
+                    "items": known_issues,
+                },
+                "hint": (
+                    "Use /sync-catalog to review and add these to .incidentfox.yaml"
+                    if total > 0
+                    else "No pending discoveries"
+                ),
+            },
+            indent=2,
+        )
+
+    @mcp.tool()
+    def mark_discoveries_synced(
+        service_ids: str | None = None,
+        dependency_ids: str | None = None,
+        known_issue_ids: str | None = None,
+    ) -> str:
+        """Mark discoveries as synced after adding to .incidentfox.yaml.
+
+        Call this after successfully writing discoveries to the service catalog.
+
+        Args:
+            service_ids: JSON array of service discovery IDs to mark synced
+            dependency_ids: JSON array of dependency discovery IDs to mark synced
+            known_issue_ids: JSON array of known issue IDs to mark synced
+
+        Returns:
+            Confirmation of marked items.
+        """
+        conn = sqlite3.connect(_get_db_path())
+        cursor = conn.cursor()
+        now = datetime.utcnow().isoformat() + "Z"
+
+        counts = {"services": 0, "dependencies": 0, "known_issues": 0}
+
+        if service_ids:
+            ids = json.loads(service_ids)
+            for sid in ids:
+                cursor.execute(
+                    "UPDATE discovered_services SET synced_at = ? WHERE id = ?",
+                    (now, sid),
+                )
+                counts["services"] += cursor.rowcount
+
+        if dependency_ids:
+            ids = json.loads(dependency_ids)
+            for did in ids:
+                cursor.execute(
+                    "UPDATE discovered_dependencies SET synced_at = ? WHERE id = ?",
+                    (now, did),
+                )
+                counts["dependencies"] += cursor.rowcount
+
+        if known_issue_ids:
+            ids = json.loads(known_issue_ids)
+            for kid in ids:
+                cursor.execute(
+                    "UPDATE suggested_known_issues SET synced_at = ? WHERE id = ?",
+                    (now, kid),
+                )
+                counts["known_issues"] += cursor.rowcount
+
+        conn.commit()
+        conn.close()
+
+        total = counts["services"] + counts["dependencies"] + counts["known_issues"]
+
+        return json.dumps(
+            {
+                "marked_synced": counts,
+                "total": total,
+                "message": f"Marked {total} discoveries as synced",
             },
             indent=2,
         )

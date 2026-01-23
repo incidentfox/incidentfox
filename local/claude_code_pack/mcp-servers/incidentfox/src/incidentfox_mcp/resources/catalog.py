@@ -72,9 +72,39 @@ Example:
 ```yaml
 services:
   payment-api:
+    # === Basic Info ===
+    description: "Processes all credit card transactions via Stripe"
+    team: payments
+    criticality: P1  # P1 (critical) / P2 (high) / P3 (medium) / P4 (low)
+
+    # === Infrastructure ===
     namespace: production
     deployments: [payment-api, payment-worker]
     dependencies: [postgres, redis, stripe-api]
+
+    # === Classification ===
+    data_sensitivity: high  # none/low/medium/high (PII, PCI, etc.)
+    sla: "99.99%"
+
+    # === Deployment ===
+    deployment:
+      method: argocd  # argocd, helm, kubectl, ecs, etc.
+      repo: "github.com/company/infra/apps/payment-api"
+      rollback: "argocd app rollback payment-api"
+
+    # === Architecture ===
+    architecture:
+      type: stateless  # stateless, stateful, event-driven
+      patterns: [circuit-breaker, retry]
+      external_apis: [stripe, sendgrid]
+
+    # === Operational Notes ===
+    notes: |
+      - PCI compliant - never dump raw request logs
+      - Peak load: 10am-2pm EST
+      - Circuit breaker to inventory-service opens after 5 failures
+
+    # === Observability ===
     logs:
       datadog: "service:payment-api"
       cloudwatch: "/aws/eks/payment-api"
@@ -108,6 +138,28 @@ known_issues:
             output.append("")
             for name, config in catalog.get("services", {}).items():
                 output.append(f"### {name}")
+
+                # Basic info (new fields)
+                if "description" in config:
+                    output.append(f"_{config['description']}_")
+                    output.append("")
+
+                basic_info = []
+                if "criticality" in config:
+                    basic_info.append(f"**Criticality:** {config['criticality']}")
+                if "team" in config:
+                    basic_info.append(f"**Team:** {config['team']}")
+                if "data_sensitivity" in config:
+                    basic_info.append(
+                        f"**Data Sensitivity:** {config['data_sensitivity']}"
+                    )
+                if "sla" in config:
+                    basic_info.append(f"**SLA:** {config['sla']}")
+                if basic_info:
+                    output.append(" | ".join(basic_info))
+                    output.append("")
+
+                # Infrastructure
                 if "namespace" in config:
                     output.append(f"- Namespace: {config['namespace']}")
                 if "deployments" in config:
@@ -116,14 +168,40 @@ known_issues:
                     output.append(
                         f"- Dependencies: {', '.join(config['dependencies'])}"
                     )
+
+                # Deployment info (new)
+                if "deployment" in config:
+                    deploy = config["deployment"]
+                    output.append("- Deployment:")
+                    if "method" in deploy:
+                        output.append(f"  - Method: {deploy['method']}")
+                    if "repo" in deploy:
+                        output.append(f"  - Repo: {deploy['repo']}")
+                    if "rollback" in deploy:
+                        output.append(f"  - Rollback: `{deploy['rollback']}`")
+
+                # Architecture info (new)
+                if "architecture" in config:
+                    arch = config["architecture"]
+                    output.append("- Architecture:")
+                    if "type" in arch:
+                        output.append(f"  - Type: {arch['type']}")
+                    if "patterns" in arch:
+                        output.append(f"  - Patterns: {', '.join(arch['patterns'])}")
+                    if "external_apis" in arch:
+                        output.append(
+                            f"  - External APIs: {', '.join(arch['external_apis'])}"
+                        )
+
+                # Observability
                 if "logs" in config:
                     output.append("- Logs:")
                     for backend, query in config["logs"].items():
                         output.append(f"  - {backend}: `{query}`")
                 if "dashboards" in config:
                     output.append("- Dashboards:")
-                    for name, url in config["dashboards"].items():
-                        output.append(f"  - {name}: {url}")
+                    for dash_name, url in config["dashboards"].items():
+                        output.append(f"  - {dash_name}: {url}")
                 if "runbooks" in config:
                     output.append("- Runbooks:")
                     for issue, path in config["runbooks"].items():
@@ -132,6 +210,13 @@ known_issues:
                     output.append("- On-call:")
                     for channel, value in config["oncall"].items():
                         output.append(f"  - {channel}: {value}")
+
+                # Operational notes (new)
+                if "notes" in config:
+                    output.append("- **Notes:**")
+                    for line in config["notes"].strip().split("\n"):
+                        output.append(f"  {line}")
+
                 output.append("")
 
         # Alerts section
@@ -173,8 +258,9 @@ known_issues:
             service_name: Name of the service to look up
 
         Returns:
-            JSON with service configuration including deployments,
-            dependencies, log locations, dashboards, and runbooks.
+            JSON with service configuration including criticality, team,
+            deployments, dependencies, deployment info, architecture,
+            log locations, dashboards, runbooks, and operational notes.
         """
         import json
 
@@ -197,13 +283,13 @@ known_issues:
                 }
             )
 
-        service = services[service_name]
+        config = services[service_name]
 
         # Find related alerts
         related_alerts = [
-            {"name": name, **config}
-            for name, config in catalog.get("alerts", {}).items()
-            if config.get("service") == service_name
+            {"name": name, **alert_config}
+            for name, alert_config in catalog.get("alerts", {}).items()
+            if alert_config.get("service") == service_name
         ]
 
         # Find related known issues
@@ -213,15 +299,58 @@ known_issues:
             if service_name in issue.get("services", [])
         ]
 
-        return json.dumps(
-            {
-                "service": service_name,
-                "config": service,
-                "related_alerts": related_alerts,
-                "known_issues": related_issues,
+        # Build structured response with investigation-relevant info at top
+        result = {
+            "service": service_name,
+            # === Investigation Context (most important for debugging) ===
+            "summary": {
+                "description": config.get("description"),
+                "criticality": config.get("criticality"),
+                "team": config.get("team"),
+                "data_sensitivity": config.get("data_sensitivity"),
+                "sla": config.get("sla"),
             },
-            indent=2,
-        )
+            # === Infrastructure ===
+            "infrastructure": {
+                "namespace": config.get("namespace"),
+                "deployments": config.get("deployments", []),
+                "dependencies": config.get("dependencies", []),
+            },
+            # === Deployment (for rollback/deploy investigation) ===
+            "deployment": config.get("deployment"),
+            # === Architecture (for understanding failure modes) ===
+            "architecture": config.get("architecture"),
+            # === Observability (where to look) ===
+            "observability": {
+                "logs": config.get("logs"),
+                "dashboards": config.get("dashboards"),
+                "runbooks": config.get("runbooks"),
+            },
+            # === On-call (who to contact) ===
+            "oncall": config.get("oncall"),
+            # === Operational Notes (tribal knowledge) ===
+            "notes": config.get("notes"),
+            # === Related Issues ===
+            "related_alerts": related_alerts,
+            "known_issues": related_issues,
+        }
+
+        # Clean up None values for cleaner output
+        result["summary"] = {
+            k: v for k, v in result["summary"].items() if v is not None
+        }
+        result["infrastructure"] = {
+            k: v for k, v in result["infrastructure"].items() if v is not None
+        }
+        if result["observability"]:
+            result["observability"] = {
+                k: v for k, v in result["observability"].items() if v is not None
+            }
+
+        # Remove top-level None values
+        result = {k: v for k, v in result.items() if v is not None}
+
+        return json.dumps(result, indent=2)
 
     @mcp.tool()
     def check_known_issues(error_message: str) -> str:
