@@ -1208,6 +1208,8 @@ def bulk_create_tool_calls(
             AgentToolCall(
                 id=tc.get("id", f"{run_id}_{i}"),
                 run_id=run_id,
+                agent_name=tc.get("agent_name"),
+                parent_agent=tc.get("parent_agent"),
                 tool_name=tc.get("tool_name", "unknown"),
                 tool_input=tc.get("tool_input"),
                 tool_output=output[:5000] if output else None,
