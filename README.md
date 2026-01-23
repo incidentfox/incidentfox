@@ -315,12 +315,6 @@ DATADOG_APP_KEY=...
 └───────────────┘          └─────────────────┘          └─────────────────┘
 ```
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/5e0a4afa-d807-4931-b2d6-186984e329de" alt="Agent Architecture Diagram">
-  <br>
-  <em>Multi-Agent Architecture — Specialized agents collaborate to investigate incidents</em>
-</p>
-
 ### Agent Capabilities
 
 | Agent | Purpose | Key Tools |
