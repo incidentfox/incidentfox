@@ -18,6 +18,24 @@ from ..core.integration_errors import IntegrationNotConfiguredError
 logger = logging.getLogger(__name__)
 
 
+def _parse_time_range(time_range: str) -> timedelta:
+    """
+    Parse time range string to timedelta.
+
+    Supports formats: '15m' (minutes), '1h' (hours), '24h', '7d' (days)
+    """
+    time_range = time_range.strip().lower()
+    if time_range.endswith("m"):
+        return timedelta(minutes=int(time_range[:-1]))
+    elif time_range.endswith("h"):
+        return timedelta(hours=int(time_range[:-1]))
+    elif time_range.endswith("d"):
+        return timedelta(days=int(time_range[:-1]))
+    else:
+        # Default to 1 hour if format not recognized
+        return timedelta(hours=1)
+
+
 def get_coralogix_config() -> dict:
     """
     Get Coralogix configuration from execution context.
@@ -91,7 +109,7 @@ def _get_headers() -> dict:
 
 def search_coralogix_logs(
     query: str,
-    time_range_minutes: int = 60,
+    time_range: str = "1h",
     limit: int = 100,
     severity: str | None = None,
 ) -> str:
@@ -115,7 +133,7 @@ def search_coralogix_logs(
 
     Args:
         query: DataPrime query string. ALWAYS start with "source logs |"
-        time_range_minutes: How far back to search (default 60 minutes)
+        time_range: How far back to search (e.g., '15m', '1h', '24h', '7d'). Default '1h'.
         limit: Maximum number of results (default 100)
         severity: Optional severity filter (Debug, Verbose, Info, Warning, Error, Critical)
 
@@ -134,7 +152,7 @@ def search_coralogix_logs(
     try:
         # Build the query
         end_time = datetime.utcnow()
-        start_time = end_time - timedelta(minutes=time_range_minutes)
+        start_time = end_time - _parse_time_range(time_range)
 
         # DataPrime query endpoint
         url = _get_api_url("/api/v1/dataprime/query")
@@ -174,7 +192,7 @@ def search_coralogix_logs(
                 {
                     "success": True,
                     "query": query,
-                    "time_range": f"Last {time_range_minutes} minutes",
+                    "time_range": time_range,
                     "result_count": len(all_results),
                     "results": all_results[:limit],
                 },
@@ -199,7 +217,7 @@ def search_coralogix_logs(
 def get_coralogix_error_logs(
     service: str | None = None,
     application: str | None = None,
-    time_range_minutes: int = 60,
+    time_range: str = "1h",
     limit: int = 50,
     include_warnings: bool = True,
 ) -> str:
@@ -207,14 +225,14 @@ def get_coralogix_error_logs(
     Get recent error logs from Coralogix for a specific service.
 
     This tool searches for logs that:
-    1. Have severity >= Warning (4) if include_warnings=True, or >= Error (5) otherwise
+    1. Have severity WARNING, ERROR, or CRITICAL if include_warnings=True
     2. OR contain error-related keywords in the log body (Error, failed, exception)
 
     Args:
         service: Service name to filter (matches $l.subsystemname)
         application: Application/environment name (matches $l.applicationname).
                      IMPORTANT: Set this to filter logs to your specific environment.
-        time_range_minutes: How far back to search (default 60 minutes)
+        time_range: How far back to search (e.g., '15m', '1h', '24h'). Default '1h'.
         limit: Maximum number of results (default 50)
         include_warnings: Include warning-level logs (default True, recommended since
                          many errors are logged at warning level)
@@ -245,12 +263,13 @@ def get_coralogix_error_logs(
 
     query += f" | limit {limit}"
 
-    return search_coralogix_logs(query, time_range_minutes, limit)
+    return search_coralogix_logs(query, time_range, limit)
 
 
 def get_coralogix_alerts(
     status: str | None = None,
     severity: str | None = None,
+    time_range: str = "1h",
     limit: int = 20,
 ) -> str:
     """
@@ -259,6 +278,7 @@ def get_coralogix_alerts(
     Args:
         status: Optional status filter (Active, Resolved, Snoozed)
         severity: Optional severity filter (Info, Warning, Critical)
+        time_range: How far back to search (e.g., '15m', '1h', '24h'). Default '1h'.
         limit: Maximum number of alerts (default 20)
 
     Returns:
@@ -276,12 +296,12 @@ def get_coralogix_alerts(
     query = "source logs | filter $m.severity == WARNING || $m.severity == ERROR || $m.severity == CRITICAL"
     query += f" | limit {limit}"
 
-    return search_coralogix_logs(query, time_range_minutes=60, limit=limit)
+    return search_coralogix_logs(query, time_range=time_range, limit=limit)
 
 
 def query_coralogix_metrics(
     metric_name: str,
-    time_range_minutes: int = 60,
+    time_range: str = "1h",
     aggregation: str = "avg",
     group_by: str | None = None,
 ) -> str:
@@ -290,7 +310,7 @@ def query_coralogix_metrics(
 
     Args:
         metric_name: Name of the metric to query
-        time_range_minutes: Time range for the query (default 60 minutes)
+        time_range: How far back to search (e.g., '15m', '1h', '24h'). Default '1h'.
         aggregation: Aggregation function (avg, sum, min, max, count)
         group_by: Optional label to group results by
 
@@ -310,7 +330,7 @@ def query_coralogix_metrics(
         url = _get_api_url("/api/v1/metrics/query")
 
         end_time = datetime.utcnow()
-        start_time = end_time - timedelta(minutes=time_range_minutes)
+        start_time = end_time - _parse_time_range(time_range)
 
         # Build PromQL query
         if group_by:
@@ -335,7 +355,7 @@ def query_coralogix_metrics(
                     "success": True,
                     "metric": metric_name,
                     "aggregation": aggregation,
-                    "time_range": f"Last {time_range_minutes} minutes",
+                    "time_range": time_range,
                     "data": result.get("data", {}),
                 },
                 indent=2,
@@ -351,7 +371,7 @@ def search_coralogix_traces(
     service: str | None = None,
     operation: str | None = None,
     min_duration_ms: int | None = None,
-    time_range_minutes: int = 60,
+    time_range: str = "1h",
     limit: int = 50,
 ) -> str:
     """
@@ -361,7 +381,7 @@ def search_coralogix_traces(
         service: Service name to filter traces
         operation: Operation/span name to filter
         min_duration_ms: Minimum duration in milliseconds (for finding slow traces)
-        time_range_minutes: Time range for search (default 60 minutes)
+        time_range: How far back to search (e.g., '15m', '1h', '24h'). Default '1h'.
         limit: Maximum traces to return (default 50)
 
     Returns:
@@ -380,7 +400,7 @@ def search_coralogix_traces(
         url = _get_api_url("/api/v1/tracing/spans")
 
         end_time = datetime.utcnow()
-        start_time = end_time - timedelta(minutes=time_range_minutes)
+        start_time = end_time - _parse_time_range(time_range)
 
         payload = {
             "startTimeUnixNano": int(start_time.timestamp() * 1e9),
@@ -416,13 +436,13 @@ def search_coralogix_traces(
         return json.dumps({"success": False, "error": str(e)})
 
 
-def get_coralogix_service_health(service: str, time_range_minutes: int = 60) -> str:
+def get_coralogix_service_health(service: str, time_range: str = "1h") -> str:
     """
     Get overall health summary for a service from Coralogix.
 
     Args:
         service: Service/application name
-        time_range_minutes: Time range to analyze (default 60 minutes)
+        time_range: How far back to analyze (e.g., '15m', '1h', '24h'). Default '1h'.
 
     Returns:
         JSON with service health metrics (error rate, latency, throughput).
@@ -438,13 +458,13 @@ def get_coralogix_service_health(service: str, time_range_minutes: int = 60) -> 
 
     # Get error logs count
     error_result = json.loads(
-        get_coralogix_error_logs(service, time_range_minutes, limit=1000)
+        get_coralogix_error_logs(service, time_range=time_range, limit=1000)
     )
 
     # Build summary
     health_summary = {
         "service": service,
-        "time_range": f"Last {time_range_minutes} minutes",
+        "time_range": time_range,
         "error_count": (
             error_result.get("result_count", 0)
             if error_result.get("success")
@@ -465,20 +485,20 @@ def get_coralogix_service_health(service: str, time_range_minutes: int = 60) -> 
     )
 
 
-def list_coralogix_services(time_range_minutes: int = 60) -> str:
+def list_coralogix_services(time_range: str = "1h") -> str:
     """
     List all services (subsystems) that have emitted logs to Coralogix recently.
 
     Use this as a discovery tool to find which services are active and their log volumes.
 
     Args:
-        time_range_minutes: How far back to look (default 60 minutes)
+        time_range: How far back to look (e.g., '15m', '1h', '24h'). Default '1h'.
 
     Returns:
         JSON with service names and log counts, sorted by volume (highest first).
     """
     query = "source logs | groupby $l.subsystemname aggregate count() as log_count | orderby log_count desc | limit 30"
-    return search_coralogix_logs(query, time_range_minutes, limit=30)
+    return search_coralogix_logs(query, time_range, limit=30)
 
 
 def coralogix_get_alert_rules() -> str:
@@ -522,14 +542,14 @@ def coralogix_get_alert_rules() -> str:
 
 
 def coralogix_get_alert_history(
-    alert_name: str | None = None, time_range_minutes: int = 1440
+    alert_name: str | None = None, time_range: str = "24h"
 ) -> str:
     """
     Get firing history for Coralogix alerts.
 
     Args:
         alert_name: Optional alert name to filter
-        time_range_minutes: Time range to query (default 24 hours)
+        time_range: How far back to query (e.g., '1h', '24h', '7d'). Default '24h'.
 
     Returns:
         JSON with alert firing history
@@ -553,7 +573,7 @@ def coralogix_get_alert_history(
 
         query += " | limit 100"
 
-        result = search_coralogix_logs(query, time_range_minutes, limit=100)
+        result = search_coralogix_logs(query, time_range, limit=100)
 
         # Parse the result
         result_data = json.loads(result)
@@ -566,7 +586,7 @@ def coralogix_get_alert_history(
                 {
                     "success": True,
                     "alert_name": alert_name,
-                    "time_range_minutes": time_range_minutes,
+                    "time_range": time_range,
                     "firing_count": len(alerts),
                     "recent_firings": alerts[:20],  # Most recent 20
                 },
