@@ -40,7 +40,7 @@ def register_tools(mcp: FastMCP):
         Returns:
             JSON with container list.
         """
-        args = ["ps", "--format", "json"]
+        args = ["ps", "--format", "{{json .}}"]
         if all_containers:
             args.append("-a")
         if filter_name:
@@ -203,7 +203,7 @@ def register_tools(mcp: FastMCP):
         Returns:
             JSON with CPU, memory, network, and disk I/O stats.
         """
-        args = ["stats", "--no-stream", "--format", "json"]
+        args = ["stats", "--no-stream", "--format", "{{json .}}"]
         if container:
             args.append(container)
 
@@ -291,7 +291,7 @@ def register_tools(mcp: FastMCP):
         Returns:
             JSON with recent Docker events (container start/stop, etc.)
         """
-        args = ["events", "--since", since, "--format", "json"]
+        args = ["events", "--since", since, "--format", "{{json .}}"]
         if until:
             args.extend(["--until", until])
         else:
