@@ -17,11 +17,46 @@ A comprehensive SRE investigation toolkit for Claude Code. Bring production obse
 
 ## Quick Start
 
-```bash
-# Install the plugin
-claude plugin install /path/to/claude_code_pack
+### 1. Clone the repository
 
-# Create a service catalog (optional but recommended)
+```bash
+git clone https://github.com/incidentfox/incidentfox.git
+cd incidentfox/local/claude_code_pack
+```
+
+### 2. Install dependencies
+
+```bash
+cd mcp-servers/incidentfox
+uv sync
+cd ../..
+```
+
+### 3. Add the MCP server to Claude Code
+
+```bash
+# Add globally (available in all projects)
+claude mcp add-json incidentfox "$(cat <<EOF
+{
+  "command": "uv",
+  "args": ["--directory", "$(pwd)/mcp-servers/incidentfox", "run", "incidentfox-mcp"],
+  "env": {
+    "KUBECONFIG": "\${KUBECONFIG:-~/.kube/config}",
+    "AWS_REGION": "\${AWS_REGION:-us-east-1}",
+    "DATADOG_API_KEY": "\${DATADOG_API_KEY}",
+    "DATADOG_APP_KEY": "\${DATADOG_APP_KEY}"
+  }
+}
+EOF
+)" -s user
+
+# Verify it's working
+claude mcp list
+```
+
+### 4. (Optional) Create a service catalog
+
+```bash
 cat > .incidentfox.yaml << 'EOF'
 services:
   api-gateway:
@@ -36,11 +71,25 @@ known_issues:
     cause: "Database connection pool exhausted"
     solution: "Scale postgres replicas or increase pool size"
 EOF
-
-# Start investigating!
-claude
-> /incident API latency increased 5x
 ```
+
+### 5. Start investigating!
+
+```bash
+claude
+> What pods are running in the default namespace?
+> Help me investigate high latency in the payment service
+```
+
+### Alternative: Use with --plugin-dir (includes skills & commands)
+
+For the full experience with skills and commands:
+
+```bash
+claude --plugin-dir /path/to/claude_code_pack
+```
+
+This gives you access to `/incident`, `/metrics`, `/remediate` commands and the investigation skills.
 
 ## Configuration
 
