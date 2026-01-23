@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "incidentfox": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "./mcp-servers/incidentfox",
+        "run",
+        "incidentfox-mcp"
+      ],
+      "env": {
+        "KUBECONFIG": "${KUBECONFIG:-~/.kube/config}",
+        "AWS_REGION": "${AWS_REGION:-us-east-1}",
+        "AWS_DEFAULT_REGION": "${AWS_DEFAULT_REGION:-us-east-1}",
+        "DATADOG_API_KEY": "${DATADOG_API_KEY}",
+        "DATADOG_APP_KEY": "${DATADOG_APP_KEY}"
+      }
+    }
+  }
+}

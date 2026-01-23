@@ -1,0 +1,69 @@
+{
+  "name": "incidentfox",
+  "version": "1.0.0",
+  "description": "IncidentFox SRE Investigation Tools - AWS, Kubernetes, Datadog observability and remediation for incident response",
+  "author": "IncidentFox",
+  "homepage": "https://incidentfox.ai",
+  "repository": "https://github.com/incidentfox/claude-code-pack",
+  "license": "MIT",
+  "keywords": [
+    "sre",
+    "incident-response",
+    "kubernetes",
+    "aws",
+    "datadog",
+    "observability",
+    "troubleshooting"
+  ],
+  "skills": [
+    {
+      "path": "skills/investigate"
+    },
+    {
+      "path": "skills/k8s-debug"
+    },
+    {
+      "path": "skills/aws-troubleshoot"
+    },
+    {
+      "path": "skills/log-analysis"
+    },
+    {
+      "path": "skills/sre-principles"
+    }
+  ],
+  "commands": [
+    {
+      "path": "commands/incident.md"
+    },
+    {
+      "path": "commands/metrics.md"
+    },
+    {
+      "path": "commands/remediate.md"
+    }
+  ],
+  "mcpServers": {
+    "incidentfox": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "${CLAUDE_PLUGIN_ROOT}/mcp-servers/incidentfox",
+        "run",
+        "incidentfox-mcp"
+      ],
+      "env": {
+        "KUBECONFIG": "${KUBECONFIG:-~/.kube/config}",
+        "AWS_REGION": "${AWS_REGION:-us-east-1}",
+        "AWS_DEFAULT_REGION": "${AWS_DEFAULT_REGION:-us-east-1}",
+        "DATADOG_API_KEY": "${DATADOG_API_KEY}",
+        "DATADOG_APP_KEY": "${DATADOG_APP_KEY}",
+        "PROMETHEUS_URL": "${PROMETHEUS_URL}",
+        "ALERTMANAGER_URL": "${ALERTMANAGER_URL}",
+        "ELASTICSEARCH_URL": "${ELASTICSEARCH_URL}",
+        "LOKI_URL": "${LOKI_URL}"
+      }
+    }
+  },
+  "hooks": "hooks/hooks.json"
+}
