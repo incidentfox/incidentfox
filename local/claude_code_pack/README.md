@@ -17,44 +17,28 @@ A comprehensive SRE investigation toolkit for Claude Code. Bring production obse
 
 ## Quick Start
 
-### 1. Clone the repository
+### Installation
 
 ```bash
 git clone https://github.com/incidentfox/incidentfox.git
 cd incidentfox/local/claude_code_pack
+./install.sh
 ```
 
-### 2. Install dependencies
+That's it! The install script will:
+1. Check prerequisites ([uv](https://github.com/astral-sh/uv) and Claude Code CLI)
+2. Install Python dependencies
+3. Add the MCP server to Claude Code globally
+4. Verify the installation works
+
+### Verify Installation
 
 ```bash
-cd mcp-servers/incidentfox
-uv sync
-cd ../..
-```
-
-### 3. Add the MCP server to Claude Code
-
-```bash
-# Add globally (available in all projects)
-claude mcp add-json incidentfox "$(cat <<EOF
-{
-  "command": "uv",
-  "args": ["--directory", "$(pwd)/mcp-servers/incidentfox", "run", "incidentfox-mcp"],
-  "env": {
-    "KUBECONFIG": "\${KUBECONFIG:-~/.kube/config}",
-    "AWS_REGION": "\${AWS_REGION:-us-east-1}",
-    "DATADOG_API_KEY": "\${DATADOG_API_KEY}",
-    "DATADOG_APP_KEY": "\${DATADOG_APP_KEY}"
-  }
-}
-EOF
-)" -s user
-
-# Verify it's working
 claude mcp list
+# Should show: incidentfox: ... ✓ Connected
 ```
 
-### 4. (Optional) Create a service catalog
+### (Optional) Create a service catalog
 
 ```bash
 cat > .incidentfox.yaml << 'EOF'
@@ -73,7 +57,7 @@ known_issues:
 EOF
 ```
 
-### 5. Start investigating!
+### Start Investigating!
 
 ```bash
 claude
@@ -81,15 +65,57 @@ claude
 > Help me investigate high latency in the payment service
 ```
 
-### Alternative: Use with --plugin-dir (includes skills & commands)
+### Full Plugin Mode (skills + commands)
 
-For the full experience with skills and commands:
+For the full experience including skills and slash commands:
 
 ```bash
 claude --plugin-dir /path/to/claude_code_pack
 ```
 
-This gives you access to `/incident`, `/metrics`, `/remediate` commands and the investigation skills.
+This gives you access to:
+- `/incident` - Start a structured investigation
+- `/metrics` - Query metrics from configured sources
+- `/remediate` - Propose and execute remediation actions
+- 5 expert skills (investigation methodology, K8s debugging, etc.)
+
+### Manual Installation
+
+<details>
+<summary>Click to expand manual installation steps</summary>
+
+If you prefer to install manually instead of using `./install.sh`:
+
+```bash
+# 1. Clone and enter the directory
+git clone https://github.com/incidentfox/incidentfox.git
+cd incidentfox/local/claude_code_pack
+
+# 2. Install Python dependencies
+cd mcp-servers/incidentfox
+uv sync
+cd ../..
+
+# 3. Add MCP server to Claude Code
+claude mcp add-json incidentfox "$(cat <<EOF
+{
+  "command": "uv",
+  "args": ["--directory", "$(pwd)/mcp-servers/incidentfox", "run", "incidentfox-mcp"],
+  "env": {
+    "KUBECONFIG": "\${KUBECONFIG:-~/.kube/config}",
+    "AWS_REGION": "\${AWS_REGION:-us-east-1}",
+    "DATADOG_API_KEY": "\${DATADOG_API_KEY}",
+    "DATADOG_APP_KEY": "\${DATADOG_APP_KEY}"
+  }
+}
+EOF
+)" -s user
+
+# 4. Verify
+claude mcp list
+```
+
+</details>
 
 ## Configuration
 
