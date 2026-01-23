@@ -1,6 +1,6 @@
 # IncidentFox - SRE Tools for Claude Code
 
-You have access to **85+ SRE investigation tools** via the IncidentFox MCP server. These tools help with:
+You have access to **~100 DevOps & SRE tools** via the IncidentFox MCP server. These tools help with:
 
 - **Kubernetes** - Pods, deployments, logs, events, resources
 - **AWS** - EC2, CloudWatch, ECS, cost analysis
@@ -8,41 +8,25 @@ You have access to **85+ SRE investigation tools** via the IncidentFox MCP serve
 - **Collaboration** - Slack, PagerDuty, GitHub
 - **Analysis** - Anomaly detection, log analysis, blast radius
 
-## Quick Start Commands
+## Quick Start
 
-Try these read-only commands to explore your infrastructure:
+Explore your infrastructure (try whichever applies):
 
 ```
 Check my Kubernetes cluster health
-List pods in the default namespace
-Show recent errors from Datadog logs
-What AWS resources am I running?
+Show my Grafana dashboards
 ```
 
-## Common Use Cases
+## Real Work
 
-### Alert Triage
-```
-Help me investigate this alert: [paste alert]
-What's causing high latency in the payment service?
-```
+Use these tools for actual tasks:
 
-### AWS Cost Optimization
-```
-Analyze my AWS costs for the past 30 days
-Find EC2 instances that could be rightsized
-```
-
-### CI/CD Debugging
-```
-Why did my GitHub workflow fail?
-Show me the last 5 failed deployments
-```
-
-### Incident Investigation
-```
-/incident [description] - Start structured investigation
-```
+| Use Case | Example |
+|----------|---------|
+| **Alert Triage** | "Help me triage this alert: [paste]" |
+| **Cost Optimization** | "Find AWS costs over the last month and explore reduction opportunities" |
+| **CI/CD Debugging** | "Why did my GitHub Actions workflow fail? [paste url]" |
+| **Log Analysis** | "Search logs for connection errors" |
 
 ## Configuration
 

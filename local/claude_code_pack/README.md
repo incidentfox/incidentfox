@@ -1,6 +1,6 @@
 # IncidentFox for Claude Code
 
-**85+ DevOps & SRE tools for Claude Code.** Query your infrastructure, investigate incidents, analyze costs, and debug CI/CD — all from your terminal.
+**Claude Code plugin with ~100 DevOps & SRE tools, skills, and commands** to investigate incidents, analyze costs, and debug CI/CD — all from your terminal.
 
 ## What You Can Do
 
@@ -29,19 +29,18 @@ cd incidentfox/local/claude_code_pack
 claude
 ```
 
-**Read-only commands to explore** (safe to run anytime):
+**Quick start** — explore your infrastructure (try whichever applies):
 ```
 > Check my Kubernetes cluster health
+> Show my Grafana dashboards
 > List pods in the default namespace
-> What integrations are configured?
-> Show my AWS cost summary
-> List recent GitHub deployments
 ```
 
-**Investigation commands** (when something's wrong):
+**Real work** — use these tools for actual tasks:
 ```
-> Help me investigate high latency in the payment service
-> What's causing these OOMKilled errors?
+> Help me triage this alert: [paste alert]
+> Find AWS costs over the last month and explore reduction opportunities
+> Why did my GitHub Actions workflow fail? [paste url]
 > Search logs for "connection refused" errors
 ```
 
