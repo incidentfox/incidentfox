@@ -2,10 +2,6 @@
 
 **Claude Code plugin with ~100 DevOps & SRE tools, skills, and commands** to investigate incidents, analyze costs, and debug CI/CD — all from your terminal.
 
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/52d86ad1-6dc9-45e5-b80c-5f8a96b3dccd" width="700" controls autoplay loop muted></video>
-</p>
-
 ## What You Can Do
 
 | Use Case | Example Prompt |
@@ -59,6 +55,12 @@ Gives you everything in Option A, plus:
 > Find AWS costs over the last month and explore reduction opportunities
 > Why did my GitHub Actions workflow fail? [paste url]
 ```
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/0965d78d-3d6a-4fd4-809e-d9ada9d9ce2c" width="700" controls autoplay loop muted></video>
+  <br>
+  <em>Investigating a PagerDuty alert with IncidentFox</em>
+</p>
 
 ### 3. Configure Integrations
 
