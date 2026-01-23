@@ -53,13 +53,6 @@ claude
 > Why did my GitHub Actions workflow fail? [paste url]
 ```
 
-**What you get:**
-- 85+ tools: Kubernetes, AWS, Datadog, Prometheus, GitHub, Slack, PagerDuty, Grafana, Sentry
-- Unified log search across multiple backends
-- Investigation history with pattern learning
-- Postmortem generation
-- No Docker, no services to manage
-
 **Full docs:** [local/claude_code_pack/README.md](local/claude_code_pack/README.md)
 
 <details>
