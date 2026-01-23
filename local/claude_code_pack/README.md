@@ -4,7 +4,7 @@ A comprehensive SRE investigation toolkit for Claude Code. Bring production obse
 
 ## Features
 
-- **80+ Investigation Tools**: Kubernetes, AWS, Datadog, Prometheus, Docker, GitHub, Slack, PagerDuty, Grafana, Sentry, and more
+- **85+ Investigation Tools**: Kubernetes, AWS, Datadog, Prometheus, Docker, GitHub, Slack, PagerDuty, Grafana, Sentry, and more
 - **Service Catalog**: Personalize investigations with `.incidentfox.yaml`
 - **Unified Log Search**: Query across Datadog, CloudWatch, Elasticsearch, Loki
 - **Investigation History**: SQLite-based tracking with pattern learning
@@ -305,12 +305,17 @@ known_issues:
 |------|-------------|
 | `get_active_alerts` | Aggregate alerts from Prometheus, Alertmanager, Datadog |
 
-### Anomaly Detection (3 tools)
+### Anomaly Detection (8 tools)
 | Tool | Description |
 |------|-------------|
 | `detect_anomalies` | Z-score based anomaly detection |
 | `correlate_metrics` | Find correlation between two metrics |
 | `find_change_point` | Detect when behavior changed |
+| `forecast_metric` | Linear regression forecasting with confidence bounds |
+| `analyze_metric_distribution` | Percentile analysis (p50/p90/p95/p99), SLO insights |
+| `prophet_detect_anomalies` | Seasonality-aware anomaly detection (requires Prophet) |
+| `prophet_forecast` | Forecasting with uncertainty bounds (requires Prophet) |
+| `prophet_decompose` | Trend/seasonality/residual decomposition (requires Prophet) |
 
 ### Git (6 tools)
 | Tool | Description |
@@ -566,7 +571,7 @@ claude_code_pack/
 │   └── sre-principles/          # Evidence-based reasoning
 ├── commands/                     # Slash commands
 ├── hooks/                        # Remediation safety
-└── mcp-servers/incidentfox/     # Python MCP server (80+ tools)
+└── mcp-servers/incidentfox/     # Python MCP server (85+ tools)
     └── src/incidentfox_mcp/
         ├── server.py            # FastMCP entry point
         ├── tools/               # Tool implementations

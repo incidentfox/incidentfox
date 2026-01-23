@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-#### New Tool Modules (52 new tools)
+#### New Tool Modules (57 new tools)
 
 - **GitHub (25+ tools)**: Complete GitHub integration for deployment correlation
   - Repository info, commits, compare, time-range search
@@ -58,6 +58,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `log_detect_anomalies` - Volume anomaly detection
   - Supports: Elasticsearch, Coralogix, Datadog, Splunk, CloudWatch
 
+- **Enhanced Anomaly Detection (5 tools)**: Advanced metric analysis with Prophet
+  - `forecast_metric` - Linear regression forecasting with confidence bounds
+  - `analyze_metric_distribution` - Percentile analysis, SLO insights, distribution shape
+  - `prophet_detect_anomalies` - Seasonality-aware anomaly detection
+  - `prophet_forecast` - Forecasting with uncertainty bounds
+  - `prophet_decompose` - Trend/seasonality/residual decomposition
+
 #### Configuration Enhancements
 
 - Added config status for all new integrations
@@ -66,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Total tool count increased from 50+ to 80+
+- Total tool count increased from 50+ to 85+
 - Updated README with comprehensive tool documentation
 - Updated Architecture section with new tool modules
 
