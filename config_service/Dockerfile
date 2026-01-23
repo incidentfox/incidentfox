@@ -12,6 +12,9 @@ RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
+# Upgrade wheel to fix CVE-2026-24049
+RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2"
+
 COPY requirements.runtime.txt /app/requirements.runtime.txt
 RUN pip install --no-cache-dir -r /app/requirements.runtime.txt \
     && pip install --no-cache-dir --upgrade \

@@ -11,8 +11,9 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     && rm -rf /var/lib/apt/lists/* \
     && node --version && npm --version
 
-# Install Poetry
-RUN pip install --no-cache-dir poetry==1.7.1
+# Upgrade wheel to fix CVE-2026-24049 and install Poetry
+RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2" && \
+    pip install --no-cache-dir poetry==1.7.1
 
 # Copy dependency files
 COPY pyproject.toml poetry.lock ./
