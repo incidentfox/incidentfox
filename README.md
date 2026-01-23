@@ -55,7 +55,8 @@ claude
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/0965d78d-3d6a-4fd4-809e-d9ada9d9ce2c" width="700" controls autoplay loop muted></video>
-  <br>
+</p>
+<p align="center">
   <em>Investigating a PagerDuty alert with IncidentFox</em>
 </p>
 
