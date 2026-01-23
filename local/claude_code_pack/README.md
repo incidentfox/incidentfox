@@ -17,11 +17,32 @@ A comprehensive SRE investigation toolkit for Claude Code. Bring production obse
 
 ## Quick Start
 
-```bash
-# Install the plugin
-claude plugin install /path/to/claude_code_pack
+### Installation
 
-# Create a service catalog (optional but recommended)
+```bash
+# Clone the repository
+git clone https://github.com/incidentfox/incidentfox.git
+cd incidentfox/local/claude_code_pack
+
+# Run the install script
+./install.sh
+```
+
+That's it! The script will:
+1. Install Python dependencies (requires [uv](https://github.com/astral-sh/uv))
+2. Add the MCP server to Claude Code globally
+3. Verify everything works
+
+### Verify Installation
+
+```bash
+claude mcp list
+# Should show: incidentfox: ... ✓ Connected
+```
+
+### (Optional) Create a service catalog
+
+```bash
 cat > .incidentfox.yaml << 'EOF'
 services:
   api-gateway:
@@ -36,11 +57,63 @@ known_issues:
     cause: "Database connection pool exhausted"
     solution: "Scale postgres replicas or increase pool size"
 EOF
-
-# Start investigating!
-claude
-> /incident API latency increased 5x
 ```
+
+### Start Investigating!
+
+```bash
+claude
+> What pods are running in the default namespace?
+> Help me investigate high latency in the payment service
+```
+
+### Full Plugin Mode (skills + commands)
+
+For the full experience including skills and slash commands:
+
+```bash
+claude --plugin-dir /path/to/claude_code_pack
+```
+
+This gives you access to:
+- `/incident` - Start a structured investigation
+- `/metrics` - Query metrics from configured sources
+- `/remediate` - Propose and execute remediation actions
+- 5 expert skills (investigation methodology, K8s debugging, etc.)
+
+### Manual Installation
+
+<details>
+<summary>Click to expand manual installation steps</summary>
+
+If you prefer to install manually instead of using `./install.sh`:
+
+```bash
+# 1. Install dependencies
+cd mcp-servers/incidentfox
+uv sync
+cd ../..
+
+# 2. Add MCP server to Claude Code
+claude mcp add-json incidentfox "$(cat <<EOF
+{
+  "command": "uv",
+  "args": ["--directory", "$(pwd)/mcp-servers/incidentfox", "run", "incidentfox-mcp"],
+  "env": {
+    "KUBECONFIG": "\${KUBECONFIG:-~/.kube/config}",
+    "AWS_REGION": "\${AWS_REGION:-us-east-1}",
+    "DATADOG_API_KEY": "\${DATADOG_API_KEY}",
+    "DATADOG_APP_KEY": "\${DATADOG_APP_KEY}"
+  }
+}
+EOF
+)" -s user
+
+# 3. Verify
+claude mcp list
+```
+
+</details>
 
 ## Configuration
 
