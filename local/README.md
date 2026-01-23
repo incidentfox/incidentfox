@@ -14,11 +14,18 @@ cd claude_code_pack
 claude
 ```
 
-Then try:
+**Quick start** — explore your infrastructure (try whichever applies):
 ```
 > Check my Kubernetes cluster health
+> Show my Grafana dashboards
 > What integrations are configured?
-> Analyze my AWS costs for the past 30 days
+```
+
+**Real work** — use these tools for actual tasks:
+```
+> Help me triage this alert: [paste alert]
+> Find AWS cost reduction opportunities
+> Why did my GitHub Actions workflow fail?
 ```
 
 ### What You Get

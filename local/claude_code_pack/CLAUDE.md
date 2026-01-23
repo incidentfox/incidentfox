@@ -8,41 +8,27 @@ You have access to **85+ SRE investigation tools** via the IncidentFox MCP serve
 - **Collaboration** - Slack, PagerDuty, GitHub
 - **Analysis** - Anomaly detection, log analysis, blast radius
 
-## Quick Start Commands
+## Quick Start
 
-Try these read-only commands to explore your infrastructure:
+Explore your infrastructure (try whichever applies):
 
 ```
 Check my Kubernetes cluster health
-List pods in the default namespace
-Show recent errors from Datadog logs
-What AWS resources am I running?
+Show my Grafana dashboards
+What integrations are configured?
 ```
 
-## Common Use Cases
+## Real Work
 
-### Alert Triage
-```
-Help me investigate this alert: [paste alert]
-What's causing high latency in the payment service?
-```
+Use these tools for actual tasks:
 
-### AWS Cost Optimization
-```
-Analyze my AWS costs for the past 30 days
-Find EC2 instances that could be rightsized
-```
-
-### CI/CD Debugging
-```
-Why did my GitHub workflow fail?
-Show me the last 5 failed deployments
-```
-
-### Incident Investigation
-```
-/incident [description] - Start structured investigation
-```
+| Use Case | Example |
+|----------|---------|
+| **Alert Triage** | "Help me triage this alert: [paste]" |
+| **Cost Optimization** | "Find AWS cost reduction opportunities" |
+| **CI/CD Debugging** | "Why did my GitHub Actions workflow fail?" |
+| **Incident Investigation** | "Investigate high latency in payments" |
+| **Log Analysis** | "Search logs for connection errors" |
 
 ## Configuration
 
