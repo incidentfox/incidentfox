@@ -24,7 +24,7 @@ from src.db.config_repository import (
     rollback_to_version,
     update_node_configuration,
 )
-from src.db.models import KnowledgeDocument, KnowledgeEdge, NodeType
+from src.db.models import KnowledgeDocument, KnowledgeEdge, NodeType, Template
 from src.db.repository import (
     create_org_node,
     create_pending_change,
@@ -43,6 +43,9 @@ from src.db.session import db_session
 from src.services.email_service import send_pending_approval_notification
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+# Default template to apply when creating new organizations
+DEFAULT_TEMPLATE_SLUG = "slack-incident-triage"
 
 
 def require_admin(
@@ -70,6 +73,79 @@ def check_org_access(principal: AdminPrincipal, org_id: str) -> None:
 def get_db() -> Session:
     with db_session() as s:
         yield s
+
+
+def apply_default_template_to_org(session: Session, org_id: str, node_id: str) -> bool:
+    """
+    Apply the default template (slack-incident-triage) to a newly created org.
+
+    This ensures new orgs have a working agent configuration out of the box.
+    Users can later choose different templates or customize their config.
+
+    Returns True if template was applied, False if template not found.
+    """
+    from src.api.routes.templates import apply_template_with_agent_replacement
+    from src.db.config_models import NodeConfiguration
+
+    # Find the default template
+    template = (
+        session.query(Template)
+        .filter(
+            Template.slug == DEFAULT_TEMPLATE_SLUG,
+            Template.is_published == True,
+        )
+        .first()
+    )
+
+    if not template:
+        # Template not found - this can happen if templates haven't been seeded yet
+        # Log a warning but don't fail org creation
+        audit_logger().warning(
+            "default_template_not_found",
+            template_slug=DEFAULT_TEMPLATE_SLUG,
+            org_id=org_id,
+        )
+        return False
+
+    # Get the NodeConfiguration that was just created
+    node_config = (
+        session.query(NodeConfiguration)
+        .filter(
+            NodeConfiguration.org_id == org_id,
+            NodeConfiguration.node_id == node_id,
+        )
+        .first()
+    )
+
+    if not node_config:
+        # This shouldn't happen since create_org_node creates the config
+        audit_logger().warning(
+            "node_config_not_found_for_template",
+            org_id=org_id,
+            node_id=node_id,
+        )
+        return False
+
+    # Apply the template with agent replacement logic
+    merged_config = apply_template_with_agent_replacement(
+        node_config.config_json or {}, template.template_json
+    )
+    node_config.config_json = merged_config
+    node_config.updated_by = "system"
+
+    # Update template usage count
+    template.usage_count = (template.usage_count or 0) + 1
+
+    audit_logger().info(
+        "default_template_applied",
+        audit=True,
+        org_id=org_id,
+        node_id=node_id,
+        template_slug=DEFAULT_TEMPLATE_SLUG,
+        template_name=template.name,
+    )
+
+    return True
 
 
 class CreateNodeRequest(BaseModel):
@@ -177,6 +253,15 @@ def admin_create_node(
             node_type=body.node_type,
             name=body.name,
         )
+
+        # Auto-apply default template for org nodes
+        # This gives new orgs a working agent config out of the box
+        template_applied = False
+        if body.node_type == NodeType.org:
+            template_applied = apply_default_template_to_org(
+                session, org_id, body.node_id
+            )
+
         ADMIN_ACTIONS_TOTAL.labels("create_node", "ok").inc()
         cache = get_config_cache()
         if cache is not None:
@@ -188,6 +273,7 @@ def admin_create_node(
             node_id=body.node_id,
             auth_kind=principal.auth_kind,
             actor=principal.email or principal.subject,
+            template_applied=template_applied,
         )
         return {
             "org_id": node.org_id,
@@ -195,6 +281,7 @@ def admin_create_node(
             "parent_id": node.parent_id,
             "node_type": node.node_type.value,
             "name": node.name,
+            "template_applied": template_applied,
         }
     except ValueError as e:
         ADMIN_ACTIONS_TOTAL.labels("create_node", "error").inc()
