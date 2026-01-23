@@ -161,6 +161,75 @@ def get_config_status() -> dict:
                     "LOKI_URL": get_env("LOKI_URL") or "NOT SET",
                 },
             },
+            "github": {
+                "configured": is_set("GITHUB_TOKEN"),
+                "variables": {
+                    "GITHUB_TOKEN": "set" if is_set("GITHUB_TOKEN") else "NOT SET",
+                    "GITHUB_REPOSITORY": (
+                        get_env("GITHUB_REPOSITORY") or "not set (optional)"
+                    ),
+                },
+            },
+            "slack": {
+                "configured": is_set("SLACK_BOT_TOKEN"),
+                "variables": {
+                    "SLACK_BOT_TOKEN": (
+                        "set" if is_set("SLACK_BOT_TOKEN") else "NOT SET"
+                    ),
+                    "SLACK_DEFAULT_CHANNEL": (
+                        get_env("SLACK_DEFAULT_CHANNEL") or "not set (optional)"
+                    ),
+                },
+            },
+            "pagerduty": {
+                "configured": is_set("PAGERDUTY_API_KEY"),
+                "variables": {
+                    "PAGERDUTY_API_KEY": (
+                        "set" if is_set("PAGERDUTY_API_KEY") else "NOT SET"
+                    ),
+                },
+            },
+            "grafana": {
+                "configured": is_set("GRAFANA_URL") and is_set("GRAFANA_API_KEY"),
+                "variables": {
+                    "GRAFANA_URL": get_env("GRAFANA_URL") or "NOT SET",
+                    "GRAFANA_API_KEY": (
+                        "set" if is_set("GRAFANA_API_KEY") else "NOT SET"
+                    ),
+                },
+            },
+            "sentry": {
+                "configured": is_set("SENTRY_AUTH_TOKEN")
+                and is_set("SENTRY_ORGANIZATION"),
+                "variables": {
+                    "SENTRY_AUTH_TOKEN": (
+                        "set" if is_set("SENTRY_AUTH_TOKEN") else "NOT SET"
+                    ),
+                    "SENTRY_ORGANIZATION": (
+                        get_env("SENTRY_ORGANIZATION") or "NOT SET"
+                    ),
+                    "SENTRY_PROJECT": (
+                        get_env("SENTRY_PROJECT") or "not set (optional)"
+                    ),
+                },
+            },
+            "coralogix": {
+                "configured": is_set("CORALOGIX_API_KEY"),
+                "variables": {
+                    "CORALOGIX_API_KEY": (
+                        "set" if is_set("CORALOGIX_API_KEY") else "NOT SET"
+                    ),
+                    "CORALOGIX_REGION": get_env("CORALOGIX_REGION", "cx498"),
+                },
+            },
+            "splunk": {
+                "configured": is_set("SPLUNK_HOST") and is_set("SPLUNK_TOKEN"),
+                "variables": {
+                    "SPLUNK_HOST": get_env("SPLUNK_HOST") or "NOT SET",
+                    "SPLUNK_TOKEN": "set" if is_set("SPLUNK_TOKEN") else "NOT SET",
+                    "SPLUNK_PORT": get_env("SPLUNK_PORT", "8089"),
+                },
+            },
         },
     }
 
