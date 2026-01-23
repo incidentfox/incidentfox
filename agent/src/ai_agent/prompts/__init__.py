@@ -1,12 +1,29 @@
 """Prompt building utilities for AI SRE agents."""
 
 from .layers import (
+    # Static prompt layers
     ASK_HUMAN_TOOL_PROMPT,
+    CONTEXT_RECEIVING_GUIDANCE,
     DELEGATION_GUIDANCE,
+    ERROR_HANDLING_COMMON,
+    EVIDENCE_FORMAT_GUIDANCE,
     LAYER_1_CORE_IDENTITY,
     LAYER_3_BEHAVIORAL_FOUNDATION,
     LAYER_7_OUTPUT_AND_RULES,
+    SUBAGENT_OUTPUT_FORMAT,
     SUBAGENT_RESPONSE_GUIDANCE,
+    SYNTHESIS_GUIDANCE,
+    TOOL_CALL_LIMITS_TEMPLATE,
+    # Integration-specific error definitions
+    AWS_ERRORS,
+    CODING_ERRORS,
+    GITHUB_ERRORS,
+    INTEGRATION_ERRORS_REGISTRY,
+    INTEGRATION_TOOL_LIMITS,
+    KUBERNETES_ERRORS,
+    LOGS_ERRORS,
+    METRICS_ERRORS,
+    # Builder functions - planner layers
     apply_role_based_prompt,
     build_behavior_overrides,
     build_capabilities_section,
@@ -16,17 +33,43 @@ from .layers import (
     build_subagent_response_section,
     build_tool_guidance,
     format_local_context,
+    # Builder functions - shared sections
+    build_agent_prompt_sections,
+    build_agent_shared_sections,
+    build_error_handling_section,
+    build_tool_call_limits,
+    get_integration_errors,
+    get_integration_tool_limits,
 )
 from .planner_prompt import build_planner_system_prompt
 
 __all__ = [
+    # Planner prompt
     "build_planner_system_prompt",
+    # Static layers
     "LAYER_1_CORE_IDENTITY",
     "LAYER_3_BEHAVIORAL_FOUNDATION",
     "LAYER_7_OUTPUT_AND_RULES",
     "SUBAGENT_RESPONSE_GUIDANCE",
     "DELEGATION_GUIDANCE",
     "ASK_HUMAN_TOOL_PROMPT",
+    # Shared templates for all agents
+    "ERROR_HANDLING_COMMON",
+    "TOOL_CALL_LIMITS_TEMPLATE",
+    "SUBAGENT_OUTPUT_FORMAT",
+    "CONTEXT_RECEIVING_GUIDANCE",
+    "EVIDENCE_FORMAT_GUIDANCE",
+    "SYNTHESIS_GUIDANCE",
+    # Integration-specific error definitions
+    "KUBERNETES_ERRORS",
+    "AWS_ERRORS",
+    "GITHUB_ERRORS",
+    "METRICS_ERRORS",
+    "LOGS_ERRORS",
+    "CODING_ERRORS",
+    "INTEGRATION_ERRORS_REGISTRY",
+    "INTEGRATION_TOOL_LIMITS",
+    # Builder functions - planner layers
     "build_runtime_metadata",
     "build_capabilities_section",
     "build_contextual_info",
@@ -36,4 +79,11 @@ __all__ = [
     "apply_role_based_prompt",
     "build_tool_guidance",
     "format_local_context",
+    # Builder functions - shared sections (recommended API)
+    "build_agent_prompt_sections",  # Simpler API with defaults
+    "build_agent_shared_sections",  # Full control API
+    "build_error_handling_section",
+    "build_tool_call_limits",
+    "get_integration_errors",
+    "get_integration_tool_limits",
 ]
