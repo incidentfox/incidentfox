@@ -960,7 +960,9 @@ def meeting_search_transcript(
         return matches
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "meeting_search_transcript", "meeting")
+        return handle_integration_not_configured(
+            e, "meeting_search_transcript", "meeting"
+        )
     except IntegrationAuthenticationError:
         raise
     except Exception as e:

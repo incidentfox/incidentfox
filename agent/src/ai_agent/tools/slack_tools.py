@@ -123,7 +123,9 @@ def slack_get_channel_history(
         return messages
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "slack_get_channel_history", "slack")
+        return handle_integration_not_configured(
+            e, "slack_get_channel_history", "slack"
+        )
     except Exception as e:
         logger.error("slack_history_failed", error=str(e), channel=channel_id)
         raise ToolExecutionError("slack_get_channel_history", str(e), e)

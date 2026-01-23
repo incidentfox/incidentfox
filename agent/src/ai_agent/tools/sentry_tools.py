@@ -146,7 +146,9 @@ def sentry_get_issue_details(issue_id: str) -> dict[str, Any]:
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "sentry_get_issue_details", "sentry")
+        return handle_integration_not_configured(
+            e, "sentry_get_issue_details", "sentry"
+        )
     except Exception as e:
         logger.error("sentry_get_issue_details_failed", error=str(e), issue_id=issue_id)
         raise ToolExecutionError("sentry_get_issue_details", str(e), e)
@@ -181,7 +183,9 @@ def sentry_update_issue_status(issue_id: str, status: str) -> dict[str, Any]:
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "sentry_update_issue_status", "sentry")
+        return handle_integration_not_configured(
+            e, "sentry_update_issue_status", "sentry"
+        )
     except Exception as e:
         logger.error(
             "sentry_update_issue_status_failed", error=str(e), issue_id=issue_id
@@ -270,7 +274,9 @@ def sentry_get_project_stats(
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "sentry_get_project_stats", "sentry")
+        return handle_integration_not_configured(
+            e, "sentry_get_project_stats", "sentry"
+        )
     except Exception as e:
         logger.error("sentry_get_project_stats_failed", error=str(e), project=project)
         raise ToolExecutionError("sentry_get_project_stats", str(e), e)

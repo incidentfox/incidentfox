@@ -270,7 +270,9 @@ def gcp_list_cloud_sql_instances() -> list[dict[str, Any]]:
         return instances
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "gcp_list_cloud_sql_instances", "gcp")
+        return handle_integration_not_configured(
+            e, "gcp_list_cloud_sql_instances", "gcp"
+        )
     except Exception as e:
         logger.error("gcp_list_cloud_sql_failed", error=str(e))
         raise ToolExecutionError("gcp_list_cloud_sql_instances", str(e), e)

@@ -193,7 +193,9 @@ def get_service_apm_metrics(
         return {"service": service_name, "metrics": metrics}
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "get_service_apm_metrics", "datadog")
+        return handle_integration_not_configured(
+            e, "get_service_apm_metrics", "datadog"
+        )
     except Exception as e:
         logger.error("datadog_apm_failed", error=str(e), service=service_name)
         raise ToolExecutionError("get_service_apm_metrics", str(e), e)
@@ -304,7 +306,9 @@ def datadog_get_monitor_history(
         return result
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "datadog_get_monitor_history", "datadog")
+        return handle_integration_not_configured(
+            e, "datadog_get_monitor_history", "datadog"
+        )
     except Exception as e:
         logger.error(
             "datadog_monitor_history_failed", error=str(e), monitor_id=monitor_id

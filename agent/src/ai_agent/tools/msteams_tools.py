@@ -158,7 +158,9 @@ def send_teams_adaptive_card(
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "send_teams_adaptive_card", "msteams")
+        return handle_integration_not_configured(
+            e, "send_teams_adaptive_card", "msteams"
+        )
     except Exception as e:
         logger.error("teams_adaptive_card_failed", error=str(e))
         raise ToolExecutionError("send_teams_adaptive_card", str(e), e)

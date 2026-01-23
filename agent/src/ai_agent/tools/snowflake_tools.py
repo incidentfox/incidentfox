@@ -380,7 +380,9 @@ def snowflake_list_tables(
         )
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "snowflake_list_tables", "snowflake")
+        return handle_integration_not_configured(
+            e, "snowflake_list_tables", "snowflake"
+        )
     except Exception as e:
         logger.error(f"failed_to_list_snowflake_tables: {e}")
         return json.dumps({"error": str(e)})
@@ -439,7 +441,9 @@ def snowflake_describe_table(
         )
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "snowflake_describe_table", "snowflake")
+        return handle_integration_not_configured(
+            e, "snowflake_describe_table", "snowflake"
+        )
     except Exception as e:
         logger.error(f"failed_to_describe_snowflake_table: {e}")
         return json.dumps({"error": str(e), "table": table_name})
@@ -502,7 +506,9 @@ def snowflake_bulk_export(
         )
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "snowflake_bulk_export", "snowflake")
+        return handle_integration_not_configured(
+            e, "snowflake_bulk_export", "snowflake"
+        )
     except Exception as e:
         logger.error(f"failed_to_bulk_export: {e}")
         return json.dumps({"error": str(e)})

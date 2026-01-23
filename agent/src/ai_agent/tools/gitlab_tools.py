@@ -181,7 +181,9 @@ def gitlab_get_merge_requests(
         return mrs
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "gitlab_get_merge_requests", "gitlab")
+        return handle_integration_not_configured(
+            e, "gitlab_get_merge_requests", "gitlab"
+        )
     except Exception as e:
         logger.error("gitlab_get_merge_requests_failed", error=str(e), project=project)
         raise ToolExecutionError("gitlab_get_merge_requests", str(e), e)
@@ -265,7 +267,9 @@ def gitlab_get_pipeline_jobs(project: str, pipeline_id: int) -> list[dict[str, A
         return jobs
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "gitlab_get_pipeline_jobs", "gitlab")
+        return handle_integration_not_configured(
+            e, "gitlab_get_pipeline_jobs", "gitlab"
+        )
     except Exception as e:
         logger.error(
             "gitlab_get_pipeline_jobs_failed",

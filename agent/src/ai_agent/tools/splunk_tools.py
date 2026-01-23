@@ -174,7 +174,9 @@ def splunk_get_saved_searches() -> list[dict[str, Any]]:
         return saved_searches
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "splunk_get_saved_searches", "splunk")
+        return handle_integration_not_configured(
+            e, "splunk_get_saved_searches", "splunk"
+        )
     except Exception as e:
         logger.error("splunk_get_saved_searches_failed", error=str(e))
         raise ToolExecutionError("splunk_get_saved_searches", str(e), e)

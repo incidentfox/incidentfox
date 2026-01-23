@@ -191,7 +191,9 @@ def aggregate_errors_by_field(
         return aggregations
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "aggregate_errors_by_field", "elasticsearch")
+        return handle_integration_not_configured(
+            e, "aggregate_errors_by_field", "elasticsearch"
+        )
     except Exception as e:
         logger.error("elasticsearch_aggregate_failed", error=str(e), field=field)
         raise ToolExecutionError("aggregate_errors_by_field", str(e), e)
@@ -235,7 +237,9 @@ def elasticsearch_list_indices(pattern: str = "*") -> dict[str, Any]:
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "elasticsearch_list_indices", "elasticsearch")
+        return handle_integration_not_configured(
+            e, "elasticsearch_list_indices", "elasticsearch"
+        )
     except Exception as e:
         logger.error("elasticsearch_list_indices_failed", error=str(e), pattern=pattern)
         raise ToolExecutionError("elasticsearch_list_indices", str(e), e)
@@ -283,7 +287,9 @@ def elasticsearch_get_mapping(index: str) -> dict[str, Any]:
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "elasticsearch_get_mapping", "elasticsearch")
+        return handle_integration_not_configured(
+            e, "elasticsearch_get_mapping", "elasticsearch"
+        )
     except Exception as e:
         logger.error("elasticsearch_get_mapping_failed", error=str(e), index=index)
         raise ToolExecutionError("elasticsearch_get_mapping", str(e), e)
@@ -336,7 +342,9 @@ def elasticsearch_bulk_index(
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "elasticsearch_bulk_index", "elasticsearch")
+        return handle_integration_not_configured(
+            e, "elasticsearch_bulk_index", "elasticsearch"
+        )
     except Exception as e:
         logger.error("elasticsearch_bulk_index_failed", error=str(e), index=index)
         raise ToolExecutionError("elasticsearch_bulk_index", str(e), e)
@@ -439,7 +447,9 @@ def search_elasticsearch(
         return json.dumps(results, indent=2, default=str)
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "search_elasticsearch", "elasticsearch")
+        return handle_integration_not_configured(
+            e, "search_elasticsearch", "elasticsearch"
+        )
     except Exception as e:
         logger.error("search_elasticsearch_failed", error=str(e), index=index)
         raise ToolExecutionError("search_elasticsearch", str(e), e)
@@ -536,7 +546,9 @@ def get_elasticsearch_stats(index: str | None = None) -> str:
         return json.dumps(stats, indent=2, default=str)
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "get_elasticsearch_stats", "elasticsearch")
+        return handle_integration_not_configured(
+            e, "get_elasticsearch_stats", "elasticsearch"
+        )
     except Exception as e:
         logger.error("get_elasticsearch_stats_failed", error=str(e), index=index)
         raise ToolExecutionError("get_elasticsearch_stats", str(e), e)

@@ -145,7 +145,9 @@ def github_app_create_check_run(
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "github_app_create_check_run", "github-app")
+        return handle_integration_not_configured(
+            e, "github_app_create_check_run", "github-app"
+        )
     except Exception as e:
         logger.error("github_check_run_failed", error=str(e), repo=repo)
         raise ToolExecutionError("github_app_create_check_run", str(e), e)
@@ -186,7 +188,9 @@ def github_app_add_pr_comment(
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "github_app_add_pr_comment", "github-app")
+        return handle_integration_not_configured(
+            e, "github_app_add_pr_comment", "github-app"
+        )
     except Exception as e:
         logger.error("github_pr_comment_failed", error=str(e), repo=repo, pr=pr_number)
         raise ToolExecutionError("github_app_add_pr_comment", str(e), e)
@@ -245,7 +249,9 @@ def github_app_update_pr_status(
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "github_app_update_pr_status", "github-app")
+        return handle_integration_not_configured(
+            e, "github_app_update_pr_status", "github-app"
+        )
     except Exception as e:
         logger.error("github_status_update_failed", error=str(e), repo=repo)
         raise ToolExecutionError("github_app_update_pr_status", str(e), e)
@@ -287,7 +293,9 @@ def github_app_list_installations() -> list[dict[str, Any]]:
         return installations
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "github_app_list_installations", "github-app")
+        return handle_integration_not_configured(
+            e, "github_app_list_installations", "github-app"
+        )
     except Exception as e:
         logger.error("github_installations_list_failed", error=str(e))
         raise ToolExecutionError("github_app_list_installations", str(e), e)

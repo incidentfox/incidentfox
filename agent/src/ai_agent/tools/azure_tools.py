@@ -217,7 +217,9 @@ def query_azure_resource_graph(
         )
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "query_azure_resource_graph", "azure")
+        return handle_integration_not_configured(
+            e, "query_azure_resource_graph", "azure"
+        )
     except Exception as e:
         logger.error("failed_to_query_resource_graph", error=str(e))
         return json.dumps({"error": str(e), "query": query})
@@ -303,7 +305,9 @@ def get_application_insights_traces(
             )
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "get_application_insights_traces", "azure")
+        return handle_integration_not_configured(
+            e, "get_application_insights_traces", "azure"
+        )
     except Exception as e:
         logger.error(
             "failed_to_query_app_insights", error=str(e), app_id=app_insights_app_id
@@ -396,7 +400,9 @@ def get_azure_monitor_metrics(
         )
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "get_azure_monitor_metrics", "azure")
+        return handle_integration_not_configured(
+            e, "get_azure_monitor_metrics", "azure"
+        )
     except Exception as e:
         logger.error(
             "failed_to_get_azure_monitor_metrics", error=str(e), resource_id=resource_id
@@ -900,7 +906,9 @@ def describe_azure_sql_database(
         return json.dumps(result)
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "describe_azure_sql_database", "azure")
+        return handle_integration_not_configured(
+            e, "describe_azure_sql_database", "azure"
+        )
     except Exception as e:
         logger.error(
             "failed_to_describe_azure_sql_db",
@@ -1037,7 +1045,9 @@ def describe_cosmos_db_account(
         return json.dumps(result)
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "describe_cosmos_db_account", "azure")
+        return handle_integration_not_configured(
+            e, "describe_cosmos_db_account", "azure"
+        )
     except Exception as e:
         logger.error(
             "failed_to_describe_cosmos_db",
@@ -1144,7 +1154,9 @@ def query_azure_cost_management(
         )
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "query_azure_cost_management", "azure")
+        return handle_integration_not_configured(
+            e, "query_azure_cost_management", "azure"
+        )
     except Exception as e:
         logger.error("failed_to_query_cost_management", error=str(e), scope=scope)
         return json.dumps({"error": str(e), "scope": scope})
@@ -1232,7 +1244,9 @@ def get_azure_advisor_recommendations(
         )
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "get_azure_advisor_recommendations", "azure")
+        return handle_integration_not_configured(
+            e, "get_azure_advisor_recommendations", "azure"
+        )
     except Exception as e:
         logger.error("failed_to_get_advisor_recommendations", error=str(e))
         return json.dumps(

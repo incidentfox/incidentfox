@@ -115,7 +115,9 @@ def grafana_list_dashboards(folder_id: int = 0, query: str = "") -> str:
         return json.dumps(result)
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "grafana_list_dashboards", "grafana")
+        return handle_integration_not_configured(
+            e, "grafana_list_dashboards", "grafana"
+        )
     except ValueError as e:
         return json.dumps(
             {
@@ -340,7 +342,9 @@ def grafana_query_prometheus(
         return json.dumps(result)
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "grafana_query_prometheus", "grafana")
+        return handle_integration_not_configured(
+            e, "grafana_query_prometheus", "grafana"
+        )
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e)})
     except Exception as e:
@@ -389,7 +393,9 @@ def grafana_list_datasources() -> str:
         return json.dumps(result)
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "grafana_list_datasources", "grafana")
+        return handle_integration_not_configured(
+            e, "grafana_list_datasources", "grafana"
+        )
     except ValueError as e:
         return json.dumps(
             {
@@ -473,7 +479,9 @@ def grafana_get_annotations(
         return json.dumps(result)
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "grafana_get_annotations", "grafana")
+        return handle_integration_not_configured(
+            e, "grafana_get_annotations", "grafana"
+        )
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e)})
     except Exception as e:
@@ -633,7 +641,9 @@ def grafana_update_alert_rule(
         return json.dumps(result)
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "grafana_update_alert_rule", "grafana")
+        return handle_integration_not_configured(
+            e, "grafana_update_alert_rule", "grafana"
+        )
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e)})
     except Exception as e:

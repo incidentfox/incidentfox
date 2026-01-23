@@ -141,7 +141,9 @@ def bigquery_list_datasets() -> list[dict[str, Any]]:
         return datasets
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "bigquery_list_datasets", "bigquery")
+        return handle_integration_not_configured(
+            e, "bigquery_list_datasets", "bigquery"
+        )
     except Exception as e:
         logger.error("bigquery_list_datasets_failed", error=str(e))
         raise ToolExecutionError("bigquery_list_datasets", str(e), e)
@@ -235,7 +237,9 @@ def bigquery_get_table_schema(dataset: str, table: str) -> dict[str, Any]:
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "bigquery_get_table_schema", "bigquery")
+        return handle_integration_not_configured(
+            e, "bigquery_get_table_schema", "bigquery"
+        )
     except Exception as e:
         logger.error(
             "bigquery_get_schema_failed", error=str(e), dataset=dataset, table=table

@@ -217,7 +217,9 @@ def confluence_create_page(
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "confluence_create_page", "confluence")
+        return handle_integration_not_configured(
+            e, "confluence_create_page", "confluence"
+        )
     except Exception as e:
         logger.error("confluence_create_page_failed", error=str(e), title=title)
         raise ToolExecutionError("confluence_create_page", str(e), e)
@@ -271,7 +273,9 @@ def confluence_write_content(
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "confluence_write_content", "confluence")
+        return handle_integration_not_configured(
+            e, "confluence_write_content", "confluence"
+        )
     except Exception as e:
         logger.error("confluence_write_failed", error=str(e), page_id=page_id)
         raise ToolExecutionError("confluence_write_content", str(e), e)

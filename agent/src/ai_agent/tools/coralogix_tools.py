@@ -125,7 +125,9 @@ def search_coralogix_logs(
     try:
         config = get_coralogix_config()
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "search_coralogix_logs", "coralogix")
+        return handle_integration_not_configured(
+            e, "search_coralogix_logs", "coralogix"
+        )
 
     logger.info(f"Searching Coralogix logs: {query[:50]}...")
 
