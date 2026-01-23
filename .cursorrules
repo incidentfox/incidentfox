@@ -265,7 +265,7 @@ kubectl exec -n incidentfox deploy/incidentfox-agent -- python -c "import sys; p
 
 3. **Add to tools catalog:** `agent/src/ai_agent/core/tools_catalog.py`
 
-4. **Update org config:** `config_service/presets/default_org_config.json`
+4. **Update template (if adding to default):** `config_service/templates/01_slack_incident_triage.json`
 
 5. **Update customer docs:** `docs/CUSTOMER_INSTALLATION_GUIDE.md`
 
