@@ -32,53 +32,44 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 
 ## 🧑‍💻 For Developers
 
-Try IncidentFox locally with an interactive terminal — no infrastructure required.
-
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/d7dfedf0-e814-4772-b6c4-daf6d5d11901" width="700" controls autoplay loop muted></video>
-  <br>
-  <em>Local CLI for terminal-native developers</em>
-</div>
-
-### Quick Start
+**85+ DevOps & SRE tools for Claude Code.** Query your infrastructure, investigate incidents, analyze costs, and debug CI/CD — all from your terminal.
 
 ```bash
-cd local
-make quickstart
+cd local/claude_code_pack
+./install.sh
+claude
 ```
 
-This will prompt for your OpenAI API key, start all services, and launch the CLI.
-
-**Already configured?** Just run:
-```bash
-make run
+Then try:
+```
+> Check my Kubernetes cluster health
+> What integrations are configured?
+> Analyze my AWS costs for the past 30 days
+> Help me investigate this alert: [paste]
 ```
 
-### Example Session
+**What you get:**
+- 85+ tools: Kubernetes, AWS, Datadog, Prometheus, GitHub, Slack, PagerDuty, Grafana, Sentry
+- Unified log search across multiple backends
+- Investigation history with pattern learning
+- Postmortem generation
+- No Docker, no services to manage
 
-```
-incidentfox> Check if there are any pods crashing in default namespace
+**Full docs:** [local/claude_code_pack/README.md](local/claude_code_pack/README.md)
 
-🔍 Investigating...
+<details>
+<summary><strong>Local CLI (Experimental)</strong></summary>
 
-Found 2 pods in CrashLoopBackOff:
-- payment-service-abc123: OOMKilled (memory limit 512Mi)
-- cart-service-xyz789: Error in startup probe
+> **Warning:** The local CLI is in early development and not recommended for production use.
 
-Recommendations:
-1. Increase memory limit for payment-service to 1Gi
-2. Check cart-service logs for startup errors
-```
+Self-hosted multi-agent system for advanced users who need custom agent behavior, self-hosted infrastructure, or non-Claude LLM providers.
 
-### What You Can Do Locally
+**Requirements:** Docker, Docker Compose, OpenAI API key
 
-- Investigate Kubernetes issues (pod crashes, deployments, services)
-- Query logs and metrics from your observability stack
-- Analyze AWS resources (EC2, Lambda, ECS, CloudWatch)
-- Search and analyze code with GitHub integration
-- Run anomaly detection on metrics
+**Documentation:** [local/incidentfox_cli/README.md](local/incidentfox_cli/README.md)
 
-**Full local setup guide:** [local/README.md](local/README.md)
+</details>
+
 
 ---
 
