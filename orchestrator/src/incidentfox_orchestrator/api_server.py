@@ -242,45 +242,78 @@ def create_app() -> FastAPI:
     # Register webhook router (all external webhooks: Slack, GitHub, PagerDuty, Incident.io)
     app.include_router(webhook_router)
 
-    @app.middleware("http")
-    async def add_request_id(request: Request, call_next):
-        rid = request.headers.get("x-request-id") or _new_request_id()
-        request.state.request_id = rid
-        start = __import__("time").time()
-        try:
-            response = await call_next(request)
-            response.headers["x-request-id"] = rid
+    # Pure ASGI middleware for request ID and logging.
+    # NOTE: We use pure ASGI middleware instead of @app.middleware("http") because
+    # BaseHTTPMiddleware breaks BackgroundTasks - it intercepts the response and
+    # creates a new one that doesn't preserve background tasks.
+    # See: https://github.com/encode/starlette/issues/919
+    class RequestIdMiddleware:
+        def __init__(self, app):
+            self.app = app
+
+        async def __call__(self, scope, receive, send):
+            if scope["type"] != "http":
+                await self.app(scope, receive, send)
+                return
+
+            # Extract or generate request ID
+            headers = dict(scope.get("headers", []))
+            rid = (headers.get(b"x-request-id") or b"").decode("utf-8") or _new_request_id()
+
+            # Store in scope for access by route handlers
+            scope["state"] = scope.get("state", {})
+            scope["state"]["request_id"] = rid
+
+            method = scope.get("method", "")
+            path = scope.get("path", "")
+            start = __import__("time").time()
+            status_code = 500  # Default to 500 if we don't get a response
+
+            async def send_wrapper(message):
+                nonlocal status_code
+                if message["type"] == "http.response.start":
+                    status_code = message.get("status", 500)
+                    # Add request ID to response headers
+                    headers = list(message.get("headers", []))
+                    headers.append((b"x-request-id", rid.encode("utf-8")))
+                    message = {**message, "headers": headers}
+                await send(message)
+
             try:
-                if _METRICS_ENABLED:
-                    HTTP_REQUESTS_TOTAL.labels(request.method, str(request.url.path), str(response.status_code)).inc()  # type: ignore[union-attr]
-                    HTTP_REQUEST_DURATION_SECONDS.labels(request.method, str(request.url.path)).observe(__import__("time").time() - start)  # type: ignore[union-attr]
-            except Exception:
-                pass
-            _log(
-                "http_request",
-                request_id=rid,
-                method=request.method,
-                path=str(request.url.path),
-                status_code=response.status_code,
-                duration_ms=int((__import__("time").time() - start) * 1000),
-            )
-            return response
-        except Exception as e:
-            try:
-                if _METRICS_ENABLED:
-                    HTTP_REQUESTS_TOTAL.labels(request.method, str(request.url.path), "500").inc()  # type: ignore[union-attr]
-                    HTTP_REQUEST_DURATION_SECONDS.labels(request.method, str(request.url.path)).observe(__import__("time").time() - start)  # type: ignore[union-attr]
-            except Exception:
-                pass
-            _log(
-                "http_request_failed",
-                request_id=rid,
-                method=request.method,
-                path=str(request.url.path),
-                error=str(e),
-                duration_ms=int((__import__("time").time() - start) * 1000),
-            )
-            raise
+                await self.app(scope, receive, send_wrapper)
+                # Log successful request after response is sent
+                try:
+                    if _METRICS_ENABLED:
+                        HTTP_REQUESTS_TOTAL.labels(method, path, str(status_code)).inc()  # type: ignore[union-attr]
+                        HTTP_REQUEST_DURATION_SECONDS.labels(method, path).observe(__import__("time").time() - start)  # type: ignore[union-attr]
+                except Exception:
+                    pass
+                _log(
+                    "http_request",
+                    request_id=rid,
+                    method=method,
+                    path=path,
+                    status_code=status_code,
+                    duration_ms=int((__import__("time").time() - start) * 1000),
+                )
+            except Exception as e:
+                try:
+                    if _METRICS_ENABLED:
+                        HTTP_REQUESTS_TOTAL.labels(method, path, "500").inc()  # type: ignore[union-attr]
+                        HTTP_REQUEST_DURATION_SECONDS.labels(method, path).observe(__import__("time").time() - start)  # type: ignore[union-attr]
+                except Exception:
+                    pass
+                _log(
+                    "http_request_failed",
+                    request_id=rid,
+                    method=method,
+                    path=path,
+                    error=str(e),
+                    duration_ms=int((__import__("time").time() - start) * 1000),
+                )
+                raise
+
+    app.add_middleware(RequestIdMiddleware)
 
     @app.get("/health")
     def health():
