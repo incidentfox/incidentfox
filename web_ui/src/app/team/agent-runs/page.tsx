@@ -195,8 +195,9 @@ export default function TeamAgentRunsPage() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
+    <div className="h-[calc(100vh-48px)] flex flex-col p-6 max-w-5xl mx-auto">
+      {/* Header - Fixed */}
+      <div className="flex items-center justify-between mb-6 flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
             <Activity className="w-5 h-5 text-white" />
@@ -236,8 +237,8 @@ export default function TeamAgentRunsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-4 mb-6">
+      {/* Filters - Fixed */}
+      <div className="flex items-center gap-4 mb-4 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-400" />
           <select
@@ -274,14 +275,15 @@ export default function TeamAgentRunsPage() {
         </div>
       </div>
 
-      {/* Runs List */}
-      {filteredRuns.length === 0 ? (
-        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-12 text-center">
-          <Activity className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
-          <p className="text-gray-500">No agent runs found.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
+      {/* Runs List - Scrollable */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {filteredRuns.length === 0 ? (
+          <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-12 text-center">
+            <Activity className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+            <p className="text-gray-500">No agent runs found.</p>
+          </div>
+        ) : (
+          <div className="space-y-3 pb-4">
           {filteredRuns.map((run) => (
             <div
               key={run.id}
@@ -405,8 +407,9 @@ export default function TeamAgentRunsPage() {
               )}
             </div>
           ))}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {/* Chat Panel Overlay */}
       {showChatPanel && (

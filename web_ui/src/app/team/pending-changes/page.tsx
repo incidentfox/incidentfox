@@ -222,8 +222,9 @@ export default function TeamPendingChangesPage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
+    <div className="h-[calc(100vh-48px)] flex flex-col p-6 max-w-4xl mx-auto">
+      {/* Header - Fixed */}
+      <div className="flex items-center justify-between mb-6 flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
             <GitPullRequest className="w-5 h-5 text-white" />
@@ -245,10 +246,10 @@ export default function TeamPendingChangesPage() {
         )}
       </div>
 
-      {/* Message */}
+      {/* Message - Fixed */}
       {message && (
         <div
-          className={`mb-6 p-4 rounded-xl flex items-center gap-3 ${
+          className={`mb-6 p-4 rounded-xl flex items-center gap-3 flex-shrink-0 ${
             message.type === 'success'
               ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'
               : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
@@ -259,8 +260,8 @@ export default function TeamPendingChangesPage() {
         </div>
       )}
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-2 mb-6">
+      {/* Filter Tabs - Fixed */}
+      <div className="flex items-center gap-2 mb-6 flex-shrink-0">
         {(['pending', 'reviewed', 'all'] as const).map((f) => (
           <button
             key={f}
@@ -276,17 +277,18 @@ export default function TeamPendingChangesPage() {
         ))}
       </div>
 
-      {/* Changes List */}
-      {filteredChanges.length === 0 ? (
-        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-12 text-center">
-          <GitPullRequest className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
-          <p className="text-gray-500">
-            {filter === 'pending' ? 'No pending changes to review.' : 'No changes found.'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {filteredChanges.map((change) => (
+      {/* Changes List - Scrollable */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {filteredChanges.length === 0 ? (
+          <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-12 text-center">
+            <GitPullRequest className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+            <p className="text-gray-500">
+              {filter === 'pending' ? 'No pending changes to review.' : 'No changes found.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4 pb-4">
+            {filteredChanges.map((change) => (
             <div
               key={change.id}
               className={`bg-white dark:bg-gray-900 border rounded-xl overflow-hidden ${
@@ -470,9 +472,10 @@ export default function TeamPendingChangesPage() {
                 </div>
               )}
             </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
