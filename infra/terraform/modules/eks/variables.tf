@@ -71,4 +71,38 @@ variable "tags" {
   description = "Tags applied to AWS resources"
 }
 
+# Memory-intensive nodegroup for workloads like knowledge-base
+variable "memory_intensive_nodegroup_enabled" {
+  type        = bool
+  default     = false
+  description = "Enable memory-intensive nodegroup for large memory workloads"
+}
+
+variable "memory_intensive_instance_types" {
+  type        = list(string)
+  default     = ["t3.xlarge"]
+  description = "Instance types for memory-intensive nodegroup (16GB RAM)"
+}
+
+variable "memory_intensive_disk_size" {
+  type        = number
+  default     = 50
+  description = "Disk size in GB for memory-intensive nodes"
+}
+
+variable "memory_intensive_min_size" {
+  type    = number
+  default = 0
+}
+
+variable "memory_intensive_max_size" {
+  type    = number
+  default = 2
+}
+
+variable "memory_intensive_desired_size" {
+  type    = number
+  default = 1
+}
+
 

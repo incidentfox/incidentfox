@@ -189,17 +189,21 @@ export default function TeamAgentRunsPage() {
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-3">
-            <Activity className="w-7 h-7 text-gray-500" />
-            Agent Run History
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+            <Activity className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Agent Run History
             <HelpTip id="agent-runs" position="right">
               <strong>Agent Runs</strong> are individual AI investigation sessions. Each run uses tools like Grafana, Kubernetes, and your Knowledge Base to analyze incidents and provide recommendations.
             </HelpTip>
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            View the history of AI agent invocations for your team.
-          </p>
+            <p className="text-sm text-gray-500">
+              View the history of AI agent invocations for your team.
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {runningCount > 0 && (
