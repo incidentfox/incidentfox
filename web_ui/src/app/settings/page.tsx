@@ -28,11 +28,18 @@ import {
   ToggleRight,
   Network,
   Loader2,
-  Link2
+  Link2,
+  Route,
+  MessageSquare,
+  Github,
+  Webhook,
+  Tag,
+  Server,
+  Info
 } from 'lucide-react';
 
 // Tab type
-type SettingsTab = 'general' | 'notifications' | 'telemetry' | 'features' | 'advanced';
+type SettingsTab = 'general' | 'routing' | 'notifications' | 'telemetry' | 'features' | 'advanced';
 
 // Feature configs
 interface IngestorSourceConfig {
@@ -75,6 +82,17 @@ interface CorrelationConfig {
   enabled: boolean;
   temporal_window_seconds: number;
   semantic_threshold: number;
+}
+
+// Routing configuration - determines which webhooks route to this team
+interface RoutingConfig {
+  slack_channel_ids: string[];
+  github_repos: string[];
+  pagerduty_service_ids: string[];
+  incidentio_team_ids: string[];
+  incidentio_alert_source_ids: string[];
+  coralogix_team_names: string[];
+  services: string[];
 }
 
 // Admin sub-pages (shown as links in sidebar for admins)
@@ -151,6 +169,22 @@ export default function SettingsPage() {
   const [featuresLoading, setFeaturesLoading] = useState(false);
   const [featuresSaving, setFeaturesSaving] = useState(false);
   const [syncingCronJobs, setSyncingCronJobs] = useState(false);
+
+  // Routing configuration state
+  const [routingConfig, setRoutingConfig] = useState<RoutingConfig>({
+    slack_channel_ids: [],
+    github_repos: [],
+    pagerduty_service_ids: [],
+    incidentio_team_ids: [],
+    incidentio_alert_source_ids: [],
+    coralogix_team_names: [],
+    services: [],
+  });
+  const [routingLoading, setRoutingLoading] = useState(false);
+  const [routingSaving, setRoutingSaving] = useState(false);
+  // Track which routing field is being edited (for add input)
+  const [editingRoutingField, setEditingRoutingField] = useState<keyof RoutingConfig | null>(null);
+  const [newRoutingValue, setNewRoutingValue] = useState('');
 
   const isAdmin = identity?.role === 'admin';
 
@@ -376,13 +410,28 @@ export default function SettingsPage() {
               semantic_threshold: config.correlation.semantic_threshold ?? 0.75,
             });
           }
+
+          // Extract routing config
+          if (config.routing) {
+            setRoutingConfig({
+              slack_channel_ids: config.routing.slack_channel_ids || [],
+              github_repos: config.routing.github_repos || [],
+              pagerduty_service_ids: config.routing.pagerduty_service_ids || [],
+              incidentio_team_ids: config.routing.incidentio_team_ids || [],
+              incidentio_alert_source_ids: config.routing.incidentio_alert_source_ids || [],
+              coralogix_team_names: config.routing.coralogix_team_names || [],
+              services: config.routing.services || [],
+            });
+          }
         }
       } catch (e) {
         console.error('Failed to load feature configs', e);
       } finally {
         setFeaturesLoading(false);
+        setRoutingLoading(false);
       }
     };
+    setRoutingLoading(true);
     loadFeatureConfigs();
   }, []);
 
@@ -424,6 +473,54 @@ export default function SettingsPage() {
     }
   };
 
+  // Save routing config
+  const saveRoutingConfig = async () => {
+    setRoutingSaving(true);
+    try {
+      const patch = {
+        routing: routingConfig,
+      };
+
+      const res = await apiFetch('/api/config/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+
+      if (!res.ok) throw new Error('Failed to save');
+      alert('Routing configuration saved successfully!');
+    } catch (e: any) {
+      console.error('Failed to save routing config', e);
+      alert('Failed to save routing configuration');
+    } finally {
+      setRoutingSaving(false);
+    }
+  };
+
+  // Add a routing identifier value
+  const addRoutingValue = (field: keyof RoutingConfig) => {
+    const trimmed = newRoutingValue.trim();
+    if (!trimmed) return;
+    if (routingConfig[field].includes(trimmed)) {
+      alert('This value already exists');
+      return;
+    }
+    setRoutingConfig({
+      ...routingConfig,
+      [field]: [...routingConfig[field], trimmed],
+    });
+    setNewRoutingValue('');
+    setEditingRoutingField(null);
+  };
+
+  // Remove a routing identifier value
+  const removeRoutingValue = (field: keyof RoutingConfig, value: string) => {
+    setRoutingConfig({
+      ...routingConfig,
+      [field]: routingConfig[field].filter((v) => v !== value),
+    });
+  };
+
   // Sync CronJobs with current config
   const syncCronJobs = async () => {
     setSyncingCronJobs(true);
@@ -450,6 +547,7 @@ export default function SettingsPage() {
 
   const tabs: { id: SettingsTab; name: string; icon: any; adminOnly?: boolean }[] = [
     { id: 'general', name: 'General', icon: Settings },
+    { id: 'routing', name: 'Webhook Routing', icon: Route },
     { id: 'notifications', name: 'Delivery & Notifications', icon: Bell },
     { id: 'telemetry', name: 'Telemetry', icon: Radio },
     { id: 'features', name: 'Advanced Features', icon: Zap },
@@ -562,6 +660,172 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
+          )}
+
+          {/* Webhook Routing Tab */}
+          {activeTab === 'routing' && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                      Webhook Routing
+                      <HelpTip id="webhook-routing" position="right">
+                        <strong>Webhook Routing</strong> determines which incoming webhooks are directed to your team. Configure identifiers from your integrations (Slack channels, GitHub repos, PagerDuty services, etc.) so that alerts and events from those sources are routed to your team's agent.
+                      </HelpTip>
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Configure which webhooks should route to your team
+                    </p>
+                  </div>
+                </div>
+
+                {/* Info Banner */}
+                <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-gray-600 dark:text-gray-300">
+                      <p className="font-medium mb-1">How routing works:</p>
+                      <p>When a webhook arrives from Slack, GitHub, PagerDuty, or other integrations, the system checks these identifiers to determine which team should handle the event. Add all the IDs and names that belong to your team.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {routingLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                    <span className="ml-2 text-gray-500">Loading routing configuration...</span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Add Routing Form */}
+                    {editingRoutingField ? (
+                      <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <select
+                            value={editingRoutingField}
+                            onChange={(e) => setEditingRoutingField(e.target.value as keyof RoutingConfig)}
+                            className="px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                          >
+                            <option value="slack_channel_ids">Slack Channel ID</option>
+                            <option value="github_repos">GitHub Repository</option>
+                            <option value="pagerduty_service_ids">PagerDuty Service ID</option>
+                            <option value="incidentio_team_ids">Incident.io Team ID</option>
+                            <option value="incidentio_alert_source_ids">Incident.io Alert Source ID</option>
+                            <option value="coralogix_team_names">Coralogix Team Name</option>
+                            <option value="services">Service Name</option>
+                          </select>
+                          <input
+                            type="text"
+                            value={newRoutingValue}
+                            onChange={(e) => setNewRoutingValue(e.target.value)}
+                            placeholder={
+                              editingRoutingField === 'slack_channel_ids' ? 'C0A4967KRBM' :
+                              editingRoutingField === 'github_repos' ? 'owner/repo' :
+                              editingRoutingField === 'pagerduty_service_ids' ? 'PXXXXXX' :
+                              editingRoutingField === 'incidentio_team_ids' ? '01KCSZ7FHG...' :
+                              editingRoutingField === 'incidentio_alert_source_ids' ? '01KEGMSPP...' :
+                              editingRoutingField === 'coralogix_team_names' ? 'team-name' :
+                              'service-name'
+                            }
+                            className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                            onKeyDown={(e) => e.key === 'Enter' && addRoutingValue(editingRoutingField)}
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => addRoutingValue(editingRoutingField)}
+                              className="px-4 py-2 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700"
+                            >
+                              Add
+                            </button>
+                            <button
+                              onClick={() => { setEditingRoutingField(null); setNewRoutingValue(''); }}
+                              className="px-4 py-2 text-gray-600 dark:text-gray-400 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setEditingRoutingField('slack_channel_ids')}
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Routing Rule
+                      </button>
+                    )}
+
+                    {/* Configured Routes List */}
+                    {(() => {
+                      const allRoutes: { type: keyof RoutingConfig; label: string; value: string }[] = [];
+                      routingConfig.slack_channel_ids.forEach(v => allRoutes.push({ type: 'slack_channel_ids', label: 'Slack', value: v }));
+                      routingConfig.github_repos.forEach(v => allRoutes.push({ type: 'github_repos', label: 'GitHub', value: v }));
+                      routingConfig.pagerduty_service_ids.forEach(v => allRoutes.push({ type: 'pagerduty_service_ids', label: 'PagerDuty', value: v }));
+                      routingConfig.incidentio_team_ids.forEach(v => allRoutes.push({ type: 'incidentio_team_ids', label: 'Incident.io Team', value: v }));
+                      routingConfig.incidentio_alert_source_ids.forEach(v => allRoutes.push({ type: 'incidentio_alert_source_ids', label: 'Incident.io Source', value: v }));
+                      routingConfig.coralogix_team_names.forEach(v => allRoutes.push({ type: 'coralogix_team_names', label: 'Coralogix', value: v }));
+                      routingConfig.services.forEach(v => allRoutes.push({ type: 'services', label: 'Service', value: v }));
+
+                      if (allRoutes.length === 0) {
+                        return (
+                          <div className="text-sm text-gray-500 py-8 text-center border border-dashed border-gray-200 dark:border-gray-800 rounded-lg">
+                            No routing rules configured. Webhooks won&apos;t be routed to this team.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="border border-gray-200 dark:border-gray-800 rounded-lg divide-y divide-gray-200 dark:divide-gray-800">
+                          {allRoutes.map((route, idx) => (
+                            <div
+                              key={`${route.type}-${route.value}-${idx}`}
+                              className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded">
+                                  {route.label}
+                                </span>
+                                <code className="text-sm text-gray-900 dark:text-gray-100">{route.value}</code>
+                              </div>
+                              <button
+                                onClick={() => removeRoutingValue(route.type, route.value)}
+                                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Save Button */}
+                    <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+                      <button
+                        onClick={saveRoutingConfig}
+                        disabled={routingSaving}
+                        className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
+                      >
+                        {routingSaving ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Save Routing Configuration
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {/* Delivery & Notifications Tab */}
@@ -934,8 +1198,8 @@ export default function SettingsPage() {
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                      <Zap className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                    <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                      <Zap className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                     </div>
                     <div>
                       <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
@@ -953,7 +1217,7 @@ export default function SettingsPage() {
                     onClick={() => setPipelineConfig({ ...pipelineConfig, enabled: !pipelineConfig.enabled })}
                     disabled={featuresLoading}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      pipelineConfig.enabled ? 'bg-orange-600' : 'bg-gray-300 dark:bg-gray-700'
+                      pipelineConfig.enabled ? 'bg-gray-600' : 'bg-gray-300 dark:bg-gray-700'
                     } ${featuresLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <span
@@ -993,7 +1257,7 @@ export default function SettingsPage() {
                       {/* Slack Ingestor */}
                       <div className={`p-4 rounded-lg border ${
                         pipelineConfig.ingestors.slack.enabled
-                          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                          ? 'border-gray-400 bg-gray-50 dark:bg-gray-800/50'
                           : 'border-gray-200 dark:border-gray-700'
                       }`}>
                         <label className="flex items-center gap-3 cursor-pointer">
@@ -1014,7 +1278,7 @@ export default function SettingsPage() {
                           <div
                             className={`w-4 h-4 rounded border flex items-center justify-center ${
                               pipelineConfig.ingestors.slack.enabled
-                                ? 'bg-orange-600 border-orange-600'
+                                ? 'bg-gray-600 border-gray-600'
                                 : 'border-gray-300 dark:border-gray-600'
                             }`}
                           >
@@ -1056,7 +1320,7 @@ export default function SettingsPage() {
                       {/* Confluence Ingestor */}
                       <div className={`p-4 rounded-lg border ${
                         pipelineConfig.ingestors.confluence.enabled
-                          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                          ? 'border-gray-400 bg-gray-50 dark:bg-gray-800/50'
                           : 'border-gray-200 dark:border-gray-700'
                       }`}>
                         <label className="flex items-center gap-3 cursor-pointer">
@@ -1077,7 +1341,7 @@ export default function SettingsPage() {
                           <div
                             className={`w-4 h-4 rounded border flex items-center justify-center ${
                               pipelineConfig.ingestors.confluence.enabled
-                                ? 'bg-orange-600 border-orange-600'
+                                ? 'bg-gray-600 border-gray-600'
                                 : 'border-gray-300 dark:border-gray-600'
                             }`}
                           >
@@ -1141,7 +1405,7 @@ export default function SettingsPage() {
                       {/* Google Docs Ingestor */}
                       <div className={`p-4 rounded-lg border ${
                         pipelineConfig.ingestors.gdocs.enabled
-                          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                          ? 'border-gray-400 bg-gray-50 dark:bg-gray-800/50'
                           : 'border-gray-200 dark:border-gray-700'
                       }`}>
                         <label className="flex items-center gap-3 cursor-pointer">
@@ -1162,7 +1426,7 @@ export default function SettingsPage() {
                           <div
                             className={`w-4 h-4 rounded border flex items-center justify-center ${
                               pipelineConfig.ingestors.gdocs.enabled
-                                ? 'bg-orange-600 border-orange-600'
+                                ? 'bg-gray-600 border-gray-600'
                                 : 'border-gray-300 dark:border-gray-600'
                             }`}
                           >
@@ -1204,7 +1468,7 @@ export default function SettingsPage() {
                       {/* Agent Traces Ingestor */}
                       <div className={`p-4 rounded-lg border ${
                         pipelineConfig.ingestors.agent_traces.enabled
-                          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                          ? 'border-gray-400 bg-gray-50 dark:bg-gray-800/50'
                           : 'border-gray-200 dark:border-gray-700'
                       }`}>
                         <label className="flex items-center gap-3 cursor-pointer">
@@ -1225,7 +1489,7 @@ export default function SettingsPage() {
                           <div
                             className={`w-4 h-4 rounded border flex items-center justify-center ${
                               pipelineConfig.ingestors.agent_traces.enabled
-                                ? 'bg-orange-600 border-orange-600'
+                                ? 'bg-gray-600 border-gray-600'
                                 : 'border-gray-300 dark:border-gray-600'
                             }`}
                           >
@@ -1246,8 +1510,8 @@ export default function SettingsPage() {
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg">
-                      <Network className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                    <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                      <Network className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                     </div>
                     <div>
                       <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
@@ -1265,7 +1529,7 @@ export default function SettingsPage() {
                     onClick={() => setDependencyConfig({ ...dependencyConfig, enabled: !dependencyConfig.enabled })}
                     disabled={featuresLoading}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      dependencyConfig.enabled ? 'bg-cyan-600' : 'bg-gray-300 dark:bg-gray-700'
+                      dependencyConfig.enabled ? 'bg-gray-600' : 'bg-gray-300 dark:bg-gray-700'
                     } ${featuresLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <span
@@ -1312,7 +1576,7 @@ export default function SettingsPage() {
                             key={source.key}
                             className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                               dependencyConfig.sources[source.key as keyof typeof dependencyConfig.sources]
-                                ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20'
+                                ? 'border-gray-400 bg-gray-50 dark:bg-gray-800/50'
                                 : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
                             }`}
                           >
@@ -1333,7 +1597,7 @@ export default function SettingsPage() {
                             <div
                               className={`w-4 h-4 rounded border flex items-center justify-center ${
                                 dependencyConfig.sources[source.key as keyof typeof dependencyConfig.sources]
-                                  ? 'bg-cyan-600 border-cyan-600'
+                                  ? 'bg-gray-600 border-gray-600'
                                   : 'border-gray-300 dark:border-gray-600'
                               }`}
                             >
@@ -1359,8 +1623,8 @@ export default function SettingsPage() {
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                      <Link2 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                      <Link2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                     </div>
                     <div>
                       <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
@@ -1378,7 +1642,7 @@ export default function SettingsPage() {
                     onClick={() => setCorrelationConfig({ ...correlationConfig, enabled: !correlationConfig.enabled })}
                     disabled={featuresLoading}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      correlationConfig.enabled ? 'bg-purple-600' : 'bg-gray-300 dark:bg-gray-700'
+                      correlationConfig.enabled ? 'bg-gray-600' : 'bg-gray-300 dark:bg-gray-700'
                     } ${featuresLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <span
@@ -1447,7 +1711,7 @@ export default function SettingsPage() {
                 <button
                   onClick={saveFeatureConfigs}
                   disabled={featuresSaving}
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
                 >
                   {featuresSaving ? (
                     <>
@@ -1484,8 +1748,8 @@ export default function SettingsPage() {
               </div>
 
               {/* Info Box */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
+              <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <p className="text-sm text-gray-700 dark:text-gray-300">
                   <span className="font-medium">How it works:</span> When enabled, these features run as scheduled Kubernetes CronJobs.
                   The AI Pipeline processes incident data to build your knowledge base. Dependency Discovery analyzes
                   observability data to map service relationships, helping agents understand your architecture during incidents.
