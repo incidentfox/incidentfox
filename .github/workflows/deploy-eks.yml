@@ -152,6 +152,21 @@ jobs:
         with:
           version: 'v3.14.0'
 
+      - name: Adopt orphaned resources for Helm
+        run: |
+          # Fix ServiceAccounts that exist but weren't created by this Helm release
+          # This adds required Helm ownership labels so Helm can manage them
+          for sa in incidentfox-knowledge-base; do
+            if kubectl get serviceaccount "$sa" -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
+              echo "Patching ServiceAccount $sa with Helm ownership labels..."
+              kubectl label serviceaccount "$sa" -n ${{ env.HELM_NAMESPACE }} \
+                app.kubernetes.io/managed-by=Helm --overwrite
+              kubectl annotate serviceaccount "$sa" -n ${{ env.HELM_NAMESPACE }} \
+                meta.helm.sh/release-name=incidentfox \
+                meta.helm.sh/release-namespace=${{ env.HELM_NAMESPACE }} --overwrite
+            fi
+          done
+
       - name: Deploy with Helm
         working-directory: charts
         run: |
