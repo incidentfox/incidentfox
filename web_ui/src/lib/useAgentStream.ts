@@ -44,6 +44,115 @@ export function useAgentStream(options: UseAgentStreamOptions = {}) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastResponseIdRef = useRef<string | null>(null);
 
+  // Define handleStreamEvent FIRST so it can be used in sendMessage's dependency array
+  const handleStreamEvent = useCallback((event: Record<string, unknown>, assistantMsgId: string) => {
+    const eventType = event.type as string || (event.agent ? 'agent_started' : 'unknown');
+    console.log('[useAgentStream] handleStreamEvent:', eventType, event);
+
+    switch (eventType) {
+      case 'agent_started':
+        console.log('[useAgentStream] Agent started');
+        break;
+
+      case 'tool_started': {
+        const toolCall: ToolCall = {
+          id: `tool-${Date.now()}-${event.sequence}`,
+          name: event.tool as string || 'unknown',
+          status: 'running',
+          input: event.input as Record<string, unknown>,
+          startedAt: new Date(),
+        };
+        setCurrentToolCalls(prev => [...prev, toolCall]);
+        setMessages(prev => prev.map(m =>
+          m.id === assistantMsgId
+            ? { ...m, toolCalls: [...(m.toolCalls || []), toolCall] }
+            : m
+        ));
+        break;
+      }
+
+      case 'tool_completed': {
+        const sequence = event.sequence as number;
+        setCurrentToolCalls(prev => prev.map((tc, idx) =>
+          idx === sequence - 1
+            ? { ...tc, status: 'completed', output: event.output_preview as string, completedAt: new Date() }
+            : tc
+        ));
+        setMessages(prev => prev.map(m => {
+          if (m.id !== assistantMsgId) return m;
+          const updatedToolCalls = (m.toolCalls || []).map((tc, idx) =>
+            idx === sequence - 1
+              ? { ...tc, status: 'completed' as const, output: event.output_preview as string, completedAt: new Date() }
+              : tc
+          );
+          return { ...m, toolCalls: updatedToolCalls };
+        }));
+        break;
+      }
+
+      case 'message':
+      case 'text_delta': {
+        const content = event.content_preview as string || event.content as string || '';
+        setMessages(prev => prev.map(m =>
+          m.id === assistantMsgId
+            ? { ...m, content: m.content + content }
+            : m
+        ));
+        break;
+      }
+
+      case 'agent_completed': {
+        console.log('[useAgentStream] Agent completed, event.output:', event.output, 'type:', typeof event.output);
+        // Output can be a string or a structured object with {summary, root_cause, ...}
+        let output = '';
+        if (typeof event.output === 'string') {
+          output = event.output;
+          console.log('[useAgentStream] Output is string:', output);
+        } else if (event.output && typeof event.output === 'object') {
+          // Extract summary from structured output, or stringify the whole thing
+          const structured = event.output as Record<string, unknown>;
+          console.log('[useAgentStream] Output is object, structured:', structured);
+          if (structured.summary && typeof structured.summary === 'string') {
+            output = structured.summary;
+            console.log('[useAgentStream] Extracted summary:', output);
+          } else {
+            output = JSON.stringify(event.output, null, 2);
+            console.log('[useAgentStream] Stringified output:', output);
+          }
+        } else {
+          console.log('[useAgentStream] Output is neither string nor object:', event.output);
+        }
+
+        const lastResponseId = event.last_response_id as string;
+        if (lastResponseId) {
+          lastResponseIdRef.current = lastResponseId;
+        }
+
+        console.log('[useAgentStream] Setting message content to:', output);
+        setMessages(prev => prev.map(m =>
+          m.id === assistantMsgId
+            ? { ...m, content: output || m.content, isStreaming: false }
+            : m
+        ));
+
+        if (event.success) {
+          console.log('[useAgentStream] Calling onComplete');
+          onComplete?.(output);
+        } else if (event.error) {
+          console.log('[useAgentStream] Setting error:', event.error);
+          setError(event.error as string);
+          onError?.(event.error as string);
+        }
+        break;
+      }
+
+      case 'subagent_started':
+      case 'subagent_completed':
+        // Sub-agent events - could show nested progress
+        break;
+    }
+  }, [onComplete, onError]);
+
   const sendMessage = useCallback(async (userMessage: string) => {
     console.log('[useAgentStream] sendMessage called:', userMessage);
     if (isStreaming) {
@@ -173,115 +282,7 @@ export function useAgentStream(options: UseAgentStreamOptions = {}) {
       setIsStreaming(false);
       abortControllerRef.current = null;
     }
-  }, [isStreaming, agentName, onError]);
-
-  const handleStreamEvent = useCallback((event: Record<string, unknown>, assistantMsgId: string) => {
-    const eventType = event.type as string || (event.agent ? 'agent_started' : 'unknown');
-    console.log('[useAgentStream] handleStreamEvent:', eventType, event);
-
-    switch (eventType) {
-      case 'agent_started':
-        console.log('[useAgentStream] Agent started');
-        break;
-
-      case 'tool_started': {
-        const toolCall: ToolCall = {
-          id: `tool-${Date.now()}-${event.sequence}`,
-          name: event.tool as string || 'unknown',
-          status: 'running',
-          input: event.input as Record<string, unknown>,
-          startedAt: new Date(),
-        };
-        setCurrentToolCalls(prev => [...prev, toolCall]);
-        setMessages(prev => prev.map(m =>
-          m.id === assistantMsgId
-            ? { ...m, toolCalls: [...(m.toolCalls || []), toolCall] }
-            : m
-        ));
-        break;
-      }
-
-      case 'tool_completed': {
-        const sequence = event.sequence as number;
-        setCurrentToolCalls(prev => prev.map((tc, idx) =>
-          idx === sequence - 1
-            ? { ...tc, status: 'completed', output: event.output_preview as string, completedAt: new Date() }
-            : tc
-        ));
-        setMessages(prev => prev.map(m => {
-          if (m.id !== assistantMsgId) return m;
-          const updatedToolCalls = (m.toolCalls || []).map((tc, idx) =>
-            idx === sequence - 1
-              ? { ...tc, status: 'completed' as const, output: event.output_preview as string, completedAt: new Date() }
-              : tc
-          );
-          return { ...m, toolCalls: updatedToolCalls };
-        }));
-        break;
-      }
-
-      case 'message':
-      case 'text_delta': {
-        const content = event.content_preview as string || event.content as string || '';
-        setMessages(prev => prev.map(m =>
-          m.id === assistantMsgId
-            ? { ...m, content: m.content + content }
-            : m
-        ));
-        break;
-      }
-
-      case 'agent_completed': {
-        console.log('[useAgentStream] Agent completed, event.output:', event.output, 'type:', typeof event.output);
-        // Output can be a string or a structured object with {summary, root_cause, ...}
-        let output = '';
-        if (typeof event.output === 'string') {
-          output = event.output;
-          console.log('[useAgentStream] Output is string:', output);
-        } else if (event.output && typeof event.output === 'object') {
-          // Extract summary from structured output, or stringify the whole thing
-          const structured = event.output as Record<string, unknown>;
-          console.log('[useAgentStream] Output is object, structured:', structured);
-          if (structured.summary && typeof structured.summary === 'string') {
-            output = structured.summary;
-            console.log('[useAgentStream] Extracted summary:', output);
-          } else {
-            output = JSON.stringify(event.output, null, 2);
-            console.log('[useAgentStream] Stringified output:', output);
-          }
-        } else {
-          console.log('[useAgentStream] Output is neither string nor object:', event.output);
-        }
-
-        const lastResponseId = event.last_response_id as string;
-        if (lastResponseId) {
-          lastResponseIdRef.current = lastResponseId;
-        }
-
-        console.log('[useAgentStream] Setting message content to:', output);
-        setMessages(prev => prev.map(m =>
-          m.id === assistantMsgId
-            ? { ...m, content: output || m.content, isStreaming: false }
-            : m
-        ));
-
-        if (event.success) {
-          console.log('[useAgentStream] Calling onComplete');
-          onComplete?.(output);
-        } else if (event.error) {
-          console.log('[useAgentStream] Setting error:', event.error);
-          setError(event.error as string);
-          onError?.(event.error as string);
-        }
-        break;
-      }
-
-      case 'subagent_started':
-      case 'subagent_completed':
-        // Sub-agent events - could show nested progress
-        break;
-    }
-  }, [onComplete, onError]);
+  }, [isStreaming, agentName, onError, handleStreamEvent]);
 
   const cancel = useCallback(() => {
     abortControllerRef.current?.abort();
