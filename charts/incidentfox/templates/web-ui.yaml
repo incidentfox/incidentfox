@@ -33,6 +33,10 @@ spec:
               value: {{ printf "http://incidentfox-agent.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.agent.servicePort | int) | quote }}
             - name: ORCHESTRATOR_URL
               value: {{ printf "http://incidentfox-orchestrator.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.orchestrator.servicePort | int) | quote }}
+            {{- if .Values.services.webUi.raptorApiUrl }}
+            - name: RAPTOR_API_URL
+              value: {{ .Values.services.webUi.raptorApiUrl | quote }}
+            {{- end }}
             # Ensure Next.js binds on all interfaces in Kubernetes (otherwise it may bind to pod hostname only,
             # which breaks kubectl port-forward and can confuse health checks).
             - name: HOSTNAME
