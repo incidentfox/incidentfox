@@ -79,7 +79,17 @@ def _is_local_tunnel_up(url: str) -> bool:
 
 
 def make_engine():
-    return create_engine(get_database_url(), pool_pre_ping=True)
+    return create_engine(
+        get_database_url(),
+        pool_pre_ping=True,
+        pool_size=20,
+        max_overflow=40,
+        pool_recycle=3600,
+        connect_args={
+            "connect_timeout": 10,
+            "options": "-c statement_timeout=30000",  # 30 second query timeout
+        },
+    )
 
 
 _SessionLocal: Optional[sessionmaker] = None
