@@ -50,7 +50,7 @@ class AgentPromptConfig(BaseModel):
 class AgentModelConfig(BaseModel):
     """Model configuration for an agent."""
 
-    name: str = "gpt-4o-mini"
+    name: str = "gpt-4o"
     temperature: float = 0.2
     max_tokens: int = 4000
 
@@ -83,7 +83,7 @@ class AgentConfig(BaseModel):
         """Get the model name."""
         if self.model:
             return self.model.name
-        return "gpt-4o-mini"
+        return "gpt-4o"
 
     def get_temperature(self) -> float:
         """Get the temperature."""

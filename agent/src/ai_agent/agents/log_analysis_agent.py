@@ -371,13 +371,33 @@ def create_log_analysis_agent(
     if tool_guidance:
         system_prompt = system_prompt + "\n\n" + tool_guidance
 
+    # Get model settings from team config if available
+    model_name = config.openai.model
+    temperature = 0.2  # Lower temp for analytical tasks
+    max_tokens = config.openai.max_tokens
+
+    if team_cfg:
+        agent_config = team_cfg.get_agent_config("log_analysis")
+        if agent_config.model:
+            model_name = agent_config.model.name
+            temperature = agent_config.model.temperature
+            max_tokens = agent_config.model.max_tokens
+            logger.info(
+                "using_team_model_config",
+                agent="log_analysis",
+                model=model_name,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+
     return Agent[TaskContext](
         name="LogAnalysisAgent",
         instructions=system_prompt,
-        model=config.openai.model,
+        model=model_name,
         model_settings=ModelSettings(
-            temperature=0.2
-        ),  # Low temperature for analytical tasks
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ),
         tools=tools,
         output_type=LogAnalysisResult,
     )

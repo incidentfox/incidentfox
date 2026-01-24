@@ -100,7 +100,7 @@ def summarize_partial_work(
     exception,
     original_query: str,
     agent_name: str = "agent",
-    model: str = "gpt-4o-mini",
+    model: str = "gpt-4o",
 ) -> dict[str, Any]:
     """
     Use an LLM to summarize the partial work from a MaxTurnsExceeded exception.
@@ -109,7 +109,7 @@ def summarize_partial_work(
         exception: The MaxTurnsExceeded exception with run_data attached
         original_query: The original query/task given to the agent
         agent_name: Name of the agent for context
-        model: Which model to use for summarization (default: gpt-4o-mini for cost)
+        model: Which model to use for summarization (default: gpt-4o)
 
     Returns:
         Dict with:
