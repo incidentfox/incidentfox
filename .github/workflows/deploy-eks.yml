@@ -131,6 +131,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Show AWS identity (for aws-auth debugging)
+        run: |
+          echo "=== AWS Caller Identity ==="
+          aws sts get-caller-identity
+          echo ""
+          echo "Add the above ARN to your EKS aws-auth ConfigMap if not already present"
+
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
