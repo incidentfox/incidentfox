@@ -24,9 +24,9 @@ from .agents.base import TaskContext
 from .core.agent_runner import (
     AgentRunner,
     ExecutionContext,
-    get_agent_registry,
-    _record_agent_run_start,
     _record_agent_run_complete,
+    _record_agent_run_start,
+    get_agent_registry,
 )
 from .core.auth import AuthError, authenticate_request
 from .core.config import get_config
