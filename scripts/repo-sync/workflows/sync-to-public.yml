@@ -1,0 +1,218 @@
+# GitHub Actions Workflow: Sync mono-repo → incidentfox (public)
+#
+# INSTALL LOCATION: mono-repo/.github/workflows/sync-to-public.yml
+#
+# This workflow syncs changes from the private mono-repo to the public
+# incidentfox repository, excluding private/premium content.
+#
+# Triggers:
+#   - Manual dispatch (workflow_dispatch)
+#   - Push to main branch (optional, commented out by default)
+#
+# Required Secrets:
+#   - SYNC_PAT: Personal Access Token with repo scope for both repos
+
+name: Sync to Public Repo
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (preview only)'
+        required: false
+        default: 'false'
+        type: boolean
+      create_pr:
+        description: 'Create PR instead of direct push'
+        required: false
+        default: 'true'
+        type: boolean
+
+  # Uncomment to auto-sync on push to main
+  # push:
+  #   branches: [main]
+  #   paths-ignore:
+  #     - '.github/workflows/sync-*.yml'
+  #     - 'scripts/repo-sync/**'
+
+env:
+  PUBLIC_REPO: incidentfox/incidentfox
+  PRIVATE_REPO: incidentfox/mono-repo
+
+jobs:
+  sync-to-public:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout mono-repo (private)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: private
+
+      - name: Checkout incidentfox (public)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PUBLIC_REPO }}
+          token: ${{ secrets.SYNC_PAT }}
+          fetch-depth: 0
+          path: public
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "IncidentFox Sync Bot"
+          git config --global user.email "sync-bot@incidentfox.ai"
+
+      - name: Sync files to public repo
+        id: sync
+        run: |
+          cd public
+
+          # Files/directories to exclude from public
+          EXCLUDE_PATTERNS=(
+            # Premium services (only README.md goes to public)
+            "ai_pipeline/*"
+            "sre-agent/*"
+            "correlation_service/*"
+            "dependency_service/*"
+            "slack-bot"
+            "telemetry_collector"
+
+            # Internal config files
+            "internal_test_configs.txt"
+            "note.md"
+            "org_internal_test_config.json"
+            "team_a_config.json"
+            "team_a_full_config.json"
+            "test_mcp_config.py"
+
+            # Internal workflows
+            ".github/workflows/eval-pipeline.yml"
+            ".github/workflows/deploy-service.yml"
+            ".github/workflows/deploy-knowledge-base.yml"
+            ".github/workflows/publish-dockerhub.yml"
+            ".github/workflows/raptor-kb-deploy.yml"
+            ".github/workflows/web-ui-deploy.yml"
+            ".github/workflows/sync-to-public.yml"
+
+            # Internal infrastructure
+            "infra/terraform/envs/pilot"
+
+            # Sync config
+            ".syncconfig.yaml"
+            "scripts/repo-sync"
+
+            # Git directory
+            ".git"
+          )
+
+          # Build rsync exclude arguments
+          EXCLUDES=""
+          for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+            EXCLUDES="$EXCLUDES --exclude=$pattern"
+          done
+
+          # Sync files
+          rsync -av --delete $EXCLUDES ../private/ ./
+
+          # Preserve stub directories (only README.md)
+          STUB_DIRS=("ai_pipeline" "sre-agent" "correlation_service" "dependency_service")
+
+          for dir in "${STUB_DIRS[@]}"; do
+            if [ -d "$dir" ]; then
+              # Restore the public README if it was overwritten
+              if [ -f "../public_backup/$dir/README.md" ]; then
+                mkdir -p "$dir"
+                cp "../public_backup/$dir/README.md" "$dir/README.md"
+              fi
+              # Remove everything except README.md
+              find "$dir" -type f ! -name 'README.md' -delete 2>/dev/null || true
+              find "$dir" -type d -empty -delete 2>/dev/null || true
+            fi
+          done
+
+          # Check for changes
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No changes to sync"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Changes detected:"
+            git status --short
+          fi
+
+      - name: Create sync branch and PR
+        if: steps.sync.outputs.has_changes == 'true' && inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          cd public
+
+          SYNC_BRANCH="sync/from-private-$(date +%Y%m%d-%H%M%S)"
+          COMMIT_SHA="${{ github.sha }}"
+
+          git checkout -b "$SYNC_BRANCH"
+          git add -A
+
+          git commit -m "sync: Update from mono-repo
+
+          Automated sync from private mono-repo.
+
+          Source: ${{ env.PRIVATE_REPO }}
+          Commit: ${COMMIT_SHA:0:7}
+          Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if [ "${{ inputs.create_pr }}" == "true" ]; then
+            git push origin "$SYNC_BRANCH"
+
+            gh pr create \
+              --repo "${{ env.PUBLIC_REPO }}" \
+              --title "sync: Update from mono-repo" \
+              --body "## Automated Sync
+
+          This PR was automatically generated to sync changes from the private mono-repo.
+
+          **Source commit:** \`${COMMIT_SHA:0:7}\`
+          **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          ### Review Checklist
+          - [ ] No private/premium code leaked
+          - [ ] No secrets or internal configs included
+          - [ ] Stub directories only contain README.md
+
+          ---
+          *Generated by [sync-to-public.yml](${{ github.server_url }}/${{ github.repository }}/blob/main/.github/workflows/sync-to-public.yml)*"
+
+            echo "✅ PR created successfully"
+          else
+            git push origin "$SYNC_BRANCH"
+            echo "✅ Changes pushed to branch: $SYNC_BRANCH"
+          fi
+
+      - name: Dry run summary
+        if: inputs.dry_run == 'true'
+        run: |
+          echo "## Dry Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.sync.outputs.has_changes }}" == "true" ]; then
+            echo "✅ Changes detected that would be synced:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cd public && git status --short >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No changes to sync" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Sync Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Source | \`${{ env.PRIVATE_REPO }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Target | \`${{ env.PUBLIC_REPO }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Changes | ${{ steps.sync.outputs.has_changes }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dry Run | ${{ inputs.dry_run }} |" >> $GITHUB_STEP_SUMMARY
