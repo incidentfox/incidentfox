@@ -863,6 +863,12 @@ async def incidentio_webhook(
     is_public_alert = event_type.startswith("public_alert.")
 
     if is_public_alert and alert_source_id:
+        _log(
+            "incidentio_webhook_adding_task",
+            alert_source_id=alert_source_id,
+            event_type=event_type,
+            task_type="public_alert",
+        )
         background.add_task(
             _process_incidentio_webhook,
             request=request,
@@ -871,8 +877,19 @@ async def incidentio_webhook(
             payload=payload,
             alert_source_id=alert_source_id,
         )
+        _log(
+            "incidentio_webhook_task_added",
+            alert_source_id=alert_source_id,
+            tasks_count=len(background.tasks),
+        )
     elif incident.get("id"):
         # Traditional incident webhook
+        _log(
+            "incidentio_webhook_adding_task",
+            incident_id=incident.get("id"),
+            event_type=event_type,
+            task_type="incident",
+        )
         background.add_task(
             _process_incidentio_webhook,
             request=request,
@@ -880,6 +897,18 @@ async def incidentio_webhook(
             event_type=event_type,
             payload=payload,
             alert_source_id="",
+        )
+        _log(
+            "incidentio_webhook_task_added",
+            incident_id=incident.get("id"),
+            tasks_count=len(background.tasks),
+        )
+    else:
+        _log(
+            "incidentio_webhook_no_task_added",
+            is_public_alert=is_public_alert,
+            alert_source_id=alert_source_id,
+            has_incident_id=bool(incident.get("id")),
         )
 
     return JSONResponse(content={"ok": True})
@@ -893,6 +922,13 @@ async def _process_incidentio_webhook(
     alert_source_id: str = "",
 ) -> None:
     """Process Incident.io webhook asynchronously."""
+    # Add initial logging to debug background task execution
+    _log(
+        "incidentio_webhook_task_started",
+        alert_source_id=alert_source_id,
+        event_type=event_type,
+    )
+
     from incidentfox_orchestrator.clients import (
         AgentApiClient,
         AuditApiClient,

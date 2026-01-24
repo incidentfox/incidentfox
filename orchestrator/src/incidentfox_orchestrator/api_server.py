@@ -242,9 +242,6 @@ def create_app() -> FastAPI:
     # Register webhook router (all external webhooks: Slack, GitHub, PagerDuty, Incident.io)
     app.include_router(webhook_router)
 
-    # Register webhook router (all external webhooks: Slack, GitHub, PagerDuty, Incident.io)
-    app.include_router(webhook_router)
-
     @app.middleware("http")
     async def add_request_id(request: Request, call_next):
         rid = request.headers.get("x-request-id") or _new_request_id()
