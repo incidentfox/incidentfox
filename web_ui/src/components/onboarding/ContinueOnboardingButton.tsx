@@ -38,9 +38,12 @@ export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButto
         const step = data.quickStartStep ?? null;
         setLocalStep(step);
         setLocalStep4Progress(data.step4Progress ?? DEFAULT_STEP4_PROGRESS);
-        // If localStorage shows null, wizard was completed
+        // Set wasCompleted based on whether step is null
         if (step === null) {
           setWasCompleted(true);
+        } else {
+          // Reset wasCompleted if there's an active step
+          setWasCompleted(false);
         }
       }
     } catch {
