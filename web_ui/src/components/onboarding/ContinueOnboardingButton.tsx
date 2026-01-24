@@ -108,9 +108,10 @@ export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButto
     };
   }, [localStep, reload]);
 
-  // Use localStep as fallback if hook state hasn't updated yet
-  const effectiveStep = state.quickStartStep || localStep;
-  const effectiveStep4Progress = state.step4Progress || localStep4Progress;
+  // Prefer localStorage values since they're read synchronously and more up-to-date
+  // Use nullish coalescing (??) instead of || to properly handle 0 and falsy values
+  const effectiveStep = localStep ?? state.quickStartStep;
+  const effectiveStep4Progress = localStep4Progress;
 
   // Don't show if dismissed, completed, or no step in progress
   const showButton = !loading && !dismissed && !wasCompleted && (hasQuickStartInProgress || localStep !== null);
