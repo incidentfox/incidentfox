@@ -55,10 +55,12 @@ async def _retry_with_backoff(
 
             # Check if this is a rate limit error (429) or transient error (5xx)
             is_rate_limit = "rate" in error_msg or "429" in error_msg
-            is_server_error = any(code in error_msg for code in ["500", "502", "503", "504"])
+            is_server_error = any(
+                code in error_msg for code in ["500", "502", "503", "504"]
+            )
 
             if attempt < max_retries and (is_rate_limit or is_server_error):
-                delay = min(base_delay * (2 ** attempt), max_delay)
+                delay = min(base_delay * (2**attempt), max_delay)
                 logger.warning(
                     "slack_api_retry",
                     attempt=attempt + 1,
