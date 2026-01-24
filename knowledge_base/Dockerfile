@@ -12,7 +12,10 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     && unzip awscliv2.zip \
     && ./aws/install \
     && rm -rf awscliv2.zip aws \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    # Remove vulnerable wheel metadata from AWS CLI bundle (CVE-2026-24049)
+    # AWS CLI bundles its own Python with wheel-0.45.1 which Trivy flags as vulnerable
+    && find /usr/local/aws-cli -name "wheel-0.45*.dist-info" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
@@ -27,13 +30,21 @@ RUN pip install --no-cache-dir fastapi uvicorn httpx \
     "starlette>=0.49.1" \
     "aiohttp>=3.13.3"
 
-# Patch setuptools' vendored wheel to fix CVE-2026-24049 (must run AFTER all pip installs)
-# setuptools bundles an old wheel in _vendor/ that Trivy flags as vulnerable
-RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2" && \
+# Patch setuptools' vendored packages to fix CVEs (must run AFTER all pip installs)
+# setuptools bundles old versions in _vendor/ that Trivy flags as vulnerable:
+# - wheel-0.45.1 (CVE-2026-24049)
+# - jaraco.context-5.3.0 (CVE-2026-23949)
+RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2" "jaraco.context>=6.1.0" && \
     SITE_PKGS=$(python -c "import site; print(site.getsitepackages()[0])") && \
+    # Patch wheel
     rm -rf $SITE_PKGS/setuptools/_vendor/wheel-*.dist-info && \
     cp -r $SITE_PKGS/wheel $SITE_PKGS/setuptools/_vendor/ && \
-    cp -r $SITE_PKGS/wheel-*.dist-info $SITE_PKGS/setuptools/_vendor/
+    cp -r $SITE_PKGS/wheel-*.dist-info $SITE_PKGS/setuptools/_vendor/ && \
+    # Patch jaraco.context
+    rm -rf $SITE_PKGS/setuptools/_vendor/jaraco.context-*.dist-info && \
+    rm -rf $SITE_PKGS/setuptools/_vendor/jaraco/context.py 2>/dev/null || true && \
+    cp -r $SITE_PKGS/jaraco $SITE_PKGS/setuptools/_vendor/ 2>/dev/null || true && \
+    cp -r $SITE_PKGS/jaraco_context-*.dist-info $SITE_PKGS/setuptools/_vendor/ 2>/dev/null || true
 
 # Copy RAPTOR library and API server
 COPY raptor/ ./raptor/
