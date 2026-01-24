@@ -9,14 +9,69 @@ Supports:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from ..logging import get_logger
 from ..output_handler import OutputHandler, OutputResult
 
 logger = get_logger(__name__)
+
+T = TypeVar("T")
+
+
+async def _retry_with_backoff(
+    func: Callable[[], T],
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 10.0,
+    retryable_errors: tuple = (Exception,),
+) -> T:
+    """
+    Retry an async function with exponential backoff.
+
+    Args:
+        func: Async function to call
+        max_retries: Maximum number of retry attempts
+        base_delay: Initial delay between retries in seconds
+        max_delay: Maximum delay between retries in seconds
+        retryable_errors: Tuple of exception types to retry on
+
+    Returns:
+        Result of the function
+
+    Raises:
+        The last exception if all retries fail
+    """
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            return await func()
+        except retryable_errors as e:
+            last_error = e
+            error_msg = str(e).lower()
+
+            # Check if this is a rate limit error (429) or transient error (5xx)
+            is_rate_limit = "rate" in error_msg or "429" in error_msg
+            is_server_error = any(code in error_msg for code in ["500", "502", "503", "504"])
+
+            if attempt < max_retries and (is_rate_limit or is_server_error):
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                logger.warning(
+                    "slack_api_retry",
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    delay_seconds=delay,
+                    error=str(e),
+                    is_rate_limit=is_rate_limit,
+                )
+                await asyncio.sleep(delay)
+            else:
+                raise
+
+    raise last_error  # Should not reach here, but for type safety
 
 
 class SlackOutputHandler(OutputHandler):
@@ -60,7 +115,12 @@ class SlackOutputHandler(OutputHandler):
         """Post initial working message, return message_ts."""
         channel_id = config.get("channel_id")
         if not channel_id:
-            logger.warning("slack_output_missing_channel")
+            logger.error(
+                "slack_output_missing_channel",
+                config_keys=list(config.keys()),
+                has_bot_token=bool(config.get("bot_token")),
+                has_thread_ts=bool(config.get("thread_ts")),
+            )
             return None
 
         try:
@@ -72,12 +132,16 @@ class SlackOutputHandler(OutputHandler):
             blocks = self._build_working_blocks(task_description, agent_name, user_id)
             mention = f"<@{user_id}> " if user_id else ""
 
-            result = await client.chat_postMessage(
-                channel=channel_id,
-                thread_ts=thread_ts,
-                text=f"{mention}🦊 {agent_name} is working on it...",
-                blocks=blocks,
-            )
+            # Use retry with backoff for transient errors
+            async def _post():
+                return await client.chat_postMessage(
+                    channel=channel_id,
+                    thread_ts=thread_ts,
+                    text=f"{mention}🦊 {agent_name} is working on it...",
+                    blocks=blocks,
+                )
+
+            result = await _retry_with_backoff(_post, max_retries=3)
 
             message_ts = result.get("ts") or result.get("message", {}).get("ts")
 
@@ -90,7 +154,12 @@ class SlackOutputHandler(OutputHandler):
             return message_ts
 
         except Exception as e:
-            logger.error("slack_initial_failed", error=str(e))
+            logger.error(
+                "slack_initial_failed",
+                error=str(e),
+                channel_id=channel_id,
+                exc_info=True,
+            )
             return None
 
     async def update_progress(
@@ -134,7 +203,12 @@ class SlackOutputHandler(OutputHandler):
             )
 
         except Exception as e:
-            logger.warning("slack_progress_failed", error=str(e))
+            logger.warning(
+                "slack_progress_failed",
+                error=str(e),
+                channel_id=channel_id,
+                message_id=message_id,
+            )
 
     async def post_final(
         self,
@@ -149,10 +223,16 @@ class SlackOutputHandler(OutputHandler):
         """Post final result with Block Kit formatting."""
         channel_id = config.get("channel_id")
         if not channel_id:
+            logger.error(
+                "slack_final_missing_channel",
+                config_keys=list(config.keys()),
+                has_bot_token=bool(config.get("bot_token")),
+                has_run_id=bool(config.get("run_id")),
+            )
             return OutputResult(
                 success=False,
                 destination_type="slack",
-                error="Missing channel_id",
+                error=f"Missing channel_id in config (keys: {list(config.keys())})",
             )
 
         try:
@@ -181,22 +261,28 @@ class SlackOutputHandler(OutputHandler):
                 fallback_text = "❌ Task failed"
 
             if message_id:
-                # Update existing message
-                result = await client.chat_update(
-                    channel=channel_id,
-                    ts=message_id,
-                    text=fallback_text,
-                    blocks=blocks,
-                )
+                # Update existing message with retry
+                async def _update():
+                    return await client.chat_update(
+                        channel=channel_id,
+                        ts=message_id,
+                        text=fallback_text,
+                        blocks=blocks,
+                    )
+
+                result = await _retry_with_backoff(_update, max_retries=3)
                 final_ts = message_id
             else:
-                # Post new message
-                result = await client.chat_postMessage(
-                    channel=channel_id,
-                    thread_ts=thread_ts,
-                    text=fallback_text,
-                    blocks=blocks,
-                )
+                # Post new message with retry
+                async def _post():
+                    return await client.chat_postMessage(
+                        channel=channel_id,
+                        thread_ts=thread_ts,
+                        text=fallback_text,
+                        blocks=blocks,
+                    )
+
+                result = await _retry_with_backoff(_post, max_retries=3)
                 final_ts = result.get("ts") or result.get("message", {}).get("ts")
 
             logger.info(
@@ -212,7 +298,13 @@ class SlackOutputHandler(OutputHandler):
             )
 
         except Exception as e:
-            logger.error("slack_final_failed", error=str(e))
+            logger.error(
+                "slack_final_failed",
+                error=str(e),
+                channel_id=channel_id,
+                message_id=message_id,
+                exc_info=True,
+            )
             return OutputResult(
                 success=False,
                 destination_type="slack",

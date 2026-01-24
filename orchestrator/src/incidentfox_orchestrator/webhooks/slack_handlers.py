@@ -185,11 +185,13 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                 _log("slack_event_impersonation_failed", correlation_id=correlation_id)
                 return
 
-            # Check for dedicated agent URL
+            # Check for entrance agent name and dedicated agent URL
+            entrance_agent_name = "planner"  # Default fallback
             dedicated_agent_url: Optional[str] = None
             effective_config: Dict[str, Any] = {}
             try:
                 effective_config = cfg.get_effective_config(team_token=team_token)
+                entrance_agent_name = effective_config.get("entrance_agent", "planner")
                 dedicated_agent_url = effective_config.get("agent", {}).get(
                     "dedicated_service_url"
                 )
@@ -219,7 +221,7 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                     trigger_actor=user_id,
                     trigger_message=text,
                     trigger_channel_id=channel_id,
-                    agent_name="planner",
+                    agent_name=entrance_agent_name,
                     metadata={
                         "event_ts": event_ts,
                         "thread_ts": thread_ts,
@@ -247,11 +249,11 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
             )
 
             # Add run_id and correlation_id to Slack destinations for feedback buttons
+            # Note: Add at top level (flat format) to match output_resolver format
             for dest in output_destinations:
                 if dest.get("type") == "slack":
-                    dest.setdefault("config", {})
-                    dest["config"]["run_id"] = run_id
-                    dest["config"]["correlation_id"] = correlation_id
+                    dest["run_id"] = run_id
+                    dest["correlation_id"] = correlation_id
 
             _log(
                 "slack_event_output_destinations",
@@ -262,7 +264,7 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
             # Run agent
             result = agent_api.run_agent(
                 team_token=team_token,
-                agent_name="planner",
+                agent_name=entrance_agent_name,
                 message=text,
                 context={
                     "user_id": user_id,
