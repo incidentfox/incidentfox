@@ -25,7 +25,7 @@ const DEFAULT_STEP4_PROGRESS: Step4Progress = {
 
 export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButtonProps) {
   const pathname = usePathname();
-  const { state, loading, hasQuickStartInProgress, clearQuickStartStep, reload } = useOnboarding();
+  const { clearQuickStartStep } = useOnboarding();
   const [dismissed, setDismissed] = useState(false);
   const [localStep, setLocalStep] = useState<number | null>(null);
   const [localStep4Progress, setLocalStep4Progress] = useState<Step4Progress>(DEFAULT_STEP4_PROGRESS);
@@ -73,7 +73,6 @@ export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButto
             // If a new step is set, reset completed state (wizard restarted)
             setWasCompleted(false);
           }
-          reload(); // Trigger hook to reload state
         }
       } catch {
         // Ignore parse errors
@@ -95,7 +94,6 @@ export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButto
         // If a new step is set, reset completed state (wizard restarted)
         setWasCompleted(false);
       }
-      reload();
     };
 
     // Listen for storage events (from other tabs/windows)
@@ -108,15 +106,15 @@ export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButto
       window.removeEventListener('storage', checkLocalStorage);
       window.removeEventListener('onboarding-state-change', handleStateChange as EventListener);
     };
-  }, [localStep, reload]);
+  }, [localStep]);
 
-  // Prefer localStorage values since they're read synchronously and more up-to-date
-  // Use nullish coalescing (??) instead of || to properly handle 0 and falsy values
-  const effectiveStep = localStep ?? state.quickStartStep;
+  // Use localStorage values directly - they're read synchronously and always up-to-date
+  const effectiveStep = localStep;
   const effectiveStep4Progress = localStep4Progress;
 
   // Don't show if dismissed, completed, or no step in progress
-  const showButton = !loading && !dismissed && !wasCompleted && (hasQuickStartInProgress || localStep !== null);
+  // We rely solely on localStorage state (localStep) which is synchronously updated
+  const showButton = !dismissed && !wasCompleted && localStep !== null;
 
   if (!showButton || !effectiveStep) {
     return null;
