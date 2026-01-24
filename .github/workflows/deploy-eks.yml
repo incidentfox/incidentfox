@@ -174,9 +174,14 @@ jobs:
 
           # Patch all knowledge-base resources
           patch_resource serviceaccount "$RESOURCE_NAME"
-          patch_resource deployment "$RESOURCE_NAME"
           patch_resource service "$RESOURCE_NAME"
           patch_resource poddisruptionbudget "$RESOURCE_NAME"
+
+          # Deployment selector is immutable - must delete and let Helm recreate
+          if kubectl get deployment "$RESOURCE_NAME" -n "$NS" &>/dev/null; then
+            echo "Deleting deployment/$RESOURCE_NAME (selector is immutable, Helm will recreate)..."
+            kubectl delete deployment "$RESOURCE_NAME" -n "$NS" --wait=false
+          fi
 
       - name: Deploy with Helm
         working-directory: charts
