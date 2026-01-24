@@ -12,8 +12,13 @@ RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-# Upgrade wheel to fix CVE-2026-24049
-RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2"
+# Upgrade wheel/setuptools and patch setuptools' vendored wheel to fix CVE-2026-24049
+# setuptools bundles an old wheel in _vendor/ that must be patched separately
+RUN pip install --no-cache-dir --upgrade "setuptools>=80.0.0" "wheel>=0.46.2" && \
+    SITE_PKGS=$(python -c "import site; print(site.getsitepackages()[0])") && \
+    rm -rf $SITE_PKGS/setuptools/_vendor/wheel-*.dist-info && \
+    cp -r $SITE_PKGS/wheel $SITE_PKGS/setuptools/_vendor/ && \
+    cp -r $SITE_PKGS/wheel-*.dist-info $SITE_PKGS/setuptools/_vendor/
 
 COPY requirements.runtime.txt /app/requirements.runtime.txt
 RUN pip install --no-cache-dir -r /app/requirements.runtime.txt \
