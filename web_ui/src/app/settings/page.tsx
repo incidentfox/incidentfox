@@ -42,7 +42,8 @@ import {
   Tag,
   Server,
   Info,
-  HelpCircle
+  HelpCircle,
+  LogOut
 } from 'lucide-react';
 
 // Tab type
@@ -647,12 +648,15 @@ export default function SettingsPage() {
                   )}
                 </div>
 
-              <button
-                  onClick={signOut}
-                  className="mt-4 w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                  Sign Out
-              </button>
+                <div className="pt-3 mt-3 border-t border-gray-100 dark:border-gray-800">
+                  <button
+                    onClick={signOut}
+                    className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Sign out
+                  </button>
+                </div>
             </div>
 
               {/* Quick Start Guide */}
