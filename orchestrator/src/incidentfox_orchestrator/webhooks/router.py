@@ -869,14 +869,28 @@ async def incidentio_webhook(
             event_type=event_type,
             task_type="public_alert",
         )
-        background.add_task(
-            _process_incidentio_webhook,
-            request=request,
-            incident=alert_data,  # Pass alert data as "incident" for processing
-            event_type=event_type,
-            payload=payload,
-            alert_source_id=alert_source_id,
-        )
+
+        # Use wrapper to catch any silent exceptions in background task
+        async def _incidentio_task_wrapper():
+            import sys
+            import traceback
+
+            print(f"INCIDENTIO_BG_TASK: wrapper starting", flush=True)
+            sys.stdout.flush()
+            try:
+                await _process_incidentio_webhook(
+                    request=request,
+                    incident=alert_data,
+                    event_type=event_type,
+                    payload=payload,
+                    alert_source_id=alert_source_id,
+                )
+            except Exception as e:
+                print(f"INCIDENTIO_BG_TASK: exception: {e}", flush=True)
+                traceback.print_exc()
+                sys.stdout.flush()
+
+        background.add_task(_incidentio_task_wrapper)
         _log(
             "incidentio_webhook_task_added",
             alert_source_id=alert_source_id,
@@ -890,14 +904,30 @@ async def incidentio_webhook(
             event_type=event_type,
             task_type="incident",
         )
-        background.add_task(
-            _process_incidentio_webhook,
-            request=request,
-            incident=incident,
-            event_type=event_type,
-            payload=payload,
-            alert_source_id="",
-        )
+
+        # Use wrapper to catch any silent exceptions in background task
+        incident_data = incident  # Capture for closure
+
+        async def _incidentio_incident_task_wrapper():
+            import sys
+            import traceback
+
+            print(f"INCIDENTIO_BG_TASK: incident wrapper starting", flush=True)
+            sys.stdout.flush()
+            try:
+                await _process_incidentio_webhook(
+                    request=request,
+                    incident=incident_data,
+                    event_type=event_type,
+                    payload=payload,
+                    alert_source_id="",
+                )
+            except Exception as e:
+                print(f"INCIDENTIO_BG_TASK: incident exception: {e}", flush=True)
+                traceback.print_exc()
+                sys.stdout.flush()
+
+        background.add_task(_incidentio_incident_task_wrapper)
         _log(
             "incidentio_webhook_task_added",
             incident_id=incident.get("id"),
