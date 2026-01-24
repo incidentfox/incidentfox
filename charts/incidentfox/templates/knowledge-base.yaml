@@ -20,6 +20,9 @@ kind: Deployment
 metadata:
   name: incidentfox-knowledge-base
   namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "incidentfox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: knowledge-base
 spec:
   replicas: {{ .Values.services.knowledgeBase.replicas }}
   selector:
@@ -121,6 +124,9 @@ kind: Service
 metadata:
   name: incidentfox-knowledge-base
   namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "incidentfox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: knowledge-base
 spec:
   selector:
     app.kubernetes.io/name: incidentfox-knowledge-base
@@ -135,6 +141,9 @@ kind: PodDisruptionBudget
 metadata:
   name: incidentfox-knowledge-base
   namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "incidentfox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: knowledge-base
 spec:
   minAvailable: {{ .Values.services.knowledgeBase.pdb.minAvailable }}
   selector:
