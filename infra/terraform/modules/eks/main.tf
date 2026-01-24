@@ -24,15 +24,30 @@ module "eks" {
   cluster_endpoint_private_access      = var.cluster_endpoint_private_access
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
 
-  eks_managed_node_groups = {
-    default = {
-      instance_types = var.node_instance_types
-      ami_type       = var.node_ami_type
-      min_size       = var.node_min_size
-      max_size       = var.node_max_size
-      desired_size   = var.node_desired_size
-    }
-  }
+  eks_managed_node_groups = merge(
+    {
+      default = {
+        instance_types = var.node_instance_types
+        ami_type       = var.node_ami_type
+        min_size       = var.node_min_size
+        max_size       = var.node_max_size
+        desired_size   = var.node_desired_size
+      }
+    },
+    var.memory_intensive_nodegroup_enabled ? {
+      memory_intensive = {
+        instance_types = var.memory_intensive_instance_types
+        ami_type       = "AL2_x86_64"  # x86 for AWS CLI compatibility
+        disk_size      = var.memory_intensive_disk_size
+        min_size       = var.memory_intensive_min_size
+        max_size       = var.memory_intensive_max_size
+        desired_size   = var.memory_intensive_desired_size
+        labels = {
+          "workload" = "memory-intensive"
+        }
+      }
+    } : {}
+  )
 
   tags = var.tags
 }

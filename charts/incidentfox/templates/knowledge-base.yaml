@@ -1,0 +1,139 @@
+{{- if .Values.services.knowledgeBase.enabled }}
+# ServiceAccount with IRSA annotation for S3 access
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: incidentfox-knowledge-base
+  namespace: {{ .Values.namespace }}
+  {{- if .Values.services.knowledgeBase.serviceAccountRoleArn }}
+  annotations:
+    eks.amazonaws.com/role-arn: {{ .Values.services.knowledgeBase.serviceAccountRoleArn | quote }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: incidentfox-knowledge-base
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.services.knowledgeBase.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: incidentfox-knowledge-base
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: incidentfox-knowledge-base
+    spec:
+      serviceAccountName: incidentfox-knowledge-base
+      {{- if .Values.services.knowledgeBase.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.services.knowledgeBase.nodeSelector | indent 8 }}
+      {{- end }}
+      {{- if .Values.services.knowledgeBase.tolerations }}
+      tolerations:
+{{ toYaml .Values.services.knowledgeBase.tolerations | indent 8 }}
+      {{- end }}
+      volumes:
+        - name: trees-volume
+          emptyDir:
+            sizeLimit: {{ .Values.services.knowledgeBase.treesVolumeSizeLimit | default "3Gi" }}
+      {{- if .Values.services.knowledgeBase.s3.enabled }}
+      initContainers:
+        - name: download-trees
+          image: {{ .Values.services.knowledgeBase.s3.awsCliImage | default "amazon/aws-cli:2.15.0" }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Downloading tree from S3..."
+              aws s3 cp "s3://{{ .Values.services.knowledgeBase.s3.bucket }}/{{ .Values.services.knowledgeBase.s3.prefix }}{{ .Values.services.knowledgeBase.defaultTree }}/{{ .Values.services.knowledgeBase.defaultTree }}.pkl" /trees/{{ .Values.services.knowledgeBase.defaultTree }}.pkl
+              echo "Download complete. File size:"
+              ls -lh /trees/
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: trees-volume
+              mountPath: /trees
+      {{- end }}
+      containers:
+        - name: raptor-kb
+          image: {{ required "services.knowledgeBase.image is required" .Values.services.knowledgeBase.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command:
+            - /bin/bash
+            - -c
+          args:
+            - |
+              echo "=== RAPTOR Knowledge Base Startup ==="
+              echo "Trees directory contents:"
+              ls -lh /app/trees/
+              echo "=== Starting API Server ==="
+              exec python api_server.py
+          ports:
+            - containerPort: {{ .Values.services.knowledgeBase.servicePort }}
+          resources:
+{{ toYaml .Values.services.knowledgeBase.resources | indent 12 }}
+          env:
+            - name: RAPTOR_TREES_DIR
+              value: /app/trees
+            - name: RAPTOR_DEFAULT_TREE
+              value: {{ .Values.services.knowledgeBase.defaultTree | quote }}
+            - name: PORT
+              value: {{ .Values.services.knowledgeBase.servicePort | quote }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.agentOpenAI.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.agentOpenAI.apiKeyKey | quote }}
+          volumeMounts:
+            - name: trees-volume
+              mountPath: /app/trees
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.knowledgeBase.servicePort }}
+            initialDelaySeconds: {{ .Values.services.knowledgeBase.readinessProbe.initialDelaySeconds | default 120 }}
+            periodSeconds: {{ .Values.services.knowledgeBase.readinessProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.services.knowledgeBase.readinessProbe.timeoutSeconds | default 5 }}
+          {{- if .Values.services.knowledgeBase.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.services.knowledgeBase.livenessProbe.path | default "/health" }}
+              port: {{ .Values.services.knowledgeBase.servicePort }}
+            initialDelaySeconds: {{ .Values.services.knowledgeBase.livenessProbe.initialDelaySeconds | default 180 }}
+            periodSeconds: {{ .Values.services.knowledgeBase.livenessProbe.periodSeconds | default 30 }}
+            timeoutSeconds: {{ .Values.services.knowledgeBase.livenessProbe.timeoutSeconds | default 10 }}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: incidentfox-knowledge-base
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app.kubernetes.io/name: incidentfox-knowledge-base
+  ports:
+    - port: {{ .Values.services.knowledgeBase.servicePort }}
+      targetPort: {{ .Values.services.knowledgeBase.servicePort }}
+      protocol: TCP
+{{- if .Values.services.knowledgeBase.pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: incidentfox-knowledge-base
+  namespace: {{ .Values.namespace }}
+spec:
+  minAvailable: {{ .Values.services.knowledgeBase.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: incidentfox-knowledge-base
+{{- end }}
+{{- end }}
