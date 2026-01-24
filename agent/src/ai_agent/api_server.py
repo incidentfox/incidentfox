@@ -11,6 +11,8 @@ Provides HTTP endpoints for:
 import asyncio
 import dataclasses
 import os
+import time
+import uuid
 from datetime import datetime
 from typing import Any
 
@@ -19,7 +21,13 @@ from sanic.request import Request
 from sanic.response import JSONResponse
 
 from .agents.base import TaskContext
-from .core.agent_runner import AgentRunner, ExecutionContext, get_agent_registry
+from .core.agent_runner import (
+    AgentRunner,
+    ExecutionContext,
+    _record_agent_run_complete,
+    _record_agent_run_start,
+    get_agent_registry,
+)
 from .core.auth import AuthError, authenticate_request
 from .core.config import get_config
 from .core.logging import get_correlation_id, get_logger, set_correlation_id
@@ -789,8 +797,6 @@ def create_app() -> Sanic:
                     correlation_id=request.ctx.correlation_id,
                 )
 
-                import time
-
                 start_time = time.time()
 
                 # Post initial "working" messages
@@ -1308,7 +1314,6 @@ def create_app() -> Sanic:
         data: <json_data>
         """
         import json
-        import time
 
         from sanic.response import ResponseStream
 
@@ -1399,6 +1404,7 @@ def create_app() -> Sanic:
 
                 start_time = time.time()
                 correlation_id = request.ctx.correlation_id
+                run_id = str(uuid.uuid4())  # Generate unique run ID for tracking
                 tool_calls_count = 0
                 # Track response_id for chaining follow-up queries
                 current_response_id = previous_response_id
@@ -1412,6 +1418,23 @@ def create_app() -> Sanic:
                 subagent_queue = EventStreamRegistry.create_stream(stream_id)
                 set_current_stream_id(stream_id)
 
+                # Get org/team from auth context
+                org_id = auth_identity.org_id if auth_identity else ""
+                team_node_id = auth_identity.team_node_id if auth_identity else ""
+
+                # Record agent run start (fire and forget, don't block streaming)
+                asyncio.create_task(
+                    _record_agent_run_start(
+                        run_id=run_id,
+                        agent_name=agent_name,
+                        correlation_id=correlation_id,
+                        trigger_source="web_ui",
+                        trigger_message=message[:500] if message else "",
+                        org_id=org_id,
+                        team_node_id=team_node_id,
+                    )
+                )
+
                 try:
                     # Send agent_started event
                     await response_stream.write(
@@ -1420,6 +1443,7 @@ def create_app() -> Sanic:
                             {
                                 "agent": agent_name,
                                 "correlation_id": correlation_id,
+                                "run_id": run_id,
                                 "timestamp": datetime.utcnow().isoformat(),
                             },
                         )
@@ -1636,6 +1660,22 @@ def create_app() -> Sanic:
                         correlation_id=correlation_id,
                     )
 
+                    # Record agent run completion
+                    output_summary = ""
+                    if isinstance(final_output, dict) and "summary" in final_output:
+                        output_summary = str(final_output["summary"])[:1000]
+                    elif isinstance(final_output, str):
+                        output_summary = final_output[:1000]
+                    asyncio.create_task(
+                        _record_agent_run_complete(
+                            run_id=run_id,
+                            status="completed",
+                            duration_seconds=duration,
+                            output_summary=output_summary,
+                            tool_calls_count=tool_calls_count,
+                        )
+                    )
+
                 except asyncio.TimeoutError:
                     duration = time.time() - start_time
                     await response_stream.write(
@@ -1649,6 +1689,16 @@ def create_app() -> Sanic:
                                 "last_response_id": current_response_id,  # For retry
                                 "timestamp": datetime.utcnow().isoformat(),
                             },
+                        )
+                    )
+                    # Record timeout
+                    asyncio.create_task(
+                        _record_agent_run_complete(
+                            run_id=run_id,
+                            status="timeout",
+                            duration_seconds=duration,
+                            error_message=f"Agent timed out after {timeout}s",
+                            tool_calls_count=tool_calls_count,
                         )
                     )
 
@@ -1672,6 +1722,16 @@ def create_app() -> Sanic:
                                 "last_response_id": current_response_id,  # For retry
                                 "timestamp": datetime.utcnow().isoformat(),
                             },
+                        )
+                    )
+                    # Record failure
+                    asyncio.create_task(
+                        _record_agent_run_complete(
+                            run_id=run_id,
+                            status="failed",
+                            duration_seconds=duration,
+                            error_message=str(e)[:500],
+                            tool_calls_count=tool_calls_count,
                         )
                     )
 

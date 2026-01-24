@@ -5,7 +5,6 @@ import { RequireRole } from '@/components/RequireRole';
 import { useIdentity } from '@/lib/useIdentity';
 import { useOnboarding } from '@/lib/useOnboarding';
 import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
-import { AgentRunnerModal } from '@/components/onboarding/AgentRunnerModal';
 import {
   Bot,
   Activity,
@@ -28,7 +27,6 @@ import {
   LayoutTemplate,
   GitPullRequest,
   Network,
-  Sparkles,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -87,8 +85,6 @@ export default function TeamDashboardPage() {
     markFirstAgentRunCompleted,
   } = useOnboarding();
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
-  const [showAgentRunner, setShowAgentRunner] = useState(false);
-  const [isOnboardingFlow, setIsOnboardingFlow] = useState(false);
 
   // Show welcome modal on first visit
   useEffect(() => {
@@ -233,25 +229,15 @@ export default function TeamDashboardPage() {
 
   const handleWelcomeRunAgent = () => {
     markWelcomeSeen();
+    markFirstAgentRunCompleted();
     setShowWelcomeModal(false);
-    setIsOnboardingFlow(true);
-    setShowAgentRunner(true);
+    // Navigate to agent-runs page where they can run agents
+    window.location.href = '/team/agent-runs';
   };
 
   const handleWelcomeSkip = () => {
     markWelcomeSeen();
     setShowWelcomeModal(false);
-  };
-
-  const handleAgentRunnerClose = () => {
-    setShowAgentRunner(false);
-    setIsOnboardingFlow(false);
-  };
-
-  const handleAgentRunComplete = () => {
-    if (isOnboardingFlow) {
-      markFirstAgentRunCompleted();
-    }
   };
 
   return (
@@ -262,14 +248,6 @@ export default function TeamDashboardPage() {
           onClose={() => setShowWelcomeModal(false)}
           onRunAgent={handleWelcomeRunAgent}
           onSkip={handleWelcomeSkip}
-        />
-      )}
-
-      {showAgentRunner && (
-        <AgentRunnerModal
-          onClose={handleAgentRunnerClose}
-          onComplete={handleAgentRunComplete}
-          isOnboarding={isOnboardingFlow}
         />
       )}
 
@@ -284,14 +262,6 @@ export default function TeamDashboardPage() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {/* Run Agent Button */}
-            <button
-              onClick={() => setShowAgentRunner(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors shadow-sm"
-            >
-              <Sparkles className="w-4 h-4" />
-              Ask IncidentFox
-            </button>
             <div className="text-xs text-gray-500 text-right">
               <div>
                 Team: <span className="font-mono">{identity?.team_node_id || identity?.org_id || 'unknown'}</span>
@@ -564,22 +534,7 @@ export default function TeamDashboardPage() {
         {/* Quick Actions */}
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <button
-              onClick={() => setShowAgentRunner(true)}
-              className="bg-gradient-to-br from-orange-500 to-amber-500 border border-orange-600 rounded-xl p-5 shadow-sm hover:from-orange-600 hover:to-amber-600 transition-all group text-left"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-white/20 text-white">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-medium text-white">Ask IncidentFox</div>
-                  <div className="text-xs text-white/80">AI-powered investigation</div>
-                </div>
-              </div>
-            </button>
-
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Link
               href="/team/knowledge"
               className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm hover:border-gray-400 dark:hover:border-gray-600 transition-colors group"

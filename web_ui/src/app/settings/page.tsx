@@ -135,11 +135,6 @@ export default function SettingsPage() {
   const [newDestinationType, setNewDestinationType] = useState('slack');
   const [newDestinationConfig, setNewDestinationConfig] = useState({ channel_name: '', channel_id: '' });
 
-  // Agent run state (advanced)
-  const [agentPrompt, setAgentPrompt] = useState('');
-  const [agentRunning, setAgentRunning] = useState(false);
-  const [agentResult, setAgentResult] = useState<any>(null);
-
   // Feature configs (AI Pipeline & Dependency Discovery)
   const [pipelineConfig, setPipelineConfig] = useState<PipelineConfig>({
     enabled: false,
@@ -300,31 +295,6 @@ export default function SettingsPage() {
       ...outputConfig,
       default_destinations: outputConfig.default_destinations.filter((_, i) => i !== index),
     });
-  };
-
-  // Run agent (advanced)
-  const runAgent = async () => {
-    if (!agentPrompt.trim()) return;
-    setAgentRunning(true);
-    setAgentResult(null);
-    try {
-      const res = await apiFetch('/api/orchestrator/agents/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: agentPrompt,
-          agent_name: 'planner',
-          max_turns: 50,
-          timeout: 180,
-        }),
-      });
-      const data = await res.json();
-      setAgentResult(data);
-    } catch (e: any) {
-      setAgentResult({ error: e?.message || 'Failed to run agent' });
-    } finally {
-      setAgentRunning(false);
-    }
   };
 
   // Sign out handler
@@ -1771,54 +1741,6 @@ export default function SettingsPage() {
                 </p>
               </div>
 
-              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                  <Bot className="w-5 h-5" /> Ad-Hoc Agent Run
-                </h2>
-                
-                <div className="space-y-4">
-                    <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      Prompt
-                    </label>
-                    <textarea
-                      value={agentPrompt}
-                      onChange={(e) => setAgentPrompt(e.target.value)}
-                      rows={3}
-                      placeholder="e.g., Investigate the cart service in otel-demo namespace"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-                    />
-                    </div>
-                  <button
-                    onClick={runAgent}
-                    disabled={agentRunning || !agentPrompt.trim()}
-                    className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
-                  >
-                    {agentRunning ? (
-                      <>
-                        <RefreshCcw className="w-4 h-4 animate-spin" />
-                        Running...
-                      </>
-                    ) : (
-                      <>
-                        <Bot className="w-4 h-4" />
-                        Run Agent
-                      </>
-                    )}
-                  </button>
-
-                  {agentResult && (
-                    <div className="mt-4">
-                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                        Result
-                        </label>
-                      <pre className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-auto max-h-80 text-xs font-mono">
-                        {JSON.stringify(agentResult, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-            </div>
           </div>
           )}
         </div>
