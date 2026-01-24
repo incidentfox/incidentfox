@@ -29,6 +29,8 @@ spec:
           env:
             - name: CONFIG_SERVICE_URL
               value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
+            - name: AGENT_SERVICE_URL
+              value: {{ printf "http://incidentfox-agent.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.agent.servicePort | int) | quote }}
             - name: ORCHESTRATOR_URL
               value: {{ printf "http://incidentfox-orchestrator.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.orchestrator.servicePort | int) | quote }}
             # Ensure Next.js binds on all interfaces in Kubernetes (otherwise it may bind to pod hostname only,
