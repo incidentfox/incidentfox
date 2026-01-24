@@ -245,7 +245,7 @@ services:
       agentMaxTurns: 50         # Max tool calls per run (enterprise: 30-100)
       agentTimeoutSeconds: 180  # 3 minutes (enterprise: 2-5 min)
   aiPipelineApi:
-    enabled: false  # Optional - knowledge base service (not included in core v1.0.0)
+    enabled: false  # Deprecated - use knowledgeBase instead
     image: "incidentfox/knowledge-base:v1.0.0"
     replicas: 2
     servicePort: 8090
@@ -269,6 +269,55 @@ services:
       minReplicas: 2
       maxReplicas: 6
       targetCPUUtilizationPercentage: 70
+
+  # RAPTOR Knowledge Base - semantic search and Q&A for observability documentation
+  knowledgeBase:
+    enabled: false  # Enable when memory-intensive nodegroup is available
+    image: "incidentfox/knowledge-base:v1.0.0"
+    replicas: 1
+    servicePort: 8000
+    # IRSA role ARN for S3 access (created via Terraform)
+    serviceAccountRoleArn: ""
+    # Default tree to load at startup
+    defaultTree: "mega_ultra_v2"
+    # Volume size for tree storage
+    treesVolumeSizeLimit: "3Gi"
+    # S3 configuration for tree download
+    s3:
+      enabled: false
+      bucket: ""  # e.g., "raptor-kb-trees-123456789012"
+      prefix: "trees/"
+      awsCliImage: "amazon/aws-cli:2.15.0"
+    # Schedule on memory-intensive nodes (t3.xlarge with 16GB RAM)
+    nodeSelector:
+      workload: memory-intensive
+    # Tolerate disk-pressure during initial tree download
+    tolerations:
+      - key: "node.kubernetes.io/disk-pressure"
+        operator: "Exists"
+        effect: "NoSchedule"
+    # High memory requirements for RAPTOR tree loading
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "8Gi"
+      limits:
+        cpu: "2"
+        memory: "12Gi"
+    readinessProbe:
+      initialDelaySeconds: 120
+      periodSeconds: 10
+      timeoutSeconds: 5
+    livenessProbe:
+      enabled: true
+      path: /health
+      initialDelaySeconds: 180
+      periodSeconds: 30
+      timeoutSeconds: 10
+    pdb:
+      enabled: false  # Single replica, PDB not useful
+      minAvailable: 1
+
   webUi:
     enabled: true
     image: "incidentfox/web-ui:v1.0.0"

@@ -96,4 +96,56 @@ resource "aws_iam_role_policy_attachment" "eso_attach" {
   policy_arn = aws_iam_policy.external_secrets.arn
 }
 
+#
+# Knowledge Base IRSA (S3 access for RAPTOR trees)
+#
+resource "aws_iam_role" "knowledge_base" {
+  count = var.knowledge_base_enabled ? 1 : 0
+  name  = "${var.name_prefix}-knowledge-base"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = { Federated = var.oidc_provider_arn },
+        Action = "sts:AssumeRoleWithWebIdentity",
+        Condition = {
+          StringEquals = {
+            "${replace(data.aws_iam_openid_connect_provider.this.url, "https://", "")}:sub" = "${local.oidc_subject_prefix}:${var.knowledge_base_namespace}:${var.knowledge_base_service_account_name}",
+            "${replace(data.aws_iam_openid_connect_provider.this.url, "https://", "")}:aud" = "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+  tags = var.tags
+}
+
+resource "aws_iam_policy" "knowledge_base" {
+  count = var.knowledge_base_enabled ? 1 : 0
+  name  = "${var.name_prefix}-knowledge-base-s3"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ],
+        Resource = concat(
+          var.knowledge_base_s3_bucket_arns,
+          [for arn in var.knowledge_base_s3_bucket_arns : "${arn}/*"]
+        )
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "knowledge_base_attach" {
+  count      = var.knowledge_base_enabled ? 1 : 0
+  role       = aws_iam_role.knowledge_base[0].name
+  policy_arn = aws_iam_policy.knowledge_base[0].arn
+}
+
 
