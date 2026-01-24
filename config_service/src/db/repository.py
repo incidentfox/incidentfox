@@ -1874,6 +1874,41 @@ def update_conversation_mapping_last_used(
     return mapping
 
 
+def upsert_conversation_mapping(
+    session: Session,
+    *,
+    session_id: str,
+    openai_conversation_id: str,
+    session_type: str,
+    org_id: Optional[str] = None,
+    team_node_id: Optional[str] = None,
+) -> tuple[ConversationMapping, bool]:
+    """
+    Upsert a conversation mapping (create if not exists, update if exists).
+
+    Returns:
+        Tuple of (ConversationMapping, created) where created is True if new record was created.
+    """
+    existing = get_conversation_mapping(session, session_id=session_id)
+    if existing:
+        # Update existing mapping
+        existing.openai_conversation_id = openai_conversation_id
+        existing.last_used_at = datetime.utcnow()
+        session.flush()
+        return existing, False
+    else:
+        # Create new mapping
+        mapping = create_conversation_mapping(
+            session,
+            session_id=session_id,
+            openai_conversation_id=openai_conversation_id,
+            session_type=session_type,
+            org_id=org_id,
+            team_node_id=team_node_id,
+        )
+        return mapping, True
+
+
 def delete_conversation_mapping(
     session: Session,
     *,

@@ -403,32 +403,11 @@ class AgentRunner(Generic[T]):
         trigger_source = exec_ctx.metadata.get("trigger_source", "api")
         trigger_message = user_message[:500] if user_message else ""
 
-        # Generate unique run ID for tracking
-        import uuid
-
-        run_id = exec_ctx.metadata.get("run_id") or str(uuid.uuid4())[:8]
-        trigger_source = exec_ctx.metadata.get("trigger_source", "api")
-        trigger_message = user_message[:500] if user_message else ""
-
         logger.info(
             "agent_execution_started",
             agent_name=agent_name,
             message_preview=user_message[:100],
             correlation_id=exec_ctx.correlation_id,
-        )
-
-        # Record run start (fire and forget with error tracking)
-        _track_background_task(
-            _record_agent_run_start(
-                run_id=run_id,
-                agent_name=agent_name,
-                correlation_id=exec_ctx.correlation_id,
-                trigger_source=trigger_source,
-                trigger_message=trigger_message,
-                org_id=exec_ctx.metadata.get("org_id", ""),
-                team_node_id=exec_ctx.metadata.get("team_node_id", ""),
-            ),
-            task_name="record_agent_run_start",
         )
 
         # Record run start (fire and forget with error tracking)
@@ -539,17 +518,6 @@ class AgentRunner(Generic[T]):
                 timeout_seconds=self.timeout,
                 duration_seconds=round(duration, 3),
                 correlation_id=exec_ctx.correlation_id,
-            )
-
-            # Record timeout
-            _track_background_task(
-                _record_agent_run_complete(
-                    run_id=run_id,
-                    status="timeout",
-                    duration_seconds=duration,
-                    error_message=error_msg,
-                ),
-                task_name="record_agent_run_timeout",
             )
 
             # Record timeout

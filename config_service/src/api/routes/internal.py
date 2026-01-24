@@ -789,27 +789,14 @@ def create_conversation_mapping(
     session: Session = Depends(get_db),
     service: str = Depends(require_internal_service),
 ):
-    """Create a new conversation mapping."""
+    """Create or update a conversation mapping (upsert to handle race conditions)."""
     if not request.openai_conversation_id:
         raise HTTPException(
             status_code=400, detail="openai_conversation_id is required"
         )
 
-    # Check if mapping already exists
-    existing = repository.get_conversation_mapping(
-        session, session_id=request.session_id
-    )
-    if existing:
-        return ConversationMappingResponse(
-            found=True,
-            session_id=existing.session_id,
-            openai_conversation_id=existing.openai_conversation_id,
-            session_type=existing.session_type,
-            created=False,
-        )
-
-    # Create new mapping
-    mapping = repository.create_conversation_mapping(
+    # Use upsert to handle concurrent requests safely
+    mapping, created = repository.upsert_conversation_mapping(
         session,
         session_id=request.session_id,
         openai_conversation_id=request.openai_conversation_id,
@@ -819,19 +806,26 @@ def create_conversation_mapping(
     )
     session.commit()
 
-    logger.info(
-        "conversation_mapping_created",
-        session_id=request.session_id,
-        openai_conversation_id=request.openai_conversation_id,
-        session_type=request.session_type,
-    )
+    if created:
+        logger.info(
+            "conversation_mapping_created",
+            session_id=request.session_id,
+            openai_conversation_id=request.openai_conversation_id,
+            session_type=request.session_type,
+        )
+    else:
+        logger.info(
+            "conversation_mapping_updated",
+            session_id=request.session_id,
+            openai_conversation_id=request.openai_conversation_id,
+        )
 
     return ConversationMappingResponse(
         found=True,
         session_id=mapping.session_id,
         openai_conversation_id=mapping.openai_conversation_id,
         session_type=mapping.session_type,
-        created=True,
+        created=created,
     )
 
 
