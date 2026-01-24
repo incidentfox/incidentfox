@@ -1,0 +1,203 @@
+# GitHub Actions Workflow: Sync incidentfox (public) → mono-repo
+#
+# INSTALL LOCATION: mono-repo/.github/workflows/sync-from-public.yml
+#
+# This workflow syncs changes from the public incidentfox repository
+# back to the private mono-repo (e.g., community contributions).
+#
+# Triggers:
+#   - Manual dispatch (workflow_dispatch)
+#   - Can be triggered when PRs are merged to public repo (via webhook)
+#
+# Required Secrets:
+#   - SYNC_PAT: Personal Access Token with repo scope for both repos
+
+name: Sync from Public Repo
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (preview only)'
+        required: false
+        default: 'false'
+        type: boolean
+      pr_number:
+        description: 'Specific PR number to sync (optional)'
+        required: false
+        type: string
+
+  # Uncomment to trigger on public repo updates via repository_dispatch
+  # repository_dispatch:
+  #   types: [public-repo-updated]
+
+env:
+  PUBLIC_REPO: incidentfox/incidentfox
+  PRIVATE_REPO: incidentfox/mono-repo
+
+jobs:
+  sync-from-public:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout mono-repo (private)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: private
+
+      - name: Checkout incidentfox (public)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PUBLIC_REPO }}
+          token: ${{ secrets.SYNC_PAT }}
+          fetch-depth: 0
+          path: public
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "IncidentFox Sync Bot"
+          git config --global user.email "sync-bot@incidentfox.ai"
+
+      - name: Sync files from public repo
+        id: sync
+        run: |
+          cd private
+
+          # Directories to SKIP syncing (they're stubs in public, full in private)
+          SKIP_DIRS=(
+            "ai_pipeline"
+            "sre-agent"
+            "correlation_service"
+            "dependency_service"
+            "slack-bot"
+            "telemetry_collector"
+          )
+
+          # Files to skip (internal only)
+          SKIP_FILES=(
+            "internal_test_configs.txt"
+            "note.md"
+            "org_internal_test_config.json"
+            "team_a_config.json"
+            "team_a_full_config.json"
+            "test_mcp_config.py"
+            ".syncconfig.yaml"
+          )
+
+          # Build rsync exclude arguments
+          EXCLUDES="--exclude=.git"
+          for dir in "${SKIP_DIRS[@]}"; do
+            EXCLUDES="$EXCLUDES --exclude=$dir"
+          done
+          for file in "${SKIP_FILES[@]}"; do
+            EXCLUDES="$EXCLUDES --exclude=$file"
+          done
+
+          # Also exclude workflow files that are private-only
+          EXCLUDES="$EXCLUDES --exclude=.github/workflows/eval-pipeline.yml"
+          EXCLUDES="$EXCLUDES --exclude=.github/workflows/deploy-service.yml"
+          EXCLUDES="$EXCLUDES --exclude=.github/workflows/deploy-knowledge-base.yml"
+          EXCLUDES="$EXCLUDES --exclude=.github/workflows/publish-dockerhub.yml"
+          EXCLUDES="$EXCLUDES --exclude=.github/workflows/sync-*.yml"
+          EXCLUDES="$EXCLUDES --exclude=scripts/repo-sync"
+          EXCLUDES="$EXCLUDES --exclude=infra/terraform/envs/pilot"
+
+          # Sync files from public to private (non-destructive for private-only dirs)
+          # Using --ignore-existing for safety on first sync
+          rsync -av $EXCLUDES ../public/ ./
+
+          # Check for changes
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No changes from public repo"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Changes detected from public repo:"
+            git status --short
+          fi
+
+      - name: Get changed files summary
+        if: steps.sync.outputs.has_changes == 'true'
+        id: changes
+        run: |
+          cd private
+          CHANGED_FILES=$(git diff --name-only | head -20)
+          CHANGE_COUNT=$(git diff --name-only | wc -l)
+
+          echo "Changed files (first 20):"
+          echo "$CHANGED_FILES"
+          echo "Total: $CHANGE_COUNT files"
+
+          # Save for PR body
+          echo "change_count=$CHANGE_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Create sync branch and PR
+        if: steps.sync.outputs.has_changes == 'true' && inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd private
+
+          SYNC_BRANCH="sync/from-public-$(date +%Y%m%d-%H%M%S)"
+
+          git checkout -b "$SYNC_BRANCH"
+          git add -A
+
+          git commit -m "sync: Merge changes from public repo
+
+          Automated sync from public incidentfox repo.
+
+          Source: ${{ env.PUBLIC_REPO }}
+          Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          git push origin "$SYNC_BRANCH"
+
+          gh pr create \
+            --title "sync: Merge changes from public repo" \
+            --body "## Automated Sync from Public Repo
+
+          This PR merges changes from the public \`incidentfox/incidentfox\` repository.
+
+          **Files changed:** ${{ steps.changes.outputs.change_count }}
+          **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          ### Likely Sources
+          - Community contributions
+          - Documentation updates
+          - Bug fixes from open-source contributors
+
+          ### Review Checklist
+          - [ ] Changes are compatible with private-only features
+          - [ ] No conflicts with premium service code
+          - [ ] Tests pass with new changes
+
+          ---
+          *Generated by [sync-from-public.yml](${{ github.server_url }}/${{ github.repository }}/blob/main/.github/workflows/sync-from-public.yml)*"
+
+          echo "✅ PR created successfully"
+
+      - name: Dry run summary
+        if: inputs.dry_run == 'true' && steps.sync.outputs.has_changes == 'true'
+        run: |
+          echo "## Dry Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Changes detected that would be synced from public:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cd private && git diff --stat >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Sync Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Source | \`${{ env.PUBLIC_REPO }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Target | \`${{ env.PRIVATE_REPO }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Changes | ${{ steps.sync.outputs.has_changes }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dry Run | ${{ inputs.dry_run }} |" >> $GITHUB_STEP_SUMMARY
