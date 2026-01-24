@@ -255,7 +255,7 @@ export default function TeamDashboardPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Bot className="w-7 h-7 text-gray-600 dark:text-gray-400" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center"><Bot className="w-5 h-5 text-white" /></div>
             <div>
               <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Team Dashboard</h1>
               <p className="text-sm text-gray-500">Monitor your AI agents and team activity</p>

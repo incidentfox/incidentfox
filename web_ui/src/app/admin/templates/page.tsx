@@ -288,7 +288,7 @@ export default function AdminTemplatesPage() {
                     {template.required_mcps.slice(0, 3).map((mcp) => (
                       <span
                         key={mcp}
-                        className="text-xs px-2 py-1 bg-purple-900/30 text-purple-400 rounded"
+                        className="text-xs px-2 py-1 bg-cyan-900/30 text-cyan-400 rounded"
                       >
                         {mcp}
                       </span>
@@ -378,7 +378,7 @@ export default function AdminTemplatesPage() {
                     {selectedTemplate.required_mcps.map((mcp) => (
                       <span
                         key={mcp}
-                        className="px-3 py-1 bg-purple-900/30 text-purple-400 rounded-lg text-sm border border-purple-800/50"
+                        className="px-3 py-1 bg-cyan-900/30 text-cyan-400 rounded-lg text-sm border border-cyan-800/50"
                       >
                         {mcp}
                       </span>
