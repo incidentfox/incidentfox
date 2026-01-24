@@ -154,6 +154,8 @@ services:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-web-ui:latest"
     cookieSecure: true
+    # RAPTOR Knowledge Base API for tree explorer and semantic search
+    raptorApiUrl: "http://incidentfox-knowledge-base.incidentfox.svc.cluster.local:8000"
     oidc:
       enabled: false
     slack:

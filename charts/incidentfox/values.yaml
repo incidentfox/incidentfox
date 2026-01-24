@@ -274,6 +274,10 @@ services:
     image: "incidentfox/web-ui:v1.0.0"
     replicas: 2
     servicePort: 3000
+    # RAPTOR Knowledge Base API URL (for tree explorer, semantic search, Q&A)
+    # If using the incidentfox-knowledge-base service in same namespace:
+    # raptorApiUrl: "http://incidentfox-knowledge-base.incidentfox.svc.cluster.local:8000"
+    raptorApiUrl: ""
     resources:
       requests:
         cpu: "100m"
