@@ -126,7 +126,7 @@ def create_k8s_agent(
                    This adds guidance for effective delegation.
                    Can also be set via team config: agents.k8s.is_master: true
     """
-    from ..prompts.layers import apply_role_based_prompt
+    from ..prompts.layers import apply_role_based_prompt, build_agent_prompt_sections
 
     config = get_config()
     team_cfg = team_config if team_config is not None else config.team_config
@@ -332,6 +332,17 @@ Always include the raw data so users can see the actual values."""
     # Load all K8s and Docker tools
     tools = _load_k8s_tools()
     logger.info("k8s_agent_tools_loaded", count=len(tools))
+
+    # Add shared sections (K8s already has detailed error handling in base prompt,
+    # so we add tool limits and evidence format for consistency)
+    shared_sections = build_agent_prompt_sections(
+        integration_name="kubernetes",
+        is_subagent=is_subagent,
+        include_error_handling=False,  # Already has comprehensive error handling
+        include_tool_limits=True,
+        include_evidence_format=True,
+    )
+    system_prompt = system_prompt + "\n\n" + shared_sections
 
     # Get model settings from team config if available
     model_name = config.openai.model

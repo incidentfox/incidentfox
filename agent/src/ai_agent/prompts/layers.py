@@ -1207,3 +1207,711 @@ def build_tool_guidance(tools: list) -> str:
             parts.append(guidance_map[tool_name])
 
     return "\n\n".join(parts)
+
+
+# =============================================================================
+# Shared Templates for All Agents
+# =============================================================================
+# These templates provide consistent guidance across all agents.
+# Import and use these in agent prompts instead of duplicating text.
+
+
+# -----------------------------------------------------------------------------
+# Error Handling Template (Shared)
+# -----------------------------------------------------------------------------
+
+ERROR_HANDLING_COMMON = """## ERROR HANDLING - CRITICAL
+
+**CRITICAL: Classify errors before deciding what to do next.**
+
+Not all errors are equal. Some can be resolved by retrying, others cannot. Retrying non-retryable errors wastes time and confuses humans.
+
+### NON-RETRYABLE ERRORS - STOP AND USE `ask_human`
+
+These errors will NEVER resolve by retrying. You MUST use the `ask_human` tool:
+
+| Error Pattern | Meaning | Action |
+|--------------|---------|--------|
+| 401 Unauthorized | Credentials invalid/expired | USE `ask_human` - ask user to fix credentials |
+| 403 Forbidden | No permission for action | USE `ask_human` - ask user to fix permissions |
+| 404 Not Found | Resource doesn't exist | STOP (unless typo suspected) |
+| "permission denied" | Auth/RBAC issue | USE `ask_human` - ask user to fix permissions |
+| "config_required": true | Integration not configured | STOP immediately - CLI handles this automatically |
+| "invalid credentials" | Wrong auth | USE `ask_human` - ask user to fix credentials |
+| "access denied" | IAM/policy issue | USE `ask_human` - ask user to fix permissions |
+
+**When you hit a non-retryable error:**
+1. **STOP IMMEDIATELY** - Do NOT retry the same operation
+2. **Do NOT try variations** - Different parameters won't fix auth issues
+3. **USE `ask_human`** - Ask the user to fix the issue
+4. **Include partial findings** - Report what you found before the error
+
+### RETRYABLE ERRORS - May retry ONCE
+
+| Error Pattern | Meaning | Action |
+|--------------|---------|--------|
+| 429 Too Many Requests | Rate limited | Wait 5 seconds, retry once |
+| 500/502/503/504 | Server error | Retry once |
+| Timeout | Slow response | Retry once with smaller scope |
+| Connection refused | Service temporarily down | Retry once |
+
+After ONE retry fails, treat as non-retryable.
+
+### CONFIG_REQUIRED RESPONSES
+
+If any tool returns `"config_required": true`:
+```json
+{"config_required": true, "integration": "...", "message": "..."}
+```
+
+This means the integration is NOT configured. Your response should:
+- Note the integration is not configured
+- Do NOT use `ask_human` for this - the CLI handles it automatically
+- Continue with other available tools if possible
+- Include this limitation in your findings
+"""
+
+
+def build_error_handling_section(
+    integration_name: str,
+    integration_specific_errors: list[dict[str, str]] | None = None,
+) -> str:
+    """
+    Build error handling section with integration-specific errors.
+
+    Args:
+        integration_name: Name of the integration (e.g., "kubernetes", "aws", "github")
+        integration_specific_errors: List of dicts with "pattern", "meaning", "action" keys
+
+    Returns:
+        Complete error handling section with common + integration-specific errors
+
+    Example:
+        k8s_errors = [
+            {"pattern": "system:anonymous", "meaning": "Auth not working", "action": "USE ask_human"},
+        ]
+        section = build_error_handling_section("kubernetes", k8s_errors)
+    """
+    lines = [ERROR_HANDLING_COMMON]
+
+    if integration_specific_errors:
+        lines.append(f"\n### {integration_name.upper()}-SPECIFIC ERRORS\n")
+        lines.append("| Error Pattern | Meaning | Action |")
+        lines.append("|--------------|---------|--------|")
+        for err in integration_specific_errors:
+            pattern = err.get("pattern", "")
+            meaning = err.get("meaning", "")
+            action = err.get("action", "")
+            lines.append(f"| {pattern} | {meaning} | {action} |")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+# -----------------------------------------------------------------------------
+# Tool Call Limits Template
+# -----------------------------------------------------------------------------
+
+TOOL_CALL_LIMITS_TEMPLATE = """## TOOL CALL LIMITS
+
+- **Maximum {max_calls} tool calls** per task
+- **After {synthesize_after} calls**, you MUST start forming conclusions
+- **Never repeat** the same tool call with identical parameters
+- If you've gathered enough evidence, stop and synthesize
+
+### When Approaching Limits
+When you've made {synthesize_after}+ tool calls:
+1. Stop gathering more data
+2. Synthesize what you have
+3. Note any gaps in your findings
+4. Provide actionable recommendations with available evidence
+
+It's better to provide partial findings than to exceed limits without conclusions.
+"""
+
+
+def build_tool_call_limits(max_calls: int = 10, synthesize_after: int = 6) -> str:
+    """
+    Build tool call limits section with customizable values.
+
+    Args:
+        max_calls: Maximum tool calls allowed
+        synthesize_after: Number of calls after which to start synthesizing
+
+    Returns:
+        Formatted tool call limits section
+    """
+    return TOOL_CALL_LIMITS_TEMPLATE.format(
+        max_calls=max_calls,
+        synthesize_after=synthesize_after,
+    )
+
+
+# -----------------------------------------------------------------------------
+# Subagent Output Format (for agents called by other agents)
+# -----------------------------------------------------------------------------
+
+SUBAGENT_OUTPUT_FORMAT = """## OUTPUT FORMAT FOR CALLER
+
+You are being called by another agent. Structure your response for easy consumption:
+
+### Required Sections
+
+1. **Summary** (1-2 sentences)
+   - The most important finding or conclusion
+   - Lead with the answer, not the methodology
+
+2. **Resources Investigated**
+   - Which specific resources you checked (names, IDs, namespaces)
+   - This prevents confusion about what was actually investigated
+
+3. **Key Findings** (evidence with specifics)
+   - Exact timestamps: "Error spike at 10:32:15 UTC"
+   - Specific values: "CPU usage 94%, memory 87%"
+   - Quoted log lines: `"Connection refused: database-primary:5432"`
+   - Resource states: "Pod status: CrashLoopBackOff, restarts: 47"
+
+4. **Confidence Level**
+   - 0-100% or low/medium/high
+   - Brief explanation of confidence
+
+5. **Gaps & Limitations**
+   - What you couldn't determine and why
+   - Tools that failed or returned no data
+
+6. **Recommendations** (if applicable)
+   - Specific next steps based on findings
+
+### What NOT to Include
+- Lengthy methodology explanations
+- Raw, unprocessed tool outputs (summarize key points)
+- Tangential findings unrelated to the query
+- Excessive caveats or disclaimers
+
+### Evidence Quoting Format
+Use consistent format: `[SOURCE] at [TIMESTAMP]: "[QUOTED TEXT]"`
+
+Example: `[CloudWatch Logs] at 2024-01-15T10:32:45Z: "Connection refused: db-primary:5432"`
+"""
+
+
+# -----------------------------------------------------------------------------
+# Context Receiving Guidance (for agents receiving context from callers)
+# -----------------------------------------------------------------------------
+
+CONTEXT_RECEIVING_GUIDANCE = """## USING CONTEXT FROM CALLER
+
+When another agent or the planner provides context, use it effectively:
+
+### What to Extract from Context
+
+1. **Time Window**
+   - "Incident started around X" → Focus investigation on that time
+   - Use ±30 minutes around reported time initially
+
+2. **Prior Findings**
+   - Don't re-investigate what's already confirmed
+   - Build on previous findings, don't contradict without evidence
+
+3. **Focus Areas**
+   - If caller says "check memory", prioritize memory investigation
+   - Don't ignore focus hints unless evidence points elsewhere
+
+4. **What's Ruled Out**
+   - If caller says "network is fine", don't spend time on network
+   - Note if your findings contradict ruled-out areas
+
+5. **Resource Identifiers**
+   - Namespace, region, service name, cluster
+   - Use EXACTLY as provided - don't guess alternatives
+
+### How to Use Context
+
+```
+Context provided: "Deployment at 10:25 UTC, errors started 10:30 UTC"
+
+GOOD: Focus on 10:20-10:45 UTC, correlate with deployment
+BAD: Search last 24 hours without time filter
+```
+
+### When Context is Incomplete
+
+If critical information is missing (e.g., namespace not specified):
+1. Check if it can be inferred from other context
+2. Use sensible defaults if reasonable (e.g., "default" namespace)
+3. Note the assumption in your response
+4. Only use `ask_human` if truly ambiguous and important
+"""
+
+
+# -----------------------------------------------------------------------------
+# Evidence Format Guidance
+# -----------------------------------------------------------------------------
+
+EVIDENCE_FORMAT_GUIDANCE = """## EVIDENCE PRESENTATION
+
+### Quoting Evidence
+Always use this format: `[SOURCE] at [TIMESTAMP]: "[QUOTED TEXT]"`
+
+Examples:
+- `[K8s Events] at 2024-01-15T10:32:45Z: "Back-off restarting failed container"`
+- `[CloudWatch Metrics] at 10:30-10:45 UTC: "CPU usage 94% (limit: 100%)"`
+- `[GitHub Commits] at 2024-01-15T10:25:00Z: "abc1234 - Fix connection pool settings"`
+
+### Evidence Quality Hierarchy
+Weight evidence by reliability:
+
+1. **Direct observation** (highest): Exact log lines, metric values, resource states
+2. **Computed correlation**: Metrics that move together, temporal correlation
+3. **Inference**: Logical deduction from multiple sources
+4. **Hypothesis** (lowest): Speculation based on patterns
+
+Always label which type: "The logs show X (direct). This suggests Y (inference)."
+
+### Timestamps
+- Always use UTC
+- Include timezone: "10:30:00 UTC" not "10:30:00"
+- For ranges: "10:30-10:45 UTC"
+- Relative times: "5 minutes before the deployment"
+
+### Numerical Evidence
+- Include units: "512Mi" not "512"
+- Include context: "CPU 94% of 2 cores" not just "CPU 94%"
+- Compare to baseline: "Error rate 15% (normal: 0.1%)"
+"""
+
+
+# -----------------------------------------------------------------------------
+# Synthesis Guidance (for orchestrator agents)
+# -----------------------------------------------------------------------------
+
+SYNTHESIS_GUIDANCE = """## SYNTHESIZING MULTI-SOURCE FINDINGS
+
+When you have findings from multiple agents or tools, synthesize them:
+
+### Building a Unified Timeline
+
+1. Extract all timestamps from all sources
+2. Sort chronologically
+3. Identify the sequence: trigger → impact → detection → response
+4. Mark uncertain times with "~" (e.g., "~10:30 UTC")
+
+### Corroborating Evidence
+
+Look for the same finding from multiple sources:
+- K8s shows OOMKilled + Metrics shows memory spike = **Strong evidence**
+- Only one source = Note as "needs corroboration"
+
+### Handling Contradictions
+
+When sources disagree:
+1. Note the contradiction explicitly
+2. Check timestamps - are they looking at same time window?
+3. Check scope - are they looking at same resources?
+4. Prefer more specific/direct evidence over inferred
+
+### Forming Root Cause
+
+A good root cause:
+1. **Explains all symptoms** - If it doesn't explain everything, it's incomplete
+2. **Has supporting evidence** - Not just plausible, but demonstrated
+3. **Is actionable** - Points to something that can be fixed
+4. **Has appropriate confidence** - 90%+ means very certain, not just "seems likely"
+
+### Gaps and Next Steps
+
+Always note:
+- What couldn't be determined (and which tools/access would help)
+- What was ruled out (and why)
+- What needs human verification
+"""
+
+
+# -----------------------------------------------------------------------------
+# Builder function for combining all shared sections
+# -----------------------------------------------------------------------------
+
+
+def build_agent_shared_sections(
+    include_error_handling: bool = True,
+    include_tool_limits: bool = True,
+    include_subagent_output: bool = False,
+    include_context_receiving: bool = False,
+    include_evidence_format: bool = True,
+    include_synthesis: bool = False,
+    # Customization
+    integration_name: str | None = None,
+    integration_errors: list[dict[str, str]] | None = None,
+    max_tool_calls: int = 10,
+    synthesize_after: int = 6,
+) -> str:
+    """
+    Build combined shared sections for an agent's system prompt.
+
+    This function assembles multiple shared prompt sections based on
+    what the agent needs. Use this instead of manually combining sections.
+
+    Args:
+        include_error_handling: Include error classification guidance
+        include_tool_limits: Include tool call limits
+        include_subagent_output: Include output format for sub-agents
+        include_context_receiving: Include guidance on using caller context
+        include_evidence_format: Include evidence presentation guidance
+        include_synthesis: Include multi-source synthesis guidance
+        integration_name: Name for integration-specific errors
+        integration_errors: Integration-specific error patterns
+        max_tool_calls: Maximum tool calls allowed
+        synthesize_after: Calls after which to synthesize
+
+    Returns:
+        Combined prompt sections string
+
+    Example:
+        shared = build_agent_shared_sections(
+            include_error_handling=True,
+            include_subagent_output=True,
+            integration_name="kubernetes",
+            integration_errors=[{"pattern": "system:anonymous", ...}],
+            max_tool_calls=15,
+        )
+        system_prompt = base_prompt + "\\n\\n" + shared
+    """
+    sections = []
+
+    if include_error_handling:
+        if integration_name and integration_errors:
+            sections.append(
+                build_error_handling_section(integration_name, integration_errors)
+            )
+        else:
+            sections.append(ERROR_HANDLING_COMMON)
+
+    if include_tool_limits:
+        sections.append(build_tool_call_limits(max_tool_calls, synthesize_after))
+
+    if include_context_receiving:
+        sections.append(CONTEXT_RECEIVING_GUIDANCE)
+
+    if include_evidence_format:
+        sections.append(EVIDENCE_FORMAT_GUIDANCE)
+
+    if include_subagent_output:
+        sections.append(SUBAGENT_OUTPUT_FORMAT)
+
+    if include_synthesis:
+        sections.append(SYNTHESIS_GUIDANCE)
+
+    return "\n\n".join(sections)
+
+
+# =============================================================================
+# Integration-Specific Error Definitions
+# =============================================================================
+# Centralized error patterns for each integration. Use these with
+# build_agent_shared_sections(integration_name="X") to automatically
+# include the appropriate errors.
+
+
+KUBERNETES_ERRORS: list[dict[str, str]] = [
+    {
+        "pattern": "system:anonymous",
+        "meaning": "Auth not working, treated as anonymous user",
+        "action": "USE ask_human - ask user to fix kubeconfig",
+    },
+    {
+        "pattern": "401 Unauthorized",
+        "meaning": "Invalid/expired credentials",
+        "action": "USE ask_human - ask user to refresh credentials",
+    },
+    {
+        "pattern": "403 Forbidden",
+        "meaning": "RBAC permission denied",
+        "action": "USE ask_human - ask user to check RBAC permissions",
+    },
+    {
+        "pattern": "404 Not Found",
+        "meaning": "Resource doesn't exist",
+        "action": "Verify resource name and namespace",
+    },
+    {
+        "pattern": "connection refused",
+        "meaning": "Cannot reach API server",
+        "action": "Check cluster connectivity, retry once",
+    },
+]
+
+AWS_ERRORS: list[dict[str, str]] = [
+    {
+        "pattern": "AccessDeniedException",
+        "meaning": "IAM permission missing",
+        "action": "USE ask_human - need IAM policy update",
+    },
+    {
+        "pattern": "ExpiredTokenException",
+        "meaning": "STS token expired",
+        "action": "USE ask_human - need credential refresh",
+    },
+    {
+        "pattern": "UnauthorizedOperation",
+        "meaning": "No permission for this action",
+        "action": "USE ask_human - need IAM permission",
+    },
+    {
+        "pattern": "InvalidClientTokenId",
+        "meaning": "AWS credentials invalid",
+        "action": "USE ask_human - need valid credentials",
+    },
+    {
+        "pattern": "ResourceNotFoundException",
+        "meaning": "Resource doesn't exist",
+        "action": "Verify resource name/ARN, check region",
+    },
+    {
+        "pattern": "ThrottlingException",
+        "meaning": "API rate limited",
+        "action": "Wait 5 seconds, retry once",
+    },
+]
+
+GITHUB_ERRORS: list[dict[str, str]] = [
+    {
+        "pattern": "401 Bad credentials",
+        "meaning": "GitHub token invalid/expired",
+        "action": "USE ask_human - need valid GitHub token",
+    },
+    {
+        "pattern": "403 rate limit exceeded",
+        "meaning": "GitHub API rate limit hit",
+        "action": "Wait 60 seconds, retry with smaller scope",
+    },
+    {
+        "pattern": "403 Resource not accessible",
+        "meaning": "Token lacks required scope",
+        "action": "USE ask_human - need token with correct permissions",
+    },
+    {
+        "pattern": "404 Not Found",
+        "meaning": "Repository/branch doesn't exist or no access",
+        "action": "Verify repo name, check if private",
+    },
+    {
+        "pattern": "422 Unprocessable Entity",
+        "meaning": "Invalid request parameters",
+        "action": "Check parameter values, verify branch/ref exists",
+    },
+]
+
+METRICS_ERRORS: list[dict[str, str]] = [
+    {
+        "pattern": "401/403 Grafana",
+        "meaning": "Grafana API key invalid or expired",
+        "action": "USE ask_human - need valid Grafana API key",
+    },
+    {
+        "pattern": "Prometheus timeout",
+        "meaning": "Query too expensive/slow",
+        "action": "Reduce time range or simplify query, retry once",
+    },
+    {
+        "pattern": "no data returned",
+        "meaning": "Wrong metric name or time range",
+        "action": "Verify metric exists, check time range",
+    },
+    {
+        "pattern": "Datadog 403",
+        "meaning": "Datadog API/App key invalid",
+        "action": "USE ask_human - need valid Datadog credentials",
+    },
+    {
+        "pattern": "NewRelic 401",
+        "meaning": "NewRelic API key invalid",
+        "action": "USE ask_human - need valid NewRelic API key",
+    },
+    {
+        "pattern": "metric not found",
+        "meaning": "Metric name doesn't exist",
+        "action": "List available metrics, try alternative names",
+    },
+]
+
+LOGS_ERRORS: list[dict[str, str]] = [
+    {
+        "pattern": "401/403 CloudWatch",
+        "meaning": "AWS credentials invalid or no permission",
+        "action": "USE ask_human - need valid AWS credentials",
+    },
+    {
+        "pattern": "log group not found",
+        "meaning": "Log group doesn't exist or wrong region",
+        "action": "Verify log group name and region",
+    },
+    {
+        "pattern": "Elasticsearch 401",
+        "meaning": "ES credentials invalid",
+        "action": "USE ask_human - need valid Elasticsearch credentials",
+    },
+    {
+        "pattern": "query timeout",
+        "meaning": "Time range too large or query too complex",
+        "action": "Reduce time range, simplify query, retry once",
+    },
+    {
+        "pattern": "Splunk 401",
+        "meaning": "Splunk token invalid",
+        "action": "USE ask_human - need valid Splunk credentials",
+    },
+    {
+        "pattern": "no logs found",
+        "meaning": "No data in time range or service not logging",
+        "action": "Expand time range slightly, verify service was running",
+    },
+]
+
+CODING_ERRORS: list[dict[str, str]] = [
+    {
+        "pattern": "File not found",
+        "meaning": "Path doesn't exist",
+        "action": "Use list_directory to verify path",
+    },
+    {
+        "pattern": "Permission denied",
+        "meaning": "No write access to file/directory",
+        "action": "USE ask_human - need file system permissions",
+    },
+    {
+        "pattern": "Binary file",
+        "meaning": "Can't read as text",
+        "action": "Note limitation, skip file",
+    },
+    {
+        "pattern": "File too large",
+        "meaning": "Exceeds read limits",
+        "action": "Read specific line ranges",
+    },
+    {
+        "pattern": "Test framework not found",
+        "meaning": "pytest/unittest not installed",
+        "action": "Note in findings, suggest installation",
+    },
+    {
+        "pattern": "Linter not found",
+        "meaning": "ruff/flake8/eslint not installed",
+        "action": "Note in findings, suggest installation",
+    },
+]
+
+# Registry mapping integration names to their error patterns
+INTEGRATION_ERRORS_REGISTRY: dict[str, list[dict[str, str]]] = {
+    "kubernetes": KUBERNETES_ERRORS,
+    "k8s": KUBERNETES_ERRORS,
+    "aws": AWS_ERRORS,
+    "github": GITHUB_ERRORS,
+    "metrics": METRICS_ERRORS,
+    "logs": LOGS_ERRORS,
+    "log_analysis": LOGS_ERRORS,
+    "coding": CODING_ERRORS,
+}
+
+# Default tool call limits per integration
+INTEGRATION_TOOL_LIMITS: dict[str, tuple[int, int]] = {
+    # (max_calls, synthesize_after)
+    "kubernetes": (15, 10),
+    "k8s": (15, 10),
+    "aws": (10, 6),
+    "github": (12, 8),
+    "metrics": (12, 8),
+    "logs": (8, 5),
+    "log_analysis": (8, 5),
+    "coding": (15, 10),
+}
+
+
+def get_integration_errors(integration_name: str) -> list[dict[str, str]] | None:
+    """
+    Get the predefined error patterns for an integration.
+
+    Args:
+        integration_name: Name of the integration (e.g., "kubernetes", "aws")
+
+    Returns:
+        List of error pattern dicts, or None if not found
+    """
+    return INTEGRATION_ERRORS_REGISTRY.get(integration_name.lower())
+
+
+def get_integration_tool_limits(integration_name: str) -> tuple[int, int]:
+    """
+    Get the default tool call limits for an integration.
+
+    Args:
+        integration_name: Name of the integration
+
+    Returns:
+        Tuple of (max_calls, synthesize_after), defaults to (10, 6)
+    """
+    return INTEGRATION_TOOL_LIMITS.get(integration_name.lower(), (10, 6))
+
+
+def build_agent_prompt_sections(
+    integration_name: str,
+    is_subagent: bool = False,
+    include_error_handling: bool = True,
+    include_tool_limits: bool = True,
+    include_evidence_format: bool = True,
+    custom_errors: list[dict[str, str]] | None = None,
+    custom_max_calls: int | None = None,
+    custom_synthesize_after: int | None = None,
+) -> str:
+    """
+    Build shared prompt sections for an agent using integration defaults.
+
+    This is a convenience function that looks up integration-specific errors
+    and tool limits from the registry. Use this instead of build_agent_shared_sections
+    for cleaner agent code.
+
+    Args:
+        integration_name: Name of the integration (e.g., "kubernetes", "aws", "github")
+        is_subagent: Whether this agent is called by another agent
+        include_error_handling: Include error handling section
+        include_tool_limits: Include tool call limits section
+        include_evidence_format: Include evidence formatting section
+        custom_errors: Override default errors for this integration
+        custom_max_calls: Override default max tool calls
+        custom_synthesize_after: Override default synthesize threshold
+
+    Returns:
+        Combined prompt sections string
+
+    Example:
+        # Simple usage with defaults
+        sections = build_agent_prompt_sections("kubernetes", is_subagent=True)
+
+        # With custom overrides
+        sections = build_agent_prompt_sections(
+            "aws",
+            custom_max_calls=15,
+            custom_errors=[{"pattern": "custom", ...}],
+        )
+    """
+    # Get defaults from registry
+    errors = custom_errors or get_integration_errors(integration_name)
+    max_calls, synthesize_after = get_integration_tool_limits(integration_name)
+
+    # Apply custom overrides
+    if custom_max_calls is not None:
+        max_calls = custom_max_calls
+    if custom_synthesize_after is not None:
+        synthesize_after = custom_synthesize_after
+
+    return build_agent_shared_sections(
+        include_error_handling=include_error_handling,
+        include_tool_limits=include_tool_limits,
+        include_subagent_output=is_subagent,
+        include_context_receiving=is_subagent,
+        include_evidence_format=include_evidence_format,
+        include_synthesis=False,
+        integration_name=integration_name,
+        integration_errors=errors,
+        max_tool_calls=max_calls,
+        synthesize_after=synthesize_after,
+    )

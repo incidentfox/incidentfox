@@ -129,7 +129,11 @@ def create_coding_agent(
                    This adds guidance for effective delegation.
                    Can also be set via team config: agents.coding.is_master: true
     """
-    from ..prompts.layers import apply_role_based_prompt, build_tool_guidance
+    from ..prompts.layers import (
+        apply_role_based_prompt,
+        build_agent_prompt_sections,
+        build_tool_guidance,
+    )
 
     config = get_config()
     team_cfg = team_config if team_config is not None else config.team_config
@@ -252,6 +256,14 @@ When providing fixes:
     tool_guidance = build_tool_guidance(tools)
     if tool_guidance:
         system_prompt = system_prompt + "\n\n" + tool_guidance
+
+    # Add shared sections (error handling, tool limits, evidence format)
+    # Uses predefined CODING_ERRORS from registry
+    shared_sections = build_agent_prompt_sections(
+        integration_name="coding",
+        is_subagent=is_subagent,
+    )
+    system_prompt = system_prompt + "\n\n" + shared_sections
 
     # Get model settings from team config if available
     model_name = config.openai.model
