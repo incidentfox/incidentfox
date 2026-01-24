@@ -38,6 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        service: [agent, config-service, orchestrator, web-ui]
         include:
           - service: agent
             context: ./agent
