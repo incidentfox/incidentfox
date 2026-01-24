@@ -810,7 +810,10 @@ def create_app() -> Sanic:
                     dest_types = [d.type for d in output_destinations]
                     if "slack" in dest_types:
                         trigger_source = "slack"
-                    elif "github_pr_comment" in dest_types or "github_issue_comment" in dest_types:
+                    elif (
+                        "github_pr_comment" in dest_types
+                        or "github_issue_comment" in dest_types
+                    ):
                         trigger_source = "github"
 
                 # Record agent run start (fire and forget)
