@@ -798,6 +798,36 @@ def create_app() -> Sanic:
                 )
 
                 start_time = time.time()
+                run_id = str(uuid.uuid4())  # Generate unique run ID for tracking
+
+                # Get org/team from auth context for recording
+                org_id = auth_identity.org_id if auth_identity else ""
+                team_node_id = auth_identity.team_node_id if auth_identity else ""
+
+                # Determine trigger source from output destinations
+                trigger_source = "api"
+                if output_destinations:
+                    dest_types = [d.type for d in output_destinations]
+                    if "slack" in dest_types:
+                        trigger_source = "slack"
+                    elif (
+                        "github_pr_comment" in dest_types
+                        or "github_issue_comment" in dest_types
+                    ):
+                        trigger_source = "github"
+
+                # Record agent run start (fire and forget)
+                asyncio.create_task(
+                    _record_agent_run_start(
+                        run_id=run_id,
+                        agent_name=agent_name,
+                        correlation_id=request.ctx.correlation_id,
+                        trigger_source=trigger_source,
+                        trigger_message=message[:500] if message else "",
+                        org_id=org_id,
+                        team_node_id=team_node_id,
+                    )
+                )
 
                 # Post initial "working" messages
                 message_ids = await post_initial_to_destinations(
@@ -1038,6 +1068,22 @@ def create_app() -> Sanic:
                         message_ids=message_ids,
                     )
 
+                    # Record agent run completion
+                    output_summary = ""
+                    if isinstance(output, dict) and "summary" in output:
+                        output_summary = str(output["summary"])[:1000]
+                    elif isinstance(output, str):
+                        output_summary = output[:1000]
+                    asyncio.create_task(
+                        _record_agent_run_complete(
+                            run_id=run_id,
+                            status="completed",
+                            duration_seconds=duration,
+                            output_summary=output_summary,
+                            tool_calls_count=0,  # Non-streaming doesn't track tool calls
+                        )
+                    )
+
                     return response.json(
                         {
                             "success": True,
@@ -1066,6 +1112,17 @@ def create_app() -> Sanic:
                         message_ids=message_ids,
                     )
 
+                    # Record timeout
+                    asyncio.create_task(
+                        _record_agent_run_complete(
+                            run_id=run_id,
+                            status="timeout",
+                            duration_seconds=duration,
+                            error_message=error_msg,
+                            tool_calls_count=0,
+                        )
+                    )
+
                     return response.json(
                         {
                             "success": False,
@@ -1089,6 +1146,17 @@ def create_app() -> Sanic:
                         duration_seconds=duration,
                         agent_name=display_name,
                         message_ids=message_ids,
+                    )
+
+                    # Record failure
+                    asyncio.create_task(
+                        _record_agent_run_complete(
+                            run_id=run_id,
+                            status="failed",
+                            duration_seconds=duration,
+                            error_message=error_msg[:500],
+                            tool_calls_count=0,
+                        )
                     )
 
                     return response.json(
