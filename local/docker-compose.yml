@@ -92,7 +92,7 @@ services:
     environment:
       # Required: OpenAI
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
       # Only set OPENAI_BASE_URL if you're using a custom endpoint (LiteLLM, Azure, etc.)
       # Config service integration
       USE_CONFIG_SERVICE: "true"
