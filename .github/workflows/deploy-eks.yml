@@ -147,7 +147,7 @@ jobs:
             -n ${{ env.HELM_NAMESPACE }} \
             -f incidentfox/values.prod.yaml \
             --no-hooks \
-            --force-conflicts \
+            --force \
             --wait \
             --timeout 10m
 
