@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { RequireRole } from '@/components/RequireRole';
 import { useIdentity } from '@/lib/useIdentity';
+import { useOnboarding } from '@/lib/useOnboarding';
+import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
 import {
   Bot,
   Activity,
@@ -31,8 +33,7 @@ import { useState, useEffect } from 'react';
 interface TeamStats {
   totalRuns: number;
   successRate: number;
-  activeAgents: number;
-  knowledgeDocs: number;
+  avgMttdSeconds: number | null;
   runsThisWeek: number;
   runsPrevWeek: number;
   trend: 'up' | 'down' | 'stable';
@@ -75,6 +76,22 @@ export default function TeamDashboardPage() {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [pending, setPending] = useState<PendingItems>({ configChanges: 0, knowledgeChanges: 0 });
   const [integrations, setIntegrations] = useState<IntegrationHealth[]>([]);
+
+  // Onboarding state
+  const {
+    shouldShowWelcome,
+    state: onboardingState,
+    markWelcomeSeen,
+    markFirstAgentRunCompleted,
+  } = useOnboarding();
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+
+  // Show welcome modal on first visit
+  useEffect(() => {
+    if (shouldShowWelcome) {
+      setShowWelcomeModal(true);
+    }
+  }, [shouldShowWelcome]);
 
   useEffect(() => {
     // Fetch team stats
@@ -210,21 +227,45 @@ export default function TeamDashboardPage() {
 
   const totalPending = pending.configChanges + pending.knowledgeChanges;
 
+  const handleWelcomeRunAgent = () => {
+    markWelcomeSeen();
+    markFirstAgentRunCompleted();
+    setShowWelcomeModal(false);
+    // Navigate to agent-runs page where they can run agents
+    window.location.href = '/team/agent-runs';
+  };
+
+  const handleWelcomeSkip = () => {
+    markWelcomeSeen();
+    setShowWelcomeModal(false);
+  };
+
   return (
     <RequireRole role="team" fallbackHref="/">
+      {/* Onboarding Modals */}
+      {showWelcomeModal && (
+        <QuickStartWizard
+          onClose={() => setShowWelcomeModal(false)}
+          onRunAgent={handleWelcomeRunAgent}
+          onSkip={handleWelcomeSkip}
+        />
+      )}
+
       <div className="p-8 max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Bot className="w-7 h-7 text-gray-600 dark:text-gray-400" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center"><Bot className="w-5 h-5 text-white" /></div>
             <div>
               <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Team Dashboard</h1>
               <p className="text-sm text-gray-500">Monitor your AI agents and team activity</p>
             </div>
           </div>
-          <div className="text-xs text-gray-500 text-right">
-            <div>
-              Team: <span className="font-mono">{identity?.team_node_id || identity?.org_id || 'unknown'}</span>
+          <div className="flex items-center gap-4">
+            <div className="text-xs text-gray-500 text-right">
+              <div>
+                Team: <span className="font-mono">{identity?.team_node_id || identity?.org_id || 'unknown'}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -232,7 +273,7 @@ export default function TeamDashboardPage() {
         {/* Team Overview Stats */}
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Team Overview</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
@@ -272,24 +313,19 @@ export default function TeamDashboardPage() {
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-gray-500">Active Agents</div>
+                  <div className="text-sm text-gray-500">Avg MTTD</div>
                   <div className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
-                    {stats?.activeAgents || 0}
+                    {stats?.avgMttdSeconds != null
+                      ? stats.avgMttdSeconds < 60
+                        ? `${Math.round(stats.avgMttdSeconds)}s`
+                        : stats.avgMttdSeconds < 3600
+                        ? `${Math.round(stats.avgMttdSeconds / 60)}m`
+                        : `${(stats.avgMttdSeconds / 3600).toFixed(1)}h`
+                      : 'N/A'}
                   </div>
+                  <div className="text-xs text-gray-400 mt-1">Last 30 days</div>
                 </div>
-                <Network className="w-10 h-10 text-gray-400 opacity-80" />
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-gray-500">Knowledge Docs</div>
-                  <div className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
-                    {stats?.knowledgeDocs || 0}
-                  </div>
-                </div>
-                <BookOpen className="w-10 h-10 text-gray-400 opacity-80" />
+                <Clock className="w-10 h-10 text-gray-400 opacity-80" />
               </div>
             </div>
           </div>
@@ -498,22 +534,7 @@ export default function TeamDashboardPage() {
         {/* Quick Actions */}
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Link
-              href="/team/agent-runs"
-              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm hover:border-gray-400 dark:hover:border-gray-600 transition-colors group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
-                  <Play className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-medium text-gray-900 dark:text-white">Run Agent</div>
-                  <div className="text-xs text-gray-500">Start investigation</div>
-                </div>
-              </div>
-            </Link>
-
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Link
               href="/team/knowledge"
               className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm hover:border-gray-400 dark:hover:border-gray-600 transition-colors group"

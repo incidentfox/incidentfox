@@ -743,6 +743,96 @@ async def get_agent_run(
 
 
 # =============================================================================
+# Agent Run Trace (Tool Calls)
+# =============================================================================
+
+
+class ToolCallTraceItem(BaseModel):
+    """Single tool call in a trace."""
+
+    id: str
+    toolName: str
+    agentName: Optional[str] = None
+    parentAgent: Optional[str] = None
+    toolInput: Optional[Dict[str, Any]] = None
+    toolOutput: Optional[str] = None
+    startedAt: str
+    durationMs: Optional[int] = None
+    status: str
+    errorMessage: Optional[str] = None
+    sequenceNumber: int
+
+
+class AgentRunTraceResponse(BaseModel):
+    """Response model for agent run trace."""
+
+    runId: str
+    toolCalls: List[ToolCallTraceItem]
+    total: int
+
+
+@router.get("/agent-runs/{run_id}/trace", response_model=AgentRunTraceResponse)
+async def get_agent_run_trace(
+    run_id: str,
+    db: Session = Depends(get_db),
+    team: TeamPrincipal = Depends(require_team_auth),
+):
+    """
+    Get detailed trace (tool calls) for a specific agent run.
+
+    Returns all tool calls made during the run, including:
+    - Tool name and arguments
+    - Which agent made the call (for sub-agent tracking)
+    - Output/result (truncated)
+    - Duration and status
+    """
+    from src.db.models import AgentToolCall
+
+    # First verify the run belongs to this team
+    run = (
+        db.query(AgentRun)
+        .filter(
+            AgentRun.id == run_id,
+            AgentRun.org_id == team.org_id,
+            AgentRun.team_node_id == team.team_node_id,
+        )
+        .first()
+    )
+
+    if not run:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+
+    # Get tool calls for this run
+    tool_calls = (
+        db.query(AgentToolCall)
+        .filter(AgentToolCall.run_id == run_id)
+        .order_by(AgentToolCall.sequence_number)
+        .all()
+    )
+
+    return AgentRunTraceResponse(
+        runId=run_id,
+        toolCalls=[
+            ToolCallTraceItem(
+                id=tc.id,
+                toolName=tc.tool_name,
+                agentName=tc.agent_name,
+                parentAgent=tc.parent_agent,
+                toolInput=tc.tool_input,
+                toolOutput=tc.tool_output[:1000] if tc.tool_output else None,
+                startedAt=tc.started_at.isoformat() if tc.started_at else "",
+                durationMs=tc.duration_ms,
+                status=tc.status,
+                errorMessage=tc.error_message,
+                sequenceNumber=tc.sequence_number,
+            )
+            for tc in tool_calls
+        ],
+        total=len(tool_calls),
+    )
+
+
+# =============================================================================
 # Tools Catalog
 # =============================================================================
 
@@ -982,8 +1072,7 @@ class TeamStatsResponse(BaseModel):
 
     totalRuns: int
     successRate: float
-    activeAgents: int
-    knowledgeDocs: int
+    avgMttdSeconds: Optional[float]  # Average Mean Time To Detect (run duration)
     runsThisWeek: int
     runsPrevWeek: int
     trend: str  # up, down, stable
@@ -1073,8 +1162,7 @@ async def get_team_stats(
     Returns:
     - Total runs (all time)
     - Success rate
-    - Active agents count
-    - Knowledge documents count
+    - Average MTTD (run duration in seconds)
     - Weekly trend
     """
     import structlog
@@ -1134,28 +1222,29 @@ async def get_team_stats(
         (successful_runs / total_runs * 100) if total_runs > 0 else 0, 1
     )
 
-    # Active agents (agents with at least one run in last 7 days)
-    active_agents = (
-        db.query(func.count(func.distinct(AgentRun.agent_name)))
+    # Calculate average MTTD (run duration) for completed runs in last 30 days
+    thirty_days_ago = now - timedelta(days=30)
+    completed_runs = (
+        db.query(AgentRun)
         .filter(
             AgentRun.org_id == team.org_id,
             AgentRun.team_node_id == team.team_node_id,
-            AgentRun.started_at >= seven_days_ago,
+            AgentRun.started_at >= thirty_days_ago,
+            AgentRun.status == "completed",
+            AgentRun.completed_at.isnot(None),
         )
-        .scalar()
-        or 0
+        .all()
     )
 
-    # Knowledge documents
-    knowledge_docs = (
-        db.query(func.count(KnowledgeDocument.doc_id))
-        .filter(
-            KnowledgeDocument.org_id == team.org_id,
-            KnowledgeDocument.team_node_id == team.team_node_id,
-        )
-        .scalar()
-        or 0
-    )
+    avg_mttd_seconds = None
+    if completed_runs:
+        durations = [
+            (run.completed_at - run.started_at).total_seconds()
+            for run in completed_runs
+            if run.completed_at and run.started_at
+        ]
+        if durations:
+            avg_mttd_seconds = round(sum(durations) / len(durations), 1)
 
     # Runs this week
     runs_this_week = (
@@ -1193,8 +1282,7 @@ async def get_team_stats(
     return TeamStatsResponse(
         totalRuns=total_runs,
         successRate=success_rate,
-        activeAgents=active_agents,
-        knowledgeDocs=knowledge_docs,
+        avgMttdSeconds=avg_mttd_seconds,
         runsThisWeek=runs_this_week,
         runsPrevWeek=runs_prev_week,
         trend=trend,

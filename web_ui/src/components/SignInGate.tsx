@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useIdentity } from '@/lib/useIdentity';
 import { applyTheme, getTheme, setTheme, type ThemeMode } from '@/lib/theme';
 import { X, KeyRound, Shield, Chrome, Building2, Loader2, Lock } from 'lucide-react';
+import { OnboardingWrapper } from './onboarding/OnboardingWrapper';
 
 interface OrgSSOConfig {
   enabled: boolean;
@@ -57,16 +58,27 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   const login = async () => {
     setSubmitting(true);
     setSubmitError(null);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
       const res = await fetch('/api/session/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ token: token.trim() }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${await res.text()}`);
       await refresh();
     } catch (e: any) {
-      setSubmitError(e?.message || String(e));
+      clearTimeout(timeoutId);
+      if (e?.name === 'AbortError') {
+        setSubmitError('Login request timed out. Please check your network connection and try again.');
+      } else {
+        setSubmitError(e?.message || String(e));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -128,7 +140,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
 
   const hasSSO = ssoConfig?.enabled;
 
-  if (canShowApp) return <>{children}</>;
+  if (canShowApp) return <OnboardingWrapper>{children}</OnboardingWrapper>;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black p-6">

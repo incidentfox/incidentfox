@@ -87,7 +87,6 @@ def main():
     script_dir = Path(__file__).parent
     config_service_dir = script_dir.parent
     templates_dir = config_service_dir / "templates"
-    presets_dir = config_service_dir / "presets"
 
     print("=" * 60)
     print("Converting Templates to Canonical Format")
@@ -117,41 +116,6 @@ def main():
                     json.dump(template, f, indent=2)
                     f.write("\n")  # Add trailing newline
                 print(f"  ✓ Updated: {template_file.name}\n")
-            else:
-                print("  ✓ No changes needed\n")
-
-        except Exception as e:
-            print(f"  ✗ ERROR: {e}\n")
-            sys.exit(1)
-
-    # Convert preset files
-    print("\n" + "=" * 60)
-    print("Converting Presets to Canonical Format")
-    print("=" * 60)
-    print()
-
-    preset_files = sorted(presets_dir.glob("*.json"))
-    print(f"Found {len(preset_files)} preset files\n")
-
-    for preset_file in preset_files:
-        print(f"Processing: {preset_file.name}")
-
-        try:
-            # Read preset
-            with open(preset_file, "r") as f:
-                preset = json.load(f)
-
-            # Convert to canonical format
-            original_json = json.dumps(preset, indent=2, sort_keys=True)
-            convert_template_to_canonical(preset)
-            canonical_json = json.dumps(preset, indent=2, sort_keys=True)
-
-            # Only write if changed
-            if original_json != canonical_json:
-                with open(preset_file, "w") as f:
-                    json.dump(preset, f, indent=2)
-                    f.write("\n")  # Add trailing newline
-                print(f"  ✓ Updated: {preset_file.name}\n")
             else:
                 print("  ✓ No changes needed\n")
 

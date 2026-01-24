@@ -21,7 +21,7 @@ The Dynamic Agent System allows agents to be defined and customized via JSON con
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        JSON Config (RDS)                         │
-│  node_configurations table / presets/*.json                      │
+│  node_configurations table / templates/*.json                    │
 │  ┌─────────────────────────────────────────────────────────┐    │
 │  │ { "agents": { "planner": {...}, "investigation": {...} } │    │
 │  │   "tools": {...}, "mcps": {...} }                        │    │
@@ -63,8 +63,7 @@ The Dynamic Agent System allows agents to be defined and customized via JSON con
 | `agent_builder.py` | `agent/src/ai_agent/core/` | Core builder - constructs agents from JSON |
 | `config_loader.py` | `agent/src/ai_agent/core/` | Fetches config from Config Service |
 | `hierarchical_config.py` | `config_service/src/core/` | Inheritance logic - deep_merge, effective config |
-| `default_org_config.json` | `config_service/presets/` | Default organization config preset |
-| `extend_org_config.json` | `config_service/presets/` | Extend organization config preset |
+| `01_slack_incident_triage.json` | `config_service/templates/` | Default template (Starship topology) - auto-applied to new orgs |
 
 ---
 
@@ -374,7 +373,7 @@ result = await Runner.run(k8s_agent, "List pods in kube-system namespace")
 Teams inherit from their organization's config with selective overrides:
 
 ```
-Org Config (default_org_config.json)
+Org Config (auto-applied from slack-incident-triage template)
     │
     ├── Team A Config (overrides prompt.suffix)
     │       └── Effective: org + team overrides
@@ -398,7 +397,7 @@ effective_config = deep_merge(org_config, team_overrides)
 | `agent_builder.py` | ✅ Complete | Can build agents from JSON |
 | `config_loader.py` | ✅ Complete | Fetches from Config Service |
 | Config Service API | ✅ Complete | `/api/v1/config/.../effective` |
-| Presets seeded | ✅ Complete | `default_org_config.json`, `extend_org_config.json` |
+| Default template | ✅ Complete | Auto-applied `slack-incident-triage` template on org creation |
 | **`api_server.py` integration** | ⚠️ Partial | Some paths still use hardcoded agents |
 | **Orchestrator integration** | ⚠️ Partial | Needs to pass org_id/team_node_id |
 

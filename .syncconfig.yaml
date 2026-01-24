@@ -1,0 +1,93 @@
+# Sync Configuration for IncidentFox Open Core
+# This file defines how to sync between:
+#   - Private: incidentfox/mono-repo
+#   - Public:  incidentfox/incidentfox (this repo)
+#
+# Direction: Bidirectional with exclusions
+
+sync:
+  # Target repositories
+  public_repo: "incidentfox/incidentfox"
+  private_repo: "incidentfox/mono-repo"
+
+  # Default branch to sync
+  default_branch: "main"
+
+# Files/directories to EXCLUDE from public repo (private-only)
+# These will never be synced TO the public repository
+exclude_from_public:
+  # Premium/Enterprise services (keep stub READMEs only)
+  - "ai_pipeline/**"
+  - "!ai_pipeline/README.md"  # Keep the stub README
+
+  - "sre-agent/**"
+  - "!sre-agent/README.md"
+
+  - "correlation_service/**"
+  - "!correlation_service/README.md"
+
+  - "dependency_service/**"
+  - "!dependency_service/README.md"
+
+  - "slack-bot/**"
+
+  - "telemetry_collector/**"
+
+  # Internal configuration and test files
+  - "internal_test_configs.txt"
+  - "note.md"
+  - "org_internal_test_config.json"
+  - "team_a_config.json"
+  - "team_a_full_config.json"
+  - "test_mcp_config.py"
+
+  # Internal workflows
+  - ".github/workflows/eval-pipeline.yml"
+  - ".github/workflows/deploy-service.yml"
+  - ".github/workflows/deploy-knowledge-base.yml"
+  - ".github/workflows/publish-dockerhub.yml"
+  - ".github/workflows/raptor-kb-deploy.yml"
+  - ".github/workflows/web-ui-deploy.yml"
+
+  # Internal infrastructure
+  - "infra/terraform/envs/pilot/**"
+
+  # Sync tooling (stays in both repos but not synced)
+  - "scripts/sync-to-public.sh"
+  - "scripts/sync-from-public.sh"
+  - ".github/workflows/sync-to-public.yml"
+  - ".github/workflows/sync-from-public.yml"
+
+# Files that should ONLY exist in public repo
+# These are excluded when syncing FROM public TO private
+exclude_from_private:
+  - "CONTRIBUTING.md"
+  - "CODE_OF_CONDUCT.md"
+  - ".github/ISSUE_TEMPLATE/**"
+  - ".github/PULL_REQUEST_TEMPLATE.md"
+
+# Stub directories: Public gets only README.md, private has full content
+stub_directories:
+  - "ai_pipeline"
+  - "sre-agent"
+  - "correlation_service"
+  - "dependency_service"
+
+# Conflict resolution strategy
+conflict_resolution:
+  # When both repos have changes to the same file:
+  # - "manual": Create PR with conflicts for manual resolution (recommended)
+  strategy: "manual"
+
+  # Files where public changes should be preferred
+  prefer_public:
+    - "docs/community/**"
+    - "CONTRIBUTING.md"
+    - "README.md"
+
+  # Files where private changes should be preferred
+  prefer_private:
+    - "agent/src/**"
+    - "config_service/src/**"
+    - "orchestrator/src/**"
+    - "web_ui/src/**"

@@ -24,6 +24,7 @@ import {
 import { TreeSelector, type EffectiveTree, type TreeStats } from '@/components/knowledge/TreeSelector';
 import { CreateTreeModal } from '@/components/knowledge/CreateTreeModal';
 import { UploadDocumentModal } from '@/components/knowledge/UploadDocumentModal';
+import { HelpTip } from '@/components/onboarding/HelpTip';
 
 // Lazy load the TreeExplorer since it's heavy
 const TreeExplorer = lazy(() =>
@@ -360,11 +361,17 @@ export default function TeamKnowledgePage() {
                 <Layers className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+                <h1 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   Knowledge Base
+                  <HelpTip id="knowledge-base" position="right">
+                    <strong>Knowledge Base</strong> stores your team's documentation, runbooks, and learned patterns. The AI uses this to provide context-aware incident investigations.
+                  </HelpTip>
                 </h1>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 flex items-center gap-1">
                   RAPTOR Tree Explorer • Semantic Search & Q&A
+                  <HelpTip id="raptor-tree" position="right">
+                    <strong>RAPTOR</strong> organizes knowledge hierarchically using AI clustering. Higher nodes summarize groups of related documents, enabling fast semantic search across large knowledge bases.
+                  </HelpTip>
                 </p>
               </div>
             </div>
@@ -420,6 +427,9 @@ export default function TeamKnowledgePage() {
                     {proposedChanges.length}
                   </span>
                 )}
+                <HelpTip id="ai-proposed" position="bottom">
+                  AI learns from your incidents and proposes new knowledge entries. Review and approve them to improve future investigations.
+                </HelpTip>
               </button>
               </div>
             </div>

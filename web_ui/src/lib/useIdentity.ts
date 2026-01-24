@@ -18,10 +18,15 @@ export function useIdentity() {
   const refresh = async () => {
     setLoading(true);
     setError(null);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
       // Prefer canonical identity endpoint (backed by config service).
       // Enterprise default: rely on session cookie, not localStorage tokens.
-      const whoRes = await apiFetch("/api/identity", { cache: "no-store" });
+      const whoRes = await apiFetch("/api/identity", { cache: "no-store", signal: controller.signal });
+      clearTimeout(timeoutId);
       if (whoRes.ok) {
         const json = (await whoRes.json()) as Identity;
         setIdentity(json);
@@ -38,8 +43,13 @@ export function useIdentity() {
       setIdentity(null);
       setError(`Unable to determine identity (identity endpoint: ${whoRes.status}).`);
     } catch (e: any) {
+      clearTimeout(timeoutId);
       setIdentity(null);
-      setError(e?.message || String(e));
+      if (e?.name === 'AbortError') {
+        setError('Request timed out. Please check your network connection.');
+      } else {
+        setError(e?.message || String(e));
+      }
     } finally {
       setLoading(false);
     }

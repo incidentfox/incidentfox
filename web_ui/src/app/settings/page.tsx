@@ -1,9 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useIdentity } from '@/lib/useIdentity';
+import { useOnboarding } from '@/lib/useOnboarding';
 import { apiFetch } from '@/lib/apiClient';
+import { HelpTip } from '@/components/onboarding/HelpTip';
+import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
+import { TelemetryInfoModal } from '@/components/settings/TelemetryInfoModal';
+import { ContinueOnboardingButton } from '@/components/onboarding/ContinueOnboardingButton';
 import {
   Settings,
   Moon,
@@ -27,11 +32,22 @@ import {
   ToggleRight,
   Network,
   Loader2,
-  Link2
+  Link2,
+  BookOpen,
+  RotateCcw,
+  Route,
+  MessageSquare,
+  Github,
+  Webhook,
+  Tag,
+  Server,
+  Info,
+  HelpCircle,
+  LogOut
 } from 'lucide-react';
 
 // Tab type
-type SettingsTab = 'general' | 'notifications' | 'telemetry' | 'features' | 'advanced';
+type SettingsTab = 'general' | 'routing' | 'notifications' | 'telemetry' | 'features' | 'advanced';
 
 // Feature configs
 interface IngestorSourceConfig {
@@ -76,6 +92,17 @@ interface CorrelationConfig {
   semantic_threshold: number;
 }
 
+// Routing configuration - determines which webhooks route to this team
+interface RoutingConfig {
+  slack_channel_ids: string[];
+  github_repos: string[];
+  pagerduty_service_ids: string[];
+  incidentio_team_ids: string[];
+  incidentio_alert_source_ids: string[];
+  coralogix_team_names: string[];
+  services: string[];
+}
+
 // Admin sub-pages (shown as links in sidebar for admins)
 interface AdminLink {
   name: string;
@@ -92,13 +119,31 @@ const adminLinks: AdminLink[] = [
 
 export default function SettingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { identity, loading: identityLoading } = useIdentity();
+  const { resetOnboarding } = useOnboarding();
+
+  // Tab state - synced with URL query param
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+
+  // Sync tab state with URL query param (e.g., /settings?tab=routing)
+  // Use searchParams.toString() as dependency for reliable updates
+  const searchParamsString = searchParams.toString();
+  useEffect(() => {
+    const validTabs: SettingsTab[] = ['general', 'routing', 'notifications', 'telemetry', 'features', 'advanced'];
+    const urlTab = searchParams.get('tab') as SettingsTab | null;
+    if (urlTab && validTabs.includes(urlTab)) {
+      setActiveTab(urlTab);
+    }
+  }, [searchParamsString, searchParams]);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [showQuickStart, setShowQuickStart] = useState(false);
+  const [quickStartInitialStep, setQuickStartInitialStep] = useState(1);
 
   // Telemetry opt-in/out
   const [telemetryEnabled, setTelemetryEnabled] = useState(true);
   const [telemetryLoading, setTelemetryLoading] = useState(false);
+  const [showTelemetryInfo, setShowTelemetryInfo] = useState(false);
 
   // Output configuration (Delivery & Notifications)
   const [outputConfig, setOutputConfig] = useState<{
@@ -115,11 +160,6 @@ export default function SettingsPage() {
   const [showAddDestination, setShowAddDestination] = useState(false);
   const [newDestinationType, setNewDestinationType] = useState('slack');
   const [newDestinationConfig, setNewDestinationConfig] = useState({ channel_name: '', channel_id: '' });
-
-  // Agent run state (advanced)
-  const [agentPrompt, setAgentPrompt] = useState('');
-  const [agentRunning, setAgentRunning] = useState(false);
-  const [agentResult, setAgentResult] = useState<any>(null);
 
   // Feature configs (AI Pipeline & Dependency Discovery)
   const [pipelineConfig, setPipelineConfig] = useState<PipelineConfig>({
@@ -150,6 +190,22 @@ export default function SettingsPage() {
   const [featuresLoading, setFeaturesLoading] = useState(false);
   const [featuresSaving, setFeaturesSaving] = useState(false);
   const [syncingCronJobs, setSyncingCronJobs] = useState(false);
+
+  // Routing configuration state
+  const [routingConfig, setRoutingConfig] = useState<RoutingConfig>({
+    slack_channel_ids: [],
+    github_repos: [],
+    pagerduty_service_ids: [],
+    incidentio_team_ids: [],
+    incidentio_alert_source_ids: [],
+    coralogix_team_names: [],
+    services: [],
+  });
+  const [routingLoading, setRoutingLoading] = useState(false);
+  const [routingSaving, setRoutingSaving] = useState(false);
+  // Track which routing field is being edited (for add input)
+  const [editingRoutingField, setEditingRoutingField] = useState<keyof RoutingConfig | null>(null);
+  const [newRoutingValue, setNewRoutingValue] = useState('');
 
   const isAdmin = identity?.role === 'admin';
 
@@ -267,31 +323,6 @@ export default function SettingsPage() {
     });
   };
 
-  // Run agent (advanced)
-  const runAgent = async () => {
-    if (!agentPrompt.trim()) return;
-    setAgentRunning(true);
-    setAgentResult(null);
-    try {
-      const res = await apiFetch('/api/orchestrator/agents/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: agentPrompt,
-          agent_name: 'planner',
-          max_turns: 50,
-          timeout: 180,
-        }),
-      });
-      const data = await res.json();
-      setAgentResult(data);
-    } catch (e: any) {
-      setAgentResult({ error: e?.message || 'Failed to run agent' });
-    } finally {
-      setAgentRunning(false);
-    }
-  };
-
   // Sign out handler
   const signOut = async () => {
     try {
@@ -375,13 +406,28 @@ export default function SettingsPage() {
               semantic_threshold: config.correlation.semantic_threshold ?? 0.75,
             });
           }
+
+          // Extract routing config
+          if (config.routing) {
+            setRoutingConfig({
+              slack_channel_ids: config.routing.slack_channel_ids || [],
+              github_repos: config.routing.github_repos || [],
+              pagerduty_service_ids: config.routing.pagerduty_service_ids || [],
+              incidentio_team_ids: config.routing.incidentio_team_ids || [],
+              incidentio_alert_source_ids: config.routing.incidentio_alert_source_ids || [],
+              coralogix_team_names: config.routing.coralogix_team_names || [],
+              services: config.routing.services || [],
+            });
+          }
         }
       } catch (e) {
         console.error('Failed to load feature configs', e);
       } finally {
         setFeaturesLoading(false);
+        setRoutingLoading(false);
       }
     };
+    setRoutingLoading(true);
     loadFeatureConfigs();
   }, []);
 
@@ -423,6 +469,54 @@ export default function SettingsPage() {
     }
   };
 
+  // Save routing config
+  const saveRoutingConfig = async () => {
+    setRoutingSaving(true);
+    try {
+      const patch = {
+        routing: routingConfig,
+      };
+
+      const res = await apiFetch('/api/config/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+
+      if (!res.ok) throw new Error('Failed to save');
+      alert('Routing configuration saved successfully!');
+    } catch (e: any) {
+      console.error('Failed to save routing config', e);
+      alert('Failed to save routing configuration');
+    } finally {
+      setRoutingSaving(false);
+    }
+  };
+
+  // Add a routing identifier value
+  const addRoutingValue = (field: keyof RoutingConfig) => {
+    const trimmed = newRoutingValue.trim();
+    if (!trimmed) return;
+    if (routingConfig[field].includes(trimmed)) {
+      alert('This value already exists');
+      return;
+    }
+    setRoutingConfig({
+      ...routingConfig,
+      [field]: [...routingConfig[field], trimmed],
+    });
+    setNewRoutingValue('');
+    setEditingRoutingField(null);
+  };
+
+  // Remove a routing identifier value
+  const removeRoutingValue = (field: keyof RoutingConfig, value: string) => {
+    setRoutingConfig({
+      ...routingConfig,
+      [field]: routingConfig[field].filter((v) => v !== value),
+    });
+  };
+
   // Sync CronJobs with current config
   const syncCronJobs = async () => {
     setSyncingCronJobs(true);
@@ -449,6 +543,7 @@ export default function SettingsPage() {
 
   const tabs: { id: SettingsTab; name: string; icon: any; adminOnly?: boolean }[] = [
     { id: 'general', name: 'General', icon: Settings },
+    { id: 'routing', name: 'Webhook Routing', icon: Route },
     { id: 'notifications', name: 'Delivery & Notifications', icon: Bell },
     { id: 'telemetry', name: 'Telemetry', icon: Radio },
     { id: 'features', name: 'Advanced Features', icon: Zap },
@@ -553,14 +648,200 @@ export default function SettingsPage() {
                   )}
                 </div>
 
-              <button
-                  onClick={signOut}
-                  className="mt-4 w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                  Sign Out
-              </button>
+                <div className="pt-3 mt-3 border-t border-gray-100 dark:border-gray-800">
+                  <button
+                    onClick={signOut}
+                    className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Sign out
+                  </button>
+                </div>
             </div>
+
+              {/* Quick Start Guide */}
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                  <BookOpen className="w-5 h-5" /> Quick Start Guide
+                </h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  Learn how IncidentFox works and get started with AI-powered investigations.
+                </p>
+                <button
+                  onClick={() => setShowQuickStart(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  View Guide
+                </button>
+              </div>
           </div>
+          )}
+
+          {/* Webhook Routing Tab */}
+          {activeTab === 'routing' && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                      Webhook Routing
+                      <HelpTip id="webhook-routing" position="right">
+                        <strong>Webhook Routing</strong> determines which incoming webhooks are directed to your team. Configure identifiers from your integrations (Slack channels, GitHub repos, PagerDuty services, etc.) so that alerts and events from those sources are routed to your team's agent.
+                      </HelpTip>
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Configure which webhooks should route to your team
+                    </p>
+                  </div>
+                </div>
+
+                {/* Info Banner */}
+                <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-gray-600 dark:text-gray-300">
+                      <p className="font-medium mb-1">How routing works:</p>
+                      <p>When a webhook arrives from Slack, GitHub, PagerDuty, or other integrations, the system checks these identifiers to determine which team should handle the event. Add all the IDs and names that belong to your team.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {routingLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                    <span className="ml-2 text-gray-500">Loading routing configuration...</span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Add Routing Form */}
+                    {editingRoutingField ? (
+                      <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <select
+                            value={editingRoutingField}
+                            onChange={(e) => setEditingRoutingField(e.target.value as keyof RoutingConfig)}
+                            className="px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                          >
+                            <option value="slack_channel_ids">Slack Channel ID</option>
+                            <option value="github_repos">GitHub Repository</option>
+                            <option value="pagerduty_service_ids">PagerDuty Service ID</option>
+                            <option value="incidentio_team_ids">Incident.io Team ID</option>
+                            <option value="incidentio_alert_source_ids">Incident.io Alert Source ID</option>
+                            <option value="coralogix_team_names">Coralogix Team Name</option>
+                            <option value="services">Service Name</option>
+                          </select>
+                          <input
+                            type="text"
+                            value={newRoutingValue}
+                            onChange={(e) => setNewRoutingValue(e.target.value)}
+                            placeholder={
+                              editingRoutingField === 'slack_channel_ids' ? 'C0A4967KRBM' :
+                              editingRoutingField === 'github_repos' ? 'owner/repo' :
+                              editingRoutingField === 'pagerduty_service_ids' ? 'PXXXXXX' :
+                              editingRoutingField === 'incidentio_team_ids' ? '01KCSZ7FHG...' :
+                              editingRoutingField === 'incidentio_alert_source_ids' ? '01KEGMSPP...' :
+                              editingRoutingField === 'coralogix_team_names' ? 'team-name' :
+                              'service-name'
+                            }
+                            className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                            onKeyDown={(e) => e.key === 'Enter' && addRoutingValue(editingRoutingField)}
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => addRoutingValue(editingRoutingField)}
+                              className="px-4 py-2 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700"
+                            >
+                              Add
+                            </button>
+                            <button
+                              onClick={() => { setEditingRoutingField(null); setNewRoutingValue(''); }}
+                              className="px-4 py-2 text-gray-600 dark:text-gray-400 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setEditingRoutingField('slack_channel_ids')}
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Routing Rule
+                      </button>
+                    )}
+
+                    {/* Configured Routes List */}
+                    {(() => {
+                      const allRoutes: { type: keyof RoutingConfig; label: string; value: string }[] = [];
+                      routingConfig.slack_channel_ids.forEach(v => allRoutes.push({ type: 'slack_channel_ids', label: 'Slack', value: v }));
+                      routingConfig.github_repos.forEach(v => allRoutes.push({ type: 'github_repos', label: 'GitHub', value: v }));
+                      routingConfig.pagerduty_service_ids.forEach(v => allRoutes.push({ type: 'pagerduty_service_ids', label: 'PagerDuty', value: v }));
+                      routingConfig.incidentio_team_ids.forEach(v => allRoutes.push({ type: 'incidentio_team_ids', label: 'Incident.io Team', value: v }));
+                      routingConfig.incidentio_alert_source_ids.forEach(v => allRoutes.push({ type: 'incidentio_alert_source_ids', label: 'Incident.io Source', value: v }));
+                      routingConfig.coralogix_team_names.forEach(v => allRoutes.push({ type: 'coralogix_team_names', label: 'Coralogix', value: v }));
+                      routingConfig.services.forEach(v => allRoutes.push({ type: 'services', label: 'Service', value: v }));
+
+                      if (allRoutes.length === 0) {
+                        return (
+                          <div className="text-sm text-gray-500 py-8 text-center border border-dashed border-gray-200 dark:border-gray-800 rounded-lg">
+                            No routing rules configured. Webhooks won&apos;t be routed to this team.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="border border-gray-200 dark:border-gray-800 rounded-lg divide-y divide-gray-200 dark:divide-gray-800">
+                          {allRoutes.map((route, idx) => (
+                            <div
+                              key={`${route.type}-${route.value}-${idx}`}
+                              className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded">
+                                  {route.label}
+                                </span>
+                                <code className="text-sm text-gray-900 dark:text-gray-100">{route.value}</code>
+                              </div>
+                              <button
+                                onClick={() => removeRoutingValue(route.type, route.value)}
+                                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Save Button */}
+                    <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+                      <button
+                        onClick={saveRoutingConfig}
+                        disabled={routingSaving}
+                        className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
+                      >
+                        {routingSaving ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Save Routing Configuration
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {/* Delivery & Notifications Tab */}
@@ -569,7 +850,12 @@ export default function SettingsPage() {
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Output Destinations</h2>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                      Output Destinations
+                      <HelpTip id="output-destinations" position="right">
+                        <strong>Output Destinations</strong> control where agent investigation results are posted. You can set default destinations (like a Slack channel) and override behavior based on how the agent was triggered.
+                      </HelpTip>
+                    </h2>
                     <p className="text-sm text-gray-500 mt-1">
                       Configure where agent results are delivered
                     </p>
@@ -804,12 +1090,26 @@ export default function SettingsPage() {
           {activeTab === 'telemetry' && (
             <div className="space-y-6">
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Telemetry Settings</h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Help us improve IncidentFox by sharing anonymous usage data
-                    </p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <Activity className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                        Telemetry
+                        <button
+                          onClick={() => setShowTelemetryInfo(true)}
+                          className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                          aria-label="Learn more about telemetry"
+                        >
+                          <HelpCircle className="w-4 h-4" />
+                        </button>
+                      </h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Share anonymous usage metrics to help improve IncidentFox
+                      </p>
+                    </div>
                   </div>
                   <button
                     onClick={toggleTelemetry}
@@ -826,93 +1126,17 @@ export default function SettingsPage() {
                   </button>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                      What data is collected?
-                    </h3>
-                    <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0"></div>
-                        <div>
-                          <span className="font-medium text-gray-900 dark:text-white">Agent run metrics:</span> Number of agent runs, success/failure rates, execution duration, and timeout counts
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0"></div>
-                        <div>
-                          <span className="font-medium text-gray-900 dark:text-white">Usage patterns:</span> Tool usage frequency, agent types used, trigger sources (webhook, manual, scheduled)
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0"></div>
-                        <div>
-                          <span className="font-medium text-gray-900 dark:text-white">Performance statistics:</span> Average duration, p50/p95/p99 latency percentiles, error types
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0"></div>
-                        <div>
-                          <span className="font-medium text-gray-900 dark:text-white">Team activity:</span> Number of active teams and overall team count
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                      What is NOT collected?
-                    </h3>
-                    <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></div>
-                        <div>Personal information, user credentials, or authentication tokens</div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></div>
-                        <div>Agent prompts, messages, or conversation content</div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></div>
-                        <div>Knowledge base documents or team-specific data</div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></div>
-                        <div>API keys, secrets, or integration credentials</div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></div>
-                        <div>IP addresses, hostnames, or network identifiers</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                      How is data used?
-                    </h3>
-                    <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                      <p>
-                        Telemetry data is aggregated and anonymized to help us understand product usage patterns,
-                        identify performance issues, and prioritize feature development. Data is sent securely to
-                        our vendor service and is never shared with third parties.
-                      </p>
-                      <p className="mt-3">
-                        <span className="font-medium text-gray-900 dark:text-white">Reporting frequency:</span>
-                        {' '}Metrics are collected every 5 minutes (heartbeat) and aggregated daily at 2:00 AM UTC.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mt-4">
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      <span className="font-medium">Note:</span> Disabling telemetry will take effect immediately.
-                      Your organization's data will be excluded from all future reports. License validation will
-                      continue to work normally.
-                    </p>
-                  </div>
-                </div>
+                <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                  {telemetryEnabled
+                    ? 'Telemetry is enabled. Anonymous metrics are being collected.'
+                    : 'Telemetry is disabled. No data is being collected.'}
+                </p>
               </div>
+
+              {/* Telemetry Info Modal */}
+              {showTelemetryInfo && (
+                <TelemetryInfoModal onClose={() => setShowTelemetryInfo(false)} />
+              )}
             </div>
           )}
 
@@ -923,11 +1147,16 @@ export default function SettingsPage() {
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                      <Zap className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                    <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                      <Zap className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">AI Pipeline</h2>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                        AI Pipeline
+                        <HelpTip id="ai-pipeline" position="right">
+                          <strong>AI Pipeline</strong> automatically processes your incident data (Slack discussions, Confluence runbooks, Google Docs) on a schedule and extracts learnings to build your Knowledge Base. This enables agents to reference past incidents and solutions.
+                        </HelpTip>
+                      </h2>
                       <p className="text-sm text-gray-500">
                         Automatically learn from incidents and build knowledge base
                       </p>
@@ -937,7 +1166,7 @@ export default function SettingsPage() {
                     onClick={() => setPipelineConfig({ ...pipelineConfig, enabled: !pipelineConfig.enabled })}
                     disabled={featuresLoading}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      pipelineConfig.enabled ? 'bg-orange-600' : 'bg-gray-300 dark:bg-gray-700'
+                      pipelineConfig.enabled ? 'bg-gray-600' : 'bg-gray-300 dark:bg-gray-700'
                     } ${featuresLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <span
@@ -977,7 +1206,7 @@ export default function SettingsPage() {
                       {/* Slack Ingestor */}
                       <div className={`p-4 rounded-lg border ${
                         pipelineConfig.ingestors.slack.enabled
-                          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                          ? 'border-gray-400 bg-gray-50 dark:bg-gray-800/50'
                           : 'border-gray-200 dark:border-gray-700'
                       }`}>
                         <label className="flex items-center gap-3 cursor-pointer">
@@ -998,7 +1227,7 @@ export default function SettingsPage() {
                           <div
                             className={`w-4 h-4 rounded border flex items-center justify-center ${
                               pipelineConfig.ingestors.slack.enabled
-                                ? 'bg-orange-600 border-orange-600'
+                                ? 'bg-gray-600 border-gray-600'
                                 : 'border-gray-300 dark:border-gray-600'
                             }`}
                           >
@@ -1040,7 +1269,7 @@ export default function SettingsPage() {
                       {/* Confluence Ingestor */}
                       <div className={`p-4 rounded-lg border ${
                         pipelineConfig.ingestors.confluence.enabled
-                          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                          ? 'border-gray-400 bg-gray-50 dark:bg-gray-800/50'
                           : 'border-gray-200 dark:border-gray-700'
                       }`}>
                         <label className="flex items-center gap-3 cursor-pointer">
@@ -1061,7 +1290,7 @@ export default function SettingsPage() {
                           <div
                             className={`w-4 h-4 rounded border flex items-center justify-center ${
                               pipelineConfig.ingestors.confluence.enabled
-                                ? 'bg-orange-600 border-orange-600'
+                                ? 'bg-gray-600 border-gray-600'
                                 : 'border-gray-300 dark:border-gray-600'
                             }`}
                           >
@@ -1125,7 +1354,7 @@ export default function SettingsPage() {
                       {/* Google Docs Ingestor */}
                       <div className={`p-4 rounded-lg border ${
                         pipelineConfig.ingestors.gdocs.enabled
-                          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                          ? 'border-gray-400 bg-gray-50 dark:bg-gray-800/50'
                           : 'border-gray-200 dark:border-gray-700'
                       }`}>
                         <label className="flex items-center gap-3 cursor-pointer">
@@ -1146,7 +1375,7 @@ export default function SettingsPage() {
                           <div
                             className={`w-4 h-4 rounded border flex items-center justify-center ${
                               pipelineConfig.ingestors.gdocs.enabled
-                                ? 'bg-orange-600 border-orange-600'
+                                ? 'bg-gray-600 border-gray-600'
                                 : 'border-gray-300 dark:border-gray-600'
                             }`}
                           >
@@ -1188,7 +1417,7 @@ export default function SettingsPage() {
                       {/* Agent Traces Ingestor */}
                       <div className={`p-4 rounded-lg border ${
                         pipelineConfig.ingestors.agent_traces.enabled
-                          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                          ? 'border-gray-400 bg-gray-50 dark:bg-gray-800/50'
                           : 'border-gray-200 dark:border-gray-700'
                       }`}>
                         <label className="flex items-center gap-3 cursor-pointer">
@@ -1209,7 +1438,7 @@ export default function SettingsPage() {
                           <div
                             className={`w-4 h-4 rounded border flex items-center justify-center ${
                               pipelineConfig.ingestors.agent_traces.enabled
-                                ? 'bg-orange-600 border-orange-600'
+                                ? 'bg-gray-600 border-gray-600'
                                 : 'border-gray-300 dark:border-gray-600'
                             }`}
                           >
@@ -1230,11 +1459,16 @@ export default function SettingsPage() {
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg">
-                      <Network className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                    <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                      <Network className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Service Dependency Discovery</h2>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                        Service Dependency Discovery
+                        <HelpTip id="dependency-discovery" position="right">
+                          <strong>Dependency Discovery</strong> analyzes your observability data (traces, metrics) to automatically map service relationships. This helps agents understand how services connect and identify cascading failures during incidents.
+                        </HelpTip>
+                      </h2>
                       <p className="text-sm text-gray-500">
                         Automatically discover service dependencies from observability data
                       </p>
@@ -1244,7 +1478,7 @@ export default function SettingsPage() {
                     onClick={() => setDependencyConfig({ ...dependencyConfig, enabled: !dependencyConfig.enabled })}
                     disabled={featuresLoading}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      dependencyConfig.enabled ? 'bg-cyan-600' : 'bg-gray-300 dark:bg-gray-700'
+                      dependencyConfig.enabled ? 'bg-gray-600' : 'bg-gray-300 dark:bg-gray-700'
                     } ${featuresLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <span
@@ -1291,7 +1525,7 @@ export default function SettingsPage() {
                             key={source.key}
                             className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                               dependencyConfig.sources[source.key as keyof typeof dependencyConfig.sources]
-                                ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20'
+                                ? 'border-gray-400 bg-gray-50 dark:bg-gray-800/50'
                                 : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
                             }`}
                           >
@@ -1312,7 +1546,7 @@ export default function SettingsPage() {
                             <div
                               className={`w-4 h-4 rounded border flex items-center justify-center ${
                                 dependencyConfig.sources[source.key as keyof typeof dependencyConfig.sources]
-                                  ? 'bg-cyan-600 border-cyan-600'
+                                  ? 'bg-gray-600 border-gray-600'
                                   : 'border-gray-300 dark:border-gray-600'
                               }`}
                             >
@@ -1338,11 +1572,16 @@ export default function SettingsPage() {
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                      <Link2 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                      <Link2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Alert Correlation</h2>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                        Alert Correlation
+                        <HelpTip id="alert-correlation" position="right">
+                          <strong>Alert Correlation</strong> groups related alerts together to reduce noise. It uses three methods: <em>temporal</em> (alerts within a time window), <em>topology</em> (alerts from related services), and <em>semantic</em> (alerts with similar descriptions).
+                        </HelpTip>
+                      </h2>
                       <p className="text-sm text-gray-500">
                         Automatically correlate related alerts using temporal, topology, and semantic analysis
                       </p>
@@ -1352,7 +1591,7 @@ export default function SettingsPage() {
                     onClick={() => setCorrelationConfig({ ...correlationConfig, enabled: !correlationConfig.enabled })}
                     disabled={featuresLoading}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      correlationConfig.enabled ? 'bg-purple-600' : 'bg-gray-300 dark:bg-gray-700'
+                      correlationConfig.enabled ? 'bg-gray-600' : 'bg-gray-300 dark:bg-gray-700'
                     } ${featuresLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <span
@@ -1421,7 +1660,7 @@ export default function SettingsPage() {
                 <button
                   onClick={saveFeatureConfigs}
                   disabled={featuresSaving}
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
                 >
                   {featuresSaving ? (
                     <>
@@ -1458,8 +1697,8 @@ export default function SettingsPage() {
               </div>
 
               {/* Info Box */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
+              <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <p className="text-sm text-gray-700 dark:text-gray-300">
                   <span className="font-medium">How it works:</span> When enabled, these features run as scheduled Kubernetes CronJobs.
                   The AI Pipeline processes incident data to build your knowledge base. Dependency Discovery analyzes
                   observability data to map service relationships, helping agents understand your architecture during incidents.
@@ -1474,65 +1713,70 @@ export default function SettingsPage() {
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
                 <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
                   <AlertTriangle className="w-5 h-5" />
-                  <span className="font-medium">Advanced Tools</span>
+                  <span className="font-medium">Debug Tools</span>
                 </div>
                 <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
                   These tools are for debugging and testing. Use with caution.
                 </p>
               </div>
 
+              {/* Quick Start Guide Section */}
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                  <Bot className="w-5 h-5" /> Ad-Hoc Agent Run
+                  <BookOpen className="w-5 h-5" /> Quick Start Guide
                 </h2>
-                
-                <div className="space-y-4">
-                    <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      Prompt
-                    </label>
-                    <textarea
-                      value={agentPrompt}
-                      onChange={(e) => setAgentPrompt(e.target.value)}
-                      rows={3}
-                      placeholder="e.g., Investigate the cart service in otel-demo namespace"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-                    />
-                    </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Review the onboarding guide or reset it for testing purposes.
+                </p>
+                <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={runAgent}
-                    disabled={agentRunning || !agentPrompt.trim()}
-                    className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                    onClick={() => {
+                      setQuickStartInitialStep(1);
+                      setShowQuickStart(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
                   >
-                    {agentRunning ? (
-                      <>
-                        <RefreshCcw className="w-4 h-4 animate-spin" />
-                        Running...
-                      </>
-                    ) : (
-                      <>
-                        <Bot className="w-4 h-4" />
-                        Run Agent
-                      </>
-                    )}
+                    <BookOpen className="w-4 h-4" />
+                    View Quick Start Guide
                   </button>
-
-                  {agentResult && (
-                    <div className="mt-4">
-                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                        Result
-                        </label>
-                      <pre className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-auto max-h-80 text-xs font-mono">
-                        {JSON.stringify(agentResult, null, 2)}
-                      </pre>
-                    </div>
-                  )}
+                  <button
+                    onClick={() => {
+                      resetOnboarding();
+                      alert('Onboarding state reset. Refresh the page to see the welcome modal again.');
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Reset Onboarding
+                  </button>
                 </div>
-            </div>
+              </div>
+
           </div>
           )}
         </div>
       </div>
+
+      {/* Continue Onboarding floating button */}
+      <ContinueOnboardingButton
+        onContinue={(step) => {
+          setQuickStartInitialStep(step);
+          setShowQuickStart(true);
+        }}
+      />
+
+      {/* Quick Start Guide Modal */}
+      {showQuickStart && (
+        <QuickStartWizard
+          onClose={() => setShowQuickStart(false)}
+          onRunAgent={() => {
+            setShowQuickStart(false);
+            router.push('/team/agent-runs');
+          }}
+          onSkip={() => setShowQuickStart(false)}
+          initialStep={quickStartInitialStep}
+        />
+      )}
     </div>
   );
 }

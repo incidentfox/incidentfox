@@ -32,53 +32,49 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 
 ## 🧑‍💻 For Developers
 
-Try IncidentFox locally with an interactive terminal — no infrastructure required.
-
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/d7dfedf0-e814-4772-b6c4-daf6d5d11901" width="700" controls autoplay loop muted></video>
-  <br>
-  <em>Local CLI for terminal-native developers</em>
-</div>
-
-### Quick Start
+**Claude Code plugin with ~100 DevOps & SRE tools, skills, and commands** to investigate incidents, analyze costs, and debug CI/CD — all from your terminal.
 
 ```bash
-cd local
-make quickstart
+cd local/claude_code_pack
+./install.sh
+claude
 ```
 
-This will prompt for your OpenAI API key, start all services, and launch the CLI.
-
-**Already configured?** Just run:
-```bash
-make run
+**Quick start** — explore your infrastructure (try whichever applies):
+```
+> Check my Kubernetes cluster health
+> Show my Grafana dashboards
 ```
 
-### Example Session
-
+**Real work** — use these tools for actual tasks:
 ```
-incidentfox> Check if there are any pods crashing in default namespace
-
-🔍 Investigating...
-
-Found 2 pods in CrashLoopBackOff:
-- payment-service-abc123: OOMKilled (memory limit 512Mi)
-- cart-service-xyz789: Error in startup probe
-
-Recommendations:
-1. Increase memory limit for payment-service to 1Gi
-2. Check cart-service logs for startup errors
+> Help me triage this alert: [paste alert]
+> Find AWS costs over the last month and explore reduction opportunities
+> Why did my GitHub Actions workflow fail? [paste url]
 ```
 
-### What You Can Do Locally
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/0965d78d-3d6a-4fd4-809e-d9ada9d9ce2c" width="700" controls autoplay loop muted></video>
+</p>
+<p align="center">
+  <em>Investigating a PagerDuty alert with IncidentFox</em>
+</p>
 
-- Investigate Kubernetes issues (pod crashes, deployments, services)
-- Query logs and metrics from your observability stack
-- Analyze AWS resources (EC2, Lambda, ECS, CloudWatch)
-- Search and analyze code with GitHub integration
-- Run anomaly detection on metrics
+**Full docs:** [local/claude_code_pack/README.md](local/claude_code_pack/README.md)
 
-**Full local setup guide:** [local/README.md](local/README.md)
+<details>
+<summary><strong>Local CLI (Experimental)</strong></summary>
+
+> **Warning:** The local CLI is in early development and not recommended for production use.
+
+Self-hosted multi-agent system for advanced users who need custom agent behavior, self-hosted infrastructure, or non-Claude LLM providers.
+
+**Requirements:** Docker, Docker Compose, OpenAI API key
+
+**Documentation:** [local/incidentfox_cli/README.md](local/incidentfox_cli/README.md)
+
+</details>
+
 
 ---
 
@@ -320,12 +316,6 @@ DATADOG_APP_KEY=...
 └───────────────┘          └─────────────────┘          └─────────────────┘
 ```
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/5e0a4afa-d807-4931-b2d6-186984e329de" alt="Agent Architecture Diagram">
-  <br>
-  <em>Multi-Agent Architecture — Specialized agents collaborate to investigate incidents</em>
-</p>
-
 ### Agent Capabilities
 
 | Agent | Purpose | Key Tools |
@@ -368,7 +358,6 @@ DATADOG_APP_KEY=...
 
 | Method | Command |
 |--------|---------|
-| **Local CLI** | `cd local && make quickstart` |
 | **Docker Compose** | `docker-compose up -d` |
 | **Kubernetes** | `helm upgrade --install incidentfox ./charts/incidentfox -n incidentfox` |
 

@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { RequireRole } from '@/components/RequireRole';
 import { useIdentity } from '@/lib/useIdentity';
+import { useOnboarding } from '@/lib/useOnboarding';
+import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
 import {
   ShieldCheck,
   Network,
@@ -15,7 +17,6 @@ import {
   CheckCircle,
   XCircle,
   Settings,
-  Play,
   FileText,
   Key,
   BarChart3,
@@ -94,6 +95,21 @@ export default function AdminHomePage() {
   const [pending, setPending] = useState<PendingItems>({ remediations: 0, configChanges: 0, expiringTokens: 0 });
   const [services, setServices] = useState<ServiceHealth[]>([]);
   const [integrations, setIntegrations] = useState<IntegrationHealth[]>([]);
+
+  // Onboarding state
+  const {
+    shouldShowWelcome,
+    markWelcomeSeen,
+    markFirstAgentRunCompleted,
+  } = useOnboarding();
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+
+  // Show welcome modal on first visit
+  useEffect(() => {
+    if (shouldShowWelcome) {
+      setShowWelcomeModal(true);
+    }
+  }, [shouldShowWelcome]);
 
   useEffect(() => {
     if (!identity?.org_id) return;
@@ -253,8 +269,28 @@ export default function AdminHomePage() {
 
   const totalPending = pending.remediations + pending.configChanges + pending.expiringTokens;
 
+  const handleWelcomeRunAgent = () => {
+    markWelcomeSeen();
+    markFirstAgentRunCompleted();
+    setShowWelcomeModal(false);
+  };
+
+  const handleWelcomeSkip = () => {
+    markWelcomeSeen();
+    setShowWelcomeModal(false);
+  };
+
   return (
     <RequireRole role="admin" fallbackHref="/">
+      {/* Onboarding Modals */}
+      {showWelcomeModal && (
+        <QuickStartWizard
+          onClose={() => setShowWelcomeModal(false)}
+          onRunAgent={handleWelcomeRunAgent}
+          onSkip={handleWelcomeSkip}
+        />
+      )}
+
       <div className="p-8 max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -265,12 +301,14 @@ export default function AdminHomePage() {
               <p className="text-sm text-gray-500">Monitor organization health and activity</p>
             </div>
           </div>
-          <div className="text-xs text-gray-500 text-right">
-            <div>
-              Signed in as: <span className="font-mono">{identity?.auth_kind || 'unknown'}</span>
-            </div>
-            <div className="mt-1">
-              Organization: <span className="font-mono">{identity?.org_id || '—'}</span>
+          <div className="flex items-center gap-4">
+            <div className="text-xs text-gray-500 text-right">
+              <div>
+                Signed in as: <span className="font-mono">{identity?.auth_kind || 'unknown'}</span>
+              </div>
+              <div className="mt-1">
+                Organization: <span className="font-mono">{identity?.org_id || '—'}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -645,7 +683,7 @@ export default function AdminHomePage() {
         {/* Quick Actions */}
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Link
               href="/admin/org-tree"
               className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm hover:border-orange-300 dark:hover:border-orange-700 transition-colors group"
@@ -687,21 +725,6 @@ export default function AdminHomePage() {
                 <div>
                   <div className="font-medium text-gray-900 dark:text-white">View Audit Log</div>
                   <div className="text-xs text-gray-500">Review admin actions</div>
-                </div>
-              </div>
-            </Link>
-
-            <Link
-              href="/admin/agent-run"
-              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm hover:border-orange-300 dark:hover:border-orange-700 transition-colors group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
-                  <Play className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-medium text-gray-900 dark:text-white">Run Agent</div>
-                  <div className="text-xs text-gray-500">Start investigation</div>
                 </div>
               </div>
             </Link>

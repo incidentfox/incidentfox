@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { RequireRole } from '@/components/RequireRole';
 import { apiFetch } from '@/lib/apiClient';
 import { useIdentity } from '@/lib/useIdentity';
+import { HelpTip } from '@/components/onboarding/HelpTip';
 import { RefreshCcw, Save, AlertTriangle, ExternalLink } from 'lucide-react';
 
 type RawMeResponse = {
@@ -99,12 +100,20 @@ export default function TeamConfigurationPage() {
       <div className="p-8 max-w-6xl mx-auto space-y-6">
         <div className="flex items-start justify-between gap-4">
                 <div>
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Team Configuration</h1>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              Team Configuration
+              <HelpTip id="team-config" position="right">
+                <strong>Configuration</strong> controls how IncidentFox connects to your integrations (Grafana, K8s, Slack) and how AI agents behave. Settings inherit from organization defaults and can be overridden per team.
+              </HelpTip>
+            </h1>
             <p className="text-sm text-gray-500 mt-1">
               Backed by config service: <span className="font-mono">/api/v1/config/me/*</span>
             </p>
-            <div className="mt-2 text-xs text-gray-500">
+            <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
               Lineage: <span className="font-mono">{lineageLabel}</span>
+              <HelpTip id="config-lineage" position="right">
+                <strong>Lineage</strong> shows the configuration hierarchy. Settings cascade from Organization to Team level, with more specific levels overriding general ones.
+              </HelpTip>
             </div>
                 </div>
                 
@@ -143,7 +152,12 @@ export default function TeamConfigurationPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm space-y-2">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold text-gray-900 dark:text-white">Effective config</div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                Effective config
+                <HelpTip id="effective-config" position="right">
+                  The <strong>effective config</strong> is the final merged result of all settings from org defaults + team overrides. This is what IncidentFox actually uses.
+                </HelpTip>
+              </div>
               <a
                 href="#"
                 className="text-xs text-gray-400 flex items-center gap-1 pointer-events-none"
@@ -168,7 +182,12 @@ export default function TeamConfigurationPage() {
 
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm space-y-3">
               <div>
-                <div className="text-sm font-semibold text-gray-900 dark:text-white">Team overrides</div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                  Team overrides
+                  <HelpTip id="team-overrides" position="right">
+                    <strong>Overrides</strong> let you customize settings for your team without changing org-wide defaults. Enter JSON to override specific values (e.g., Grafana URLs, alert thresholds).
+                  </HelpTip>
+                </div>
                 <p className="text-xs text-gray-500 mt-1">
                   This payload is deep-merged (PATCH semantics) into existing team overrides via{' '}
                   <span className="font-mono">PUT /api/v1/config/me</span>.

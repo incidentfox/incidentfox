@@ -181,14 +181,18 @@ export default function TemplatesPage() {
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-              <LayoutTemplate className="w-8 h-8 text-gray-600 dark:text-gray-400" />
-              Template Marketplace
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-2">
-              Pre-configured agent systems optimized for specific use cases
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+              <LayoutTemplate className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                Template Marketplace
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Pre-configured agent systems optimized for specific use cases
+              </p>
+            </div>
           </div>
         </div>
 

@@ -134,6 +134,11 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
             )
             return
 
+        # Track whether agent run was created so we can mark it failed on exception
+        agent_run_created = False
+        run_id = None
+        org_id = None
+
         try:
             cfg = integration.config_service
             agent_api = integration.agent_api
@@ -221,6 +226,7 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                         "session_id": session_id,
                     },
                 )
+                agent_run_created = True
 
             # Resolve output destinations
             from incidentfox_orchestrator.output_resolver import (
@@ -317,6 +323,22 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                 channel_id=channel_id,
                 error=str(e),
             )
+            # Mark agent run as failed if it was created
+            if agent_run_created and audit_api and run_id and org_id:
+                try:
+                    audit_api.complete_agent_run(
+                        org_id=org_id,
+                        run_id=run_id,
+                        status="failed",
+                        error_message=str(e)[:500],  # Truncate long errors
+                    )
+                except Exception as completion_err:
+                    _log(
+                        "slack_event_failed_completion_error",
+                        correlation_id=correlation_id,
+                        run_id=run_id,
+                        error=str(completion_err),
+                    )
 
     @app.action("feedback_positive")
     async def handle_feedback_positive(ack, body, respond):

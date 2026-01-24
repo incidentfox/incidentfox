@@ -483,12 +483,29 @@ class CoralogixBackend(LogBackend):
         if context:
             config = context.get_integration_config("coralogix")
             if config and config.get("api_key"):
+                api_key = config.get("api_key", "")
+                region = config.get("region", "cx498")
+                logger.info(
+                    "coralogix_config_loaded",
+                    source="execution_context",
+                    region=region,
+                    api_key_prefix=api_key[:10] + "..." if api_key else "None",
+                    api_key_length=len(api_key),
+                )
                 return config
 
         if os.getenv("CORALOGIX_API_KEY"):
+            api_key = os.getenv("CORALOGIX_API_KEY")
+            region = os.getenv("CORALOGIX_REGION", "cx498")
+            logger.info(
+                "coralogix_config_loaded",
+                source="environment",
+                region=region,
+                api_key_prefix=api_key[:10] + "..." if api_key else "None",
+            )
             return {
-                "api_key": os.getenv("CORALOGIX_API_KEY"),
-                "region": os.getenv("CORALOGIX_REGION", "cx498"),
+                "api_key": api_key,
+                "region": region,
             }
 
         raise IntegrationNotConfiguredError(
@@ -524,9 +541,36 @@ class CoralogixBackend(LogBackend):
             "limit": limit,
         }
 
+        logger.info(
+            "coralogix_query_request",
+            url=url,
+            region=region,
+            query=query[:200],
+            api_key_prefix=api_key[:15] + "..." if api_key else "None",
+            start_time=payload["metadata"]["startDate"],
+            end_time=payload["metadata"]["endDate"],
+        )
+
         with httpx.Client(timeout=30.0) as client:
             response = client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
+            logger.info(
+                "coralogix_query_response",
+                status_code=response.status_code,
+                response_length=len(response.text),
+            )
+            if response.status_code >= 400:
+                error_detail = response.text[:1000] if response.text else "No details"
+                logger.error(
+                    "coralogix_query_failed",
+                    status_code=response.status_code,
+                    region=region,
+                    api_key_prefix=api_key[:15] + "...",
+                    error_detail=error_detail,
+                    query=query,
+                )
+                raise Exception(
+                    f"Coralogix API error {response.status_code} (region={region}, key={api_key[:15]}...): {error_detail}"
+                )
 
             results = []
             for line in response.text.strip().split("\n"):
@@ -591,10 +635,11 @@ class CoralogixBackend(LogBackend):
             if sev in error_severities:
                 error_count += cnt
 
-        # Get top patterns
-        pattern_query = "source logs | filter $m.severity >= '5' | groupby $d.logRecord.body aggregate count() as cnt | orderby cnt desc | limit 10"
+        # Get top patterns - use unquoted uppercase severity names (Coralogix requirement)
+        # Cast body to string for groupby
+        pattern_query = "source logs | filter $m.severity == ERROR || $m.severity == CRITICAL | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
         if service:
-            pattern_query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity >= '5' | groupby $d.logRecord.body aggregate count() as cnt | orderby cnt desc | limit 10"
+            pattern_query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity == ERROR || $m.severity == CRITICAL | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
 
         pattern_results = self._query(pattern_query, start_time, end_time, limit=10)
         top_patterns = [
@@ -625,9 +670,10 @@ class CoralogixBackend(LogBackend):
     ) -> dict[str, Any]:
         """Sample Coralogix logs."""
         if strategy == "errors_only":
-            query = f"source logs | filter $m.severity >= '5' | limit {sample_size}"
+            # Use unquoted uppercase severity names (Coralogix requirement)
+            query = f"source logs | filter $m.severity == ERROR || $m.severity == CRITICAL | limit {sample_size}"
             if service:
-                query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity >= '5' | limit {sample_size}"
+                query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity == ERROR || $m.severity == CRITICAL | limit {sample_size}"
         else:
             query = f"source logs | limit {sample_size}"
             if service:
@@ -1437,12 +1483,21 @@ def get_log_statistics(
 
     This is a MANDATORY first step - never jump to raw log searches.
 
+    Example:
+        get_log_statistics(service="payment-service", time_range="1h")
+
     Args:
         service: Optional service name to filter logs
         time_range: Time range to analyze (e.g., '15m', '1h', '24h')
-        log_source: Log backend to query (auto, elasticsearch, coralogix, datadog, splunk, cloudwatch)
-        index_pattern: Elasticsearch index pattern (e.g., 'logs-*')
-        log_group: CloudWatch log group name
+        log_source: Log backend to query. Options:
+            - 'auto': Auto-detect based on configured integrations (default)
+            - 'elasticsearch': Query Elasticsearch/OpenSearch
+            - 'coralogix': Query Coralogix
+            - 'datadog': Query Datadog Logs
+            - 'splunk': Query Splunk
+            - 'cloudwatch': Query AWS CloudWatch Logs
+        index_pattern: [Elasticsearch only] Index pattern (e.g., 'logs-*', 'app-logs-2024.*')
+        log_group: [CloudWatch only] Log group name (e.g., '/aws/lambda/my-function')
 
     Returns:
         JSON with:
@@ -1518,24 +1573,24 @@ def sample_logs(
 
     NEVER request all logs - use this tool to get a manageable sample.
 
+    Example:
+        sample_logs(strategy="errors_only", service="api-gateway", time_range="30m")
+
     Strategies:
     - errors_only: Only return ERROR and CRITICAL logs (best for incident investigation)
-    - first_last: First N and last N logs in time range (see timeline)
-    - random: Random sample across time range (statistical representation)
-    - stratified: Sample from each severity level proportionally
-    - around_anomaly: Logs within window of a specific timestamp
+    - around_anomaly: Logs within window of a specific timestamp (requires anomaly_timestamp)
 
     Args:
-        strategy: Sampling strategy to use
+        strategy: Sampling strategy ('errors_only' or 'around_anomaly')
         service: Optional service name to filter
         time_range: Time range to sample from (e.g., '15m', '1h', '24h')
         sample_size: Maximum number of logs to return (default 50)
-        anomaly_timestamp: ISO timestamp for around_anomaly strategy
-        window_seconds: Seconds before/after anomaly to include
-        log_source: Log backend to query
-        index_pattern: Elasticsearch index pattern
-        log_group: CloudWatch log group
-        severity_filter: Minimum severity level to include
+        anomaly_timestamp: [around_anomaly only] ISO timestamp (e.g., '2024-01-15T10:32:45Z')
+        window_seconds: [around_anomaly only] Seconds before/after anomaly (default 60)
+        log_source: Log backend ('auto', 'elasticsearch', 'coralogix', 'datadog', 'splunk', 'cloudwatch')
+        index_pattern: [Elasticsearch only] Index pattern (e.g., 'logs-*')
+        log_group: [CloudWatch only] Log group name
+        severity_filter: Minimum severity level (e.g., 'WARNING', 'ERROR')
 
     Returns:
         JSON with sampled logs and sampling metadata
@@ -1555,6 +1610,8 @@ def sample_logs(
             kwargs["anomaly_timestamp"] = datetime.fromisoformat(
                 anomaly_timestamp.replace("Z", "")
             )
+        if severity_filter:
+            kwargs["severity_filter"] = severity_filter
 
         result = backend.sample_logs(
             strategy, service, start_time, end_time, sample_size, **kwargs
@@ -1612,16 +1669,20 @@ def search_logs_by_pattern(
     - Tracing exceptions with stack traces
     - Searching for transaction/trace IDs
 
+    Example:
+        search_logs_by_pattern(pattern="NullPointerException", service="order-service")
+        search_logs_by_pattern(pattern="trace-id-12345")
+
     Args:
         pattern: String or regex pattern to search for
         service: Optional service name to filter
         time_range: Time range to search (e.g., '15m', '1h', '24h')
-        context_lines: Number of lines before/after to include
+        context_lines: Number of log lines before/after match to include (default 2)
         max_results: Maximum matches to return (default 50)
-        case_sensitive: Whether search is case-sensitive
-        log_source: Log backend to query
-        index_pattern: Elasticsearch index pattern
-        log_group: CloudWatch log group
+        case_sensitive: Whether search is case-sensitive (default False)
+        log_source: Log backend ('auto', 'elasticsearch', 'coralogix', 'datadog', 'splunk', 'cloudwatch')
+        index_pattern: [Elasticsearch only] Index pattern (e.g., 'logs-*')
+        log_group: [CloudWatch only] Log group name
 
     Returns:
         JSON with matching logs and context
@@ -1630,7 +1691,10 @@ def search_logs_by_pattern(
         start_time, end_time = _get_time_bounds(time_range)
         backend = _get_backend(log_source)
 
-        kwargs = {}
+        kwargs = {
+            "context_lines": context_lines,
+            "case_sensitive": case_sensitive,
+        }
         if index_pattern:
             kwargs["index_pattern"] = index_pattern
         if log_group:
@@ -1676,19 +1740,26 @@ def get_logs_around_timestamp(
     Use when you've identified an anomaly or event and want to see
     what happened immediately before and after.
 
+    Example:
+        get_logs_around_timestamp(
+            timestamp="2024-01-15T10:32:45Z",
+            service="payment-service",
+            window_before_seconds=60
+        )
+
     Args:
         timestamp: ISO timestamp of the event (e.g., '2024-01-15T10:32:45Z')
         window_before_seconds: Seconds before event to include (default 30)
         window_after_seconds: Seconds after event to include (default 30)
         service: Optional service name to filter
-        severity_filter: Minimum severity to include (e.g., 'ERROR')
+        severity_filter: Minimum severity to include (e.g., 'WARNING', 'ERROR')
         max_results: Maximum logs to return (default 100)
-        log_source: Log backend to query
-        index_pattern: Elasticsearch index pattern
-        log_group: CloudWatch log group
+        log_source: Log backend ('auto', 'elasticsearch', 'coralogix', 'datadog', 'splunk', 'cloudwatch')
+        index_pattern: [Elasticsearch only] Index pattern (e.g., 'logs-*')
+        log_group: [CloudWatch only] Log group name
 
     Returns:
-        JSON with logs before/during/after the timestamp
+        JSON with logs before/during/after the timestamp, plus timeline_summary
     """
     try:
         ts = datetime.fromisoformat(timestamp.replace("Z", ""))
@@ -1699,6 +1770,8 @@ def get_logs_around_timestamp(
             kwargs["index_pattern"] = index_pattern
         if log_group:
             kwargs["log_group"] = log_group
+        if severity_filter:
+            kwargs["severity_filter"] = severity_filter
 
         result = backend.get_logs_around_time(
             ts, window_before_seconds, window_after_seconds, service, **kwargs

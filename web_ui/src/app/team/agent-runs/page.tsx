@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useIdentity } from '@/lib/useIdentity';
 import { apiFetch } from '@/lib/apiClient';
+import { HelpTip } from '@/components/onboarding/HelpTip';
+import { useAgentStream } from '@/lib/useAgentStream';
+import { useOnboarding } from '@/lib/useOnboarding';
 import {
   Activity,
   CheckCircle,
@@ -18,7 +21,11 @@ import {
   RefreshCcw,
   Filter,
   Calendar,
+  Sparkles,
+  X,
+  Send,
 } from 'lucide-react';
+import TraceViewer from '@/components/TraceViewer';
 
 interface AgentRun {
   id: string;
@@ -91,12 +98,35 @@ const AGENT_COLORS: Record<string, string> = {
 
 export default function TeamAgentRunsPage() {
   const { identity } = useIdentity();
+  const { state: onboardingState, markFirstAgentRunCompleted, setQuickStartStep } = useOnboarding();
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterAgent, setFilterAgent] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  
+  const [showChatPanel, setShowChatPanel] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Use the agent stream hook for proper SSE parsing
+  const {
+    messages: agentMessages,
+    isStreaming,
+    error: agentError,
+    sendMessage,
+    reset: resetChat,
+  } = useAgentStream({
+    onComplete: () => {
+      loadRuns(); // Refresh runs after completion
+
+      // If user is on Step 5 of onboarding, mark first run completed and advance to Step 6
+      if (onboardingState.quickStartStep === 5) {
+        markFirstAgentRunCompleted();
+        setQuickStartStep(6);
+      }
+    },
+  });
+
   const teamId = identity?.team_node_id;
 
   const loadRuns = useCallback(async () => {
@@ -138,6 +168,24 @@ export default function TeamAgentRunsPage() {
     return `${mins}m ${secs}s`;
   };
 
+  const handleSendMessage = () => {
+    if (!chatInput.trim() || isStreaming) return;
+    sendMessage(chatInput.trim());
+    setChatInput('');
+  };
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [agentMessages]);
+
+  // Reset chat when panel closes
+  const handleCloseChat = () => {
+    setShowChatPanel(false);
+    resetChat();
+    setChatInput('');
+  };
+
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center">
@@ -149,14 +197,21 @@ export default function TeamAgentRunsPage() {
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-3">
-            <Activity className="w-7 h-7 text-gray-500" />
-            Agent Run History
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+            <Activity className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Agent Run History
+            <HelpTip id="agent-runs" position="right">
+              <strong>Agent Runs</strong> are individual AI investigation sessions. Each run uses tools like Grafana, Kubernetes, and your Knowledge Base to analyze incidents and provide recommendations.
+            </HelpTip>
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            View the history of AI agent invocations for your team.
-          </p>
+            <p className="text-sm text-gray-500">
+              View the history of AI agent invocations for your team.
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {runningCount > 0 && (
@@ -165,6 +220,13 @@ export default function TeamAgentRunsPage() {
               {runningCount} running
             </div>
           )}
+          <button
+            onClick={() => setShowChatPanel(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <Sparkles className="w-4 h-4" />
+            New Investigation
+          </button>
           <button
             onClick={loadRuns}
             className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -191,17 +253,25 @@ export default function TeamAgentRunsPage() {
             ))}
           </select>
         </div>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-        >
-          <option value="all">All Status</option>
-          <option value="running">Running</option>
-          <option value="completed">Completed</option>
-          <option value="failed">Failed</option>
-          <option value="timeout">Timeout</option>
-        </select>
+        <div className="flex items-center gap-1">
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+          >
+            <option value="all">All Status</option>
+            <option value="running">Running</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+            <option value="timeout">Timeout</option>
+          </select>
+          <HelpTip id="run-status" position="bottom">
+            <strong>Running:</strong> Agent is actively investigating<br/>
+            <strong>Completed:</strong> Investigation finished successfully<br/>
+            <strong>Failed:</strong> Agent encountered an error<br/>
+            <strong>Timeout:</strong> Investigation exceeded time limit
+          </HelpTip>
+        </div>
       </div>
 
       {/* Runs List */}
@@ -276,13 +346,23 @@ export default function TeamAgentRunsPage() {
                 <div className="border-t border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-950">
                   <div className="grid grid-cols-3 gap-4 mb-4">
                     <div className="bg-white dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                      <div className="text-xs text-gray-500 mb-1">MTTD (Run Duration)</div>
+                      <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                        MTTD (Run Duration)
+                        <HelpTip id="mttd" position="top">
+                          <strong>Mean Time to Detect</strong> measures how long the agent took to analyze the incident. Lower is better.
+                        </HelpTip>
+                      </div>
                       <div className="text-lg font-semibold text-gray-900 dark:text-white">
                         {formatDuration(run.durationSeconds)}
                       </div>
                     </div>
                     <div className="bg-white dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                      <div className="text-xs text-gray-500 mb-1">Tool Calls</div>
+                      <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                        Tool Calls
+                        <HelpTip id="tool-calls" position="top">
+                          Number of tools the agent used (Grafana queries, K8s lookups, Knowledge Base searches, etc.)
+                        </HelpTip>
+                      </div>
                       <div className="text-lg font-semibold text-gray-900 dark:text-white">
                         {run.toolCallsCount || 0}
                       </div>
@@ -313,7 +393,10 @@ export default function TeamAgentRunsPage() {
                     </div>
                   )}
 
-                  <div className="text-xs text-gray-400 flex items-center gap-4">
+                  {/* Trace Viewer */}
+                  <TraceViewer runId={run.id} correlationId={run.correlationId} />
+
+                  <div className="text-xs text-gray-400 flex items-center gap-4 mt-4">
                     <span>Correlation ID: {run.correlationId}</span>
                     <span>Started: {new Date(run.startedAt).toLocaleString()}</span>
                     {run.completedAt && <span>Completed: {new Date(run.completedAt).toLocaleString()}</span>}
@@ -322,6 +405,128 @@ export default function TeamAgentRunsPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Chat Panel Overlay */}
+      {showChatPanel && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/20 dark:bg-black/40"
+            onClick={handleCloseChat}
+          />
+
+          {/* Panel */}
+          <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 shadow-2xl flex flex-col h-full">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">Ask IncidentFox</h2>
+                  <p className="text-xs text-gray-500">AI-powered incident investigation</p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseChat}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {agentMessages.length === 0 && (
+                <div className="text-center py-12">
+                  <Bot className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                  <p className="text-gray-500 mb-2">Start an investigation</p>
+                  <p className="text-sm text-gray-400">
+                    Describe the issue you&apos;re investigating, and the AI will analyze your systems.
+                  </p>
+                </div>
+              )}
+
+              {agentMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-lg px-4 py-3 ${
+                      msg.role === 'user'
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+                    }`}
+                  >
+                    {/* Tool calls for assistant messages */}
+                    {msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0 && (
+                      <div className="space-y-1 mb-2 text-xs">
+                        {msg.toolCalls.map((tool) => (
+                          <div key={tool.id} className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                            {tool.status === 'running' ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : tool.status === 'completed' ? (
+                              <CheckCircle className="w-3 h-3 text-green-500" />
+                            ) : (
+                              <XCircle className="w-3 h-3 text-red-500" />
+                            )}
+                            <span>{tool.name.replace(/_/g, ' ')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {msg.content && (
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    )}
+                    {msg.isStreaming && !msg.content && (!msg.toolCalls || msg.toolCalls.length === 0) && (
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm">Thinking...</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {agentError && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                  <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-red-700 dark:text-red-400">{agentError}</div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input Area */}
+            <div className="border-t border-gray-200 dark:border-gray-800 p-4">
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                  placeholder="Describe the issue to investigate..."
+                  className="flex-1 px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  disabled={isStreaming}
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!chatInput.trim() || isStreaming}
+                  className="p-3 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:dark:bg-gray-700 text-white rounded-lg transition-colors"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-2 text-center">
+                Press Enter to send
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

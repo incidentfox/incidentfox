@@ -1,0 +1,44 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "incidentfox__propose_pod_restart",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '\\n[REMEDIATION] Pod restart requested. This will delete the pod.\\n'"
+          }
+        ]
+      },
+      {
+        "matcher": "incidentfox__propose_deployment_restart",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '\\n[REMEDIATION] Deployment rolling restart requested.\\n'"
+          }
+        ]
+      },
+      {
+        "matcher": "incidentfox__propose_scale_deployment",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '\\n[REMEDIATION] Deployment scaling requested.\\n'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "incidentfox__propose_*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mkdir -p ~/.incidentfox/logs && echo \"$(date -u +%Y-%m-%dT%H:%M:%SZ) - Remediation action executed\" >> ~/.incidentfox/logs/remediation.log"
+          }
+        ]
+      }
+    ]
+  }
+}

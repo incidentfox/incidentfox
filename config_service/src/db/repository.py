@@ -409,9 +409,16 @@ def authenticate_org_admin_token(
     if row.is_expired():
         raise ValueError("Token has expired")
 
+    # Throttle last_used_at updates to reduce write contention (only update if older than 5 minutes)
     if update_last_used:
-        row.last_used_at = datetime.utcnow()
-        session.flush()
+        now = datetime.utcnow()
+        should_update = (
+            row.last_used_at is None
+            or (now - row.last_used_at.replace(tzinfo=None)).total_seconds() > 300
+        )
+        if should_update:
+            row.last_used_at = now
+            session.flush()
 
     return OrgAdminPrincipal(org_id=row.org_id)
 
@@ -689,10 +696,16 @@ def authenticate_bearer_token(
         )
         raise ValueError("Token expired")
 
-    # Update last_used_at
+    # Update last_used_at (throttled to reduce write contention - only update if older than 5 minutes)
     if update_last_used:
-        row.last_used_at = datetime.utcnow()
-        session.flush()
+        now = datetime.utcnow()
+        should_update = (
+            row.last_used_at is None
+            or (now - row.last_used_at.replace(tzinfo=None)).total_seconds() > 300
+        )
+        if should_update:
+            row.last_used_at = now
+            session.flush()
 
     return Principal(org_id=row.org_id, team_node_id=row.team_node_id)
 
@@ -1208,6 +1221,8 @@ def bulk_create_tool_calls(
             AgentToolCall(
                 id=tc.get("id", f"{run_id}_{i}"),
                 run_id=run_id,
+                agent_name=tc.get("agent_name"),
+                parent_agent=tc.get("parent_agent"),
                 tool_name=tc.get("tool_name", "unknown"),
                 tool_input=tc.get("tool_input"),
                 tool_output=output[:5000] if output else None,
