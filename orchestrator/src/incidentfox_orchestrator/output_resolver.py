@@ -48,6 +48,12 @@ def resolve_output_destinations(
     trigger_overrides = output_config.get("trigger_overrides", {})
     default_destinations = output_config.get("default_destinations", [])
 
+    # Extract Slack bot_token from team integrations config
+    # This enables multi-tenant scenarios where teams use different Slack workspaces
+    slack_bot_token = (
+        (team_config or {}).get("integrations", {}).get("slack", {}).get("bot_token")
+    )
+
     # Legacy notifications config (for backward compatibility)
     notifications = (team_config or {}).get("notifications", {})
 
@@ -56,15 +62,16 @@ def resolve_output_destinations(
 
     if trigger_override == "reply_in_thread" and trigger_source == "slack":
         # Override: reply in Slack thread
-        destinations.append(
-            {
-                "type": "slack",
-                "channel_id": trigger_payload.get("channel_id"),
-                "thread_ts": trigger_payload.get("thread_ts")
-                or trigger_payload.get("event_ts"),
-                "user_id": trigger_payload.get("user_id"),
-            }
-        )
+        dest = {
+            "type": "slack",
+            "channel_id": trigger_payload.get("channel_id"),
+            "thread_ts": trigger_payload.get("thread_ts")
+            or trigger_payload.get("event_ts"),
+            "user_id": trigger_payload.get("user_id"),
+        }
+        if slack_bot_token:
+            dest["bot_token"] = slack_bot_token
+        destinations.append(dest)
         return destinations
 
     elif trigger_override == "comment_on_pr" and trigger_source == "github":
@@ -94,15 +101,16 @@ def resolve_output_destinations(
     # 3. Trigger-specific defaults (built-in behavior)
     if trigger_source == "slack":
         # Default: reply in same thread
-        destinations.append(
-            {
-                "type": "slack",
-                "channel_id": trigger_payload.get("channel_id"),
-                "thread_ts": trigger_payload.get("thread_ts")
-                or trigger_payload.get("event_ts"),
-                "user_id": trigger_payload.get("user_id"),
-            }
-        )
+        dest = {
+            "type": "slack",
+            "channel_id": trigger_payload.get("channel_id"),
+            "thread_ts": trigger_payload.get("thread_ts")
+            or trigger_payload.get("event_ts"),
+            "user_id": trigger_payload.get("user_id"),
+        }
+        if slack_bot_token:
+            dest["bot_token"] = slack_bot_token
+        destinations.append(dest)
 
     elif trigger_source == "github":
         # Default: post back to same PR/issue
@@ -127,12 +135,13 @@ def resolve_output_destinations(
         gh_output = notifications.get("github_output", {})
         gh_slack = gh_output.get("slack_channel_id")
         if gh_slack:
-            destinations.append(
-                {
-                    "type": "slack",
-                    "channel_id": gh_slack,
-                }
-            )
+            dest = {
+                "type": "slack",
+                "channel_id": gh_slack,
+            }
+            if slack_bot_token:
+                dest["bot_token"] = slack_bot_token
+            destinations.append(dest)
 
     elif trigger_source == "pagerduty":
         # Use PD-specific config or fallback to default (legacy)
@@ -142,12 +151,13 @@ def resolve_output_destinations(
         )
 
         if slack_channel:
-            destinations.append(
-                {
-                    "type": "slack",
-                    "channel_id": slack_channel,
-                }
-            )
+            dest = {
+                "type": "slack",
+                "channel_id": slack_channel,
+            }
+            if slack_bot_token:
+                dest["bot_token"] = slack_bot_token
+            destinations.append(dest)
 
         # Optionally add PagerDuty note
         if pd_output.get("post_pagerduty_note") and trigger_payload.get("incident_id"):
@@ -166,12 +176,13 @@ def resolve_output_destinations(
         )
 
         if slack_channel:
-            destinations.append(
-                {
-                    "type": "slack",
-                    "channel_id": slack_channel,
-                }
-            )
+            dest = {
+                "type": "slack",
+                "channel_id": slack_channel,
+            }
+            if slack_bot_token:
+                dest["bot_token"] = slack_bot_token
+            destinations.append(dest)
 
         # Optionally add Incident.io timeline entry
         if io_output.get("post_timeline") and trigger_payload.get("incident_id"):
@@ -190,12 +201,13 @@ def resolve_output_destinations(
         # Legacy fallback
         default_channel = notifications.get("default_slack_channel_id")
         if default_channel:
-            destinations.append(
-                {
-                    "type": "slack",
-                    "channel_id": default_channel,
-                }
-            )
+            dest = {
+                "type": "slack",
+                "channel_id": default_channel,
+            }
+            if slack_bot_token:
+                dest["bot_token"] = slack_bot_token
+            destinations.append(dest)
 
     # 4. If still empty after trigger-specific handling, check for team default destinations (NEW)
     if not destinations and default_destinations:
@@ -205,12 +217,13 @@ def resolve_output_destinations(
     if not destinations:
         default_channel = notifications.get("default_slack_channel_id")
         if default_channel:
-            destinations.append(
-                {
-                    "type": "slack",
-                    "channel_id": default_channel,
-                }
-            )
+            dest = {
+                "type": "slack",
+                "channel_id": default_channel,
+            }
+            if slack_bot_token:
+                dest["bot_token"] = slack_bot_token
+            destinations.append(dest)
 
     # 6. Return whatever we have (could be empty = no output)
     return destinations
