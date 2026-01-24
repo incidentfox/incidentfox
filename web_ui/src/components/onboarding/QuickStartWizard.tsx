@@ -294,7 +294,7 @@ function StepConnectSystems() {
       </div>
 
       <Link
-        href="/team/setup"
+        href="/team/tools"
         className="flex items-center justify-between w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors group"
       >
         <div className="flex items-center gap-3">
@@ -340,7 +340,7 @@ function StepConfigureAgents() {
 
       <div className="flex gap-3">
         <Link
-          href="/team/setup"
+          href="/team/tools"
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors text-sm font-medium text-gray-700 dark:text-gray-300"
         >
           <Wrench className="w-4 h-4" />
