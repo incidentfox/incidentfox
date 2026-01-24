@@ -5,7 +5,6 @@ import { RequireRole } from '@/components/RequireRole';
 import { useIdentity } from '@/lib/useIdentity';
 import { useOnboarding } from '@/lib/useOnboarding';
 import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
-import { AgentRunnerModal } from '@/components/onboarding/AgentRunnerModal';
 import {
   ShieldCheck,
   Network,
@@ -18,7 +17,6 @@ import {
   CheckCircle,
   XCircle,
   Settings,
-  Play,
   FileText,
   Key,
   BarChart3,
@@ -28,7 +26,6 @@ import {
   Github,
   Code,
   RefreshCw,
-  Sparkles,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -106,8 +103,6 @@ export default function AdminHomePage() {
     markFirstAgentRunCompleted,
   } = useOnboarding();
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
-  const [showAgentRunner, setShowAgentRunner] = useState(false);
-  const [isOnboardingFlow, setIsOnboardingFlow] = useState(false);
 
   // Show welcome modal on first visit
   useEffect(() => {
@@ -276,25 +271,13 @@ export default function AdminHomePage() {
 
   const handleWelcomeRunAgent = () => {
     markWelcomeSeen();
+    markFirstAgentRunCompleted();
     setShowWelcomeModal(false);
-    setIsOnboardingFlow(true);
-    setShowAgentRunner(true);
   };
 
   const handleWelcomeSkip = () => {
     markWelcomeSeen();
     setShowWelcomeModal(false);
-  };
-
-  const handleAgentRunnerClose = () => {
-    setShowAgentRunner(false);
-    setIsOnboardingFlow(false);
-  };
-
-  const handleAgentRunComplete = () => {
-    if (isOnboardingFlow) {
-      markFirstAgentRunCompleted();
-    }
   };
 
   return (
@@ -305,14 +288,6 @@ export default function AdminHomePage() {
           onClose={() => setShowWelcomeModal(false)}
           onRunAgent={handleWelcomeRunAgent}
           onSkip={handleWelcomeSkip}
-        />
-      )}
-
-      {showAgentRunner && (
-        <AgentRunnerModal
-          onClose={handleAgentRunnerClose}
-          onComplete={handleAgentRunComplete}
-          isOnboarding={isOnboardingFlow}
         />
       )}
 
@@ -327,14 +302,6 @@ export default function AdminHomePage() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {/* Run Agent Button */}
-            <button
-              onClick={() => setShowAgentRunner(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors shadow-sm"
-            >
-              <Sparkles className="w-4 h-4" />
-              Ask IncidentFox
-            </button>
             <div className="text-xs text-gray-500 text-right">
               <div>
                 Signed in as: <span className="font-mono">{identity?.auth_kind || 'unknown'}</span>
@@ -716,22 +683,7 @@ export default function AdminHomePage() {
         {/* Quick Actions */}
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <button
-              onClick={() => setShowAgentRunner(true)}
-              className="bg-gradient-to-br from-orange-500 to-amber-500 border border-orange-600 rounded-xl p-5 shadow-sm hover:from-orange-600 hover:to-amber-600 transition-all group text-left"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-white/20 text-white">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-medium text-white">Ask IncidentFox</div>
-                  <div className="text-xs text-white/80">AI-powered investigation</div>
-                </div>
-              </div>
-            </button>
-
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Link
               href="/admin/org-tree"
               className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm hover:border-orange-300 dark:hover:border-orange-700 transition-colors group"
@@ -773,21 +725,6 @@ export default function AdminHomePage() {
                 <div>
                   <div className="font-medium text-gray-900 dark:text-white">View Audit Log</div>
                   <div className="text-xs text-gray-500">Review admin actions</div>
-                </div>
-              </div>
-            </Link>
-
-            <Link
-              href="/admin/agent-run"
-              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm hover:border-orange-300 dark:hover:border-orange-700 transition-colors group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
-                  <Play className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-medium text-gray-900 dark:text-white">Run Agent</div>
-                  <div className="text-xs text-gray-500">Start investigation</div>
                 </div>
               </div>
             </Link>

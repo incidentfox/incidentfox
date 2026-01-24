@@ -51,42 +51,32 @@ export function QuickStartWizard({ onClose, onRunAgent, onSkip }: QuickStartWiza
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="relative bg-gradient-to-br from-orange-500 via-orange-600 to-amber-500 px-6 py-5 text-white">
+        <div className="relative px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-white/80 hover:text-white transition-colors"
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
-              <span className="text-xl">🦊</span>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">Quick Start Guide</h1>
-              <p className="text-white/80 text-sm">Learn how IncidentFox works</p>
-            </div>
-          </div>
-
           {/* Progress dots */}
-          <div className="flex items-center gap-2 mt-4">
+          <div className="flex items-center gap-2">
             {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
               <button
                 key={i}
                 onClick={() => setCurrentStep(i + 1)}
                 className={`w-2 h-2 rounded-full transition-all ${
                   i + 1 === currentStep
-                    ? 'w-6 bg-white'
+                    ? 'w-6 bg-orange-500'
                     : i + 1 < currentStep
-                    ? 'bg-white/80'
-                    : 'bg-white/40'
+                    ? 'bg-orange-300 dark:bg-orange-700'
+                    : 'bg-gray-200 dark:bg-gray-600'
                 }`}
               />
             ))}
-            <span className="ml-auto text-white/60 text-xs">
-              Step {currentStep} of {TOTAL_STEPS}
+            <span className="ml-auto text-gray-400 text-xs">
+              {currentStep} / {TOTAL_STEPS}
             </span>
           </div>
         </div>
