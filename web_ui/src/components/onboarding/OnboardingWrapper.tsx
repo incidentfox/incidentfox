@@ -41,9 +41,16 @@ export function OnboardingWrapper({ children }: OnboardingWrapperProps) {
       }
     }
 
-    // For Step 5, navigate to agent-runs
+    // For Step 5, navigate to agent-runs page (if not already there)
     if (step === 5) {
       router.push('/team/agent-runs');
+      return;
+    }
+
+    // For Step 6, open the wizard at the congratulations screen
+    if (step === 6) {
+      setWizardInitialStep(6);
+      setShowWizard(true);
       return;
     }
 

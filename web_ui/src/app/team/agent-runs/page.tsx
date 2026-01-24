@@ -5,6 +5,7 @@ import { useIdentity } from '@/lib/useIdentity';
 import { apiFetch } from '@/lib/apiClient';
 import { HelpTip } from '@/components/onboarding/HelpTip';
 import { useAgentStream } from '@/lib/useAgentStream';
+import { useOnboarding } from '@/lib/useOnboarding';
 import {
   Activity,
   CheckCircle,
@@ -97,6 +98,7 @@ const AGENT_COLORS: Record<string, string> = {
 
 export default function TeamAgentRunsPage() {
   const { identity } = useIdentity();
+  const { state: onboardingState, markFirstAgentRunCompleted, setQuickStartStep } = useOnboarding();
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -116,6 +118,12 @@ export default function TeamAgentRunsPage() {
   } = useAgentStream({
     onComplete: () => {
       loadRuns(); // Refresh runs after completion
+
+      // If user is on Step 5 of onboarding, mark first run completed and advance to Step 6
+      if (onboardingState.quickStartStep === 5) {
+        markFirstAgentRunCompleted();
+        setQuickStartStep(6);
+      }
     },
   });
 

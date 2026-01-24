@@ -40,11 +40,12 @@ export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButto
         const step = data.quickStartStep ?? null;
         setLocalStep(step);
         setLocalStep4Progress(data.step4Progress ?? DEFAULT_STEP4_PROGRESS);
-        // Set wasCompleted based on whether step is null
+        // Set states based on whether step is null
         if (step === null) {
           setWasCompleted(true);
         } else {
-          // Reset wasCompleted if there's an active step
+          // Reset dismissed and wasCompleted if there's an active step
+          setDismissed(false);
           setWasCompleted(false);
         }
       }
@@ -91,7 +92,8 @@ export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButto
       if (newStep === null) {
         setWasCompleted(true);
       } else {
-        // If a new step is set, reset completed state (wizard restarted)
+        // If a new step is set, reset dismissed and completed states
+        setDismissed(false);
         setWasCompleted(false);
       }
     };
@@ -146,6 +148,14 @@ export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButto
         default:
           return 'Configure Agents';
       }
+    }
+    // Step 5: Prompt to run an investigation
+    if (effectiveStep === 5) {
+      return 'Run Investigation';
+    }
+    // Step 6: Complete the setup
+    if (effectiveStep === 6) {
+      return 'Finish Setup';
     }
     return STEP_NAMES[effectiveStep] || `Step ${effectiveStep}`;
   };
