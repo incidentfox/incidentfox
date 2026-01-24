@@ -730,7 +730,7 @@ async def _process_pagerduty_webhook(
 
         result = agent_api.run_agent(
             team_token=team_token,
-            agent_name="planner",
+            agent_name=entrance_agent_name,
             message=message,
             context=agent_context,
             timeout=int(
@@ -1111,7 +1111,7 @@ async def _process_incidentio_webhook(
 
         result = agent_api.run_agent(
             team_token=team_token,
-            agent_name="planner",
+            agent_name=entrance_agent_name,
             message=message,
             context=agent_context,
             timeout=int(
