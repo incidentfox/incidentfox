@@ -290,8 +290,13 @@ def parse_output_destinations(raw: Any) -> list[OutputDestination]:
 
     Accepts:
     - List of dicts: [{"type": "slack", "config": {...}}]
+    - Flat format: [{"type": "slack", "channel_id": "...", ...}]
+    - Mixed format: [{"type": "slack", "channel_id": "...", "config": {"run_id": "..."}}]
     - List of OutputDestination objects
     - None (returns empty list)
+
+    When both flat keys and a "config" dict exist, they are merged with flat keys
+    taking precedence (allowing overrides at top level).
     """
     if not raw:
         return []
@@ -305,10 +310,17 @@ def parse_output_destinations(raw: Any) -> list[OutputDestination]:
             destinations.append(item)
         elif isinstance(item, dict):
             dest_type = item.get("type", "")
-            config = item.get("config", {})
-            # Also support flat format (type + other keys as config)
-            if not config:
-                config = {k: v for k, v in item.items() if k != "type"}
+
+            # Extract flat keys (everything except "type" and "config")
+            flat_keys = {k: v for k, v in item.items() if k not in ("type", "config")}
+
+            # Get nested config if it exists
+            nested_config = item.get("config", {})
+
+            # Merge: start with nested config, then overlay flat keys
+            # This allows flat keys to override nested config values
+            config = {**nested_config, **flat_keys}
+
             destinations.append(OutputDestination(type=dest_type, config=config))
 
     return destinations
