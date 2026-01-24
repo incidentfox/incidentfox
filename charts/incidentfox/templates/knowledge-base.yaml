@@ -5,10 +5,15 @@ kind: ServiceAccount
 metadata:
   name: incidentfox-knowledge-base
   namespace: {{ .Values.namespace }}
-  {{- if .Values.services.knowledgeBase.serviceAccountRoleArn }}
+  labels:
+    {{- include "incidentfox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: knowledge-base
   annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+    {{- if .Values.services.knowledgeBase.serviceAccountRoleArn }}
     eks.amazonaws.com/role-arn: {{ .Values.services.knowledgeBase.serviceAccountRoleArn | quote }}
-  {{- end }}
+    {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
