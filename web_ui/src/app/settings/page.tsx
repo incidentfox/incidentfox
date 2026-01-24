@@ -7,6 +7,7 @@ import { useOnboarding } from '@/lib/useOnboarding';
 import { apiFetch } from '@/lib/apiClient';
 import { HelpTip } from '@/components/onboarding/HelpTip';
 import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
+import { TelemetryInfoModal } from '@/components/settings/TelemetryInfoModal';
 import { ContinueOnboardingButton } from '@/components/onboarding/ContinueOnboardingButton';
 import {
   Settings,
@@ -40,7 +41,9 @@ import {
   Webhook,
   Tag,
   Server,
-  Info
+  Info,
+  HelpCircle,
+  LogOut
 } from 'lucide-react';
 
 // Tab type
@@ -140,6 +143,7 @@ export default function SettingsPage() {
   // Telemetry opt-in/out
   const [telemetryEnabled, setTelemetryEnabled] = useState(true);
   const [telemetryLoading, setTelemetryLoading] = useState(false);
+  const [showTelemetryInfo, setShowTelemetryInfo] = useState(false);
 
   // Output configuration (Delivery & Notifications)
   const [outputConfig, setOutputConfig] = useState<{
@@ -644,12 +648,15 @@ export default function SettingsPage() {
                   )}
                 </div>
 
-              <button
-                  onClick={signOut}
-                  className="mt-4 w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                  Sign Out
-              </button>
+                <div className="pt-3 mt-3 border-t border-gray-100 dark:border-gray-800">
+                  <button
+                    onClick={signOut}
+                    className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Sign out
+                  </button>
+                </div>
             </div>
 
               {/* Quick Start Guide */}
@@ -1083,17 +1090,26 @@ export default function SettingsPage() {
           {activeTab === 'telemetry' && (
             <div className="space-y-6">
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-1">
-                      Telemetry Settings
-                      <HelpTip id="telemetry-settings" position="right">
-                        <strong>Telemetry</strong> helps us improve IncidentFox by sharing anonymous usage metrics (agent run counts, success rates, performance). No personal data, prompts, or sensitive information is ever collected.
-                      </HelpTip>
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Help us improve IncidentFox by sharing anonymous usage data
-                    </p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <Activity className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                        Telemetry
+                        <button
+                          onClick={() => setShowTelemetryInfo(true)}
+                          className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                          aria-label="Learn more about telemetry"
+                        >
+                          <HelpCircle className="w-4 h-4" />
+                        </button>
+                      </h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Share anonymous usage metrics to help improve IncidentFox
+                      </p>
+                    </div>
                   </div>
                   <button
                     onClick={toggleTelemetry}
@@ -1110,93 +1126,17 @@ export default function SettingsPage() {
                   </button>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                      What data is collected?
-                    </h3>
-                    <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0"></div>
-                        <div>
-                          <span className="font-medium text-gray-900 dark:text-white">Agent run metrics:</span> Number of agent runs, success/failure rates, execution duration, and timeout counts
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0"></div>
-                        <div>
-                          <span className="font-medium text-gray-900 dark:text-white">Usage patterns:</span> Tool usage frequency, agent types used, trigger sources (webhook, manual, scheduled)
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0"></div>
-                        <div>
-                          <span className="font-medium text-gray-900 dark:text-white">Performance statistics:</span> Average duration, p50/p95/p99 latency percentiles, error types
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0"></div>
-                        <div>
-                          <span className="font-medium text-gray-900 dark:text-white">Team activity:</span> Number of active teams and overall team count
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                      What is NOT collected?
-                    </h3>
-                    <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></div>
-                        <div>Personal information, user credentials, or authentication tokens</div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></div>
-                        <div>Agent prompts, messages, or conversation content</div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></div>
-                        <div>Knowledge base documents or team-specific data</div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></div>
-                        <div>API keys, secrets, or integration credentials</div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></div>
-                        <div>IP addresses, hostnames, or network identifiers</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                      How is data used?
-                    </h3>
-                    <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                      <p>
-                        Telemetry data is aggregated and anonymized to help us understand product usage patterns,
-                        identify performance issues, and prioritize feature development. Data is sent securely to
-                        our vendor service and is never shared with third parties.
-                      </p>
-                      <p className="mt-3">
-                        <span className="font-medium text-gray-900 dark:text-white">Reporting frequency:</span>
-                        {' '}Metrics are collected every 5 minutes (heartbeat) and aggregated daily at 2:00 AM UTC.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mt-4">
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      <span className="font-medium">Note:</span> Disabling telemetry will take effect immediately.
-                      Your organization's data will be excluded from all future reports. License validation will
-                      continue to work normally.
-                    </p>
-                  </div>
-                </div>
+                <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                  {telemetryEnabled
+                    ? 'Telemetry is enabled. Anonymous metrics are being collected.'
+                    : 'Telemetry is disabled. No data is being collected.'}
+                </p>
               </div>
+
+              {/* Telemetry Info Modal */}
+              {showTelemetryInfo && (
+                <TelemetryInfoModal onClose={() => setShowTelemetryInfo(false)} />
+              )}
             </div>
           )}
 
