@@ -146,9 +146,22 @@ services:
       namespace: "otel-demo"
 
   aiPipelineApi:
-    # Disabled temporarily - DB migration failing due to node memory pressure
+    # Deprecated - use knowledgeBase instead
     enabled: false
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ai-pipeline-api:latest"
+
+  # RAPTOR Knowledge Base for semantic search
+  knowledgeBase:
+    enabled: true
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-knowledge-base:latest"
+    replicas: 1
+    # IRSA role created via Terraform - update after terraform apply
+    serviceAccountRoleArn: "arn:aws:iam::103002841599:role/incidentfox-raptor-kb-role"
+    defaultTree: "mega_ultra_v2"
+    s3:
+      enabled: true
+      bucket: "raptor-kb-trees-103002841599"
+      prefix: "trees/"
 
   webUi:
     enabled: true

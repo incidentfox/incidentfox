@@ -119,6 +119,10 @@ services:
     enabled: true
     image: "103002841599.dkr.ecr.us-east-1.amazonaws.com/incidentfox-pilot-ai-pipeline-api:pilot"
 
+  # RAPTOR Knowledge Base - disabled until infrastructure is set up
+  knowledgeBase:
+    enabled: false
+
   webUi:
     enabled: true
     image: "103002841599.dkr.ecr.us-east-1.amazonaws.com/incidentfox-pilot-web-ui:pilot"
