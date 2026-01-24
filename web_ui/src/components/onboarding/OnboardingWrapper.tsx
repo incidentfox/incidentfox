@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { ContinueOnboardingButton } from './ContinueOnboardingButton';
 import { QuickStartWizard } from './QuickStartWizard';
-import { useOnboarding, type Step4NextAction } from '@/lib/useOnboarding';
+import type { Step4NextAction } from '@/lib/useOnboarding';
 
 interface OnboardingWrapperProps {
   children: React.ReactNode;
@@ -15,49 +14,16 @@ interface OnboardingWrapperProps {
  * Should be placed high in the component tree to appear on all pages.
  */
 export function OnboardingWrapper({ children }: OnboardingWrapperProps) {
-  const router = useRouter();
   const [showWizard, setShowWizard] = useState(false);
   const [wizardInitialStep, setWizardInitialStep] = useState(1);
-  const { markStep4IntegrationsVisited, markStep4AgentConfigVisited, setQuickStartStep } = useOnboarding();
 
-  const handleContinueOnboarding = useCallback((step: number, step4Action?: Step4NextAction) => {
-    // For Step 4, navigate directly to the appropriate page based on what's missing
-    // AND mark that page as visited
-    if (step === 4 && step4Action) {
-      switch (step4Action) {
-        case 'integrations':
-          markStep4IntegrationsVisited();
-          router.push('/team/tools');
-          return;
-        case 'agent-config':
-          markStep4AgentConfigVisited();
-          router.push('/team/agents');
-          return;
-        case 'complete':
-          // Both done - advance to step 5 (Try It Now)
-          setQuickStartStep(5);
-          router.push('/team/agent-runs');
-          return;
-      }
-    }
-
-    // For Step 5, navigate to agent-runs page (if not already there)
-    if (step === 5) {
-      router.push('/team/agent-runs');
-      return;
-    }
-
-    // For Step 6, open the wizard at the congratulations screen
-    if (step === 6) {
-      setWizardInitialStep(6);
-      setShowWizard(true);
-      return;
-    }
-
-    // For other steps, open the wizard
+  const handleContinueOnboarding = useCallback((step: number, _step4Action?: Step4NextAction) => {
+    // For all steps, open the wizard modal first
+    // Steps 4 and 5 have navigation buttons inside the modal content
+    // that users can click to go to the actual pages
     setWizardInitialStep(step);
     setShowWizard(true);
-  }, [router, markStep4IntegrationsVisited, markStep4AgentConfigVisited, setQuickStartStep]);
+  }, []);
 
   const handleCloseWizard = useCallback(() => {
     setShowWizard(false);
