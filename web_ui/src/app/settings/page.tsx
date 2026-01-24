@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useIdentity } from '@/lib/useIdentity';
+import { useOnboarding } from '@/lib/useOnboarding';
 import { apiFetch } from '@/lib/apiClient';
 import { HelpTip } from '@/components/onboarding/HelpTip';
+import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
 import {
   Settings,
   Moon,
@@ -29,6 +31,8 @@ import {
   Network,
   Loader2,
   Link2,
+  BookOpen,
+  RotateCcw,
   Route,
   MessageSquare,
   Github,
@@ -112,8 +116,10 @@ const adminLinks: AdminLink[] = [
 export default function SettingsPage() {
   const router = useRouter();
   const { identity, loading: identityLoading } = useIdentity();
+  const { resetOnboarding } = useOnboarding();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [showQuickStart, setShowQuickStart] = useState(false);
 
   // Telemetry opt-in/out
   const [telemetryEnabled, setTelemetryEnabled] = useState(true);
@@ -629,6 +635,23 @@ export default function SettingsPage() {
                   Sign Out
               </button>
             </div>
+
+              {/* Quick Start Guide */}
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                  <BookOpen className="w-5 h-5" /> Quick Start Guide
+                </h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  Learn how IncidentFox works and get started with AI-powered investigations.
+                </p>
+                <button
+                  onClick={() => setShowQuickStart(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  View Guide
+                </button>
+              </div>
           </div>
           )}
 
@@ -1734,17 +1757,58 @@ export default function SettingsPage() {
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
                 <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
                   <AlertTriangle className="w-5 h-5" />
-                  <span className="font-medium">Advanced Tools</span>
+                  <span className="font-medium">Debug Tools</span>
                 </div>
                 <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
                   These tools are for debugging and testing. Use with caution.
                 </p>
               </div>
 
+              {/* Quick Start Guide Section */}
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <BookOpen className="w-5 h-5" /> Quick Start Guide
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Review the onboarding guide or reset it for testing purposes.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => setShowQuickStart(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    View Quick Start Guide
+                  </button>
+                  <button
+                    onClick={() => {
+                      resetOnboarding();
+                      alert('Onboarding state reset. Refresh the page to see the welcome modal again.');
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Reset Onboarding
+                  </button>
+                </div>
+              </div>
+
           </div>
           )}
         </div>
       </div>
+
+      {/* Quick Start Guide Modal */}
+      {showQuickStart && (
+        <QuickStartWizard
+          onClose={() => setShowQuickStart(false)}
+          onRunAgent={() => {
+            setShowQuickStart(false);
+            router.push('/team/agent-runs');
+          }}
+          onSkip={() => setShowQuickStart(false)}
+        />
+      )}
     </div>
   );
 }
