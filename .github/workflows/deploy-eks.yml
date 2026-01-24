@@ -154,18 +154,29 @@ jobs:
 
       - name: Adopt orphaned resources for Helm
         run: |
-          # Fix ServiceAccounts that exist but weren't created by this Helm release
+          # Fix resources that exist but weren't created by this Helm release
           # This adds required Helm ownership labels so Helm can manage them
-          for sa in incidentfox-knowledge-base; do
-            if kubectl get serviceaccount "$sa" -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
-              echo "Patching ServiceAccount $sa with Helm ownership labels..."
-              kubectl label serviceaccount "$sa" -n ${{ env.HELM_NAMESPACE }} \
-                app.kubernetes.io/managed-by=Helm --overwrite
-              kubectl annotate serviceaccount "$sa" -n ${{ env.HELM_NAMESPACE }} \
+          RESOURCE_NAME="incidentfox-knowledge-base"
+          NS="${{ env.HELM_NAMESPACE }}"
+
+          # Helper function to patch a resource with Helm ownership metadata
+          patch_resource() {
+            local kind=$1
+            local name=$2
+            if kubectl get "$kind" "$name" -n "$NS" &>/dev/null; then
+              echo "Patching $kind/$name with Helm ownership labels..."
+              kubectl label "$kind" "$name" -n "$NS" app.kubernetes.io/managed-by=Helm --overwrite
+              kubectl annotate "$kind" "$name" -n "$NS" \
                 meta.helm.sh/release-name=incidentfox \
-                meta.helm.sh/release-namespace=${{ env.HELM_NAMESPACE }} --overwrite
+                meta.helm.sh/release-namespace="$NS" --overwrite
             fi
-          done
+          }
+
+          # Patch all knowledge-base resources
+          patch_resource serviceaccount "$RESOURCE_NAME"
+          patch_resource deployment "$RESOURCE_NAME"
+          patch_resource service "$RESOURCE_NAME"
+          patch_resource poddisruptionbudget "$RESOURCE_NAME"
 
       - name: Deploy with Helm
         working-directory: charts
