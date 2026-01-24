@@ -180,12 +180,12 @@ jobs:
       - name: Wait for rollout
         run: |
           if [ "${{ github.event.inputs.services }}" = "all" ]; then
-            kubectl rollout status deployment/incidentfox-agent -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-            kubectl rollout status deployment/incidentfox-config-service -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-            kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-            kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+            kubectl rollout status deployment/incidentfox-agent -n ${{ env.HELM_NAMESPACE }} --timeout=10m
+            kubectl rollout status deployment/incidentfox-config-service -n ${{ env.HELM_NAMESPACE }} --timeout=10m
+            kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=10m
+            kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=10m
           else
-            kubectl rollout status deployment/incidentfox-${{ github.event.inputs.services }} -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+            kubectl rollout status deployment/incidentfox-${{ github.event.inputs.services }} -n ${{ env.HELM_NAMESPACE }} --timeout=10m
           fi
 
       - name: Verify deployment
