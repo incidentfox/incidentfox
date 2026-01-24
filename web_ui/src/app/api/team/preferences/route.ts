@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     }
 
     const config = await res.json();
-    const preferences = config?.preferences || {};
+    const preferences = config?.effective_config?.preferences || {};
 
     return NextResponse.json(preferences);
   } catch (err: unknown) {
@@ -78,7 +78,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const result = await res.json();
-    return NextResponse.json(result?.preferences || preferences);
+    return NextResponse.json(result?.config?.preferences || preferences);
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
