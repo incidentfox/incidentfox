@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ContinueOnboardingButton } from './ContinueOnboardingButton';
 import { QuickStartWizard } from './QuickStartWizard';
-import type { Step4NextAction } from '@/lib/useOnboarding';
+import { useOnboarding, type Step4NextAction } from '@/lib/useOnboarding';
 
 interface OnboardingWrapperProps {
   children: React.ReactNode;
@@ -18,19 +18,24 @@ export function OnboardingWrapper({ children }: OnboardingWrapperProps) {
   const router = useRouter();
   const [showWizard, setShowWizard] = useState(false);
   const [wizardInitialStep, setWizardInitialStep] = useState(1);
+  const { markStep4IntegrationsVisited, markStep4AgentConfigVisited, setQuickStartStep } = useOnboarding();
 
   const handleContinueOnboarding = useCallback((step: number, step4Action?: Step4NextAction) => {
     // For Step 4, navigate directly to the appropriate page based on what's missing
+    // AND mark that page as visited
     if (step === 4 && step4Action) {
       switch (step4Action) {
         case 'integrations':
+          markStep4IntegrationsVisited();
           router.push('/team/tools');
           return;
         case 'agent-config':
+          markStep4AgentConfigVisited();
           router.push('/team/agents');
           return;
         case 'complete':
           // Both done - advance to step 5 (Try It Now)
+          setQuickStartStep(5);
           router.push('/team/agent-runs');
           return;
       }
@@ -45,7 +50,7 @@ export function OnboardingWrapper({ children }: OnboardingWrapperProps) {
     // For other steps, open the wizard
     setWizardInitialStep(step);
     setShowWizard(true);
-  }, [router]);
+  }, [router, markStep4IntegrationsVisited, markStep4AgentConfigVisited, setQuickStartStep]);
 
   const handleCloseWizard = useCallback(() => {
     setShowWizard(false);

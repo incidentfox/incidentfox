@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { useOnboarding, type Step4NextAction, type Step4Progress } from '@/lib/useOnboarding';
 import { ArrowRight, X } from 'lucide-react';
 
@@ -23,13 +24,14 @@ const DEFAULT_STEP4_PROGRESS: Step4Progress = {
 };
 
 export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButtonProps) {
+  const pathname = usePathname();
   const { state, loading, hasQuickStartInProgress, clearQuickStartStep, reload } = useOnboarding();
   const [dismissed, setDismissed] = useState(false);
   const [localStep, setLocalStep] = useState<number | null>(null);
   const [localStep4Progress, setLocalStep4Progress] = useState<Step4Progress>(DEFAULT_STEP4_PROGRESS);
   const [wasCompleted, setWasCompleted] = useState(false);
 
-  // Check localStorage synchronously for initial state
+  // Check localStorage for state - runs on mount AND on navigation
   useEffect(() => {
     try {
       const cached = localStorage.getItem('incidentfox_onboarding');
@@ -49,7 +51,7 @@ export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButto
     } catch {
       // Ignore parse errors
     }
-  }, []);
+  }, [pathname]); // Re-run when pathname changes (navigation)
 
   // Listen for state changes (from other hook instances)
   useEffect(() => {
