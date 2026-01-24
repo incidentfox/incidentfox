@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useOnboarding } from '@/lib/useOnboarding';
 import {
   X,
   ArrowRight,
@@ -18,18 +19,53 @@ import {
   Zap,
   ChevronRight,
   Sparkles,
+  Check,
+  PartyPopper,
+  Rocket,
 } from 'lucide-react';
 
 interface QuickStartWizardProps {
   onClose: () => void;
   onRunAgent: () => void;
   onSkip: () => void;
+  initialStep?: number;
 }
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
-export function QuickStartWizard({ onClose, onRunAgent, onSkip }: QuickStartWizardProps) {
-  const [currentStep, setCurrentStep] = useState(1);
+export function QuickStartWizard({ onClose, onRunAgent, onSkip, initialStep = 1 }: QuickStartWizardProps) {
+  const [currentStep, setCurrentStep] = useState(initialStep);
+  const { setQuickStartStep, clearQuickStartStep, markStep4IntegrationsVisited, markStep4AgentConfigVisited } = useOnboarding();
+
+  // Handle navigation away - save next step so user can resume
+  const handleNavigateAway = () => {
+    const nextStep = Math.min(currentStep + 1, TOTAL_STEPS);
+    setQuickStartStep(nextStep);
+    onClose();
+  };
+
+  // Handle Step 4 Integrations button click
+  const handleStep4Integrations = () => {
+    markStep4IntegrationsVisited();
+    onClose();
+  };
+
+  // Handle Step 4 Agent Config button click
+  const handleStep4AgentConfig = () => {
+    markStep4AgentConfigVisited();
+    onClose();
+  };
+
+  // Handle complete close (X button or skip) - clear saved step
+  const handleClose = () => {
+    clearQuickStartStep();
+    onClose();
+  };
+
+  const handleSkip = () => {
+    clearQuickStartStep();
+    onSkip();
+  };
 
   const handleNext = () => {
     if (currentStep < TOTAL_STEPS) {
@@ -43,8 +79,9 @@ export function QuickStartWizard({ onClose, onRunAgent, onSkip }: QuickStartWiza
     }
   };
 
-  const handleTryNow = () => {
-    onRunAgent();
+  const handleComplete = () => {
+    clearQuickStartStep();
+    onClose();
   };
 
   return (
@@ -53,7 +90,7 @@ export function QuickStartWizard({ onClose, onRunAgent, onSkip }: QuickStartWiza
         {/* Header */}
         <div className="relative px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             aria-label="Close"
           >
@@ -85,9 +122,10 @@ export function QuickStartWizard({ onClose, onRunAgent, onSkip }: QuickStartWiza
         <div className="px-6 py-6 min-h-[320px]">
           {currentStep === 1 && <StepWelcome />}
           {currentStep === 2 && <StepHowItWorks />}
-          {currentStep === 3 && <StepConnectSystems />}
-          {currentStep === 4 && <StepConfigureAgents />}
-          {currentStep === 5 && <StepTryItNow />}
+          {currentStep === 3 && <StepConnectSystems onNavigateAway={handleNavigateAway} />}
+          {currentStep === 4 && <StepConfigureAgents onIntegrationsClick={handleStep4Integrations} onAgentConfigClick={handleStep4AgentConfig} />}
+          {currentStep === 5 && <StepTryItNow onNavigateAway={handleNavigateAway} />}
+          {currentStep === 6 && <StepComplete />}
         </div>
 
         {/* Footer */}
@@ -103,7 +141,7 @@ export function QuickStartWizard({ onClose, onRunAgent, onSkip }: QuickStartWiza
               </button>
             ) : (
               <button
-                onClick={onSkip}
+                onClick={handleSkip}
                 className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
               >
                 Skip tutorial
@@ -122,11 +160,11 @@ export function QuickStartWizard({ onClose, onRunAgent, onSkip }: QuickStartWiza
               </button>
             ) : (
               <button
-                onClick={handleTryNow}
-                className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors shadow-sm"
+                onClick={handleComplete}
+                className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-sm"
               >
-                <Sparkles className="w-4 h-4" />
-                Try It Now
+                <Check className="w-4 h-4" />
+                Done
               </button>
             )}
           </div>
@@ -244,7 +282,7 @@ function StepHowItWorks() {
 }
 
 // Step 3: Connect Systems
-function StepConnectSystems() {
+function StepConnectSystems({ onNavigateAway }: { onNavigateAway: () => void }) {
   return (
     <div className="space-y-6">
       <div>
@@ -284,7 +322,8 @@ function StepConnectSystems() {
       </div>
 
       <Link
-        href="/team/tools"
+        href="/settings?tab=routing"
+        onClick={onNavigateAway}
         className="flex items-center justify-between w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors group"
       >
         <div className="flex items-center gap-3">
@@ -298,7 +337,7 @@ function StepConnectSystems() {
 }
 
 // Step 4: Configure Agents
-function StepConfigureAgents() {
+function StepConfigureAgents({ onIntegrationsClick, onAgentConfigClick }: { onIntegrationsClick: () => void; onAgentConfigClick: () => void }) {
   return (
     <div className="space-y-6">
       <div>
@@ -328,9 +367,16 @@ function StepConfigureAgents() {
         />
       </div>
 
+      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-900/40">
+        <p className="text-sm text-blue-800 dark:text-blue-200">
+          <strong>Tip:</strong> Visit both pages to complete this step. The setup guide will track your progress.
+        </p>
+      </div>
+
       <div className="flex gap-3">
         <Link
           href="/team/tools"
+          onClick={onIntegrationsClick}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors text-sm font-medium text-gray-700 dark:text-gray-300"
         >
           <Wrench className="w-4 h-4" />
@@ -338,6 +384,7 @@ function StepConfigureAgents() {
         </Link>
         <Link
           href="/team/agents"
+          onClick={onAgentConfigClick}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors text-sm font-medium text-gray-700 dark:text-gray-300"
         >
           <Bot className="w-4 h-4" />
@@ -349,7 +396,7 @@ function StepConfigureAgents() {
 }
 
 // Step 5: Try It Now
-function StepTryItNow() {
+function StepTryItNow({ onNavigateAway }: { onNavigateAway: () => void }) {
   return (
     <div className="space-y-6">
       <div>
@@ -377,11 +424,14 @@ function StepTryItNow() {
         </p>
       </div>
 
-      <div className="text-center pt-2">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Click <strong>&quot;Try It Now&quot;</strong> below to open the investigation interface
-        </p>
-      </div>
+      <Link
+        href="/team/agent-runs"
+        onClick={onNavigateAway}
+        className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors shadow-sm"
+      >
+        <Sparkles className="w-5 h-5" />
+        Try It Now
+      </Link>
     </div>
   );
 }
@@ -459,6 +509,62 @@ function ExamplePrompt({ text }: { text: string }) {
     <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
       <GitBranch className="w-4 h-4 text-gray-400 flex-shrink-0" />
       <span className="text-sm text-gray-700 dark:text-gray-300">{text}</span>
+    </div>
+  );
+}
+
+// Step 6: Complete / Congratulations
+function StepComplete() {
+  return (
+    <div className="space-y-6 text-center py-4">
+      <div className="flex justify-center">
+        <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+          <PartyPopper className="w-10 h-10 text-green-600 dark:text-green-400" />
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          All Done!
+        </h2>
+        <p className="text-gray-600 dark:text-gray-400">
+          Congratulations! You&apos;re all set up and ready to go.
+        </p>
+      </div>
+
+      <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-5 text-left">
+        <h3 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+          <Rocket className="w-5 h-5 text-orange-500" />
+          What&apos;s Next?
+        </h3>
+        <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+          <li className="flex items-start gap-2">
+            <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+            <span>Trigger an investigation via Slack or webhook</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+            <span>Watch agents analyze and correlate data automatically</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+            <span>Review findings and root cause analysis</span>
+          </li>
+        </ul>
+      </div>
+
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        Need help? Check out the{' '}
+        <a
+          href="https://incidentfox.mintlify.app/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 underline"
+        >
+          documentation
+        </a>
+        {' '}or reach out to support.
+      </p>
     </div>
   );
 }

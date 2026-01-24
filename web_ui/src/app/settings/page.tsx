@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useIdentity } from '@/lib/useIdentity';
 import { useOnboarding } from '@/lib/useOnboarding';
 import { apiFetch } from '@/lib/apiClient';
 import { HelpTip } from '@/components/onboarding/HelpTip';
 import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
+import { ContinueOnboardingButton } from '@/components/onboarding/ContinueOnboardingButton';
 import {
   Settings,
   Moon,
@@ -115,11 +116,26 @@ const adminLinks: AdminLink[] = [
 
 export default function SettingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { identity, loading: identityLoading } = useIdentity();
   const { resetOnboarding } = useOnboarding();
+
+  // Tab state - synced with URL query param
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+
+  // Sync tab state with URL query param (e.g., /settings?tab=routing)
+  // Use searchParams.toString() as dependency for reliable updates
+  const searchParamsString = searchParams.toString();
+  useEffect(() => {
+    const validTabs: SettingsTab[] = ['general', 'routing', 'notifications', 'telemetry', 'features', 'advanced'];
+    const urlTab = searchParams.get('tab') as SettingsTab | null;
+    if (urlTab && validTabs.includes(urlTab)) {
+      setActiveTab(urlTab);
+    }
+  }, [searchParamsString, searchParams]);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [showQuickStart, setShowQuickStart] = useState(false);
+  const [quickStartInitialStep, setQuickStartInitialStep] = useState(1);
 
   // Telemetry opt-in/out
   const [telemetryEnabled, setTelemetryEnabled] = useState(true);
@@ -1774,7 +1790,10 @@ export default function SettingsPage() {
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={() => setShowQuickStart(true)}
+                    onClick={() => {
+                      setQuickStartInitialStep(1);
+                      setShowQuickStart(true);
+                    }}
                     className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
                   >
                     <BookOpen className="w-4 h-4" />
@@ -1798,6 +1817,14 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Continue Onboarding floating button */}
+      <ContinueOnboardingButton
+        onContinue={(step) => {
+          setQuickStartInitialStep(step);
+          setShowQuickStart(true);
+        }}
+      />
+
       {/* Quick Start Guide Modal */}
       {showQuickStart && (
         <QuickStartWizard
@@ -1807,6 +1834,7 @@ export default function SettingsPage() {
             router.push('/team/agent-runs');
           }}
           onSkip={() => setShowQuickStart(false)}
+          initialStep={quickStartInitialStep}
         />
       )}
     </div>

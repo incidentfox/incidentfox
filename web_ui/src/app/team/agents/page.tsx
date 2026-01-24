@@ -32,6 +32,8 @@ import {
   Server,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/apiClient';
+import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
+import { ContinueOnboardingButton } from '@/components/onboarding/ContinueOnboardingButton';
 
 interface AgentModel {
   name: string;
@@ -102,6 +104,7 @@ type RawMeResponse = {
 };
 
 export default function AgentSettingsPage() {
+  const router = useRouter();
   const { identity } = useIdentity();
   const [agents, setAgents] = useState<Record<string, AgentConfig>>({});
   const [loading, setLoading] = useState(true);
@@ -145,6 +148,10 @@ export default function AgentSettingsPage() {
   const [raw, setRaw] = useState<RawMeResponse | null>(null);
   const [entranceAgentId, setEntranceAgentId] = useState<string | null>(null);
   const [overridesText, setOverridesText] = useState('{\n  \n}');
+
+  // Quick Start wizard state
+  const [showQuickStart, setShowQuickStart] = useState(false);
+  const [quickStartInitialStep, setQuickStartInitialStep] = useState(1);
 
   const teamId = identity?.team_node_id;
 
@@ -2614,6 +2621,27 @@ export default function AgentSettingsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Continue Onboarding floating button */}
+      <ContinueOnboardingButton
+        onContinue={(step) => {
+          setQuickStartInitialStep(step);
+          setShowQuickStart(true);
+        }}
+      />
+
+      {/* Quick Start Guide Modal */}
+      {showQuickStart && (
+        <QuickStartWizard
+          onClose={() => setShowQuickStart(false)}
+          onRunAgent={() => {
+            setShowQuickStart(false);
+            router.push('/team/agent-runs');
+          }}
+          onSkip={() => setShowQuickStart(false)}
+          initialStep={quickStartInitialStep}
+        />
       )}
     </div>
   );
