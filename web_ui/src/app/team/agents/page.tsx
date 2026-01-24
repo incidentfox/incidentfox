@@ -587,8 +587,8 @@ export default function AgentSettingsPage() {
       <div className="flex-shrink-0 px-8 py-6 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-gray-800 flex items-center justify-center">
-              <Brain className="w-6 h-6 text-gray-300" />
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+              <Brain className="w-6 h-6 text-white" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -1340,7 +1340,7 @@ export default function AgentSettingsPage() {
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                      <Server className="w-5 h-5 text-purple-500" />
+                      <Server className="w-5 h-5 text-cyan-500" />
                       <h3 className="font-semibold text-gray-900 dark:text-white">
                         MCP Servers
                       </h3>
@@ -1390,7 +1390,7 @@ export default function AgentSettingsPage() {
                                         }
                                       });
                                     }}
-                                    className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors group bg-purple-500 text-white hover:bg-purple-600"
+                                    className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors group bg-cyan-500 text-white hover:bg-cyan-600"
                                     title={`Click to remove (${toolCount} tools)`}
                                   >
                                     <Server className="w-4 h-4" />
@@ -1432,7 +1432,7 @@ export default function AgentSettingsPage() {
                                             }
                                           });
                                         }}
-                                        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-purple-500 hover:text-purple-600 dark:hover:text-purple-400"
+                                        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-cyan-500 hover:text-cyan-600 dark:hover:text-cyan-400"
                                         title={`Click to add (${toolCount} tools)`}
                                       >
                                         <Server className="w-4 h-4" />
@@ -1448,7 +1448,7 @@ export default function AgentSettingsPage() {
 
                           {availableMcps.length === 0 && (
                             <div className="text-sm text-gray-500 italic">
-                              No MCP servers available. Configure them in the <a href="/team/tools" className="text-purple-600 hover:underline">Tools page</a>.
+                              No MCP servers available. Configure them in the <a href="/team/tools" className="text-cyan-600 hover:underline">Tools page</a>.
                             </div>
                           )}
                         </>

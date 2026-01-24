@@ -897,7 +897,7 @@ export default function TeamToolsPage() {
                     return (
                       <span
                         key={idx}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300"
                         title={toolDesc}
                       >
                         {toolName}
@@ -1007,8 +1007,8 @@ export default function TeamToolsPage() {
       <div className="flex-shrink-0 px-8 py-6 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-11 h-11 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-              <Wrench className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+              <Wrench className="w-5 h-5 text-white" />
             </div>
             <div>
               <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Tools</h1>
@@ -1111,7 +1111,7 @@ export default function TeamToolsPage() {
                   className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   {expandedCategories.has('mcp') ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                  <Server className="w-4 h-4 text-gray-500" />
+                  <Server className="w-4 h-4 text-cyan-500" />
                   <span className="font-medium text-gray-900 dark:text-white">MCP Servers</span>
                   <span className="text-xs text-gray-500">
                     {searchQuery ? `${filteredEnabled} enabled, ${filteredDisabled} disabled` : `${enabledServers.length} enabled, ${disabledServers.length} disabled`}
@@ -1350,7 +1350,7 @@ export default function TeamToolsPage() {
                         )}
                         {toolCategory && (
                           <div className="mt-1">
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300">
                               {toolCategory}
                             </span>
                           </div>

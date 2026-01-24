@@ -224,14 +224,18 @@ export default function TeamPendingChangesPage() {
   return (
     <div className="p-8 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-3">
-            <GitPullRequest className="w-7 h-7 text-gray-500" />
-            Proposed Changes
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Review and approve AI-proposed changes to your team's configuration.
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+            <GitPullRequest className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Proposed Changes
+            </h1>
+            <p className="text-sm text-gray-500">
+              Review and approve AI-proposed changes to your team's configuration.
+            </p>
+          </div>
         </div>
         {pendingCount > 0 && (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400 rounded-full text-sm font-medium">

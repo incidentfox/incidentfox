@@ -458,7 +458,7 @@ export default function OrgDefaultsPage() {
             {/* MCP List */}
             {mcpServers.length === 0 ? (
               <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-12 text-center">
-                <Server className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                <Server className="w-12 h-12 mx-auto text-cyan-300 dark:text-cyan-600 mb-4" />
                 <p className="text-gray-500">No default MCP servers configured.</p>
                 <p className="text-xs text-gray-400 mt-2">
                   Add MCP servers that all teams will inherit by default.
@@ -476,8 +476,8 @@ export default function OrgDefaultsPage() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                        <Server className="w-5 h-5 text-gray-600" />
+                      <div className="w-10 h-10 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center">
+                        <Server className="w-5 h-5 text-cyan-600" />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">

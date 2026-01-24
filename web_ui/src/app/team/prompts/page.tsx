@@ -291,14 +291,18 @@ export default function TeamPromptsPage() {
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-3">
-            <MessageSquareText className="w-7 h-7 text-gray-500" />
-            Agent Prompts
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Customize system prompts for your team's AI agents.
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+            <MessageSquareText className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Agent Prompts
+            </h1>
+            <p className="text-sm text-gray-500">
+              Customize system prompts for your team's AI agents.
+            </p>
+          </div>
         </div>
       </div>
 
