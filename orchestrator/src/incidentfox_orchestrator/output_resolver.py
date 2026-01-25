@@ -10,6 +10,7 @@ Determines where agent output should go based on:
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Optional
 
 
@@ -50,9 +51,10 @@ def resolve_output_destinations(
 
     # Extract Slack bot_token from team integrations config
     # This enables multi-tenant scenarios where teams use different Slack workspaces
+    # Fall back to SLACK_BOT_TOKEN env var for single-tenant deployments
     slack_bot_token = (
         (team_config or {}).get("integrations", {}).get("slack", {}).get("bot_token")
-    )
+    ) or os.getenv("SLACK_BOT_TOKEN")
 
     # Legacy notifications config (for backward compatibility)
     notifications = (team_config or {}).get("notifications", {})
