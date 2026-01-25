@@ -41,13 +41,15 @@ class ExecutionContext:
 
     # Metadata keys that are NOT actual configuration values.
     # These are structural/schema keys from the config system's default structure.
-    _INTEGRATION_METADATA_KEYS = frozenset({
-        "level",              # org/team level indicator
-        "locked",             # whether integration is locked at org level
-        "config_schema",      # schema for org-level fields (for UI display)
-        "team_config_schema", # schema for team-level fields (for UI display)
-        "name",               # display name
-    })
+    _INTEGRATION_METADATA_KEYS = frozenset(
+        {
+            "level",  # org/team level indicator
+            "locked",  # whether integration is locked at org level
+            "config_schema",  # schema for org-level fields (for UI display)
+            "team_config_schema",  # schema for team-level fields (for UI display)
+            "name",  # display name
+        }
+    )
 
     def get_integration_config(self, integration_id: str) -> dict[str, Any]:
         """
