@@ -778,6 +778,19 @@ def create_app() -> Sanic:
                         )
                     ]
 
+            # Log output destinations for debugging
+            logger.info(
+                "agent_run_output_destinations_parsed",
+                agent_name=agent_name,
+                correlation_id=request.ctx.correlation_id,
+                has_output_destinations_raw=bool(output_destinations_raw),
+                has_slack_context=bool(slack_context_data),
+                destination_count=len(output_destinations),
+                destination_types=(
+                    [d.type for d in output_destinations] if output_destinations else []
+                ),
+            )
+
             # If output destinations provided, use the output handler system
             if output_destinations:
                 from .core.output_handler import (
@@ -1173,6 +1186,17 @@ def create_app() -> Sanic:
                     # Always clear execution context after agent run
                     if auth_identity and team_config:
                         clear_execution_context()
+
+            # No output destinations - agent runs but output is returned in response only
+            # (no Slack/GitHub/etc posting)
+            logger.info(
+                "running_agent_without_output_destinations",
+                agent_name=agent_name,
+                correlation_id=request.ctx.correlation_id,
+                note="Agent will run but output will not be posted to external destinations. "
+                "Configure notifications.incidentio_output.slack_channel_id or "
+                "notifications.default_slack_channel_id in team config to enable Slack output.",
+            )
 
             # Set team execution context for integration access
             from .core.execution_context import (
@@ -1744,7 +1768,7 @@ def create_app() -> Sanic:
                         )
                     )
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     duration = time.time() - start_time
                     await response_stream.write(
                         sse_event(
