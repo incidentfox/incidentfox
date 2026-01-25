@@ -795,12 +795,20 @@ def validate_agent_config(agent_config: dict[str, Any]) -> list[str]:
     model_config = agent_config.get("model", {})
     if "name" in model_config:
         valid_models = [
+            # GPT-5 series
+            "gpt-5",
+            # GPT-4o series
             "gpt-4o",
+            "gpt-4o-2024-11-20",
             "gpt-4o-mini",
+            # Legacy GPT-4
             "gpt-4-turbo",
             "gpt-3.5-turbo",
+            # Reasoning models
             "o1",
             "o1-mini",
+            "o3-mini",
+            "o4-mini",
         ]
         if model_config["name"] not in valid_models:
             errors.append(f"Unknown model: {model_config['name']}")

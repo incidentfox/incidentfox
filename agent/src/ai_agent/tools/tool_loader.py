@@ -605,6 +605,9 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
                 get_snowflake_schema,
                 run_snowflake_query,
                 search_incidents_by_service,
+                snowflake_bulk_export,
+                snowflake_describe_table,
+                snowflake_list_tables,
             )
 
             tools.extend(
@@ -617,9 +620,12 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
                     get_customer_info,
                     get_incident_timeline,
                     search_incidents_by_service,
+                    snowflake_list_tables,
+                    snowflake_describe_table,
+                    snowflake_bulk_export,
                 ]
             )
-            logger.debug("snowflake_tools_loaded", count=8)
+            logger.debug("snowflake_tools_loaded", count=11)
         except Exception as e:
             logger.warning("snowflake_tools_load_failed", error=str(e))
 
