@@ -19,20 +19,24 @@ Architecture (Starship Topology):
 
 Uses Agent-as-Tool pattern for true multi-agent orchestration with control retention.
 
-System Prompt Architecture (7 layers):
-1. Core Identity (static) - who you are, role, responsibility
-2. Runtime Metadata (injected) - timestamp, org, team, environment
-3. Behavioral Foundation (static) - honesty, thoroughness, helpfulness
-4. Capabilities (dynamic) - available agents and how to use them
-5. Contextual Info (from team config) - service details, dependencies
-6. Behavior Overrides (from team config) - team-specific instructions
-7. Output Format and Rules (static) - how to structure responses
+System Prompt Architecture (Standard Pattern):
+    base_prompt = custom_prompt or PLANNER_SYSTEM_PROMPT
+    system_prompt = base_prompt + capabilities
+    system_prompt = apply_role_based_prompt(...)  # Role sections
+    system_prompt += shared_sections              # Error handling, tool limits, etc.
+
+Context (runtime metadata, team config) is passed in the USER MESSAGE, not the
+system prompt. This allows context to flow naturally to sub-agents when delegating.
+
+To include context, callers should use:
+    from ai_agent.prompts.layers import build_user_context
+    context = build_user_context(timestamp=..., team_config=...)
+    full_query = f"{context}\\n\\n## Task\\n{user_query}"
 """
 
 import asyncio
 import json
 import threading
-from datetime import UTC, datetime
 from typing import Any
 
 from agents import Agent, ModelSettings, Runner, function_tool
@@ -604,94 +608,12 @@ def create_agent_tools(team_config=None):
 
 
 # =============================================================================
-# Context Extraction
-# =============================================================================
-
-
-def _extract_context_from_team_config(team_cfg) -> dict[str, Any]:
-    """
-    Extract contextual information from team config for prompt building.
-
-    Args:
-        team_cfg: Team configuration object or dict
-
-    Returns:
-        Dict with contextual info fields
-    """
-    if not team_cfg:
-        return {}
-
-    context_dict = {}
-
-    # Handle dict, Pydantic models, and plain objects
-    def get_field(cfg, field):
-        if isinstance(cfg, dict):
-            return cfg.get(field)
-        # Pydantic models with extra="allow" store extra fields in __pydantic_extra__
-        if hasattr(cfg, "__pydantic_extra__") and cfg.__pydantic_extra__:
-            if field in cfg.__pydantic_extra__:
-                return cfg.__pydantic_extra__[field]
-        # Also try model_dump for Pydantic v2
-        if hasattr(cfg, "model_dump"):
-            data = cfg.model_dump()
-            if field in data:
-                return data[field]
-        return getattr(cfg, field, None)
-
-    # Try to get context fields from team config
-    # These might be on the config object directly or in a 'context' sub-dict
-    try:
-        ctx = get_field(team_cfg, "context")
-        if ctx:
-            if isinstance(ctx, dict):
-                context_dict = ctx.copy()
-            elif hasattr(ctx, "__dict__"):
-                context_dict = {
-                    k: v for k, v in ctx.__dict__.items() if not k.startswith("_") and v
-                }
-
-        # Also look for known context fields directly on config
-        for field in [
-            "service_info",
-            "dependencies",
-            "common_issues",
-            "common_resources",
-            "business_context",
-            "known_instability",
-            "approval_gates",
-            "additional_instructions",
-        ]:
-            value = get_field(team_cfg, field)
-            if value and field not in context_dict:
-                context_dict[field] = value
-
-        # Check for planner-specific additional instructions
-        if hasattr(team_cfg, "get_agent_config"):
-            planner_config = team_cfg.get_agent_config("planner")
-            if planner_config and hasattr(planner_config, "additional_instructions"):
-                instructions = planner_config.additional_instructions
-                if instructions:
-                    context_dict["additional_instructions"] = instructions
-
-    except Exception as e:
-        logger.warning("failed_to_extract_context", error=str(e))
-
-    return context_dict
-
-
-# =============================================================================
 # Planner Agent Factory
 # =============================================================================
 
 
 def create_planner_agent(
     team_config=None,
-    # Runtime context (optional - for richer prompts)
-    org_id: str | None = None,
-    team_id: str | None = None,
-    environment: str | None = None,
-    incident_id: str | None = None,
-    alert_source: str | None = None,
 ) -> Agent[TaskContext]:
     """
     Create and configure the Planner Agent with 3 top-level agents as tools.
@@ -708,58 +630,27 @@ def create_planner_agent(
         ├── Coding Agent (explicit code requests only)
         └── Writeup Agent (explicit documentation requests only)
 
-    System prompt is built using the 7-layer architecture:
-    1. Core Identity (static)
-    2. Runtime Metadata (injected from parameters)
-    3. Behavioral Foundation (static)
-    4. Capabilities (dynamic based on enabled agents)
-    5. Contextual Info (from team config)
-    6. Behavior Overrides (from team config)
-    7. Output Format and Rules (static)
+    System prompt follows the standard pattern:
+        base_prompt = custom_prompt or PLANNER_SYSTEM_PROMPT
+        system_prompt = base_prompt + capabilities
+        system_prompt = apply_role_based_prompt(...)  # Role sections
+        system_prompt += shared_sections
+
+    NOTE: Runtime metadata and contextual info should be passed in the USER
+    MESSAGE, not the system prompt. Use build_user_context() for this:
+
+        from ai_agent.prompts.layers import build_user_context
+        context = build_user_context(timestamp=..., team_config=...)
+        full_query = f"{context}\\n\\n## Task\\n{user_query}"
 
     Args:
         team_config: Team configuration object or dict
-        org_id: Organization identifier for runtime context
-        team_id: Team identifier for runtime context
-        environment: Environment (prod, staging, dev)
-        incident_id: Incident/alert ID if applicable
-        alert_source: Source of alert (PagerDuty, Datadog, etc.)
 
     Returns:
         Configured Planner Agent
     """
     config = get_config()
     team_cfg = team_config if team_config is not None else config.team_config
-
-    # Check if team has custom prompt (overrides the layered prompt)
-    custom_prompt = None
-    if team_cfg:
-        try:
-            agent_config = None
-            if hasattr(team_cfg, "get_agent_config"):
-                agent_config = team_cfg.get_agent_config("planner")
-            elif isinstance(team_cfg, dict):
-                agents = team_cfg.get("agents", {})
-                agent_config = agents.get("planner")
-
-            if agent_config:
-                if hasattr(agent_config, "get_system_prompt"):
-                    custom_prompt = agent_config.get_system_prompt()
-                elif hasattr(agent_config, "prompt") and agent_config.prompt:
-                    custom_prompt = agent_config.prompt
-                elif isinstance(agent_config, dict) and agent_config.get("prompt"):
-                    prompt_cfg = agent_config["prompt"]
-                    if isinstance(prompt_cfg, str):
-                        custom_prompt = prompt_cfg
-                    elif isinstance(prompt_cfg, dict):
-                        custom_prompt = prompt_cfg.get("system")
-
-                if custom_prompt:
-                    logger.info(
-                        "using_custom_planner_prompt", prompt_length=len(custom_prompt)
-                    )
-        except Exception:
-            pass
 
     # Get meta-agent tools (think, web_search, llm_call, etc.)
     meta_tools = get_agent_tools()
@@ -797,39 +688,24 @@ def create_planner_agent(
         except Exception as e:
             logger.warning("failed_to_load_remote_agents_for_prompt", error=str(e))
 
-    # Build system prompt using the layered architecture
-    if custom_prompt:
-        system_prompt = custom_prompt
-    else:
-        # Extract contextual info from team config if available
-        context_dict = _extract_context_from_team_config(team_cfg)
+    # Get enabled agents from team config (respects enabled/disabled settings)
+    enabled_agents = _get_enabled_agents_from_config(team_cfg)
 
-        # Get enabled agents from team config (respects enabled/disabled settings)
-        enabled_agents = _get_enabled_agents_from_config(team_cfg)
+    # Build system prompt using the standard pattern
+    # (custom prompt can override base, role sections and shared sections still appended)
+    system_prompt = build_planner_system_prompt(
+        enabled_agents=enabled_agents,
+        agent_capabilities=AGENT_CAPABILITIES,
+        remote_agents=remote_agents_config,
+        team_config=team_cfg if isinstance(team_cfg, dict) else None,
+    )
 
-        # Build the production-grade layered prompt
-        system_prompt = build_planner_system_prompt(
-            org_id=org_id or "default",
-            team_id=team_id or "default",
-            timestamp=datetime.now(UTC).isoformat(),
-            environment=environment,
-            incident_id=incident_id,
-            alert_source=alert_source,
-            enabled_agents=enabled_agents,
-            agent_capabilities=AGENT_CAPABILITIES,
-            remote_agents=remote_agents_config,
-            team_config=context_dict,
-        )
-
-        logger.info(
-            "planner_prompt_built",
-            prompt_length=len(system_prompt),
-            enabled_agents=enabled_agents,
-            has_context=bool(context_dict),
-            context_keys=list(context_dict.keys()) if context_dict else [],
-            has_service_info="service_info" in context_dict if context_dict else False,
-            has_remote_agents=bool(remote_agents_config),
-        )
+    logger.info(
+        "planner_prompt_built",
+        prompt_length=len(system_prompt),
+        enabled_agents=enabled_agents,
+        has_remote_agents=bool(remote_agents_config),
+    )
 
     # Combine meta-tools and agent-as-tool wrappers
     all_tools = meta_tools + agent_tools

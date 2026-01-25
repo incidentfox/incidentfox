@@ -37,16 +37,21 @@ from .layers import (
     build_subagent_response_section,
     build_tool_call_limits,
     build_tool_guidance,
+    # User context builder (for user/task message)
+    build_user_context,
     format_local_context,
     get_integration_errors,
     get_integration_tool_limits,
 )
-from .planner_prompt import build_planner_system_prompt
+from .planner_prompt import PLANNER_SYSTEM_PROMPT, build_planner_system_prompt
 
 __all__ = [
     # Planner prompt
     "build_planner_system_prompt",
-    # Static layers
+    "PLANNER_SYSTEM_PROMPT",
+    # User context builder (for user/task message - replaces runtime metadata in system prompt)
+    "build_user_context",
+    # Static layers (deprecated - prefer inline prompts per agent)
     "LAYER_1_CORE_IDENTITY",
     "LAYER_3_BEHAVIORAL_FOUNDATION",
     "LAYER_7_OUTPUT_AND_RULES",
@@ -69,8 +74,8 @@ __all__ = [
     "CODING_ERRORS",
     "INTEGRATION_ERRORS_REGISTRY",
     "INTEGRATION_TOOL_LIMITS",
-    # Builder functions - planner layers
-    "build_runtime_metadata",
+    # Builder functions - context and layers
+    "build_runtime_metadata",  # Deprecated - use build_user_context instead
     "build_capabilities_section",
     "build_contextual_info",
     "build_behavior_overrides",
