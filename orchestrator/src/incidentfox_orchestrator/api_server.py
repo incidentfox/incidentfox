@@ -258,7 +258,9 @@ def create_app() -> FastAPI:
 
             # Extract or generate request ID
             headers = dict(scope.get("headers", []))
-            rid = (headers.get(b"x-request-id") or b"").decode("utf-8") or _new_request_id()
+            rid = (headers.get(b"x-request-id") or b"").decode(
+                "utf-8"
+            ) or _new_request_id()
 
             # Store in scope for access by route handlers
             scope["state"] = scope.get("state", {})
