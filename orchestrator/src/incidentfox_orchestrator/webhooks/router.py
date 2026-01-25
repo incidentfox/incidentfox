@@ -18,8 +18,10 @@ Other endpoints use manual signature verification.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+from functools import partial
 from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
@@ -962,13 +964,17 @@ async def _process_incidentio_webhook(
         )
 
         # Route by alert_source_id for public alerts, or incident_id for incidents
+        # Use asyncio.to_thread() for sync HTTP calls to avoid blocking the event loop
+        # This prevents liveness probe failures during long-running operations
         if is_public_alert and alert_source_id:
-            routing = cfg.lookup_routing(
+            routing = await asyncio.to_thread(
+                cfg.lookup_routing,
                 internal_service_name="orchestrator",
                 identifiers={"incidentio_alert_source_id": alert_source_id},
             )
         else:
-            routing = cfg.lookup_routing(
+            routing = await asyncio.to_thread(
+                cfg.lookup_routing,
                 internal_service_name="orchestrator",
                 identifiers={"incidentio_team_id": incident_id},
             )
@@ -989,8 +995,12 @@ async def _process_incidentio_webhook(
         if not admin_token:
             return
 
-        imp = cfg.issue_team_impersonation_token(
-            admin_token, org_id=org_id, team_node_id=team_node_id
+        # Run sync HTTP call in thread pool to avoid blocking event loop
+        imp = await asyncio.to_thread(
+            cfg.issue_team_impersonation_token,
+            admin_token,
+            org_id=org_id,
+            team_node_id=team_node_id,
         )
         team_token = str(imp.get("token") or "")
         if not team_token:
@@ -1001,7 +1011,10 @@ async def _process_incidentio_webhook(
         dedicated_agent_url: Optional[str] = None
         effective_config: dict = {}
         try:
-            effective_config = cfg.get_effective_config(team_token=team_token)
+            # Run sync HTTP call in thread pool to avoid blocking event loop
+            effective_config = await asyncio.to_thread(
+                cfg.get_effective_config, team_token=team_token
+            )
             entrance_agent_name = effective_config.get("entrance_agent", "planner")
             dedicated_agent_url = effective_config.get("agent", {}).get(
                 "dedicated_service_url"
@@ -1116,19 +1129,23 @@ async def _process_incidentio_webhook(
         )
 
         if audit_api:
-            audit_api.create_agent_run(
-                run_id=run_id,
-                org_id=org_id,
-                team_node_id=team_node_id,
-                correlation_id=correlation_id,
-                trigger_source="incidentio",
-                trigger_message=message[:500],
-                agent_name=entrance_agent_name,
-                metadata={
-                    "event_type": event_type,
-                    "incident_id": incident_id,
-                    "correlation": correlation_context,
-                },
+            # Run sync HTTP call in thread pool to avoid blocking event loop
+            await asyncio.to_thread(
+                partial(
+                    audit_api.create_agent_run,
+                    run_id=run_id,
+                    org_id=org_id,
+                    team_node_id=team_node_id,
+                    correlation_id=correlation_id,
+                    trigger_source="incidentio",
+                    trigger_message=message[:500],
+                    agent_name=entrance_agent_name,
+                    metadata={
+                        "event_type": event_type,
+                        "incident_id": incident_id,
+                        "correlation": correlation_context,
+                    },
+                )
             )
             agent_run_created = True
 
@@ -1145,23 +1162,34 @@ async def _process_incidentio_webhook(
         if correlation_context:
             agent_context["metadata"]["correlation"] = correlation_context
 
-        result = agent_api.run_agent(
-            team_token=team_token,
-            agent_name=entrance_agent_name,
-            message=message,
-            context=agent_context,
-            timeout=int(
-                os.getenv("ORCHESTRATOR_INCIDENTIO_AGENT_TIMEOUT_SECONDS", "300")
-            ),
-            max_turns=int(os.getenv("ORCHESTRATOR_INCIDENTIO_AGENT_MAX_TURNS", "50")),
-            correlation_id=correlation_id,
-            agent_base_url=dedicated_agent_url,
-            output_destinations=output_destinations,
+        # CRITICAL: Run agent in thread pool to avoid blocking the event loop.
+        # agent_api.run_agent() uses sync httpx and can take several minutes.
+        # Without this, the event loop blocks and health checks fail, causing
+        # the pod to be killed by the liveness probe.
+        result = await asyncio.to_thread(
+            partial(
+                agent_api.run_agent,
+                team_token=team_token,
+                agent_name=entrance_agent_name,
+                message=message,
+                context=agent_context,
+                timeout=int(
+                    os.getenv("ORCHESTRATOR_INCIDENTIO_AGENT_TIMEOUT_SECONDS", "300")
+                ),
+                max_turns=int(
+                    os.getenv("ORCHESTRATOR_INCIDENTIO_AGENT_MAX_TURNS", "50")
+                ),
+                correlation_id=correlation_id,
+                agent_base_url=dedicated_agent_url,
+                output_destinations=output_destinations,
+            )
         )
 
         if audit_api:
             run_status = "completed" if result.get("success", True) else "failed"
-            audit_api.complete_agent_run(
+            # Run audit call in thread pool as well
+            await asyncio.to_thread(
+                audit_api.complete_agent_run,
                 org_id=org_id,
                 run_id=run_id,
                 status=run_status,
@@ -1184,7 +1212,8 @@ async def _process_incidentio_webhook(
         # Mark agent run as failed if it was created
         if agent_run_created and audit_api and run_id and org_id:
             try:
-                audit_api.complete_agent_run(
+                await asyncio.to_thread(
+                    audit_api.complete_agent_run,
                     org_id=org_id,
                     run_id=run_id,
                     status="failed",
