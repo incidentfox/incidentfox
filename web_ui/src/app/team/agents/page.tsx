@@ -34,6 +34,7 @@ import {
 import { apiFetch } from '@/lib/apiClient';
 import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
 import { ContinueOnboardingButton } from '@/components/onboarding/ContinueOnboardingButton';
+import { HelpTip } from '@/components/onboarding/HelpTip';
 
 interface AgentModel {
   name: string;
@@ -99,7 +100,7 @@ interface RemoteAgentConfig {
 
 
 type RawMeResponse = {
-  lineage?: Array<{ org_id?: string; node_id: string; name?: string; node_type?: string; parent_id?: string | null }>;
+  lineage?: Array<string | { org_id?: string; node_id: string; name?: string; node_type?: string; parent_id?: string | null }>;
   configs?: Record<string, unknown>;
 };
 
@@ -148,6 +149,8 @@ export default function AgentSettingsPage() {
   const [raw, setRaw] = useState<RawMeResponse | null>(null);
   const [entranceAgentId, setEntranceAgentId] = useState<string | null>(null);
   const [overridesText, setOverridesText] = useState('{\n  \n}');
+  const [initialOverridesLoaded, setInitialOverridesLoaded] = useState(false);
+  const [showInheritanceModal, setShowInheritanceModal] = useState(false);
 
   // Quick Start wizard state
   const [showQuickStart, setShowQuickStart] = useState(false);
@@ -180,6 +183,7 @@ export default function AgentSettingsPage() {
   const loadAgents = useCallback(async () => {
     if (!teamId) return;
     setLoading(true);
+    setInitialOverridesLoaded(false);
 
     try {
       const res = await fetch('/api/team/config');
@@ -290,13 +294,36 @@ export default function AgentSettingsPage() {
   const lineageLabel = useMemo(() => {
     const lineage = raw?.lineage || [];
     if (!lineage.length) return '—';
-    return lineage.map((n) => n.name || n.node_id).join(' → ');
+    // Handle both string array (API returns this) and object array
+    return lineage.map((n) => {
+      if (typeof n === 'string') return n;
+      return n.name || n.node_id;
+    }).join(' → ');
   }, [raw?.lineage]);
 
   useEffect(() => {
     loadAgents();
     loadToolPool();
   }, [loadAgents, loadToolPool]);
+
+  // Pre-fill team overrides when raw data loads
+  useEffect(() => {
+    if (raw?.configs && raw?.lineage && !initialOverridesLoaded) {
+      // Get the team's own config (last item in lineage)
+      const lineage = raw.lineage;
+      const teamNodeId = typeof lineage[lineage.length - 1] === 'string'
+        ? lineage[lineage.length - 1]
+        : (lineage[lineage.length - 1] as any)?.node_id;
+
+      if (teamNodeId && raw.configs[teamNodeId as string]) {
+        setOverridesText(JSON.stringify(raw.configs[teamNodeId as string], null, 2));
+      } else {
+        // No team config yet, show empty object
+        setOverridesText('{\n  \n}');
+      }
+      setInitialOverridesLoaded(true);
+    }
+  }, [raw, initialOverridesLoaded]);
 
   // Helper function to compute effective sub-agents using disable/enable pattern
   const getEffectiveSubAgents = useCallback((agent: AgentConfig): string[] => {
@@ -728,53 +755,79 @@ export default function AgentSettingsPage() {
       <div className="flex-1 flex min-h-0">
         {/* JSON View */}
         {viewMode === 'json' ? (
-          <div className="flex-1 overflow-auto p-6 space-y-6">
-            <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-6">
-              {/* Effective Config */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Effective config</h3>
-                  <a 
-                    href="https://docs.incidentfox.ai/config" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-sm text-gray-400 hover:text-gray-300 flex items-center gap-1"
-                  >
-                    Docs <ExternalLink className="w-3 h-3" />
-                  </a>
+          <div className="flex-1 flex flex-col overflow-hidden p-6">
+            {/* Header with lineage and inheritance button */}
+            <div className="max-w-7xl mx-auto w-full mb-4 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3 text-sm text-gray-500">
+                <span className="flex items-center gap-1">
+                  Lineage: <span className="font-mono">{lineageLabel}</span>
+                  <HelpTip id="config-lineage" position="right">
+                    <strong>Lineage</strong> shows the configuration inheritance path. Settings flow from Organization to Team level, with more specific levels overriding general ones.
+                  </HelpTip>
+                </span>
+                <button
+                  onClick={() => setShowInheritanceModal(true)}
+                  className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 underline underline-offset-2"
+                >
+                  Show inheritance details
+                </button>
+              </div>
+              <a
+                href="https://docs.incidentfox.ai/config"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-gray-400 hover:text-gray-300 flex items-center gap-1"
+              >
+                Docs <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="flex-1 min-h-0 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left: Active Configuration (read-only) */}
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                    Active Configuration
+                    <HelpTip id="effective-config" position="right">
+                      The <strong>active configuration</strong> is the final merged result of organization defaults combined with your team&apos;s overrides. This is what IncidentFox actually uses at runtime.
+                    </HelpTip>
+                  </div>
+                  <span className="text-xs text-gray-400">Read-only</span>
                 </div>
-                <p className="text-xs text-gray-500">Lineage: {lineageLabel}</p>
-                <pre className="bg-gray-900 text-gray-100 p-4 rounded-xl text-xs font-mono overflow-auto max-h-[400px] border border-gray-800">
-                  {effectivePretty || 'Loading...'}
+                <pre className="flex-1 min-h-0 overflow-auto bg-gray-50 dark:bg-gray-950/50 border border-gray-200 dark:border-gray-800 rounded-lg p-3 text-xs font-mono text-gray-700 dark:text-gray-200">
+                  {effectivePretty || '(not loaded)'}
                 </pre>
               </div>
 
-              {/* Raw lineage + per-node configs */}
-              <div className="space-y-3">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Raw lineage + per-node configs</h3>
-                <pre className="bg-gray-900 text-gray-100 p-4 rounded-xl text-xs font-mono overflow-auto max-h-[200px] border border-gray-800">
-                  {rawPretty || 'Loading...'}
-                </pre>
-                
-                {/* Team overrides */}
-                <div className="mt-6 space-y-3">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Team overrides</h3>
+              {/* Right: Team Overrides (editable) */}
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-sm flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                    Team Overrides
+                    <HelpTip id="team-overrides" position="right">
+                      <strong>Team Overrides</strong> are your team&apos;s custom settings. Changes here only affect your team, not the organization. Edit the JSON below and click Save to update your configuration.
+                    </HelpTip>
+                  </div>
+                </div>
+
+                <textarea
+                  value={overridesText}
+                  onChange={(e) => setOverridesText(e.target.value)}
+                  placeholder={`// Your team's configuration\n// Edit and save to customize settings\n{\n  \n}`}
+                  className="flex-1 min-h-0 w-full p-3 font-mono text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+                />
+
+                <div className="mt-3 flex justify-between items-center flex-shrink-0">
                   <p className="text-xs text-gray-500">
-                    This payload is deep-merged (PATCH semantics) into existing team overrides via PUT /api/v1/config/me.
+                    Edit and save to update your team&apos;s configuration.
                   </p>
-                  <textarea
-                    value={overridesText}
-                    onChange={(e) => setOverridesText(e.target.value)}
-                    className="w-full h-40 bg-gray-900 text-gray-100 p-4 rounded-xl text-xs font-mono border border-gray-700 focus:border-gray-500 focus:outline-none resize-none"
-                    placeholder='{"agents": {"my_agent": {"prompt": {"system": "..."}}}}'
-                  />
                   <button
                     onClick={saveOverrides}
                     disabled={saving}
-                    className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 text-sm"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-70"
                   >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Save overrides
+                    Save
                   </button>
                 </div>
               </div>
@@ -2642,6 +2695,46 @@ export default function AgentSettingsPage() {
           onSkip={() => setShowQuickStart(false)}
           initialStep={quickStartInitialStep}
         />
+      )}
+
+      {/* Inheritance Details Modal */}
+      {showInheritanceModal && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowInheritanceModal(false);
+          }}
+        >
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-xl mx-4">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Configuration Inheritance</h2>
+              <button
+                onClick={() => setShowInheritanceModal(false)}
+                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Modal Explanation */}
+            <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/50">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <strong>Lineage:</strong> {lineageLabel}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
+                This shows what&apos;s configured at each level of the hierarchy. Settings from parent nodes are inherited and can be overridden by child nodes.
+              </p>
+            </div>
+
+            {/* Modal Content (scrollable) */}
+            <div className="flex-1 overflow-auto p-4">
+              <pre className="text-xs font-mono text-gray-700 dark:text-gray-200 whitespace-pre-wrap">
+                {rawPretty || '(not loaded)'}
+              </pre>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
