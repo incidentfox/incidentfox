@@ -1166,11 +1166,16 @@ export default function AdminConfigPage() {
                                   }
                                   className="w-full px-3 py-2 text-sm rounded-lg border border-slate-600 bg-slate-900 text-white"
                                 >
+                                  <option value="gpt-5">gpt-5</option>
                                   <option value="gpt-4o">gpt-4o</option>
+                                  <option value="gpt-4o-2024-11-20">gpt-4o-2024-11-20</option>
                                   <option value="gpt-4o-mini">gpt-4o-mini</option>
                                   <option value="gpt-4-turbo">gpt-4-turbo</option>
-                                  <option value="claude-3-5-sonnet-20241022">claude-3.5-sonnet</option>
-                                  <option value="claude-3-opus-20240229">claude-3-opus</option>
+                                  <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+                                  <option value="o1">o1</option>
+                                  <option value="o1-mini">o1-mini</option>
+                                  <option value="o3-mini">o3-mini</option>
+                                  <option value="o4-mini">o4-mini</option>
                                 </select>
                               </div>
 
