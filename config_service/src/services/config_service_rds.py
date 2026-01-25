@@ -23,6 +23,11 @@ from src.db.repository import (
     upsert_team_overrides,
 )
 
+# Sentinel value to indicate "unset this key and inherit from parent"
+# When the API receives this value, the key is removed from the team config
+# rather than being set, allowing inheritance from org/default to work.
+INHERIT_SENTINEL = "__INHERIT__"
+
 # Routing identifier fields (list fields in team routing config)
 ROUTING_FIELDS = [
     "slack_channel_ids",
@@ -33,6 +38,39 @@ ROUTING_FIELDS = [
     "github_repos",
     "services",
 ]
+
+
+def process_inherit_sentinels(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Recursively process a config dict and remove any keys with INHERIT_SENTINEL value.
+
+    This allows clients to "unset" a value by sending {"key": "__INHERIT__"},
+    which removes the key from the stored config so inheritance can work.
+
+    Args:
+        config: The config dict to process
+
+    Returns:
+        A new dict with sentinel keys removed
+    """
+    if not isinstance(config, dict):
+        return config
+
+    result = {}
+    for key, value in config.items():
+        if value == INHERIT_SENTINEL:
+            # Skip this key - don't include it in result (effectively "unset")
+            continue
+        elif isinstance(value, dict):
+            # Recursively process nested dicts
+            processed = process_inherit_sentinels(value)
+            # Only include non-empty dicts (if all keys were sentinels, skip the parent too)
+            if processed:
+                result[key] = processed
+        else:
+            result[key] = value
+
+    return result
 
 
 def _normalize_routing_value(field: str, value: str) -> str:
@@ -197,7 +235,10 @@ class ConfigServiceRDS:
             }
 
         # Add tools catalog and prepare clean UI structure
-        eff = self._add_tools_catalog_and_clean_structure(eff, session)
+        # Pass raw configs so we can determine which values come from which level
+        eff = self._add_tools_catalog_and_clean_structure(
+            eff, session, raw_configs=raw.configs, team_node_id=principal.team_node_id
+        )
 
         if self.cache is not None:
             epoch = self.cache.get_org_epoch(principal.org_id)
@@ -209,18 +250,28 @@ class ConfigServiceRDS:
         return eff
 
     def _add_tools_catalog_and_clean_structure(
-        self, config: Dict[str, Any], session: Session
+        self,
+        config: Dict[str, Any],
+        session: Session,
+        raw_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+        team_node_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Add built-in tools catalog to config and transform integrations structure.
 
         Returns config with:
-        - integrations: {...}  (transformed to have config_schema + config_values)
+        - integrations: {...}  (transformed to have config_schema + config_values + config_sources)
         - mcp_servers: {...}   (dict format, already present from DB)
         - built_in_tools: [...] (from catalog)
         - tools: {...}         (team-level tool overrides in dict format)
 
         Note: Uses canonical config format with dict-based tools and mcp_servers.
+
+        Args:
+            config: The effective config to transform
+            session: Database session
+            raw_configs: Optional dict of node_id -> raw config, for source tracking
+            team_node_id: Optional team node ID, for source tracking
         """
         from ..core.tools_catalog import get_tools_catalog
         from ..db.config_models import IntegrationSchema
@@ -228,6 +279,12 @@ class ConfigServiceRDS:
         # Add built-in tools catalog
         catalog = get_tools_catalog()
         config["built_in_tools"] = catalog["tools"]
+
+        # Get team's raw integrations for source tracking
+        team_raw_integrations: Dict[str, Any] = {}
+        if raw_configs and team_node_id:
+            team_raw_config = raw_configs.get(team_node_id, {})
+            team_raw_integrations = team_raw_config.get("integrations", {})
 
         # Transform integrations to have config_schema + config_values structure
         # Frontend expects: {integration_id: {config_schema: {...}, config_values: {...}}}
@@ -266,10 +323,25 @@ class ConfigServiceRDS:
                     if field_name in integration_config:
                         config_values[field_name] = integration_config[field_name]
 
+                # Build config_sources: determine if each field value is from team or inherited
+                # "team" = explicitly set at team level (can be cleared)
+                # "inherited" = inherited from org or defaults (no clear option)
+                config_sources = {}
+                team_raw_integration = team_raw_integrations.get(integration_id, {})
+                for field in schema.fields:
+                    field_name = field["name"]
+                    if field_name in config_values:
+                        # Check if this field is explicitly set in team's raw config
+                        if isinstance(team_raw_integration, dict) and field_name in team_raw_integration:
+                            config_sources[field_name] = "team"
+                        else:
+                            config_sources[field_name] = "inherited"
+
                 transformed_integrations[integration_id] = {
                     "name": schema.name,
                     "config_schema": config_schema,
                     "config_values": config_values,
+                    "config_sources": config_sources,
                 }
 
             config["integrations"] = transformed_integrations
@@ -322,14 +394,9 @@ class ConfigServiceRDS:
         # Avoid in-place mutation of ORM-backed dicts; always merge from a deep copy.
         merged = deep_merge_dicts([copy.deepcopy(before), overrides])
 
-        # Validate routing identifier uniqueness
-        if "routing" in merged:
-            validate_routing_uniqueness(
-                session,
-                org_id=principal.org_id,
-                team_node_id=principal.team_node_id,
-                routing_config=merged["routing"],
-            )
+        # Process INHERIT_SENTINEL values: remove keys marked for inheritance
+        # This allows clients to "unset" a team-level override and inherit from org
+        merged = process_inherit_sentinels(merged)
 
         # Validate routing identifier uniqueness
         if "routing" in merged:
