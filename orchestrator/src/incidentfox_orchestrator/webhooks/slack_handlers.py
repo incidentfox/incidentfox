@@ -13,10 +13,12 @@ Features:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 import uuid
+from functools import partial
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from slack_bolt.async_app import AsyncApp
@@ -145,7 +147,9 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
             audit_api = integration.audit_api
 
             # Look up team via routing
-            routing = cfg.lookup_routing(
+            # Use asyncio.to_thread() for sync HTTP calls to avoid blocking the event loop
+            routing = await asyncio.to_thread(
+                cfg.lookup_routing,
                 internal_service_name="orchestrator",
                 identifiers={"slack_channel_id": channel_id},
             )
@@ -177,8 +181,12 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                 _log("slack_event_missing_admin_token", correlation_id=correlation_id)
                 return
 
-            imp = cfg.issue_team_impersonation_token(
-                admin_token, org_id=org_id, team_node_id=team_node_id
+            # Run sync HTTP call in thread pool to avoid blocking event loop
+            imp = await asyncio.to_thread(
+                cfg.issue_team_impersonation_token,
+                admin_token,
+                org_id=org_id,
+                team_node_id=team_node_id,
             )
             team_token = str(imp.get("token") or "")
             if not team_token:
@@ -190,7 +198,10 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
             dedicated_agent_url: Optional[str] = None
             effective_config: Dict[str, Any] = {}
             try:
-                effective_config = cfg.get_effective_config(team_token=team_token)
+                # Run sync HTTP call in thread pool to avoid blocking event loop
+                effective_config = await asyncio.to_thread(
+                    cfg.get_effective_config, team_token=team_token
+                )
                 entrance_agent_name = effective_config.get("entrance_agent", "planner")
                 dedicated_agent_url = effective_config.get("agent", {}).get(
                     "dedicated_service_url"
@@ -212,21 +223,25 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
 
             # Record agent run start
             if audit_api:
-                audit_api.create_agent_run(
-                    run_id=run_id,
-                    org_id=org_id,
-                    team_node_id=team_node_id,
-                    correlation_id=correlation_id,
-                    trigger_source="slack",
-                    trigger_actor=user_id,
-                    trigger_message=text,
-                    trigger_channel_id=channel_id,
-                    agent_name=entrance_agent_name,
-                    metadata={
-                        "event_ts": event_ts,
-                        "thread_ts": thread_ts,
-                        "session_id": session_id,
-                    },
+                # Run sync HTTP call in thread pool to avoid blocking event loop
+                await asyncio.to_thread(
+                    partial(
+                        audit_api.create_agent_run,
+                        run_id=run_id,
+                        org_id=org_id,
+                        team_node_id=team_node_id,
+                        correlation_id=correlation_id,
+                        trigger_source="slack",
+                        trigger_actor=user_id,
+                        trigger_message=text,
+                        trigger_channel_id=channel_id,
+                        agent_name=entrance_agent_name,
+                        metadata={
+                            "event_ts": event_ts,
+                            "thread_ts": thread_ts,
+                            "session_id": session_id,
+                        },
+                    )
                 )
                 agent_run_created = True
 
@@ -261,30 +276,34 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                 destinations=[d.get("type") for d in output_destinations],
             )
 
-            # Run agent
-            result = agent_api.run_agent(
-                team_token=team_token,
-                agent_name=entrance_agent_name,
-                message=text,
-                context={
-                    "user_id": user_id,
-                    "session_id": session_id,
-                    "metadata": {
-                        "slack": {
-                            "channel_id": channel_id,
-                            "event_ts": event_ts,
-                            "thread_ts": thread_ts,
+            # CRITICAL: Run agent in thread pool to avoid blocking the event loop.
+            # agent_api.run_agent() uses sync httpx and can take several minutes.
+            result = await asyncio.to_thread(
+                partial(
+                    agent_api.run_agent,
+                    team_token=team_token,
+                    agent_name=entrance_agent_name,
+                    message=text,
+                    context={
+                        "user_id": user_id,
+                        "session_id": session_id,
+                        "metadata": {
+                            "slack": {
+                                "channel_id": channel_id,
+                                "event_ts": event_ts,
+                                "thread_ts": thread_ts,
+                            },
+                            "trigger": "slack",
                         },
-                        "trigger": "slack",
                     },
-                },
-                timeout=int(
-                    os.getenv("ORCHESTRATOR_SLACK_AGENT_TIMEOUT_SECONDS", "300")
-                ),
-                max_turns=int(os.getenv("ORCHESTRATOR_SLACK_AGENT_MAX_TURNS", "50")),
-                correlation_id=correlation_id,
-                agent_base_url=dedicated_agent_url,
-                output_destinations=output_destinations,
+                    timeout=int(
+                        os.getenv("ORCHESTRATOR_SLACK_AGENT_TIMEOUT_SECONDS", "300")
+                    ),
+                    max_turns=int(os.getenv("ORCHESTRATOR_SLACK_AGENT_MAX_TURNS", "50")),
+                    correlation_id=correlation_id,
+                    agent_base_url=dedicated_agent_url,
+                    output_destinations=output_destinations,
+                )
             )
 
             # Record completion
@@ -297,16 +316,20 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                     output_summary = out[:200] if len(out) > 200 else out
 
                 status = "completed" if result.get("success", True) else "failed"
-                audit_api.complete_agent_run(
-                    org_id=org_id,
-                    run_id=run_id,
-                    status=status,
-                    tool_calls_count=result.get("tool_calls_count"),
-                    output_summary=(
-                        output_summary[:200]
-                        if output_summary and len(output_summary) > 200
-                        else output_summary
-                    ),
+                # Run audit call in thread pool as well
+                await asyncio.to_thread(
+                    partial(
+                        audit_api.complete_agent_run,
+                        org_id=org_id,
+                        run_id=run_id,
+                        status=status,
+                        tool_calls_count=result.get("tool_calls_count"),
+                        output_summary=(
+                            output_summary[:200]
+                            if output_summary and len(output_summary) > 200
+                            else output_summary
+                        ),
+                    )
                 )
 
             _log(
@@ -328,7 +351,8 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
             # Mark agent run as failed if it was created
             if agent_run_created and audit_api and run_id and org_id:
                 try:
-                    audit_api.complete_agent_run(
+                    await asyncio.to_thread(
+                        audit_api.complete_agent_run,
                         org_id=org_id,
                         run_id=run_id,
                         status="failed",
@@ -389,7 +413,9 @@ async def _handle_feedback(
 
     # Record feedback to audit service
     if integration.audit_api and run_id:
-        integration.audit_api.record_feedback(
+        # Run sync HTTP call in thread pool to avoid blocking event loop
+        await asyncio.to_thread(
+            integration.audit_api.record_feedback,
             run_id=run_id,
             correlation_id=correlation_id,
             feedback=feedback_type,

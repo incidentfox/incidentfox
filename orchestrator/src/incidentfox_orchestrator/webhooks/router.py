@@ -212,7 +212,9 @@ async def _process_github_webhook(
         )
 
         # Look up team via routing
-        routing = cfg.lookup_routing(
+        # Use asyncio.to_thread() for sync HTTP calls to avoid blocking the event loop
+        routing = await asyncio.to_thread(
+            cfg.lookup_routing,
             internal_service_name="orchestrator",
             identifiers={"github_repo": repo_full_name},
         )
@@ -233,8 +235,12 @@ async def _process_github_webhook(
         if not admin_token:
             return
 
-        imp = cfg.issue_team_impersonation_token(
-            admin_token, org_id=org_id, team_node_id=team_node_id
+        # Run sync HTTP call in thread pool to avoid blocking event loop
+        imp = await asyncio.to_thread(
+            cfg.issue_team_impersonation_token,
+            admin_token,
+            org_id=org_id,
+            team_node_id=team_node_id,
         )
         team_token = str(imp.get("token") or "")
         if not team_token:
@@ -244,7 +250,10 @@ async def _process_github_webhook(
         entrance_agent_name = "planner"  # Default fallback
         dedicated_agent_url: Optional[str] = None
         try:
-            effective_config = cfg.get_effective_config(team_token=team_token)
+            # Run sync HTTP call in thread pool to avoid blocking event loop
+            effective_config = await asyncio.to_thread(
+                cfg.get_effective_config, team_token=team_token
+            )
             entrance_agent_name = effective_config.get("entrance_agent", "planner")
             dedicated_agent_url = effective_config.get("agent", {}).get(
                 "dedicated_service_url"
@@ -350,53 +359,63 @@ async def _process_github_webhook(
                 # Continue with original message if enrichment fails
 
         if audit_api:
-            audit_api.create_agent_run(
-                run_id=run_id,
-                org_id=org_id,
-                team_node_id=team_node_id,
-                correlation_id=correlation_id,
-                trigger_source="github",
-                trigger_actor=payload.get("sender", {}).get("login"),
-                trigger_message=enriched_message[:500],
-                agent_name=entrance_agent_name,
-                metadata={
-                    "event_type": event_type,
-                    "repo": repo_full_name,
-                    "pr_number": pr_number,
-                    "issue_number": issue_number,
-                    "is_pr": bool(pr_number),
-                },
+            # Run sync HTTP call in thread pool to avoid blocking event loop
+            await asyncio.to_thread(
+                partial(
+                    audit_api.create_agent_run,
+                    run_id=run_id,
+                    org_id=org_id,
+                    team_node_id=team_node_id,
+                    correlation_id=correlation_id,
+                    trigger_source="github",
+                    trigger_actor=payload.get("sender", {}).get("login"),
+                    trigger_message=enriched_message[:500],
+                    agent_name=entrance_agent_name,
+                    metadata={
+                        "event_type": event_type,
+                        "repo": repo_full_name,
+                        "pr_number": pr_number,
+                        "issue_number": issue_number,
+                        "is_pr": bool(pr_number),
+                    },
+                )
             )
             agent_run_created = True
 
         # Run agent with session resumption
         # OpenAIConversationsSession uses pr_number as conversation_id
-        result = agent_api.run_agent(
-            team_token=team_token,
-            agent_name=entrance_agent_name,
-            message=enriched_message,
-            context={
-                "metadata": {
-                    "github": {
-                        "event_type": event_type,
-                        "repo": repo_full_name,
-                        "delivery_id": delivery_id,
-                        "pr_number": pr_number,  # Used for conversation_id
-                        "issue_number": issue_number,
+        # CRITICAL: Run agent in thread pool to avoid blocking the event loop.
+        result = await asyncio.to_thread(
+            partial(
+                agent_api.run_agent,
+                team_token=team_token,
+                agent_name=entrance_agent_name,
+                message=enriched_message,
+                context={
+                    "metadata": {
+                        "github": {
+                            "event_type": event_type,
+                            "repo": repo_full_name,
+                            "delivery_id": delivery_id,
+                            "pr_number": pr_number,  # Used for conversation_id
+                            "issue_number": issue_number,
+                        },
+                        "trigger": "github",
                     },
-                    "trigger": "github",
                 },
-            },
-            timeout=int(os.getenv("ORCHESTRATOR_GITHUB_AGENT_TIMEOUT_SECONDS", "180")),
-            max_turns=int(os.getenv("ORCHESTRATOR_GITHUB_AGENT_MAX_TURNS", "30")),
-            correlation_id=correlation_id,
-            agent_base_url=dedicated_agent_url,
-            output_destinations=output_destinations,
+                timeout=int(os.getenv("ORCHESTRATOR_GITHUB_AGENT_TIMEOUT_SECONDS", "180")),
+                max_turns=int(os.getenv("ORCHESTRATOR_GITHUB_AGENT_MAX_TURNS", "30")),
+                correlation_id=correlation_id,
+                agent_base_url=dedicated_agent_url,
+                output_destinations=output_destinations,
+            )
         )
 
         if audit_api:
             status = "completed" if result.get("success", True) else "failed"
-            audit_api.complete_agent_run(
+            # Run audit call in thread pool as well
+            await asyncio.to_thread(
+                audit_api.complete_agent_run,
                 org_id=org_id,
                 run_id=run_id,
                 status=status,
@@ -420,7 +439,8 @@ async def _process_github_webhook(
         # Mark agent run as failed if it was created
         if agent_run_created and audit_api and run_id and org_id:
             try:
-                audit_api.complete_agent_run(
+                await asyncio.to_thread(
+                    audit_api.complete_agent_run,
                     org_id=org_id,
                     run_id=run_id,
                     status="failed",
