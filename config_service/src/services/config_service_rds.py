@@ -332,7 +332,10 @@ class ConfigServiceRDS:
                     field_name = field["name"]
                     if field_name in config_values:
                         # Check if this field is explicitly set in team's raw config
-                        if isinstance(team_raw_integration, dict) and field_name in team_raw_integration:
+                        if (
+                            isinstance(team_raw_integration, dict)
+                            and field_name in team_raw_integration
+                        ):
                             config_sources[field_name] = "team"
                         else:
                             config_sources[field_name] = "inherited"
