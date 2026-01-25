@@ -748,6 +748,35 @@ def create_app() -> Sanic:
                         has_key_context=bool(local_context.get("key_context")),
                     )
 
+            # Inject user context (runtime metadata + team contextual info)
+            # This allows context to flow naturally to sub-agents when delegating
+            if team_config:
+                from .prompts import build_user_context
+
+                # Extract team context dict from config
+                team_context_dict = None
+                if hasattr(team_config, "model_dump"):
+                    team_context_dict = team_config.model_dump()
+                elif isinstance(team_config, dict):
+                    team_context_dict = team_config
+
+                user_context = build_user_context(
+                    timestamp=datetime.now().isoformat(),
+                    org_id=(auth_identity.org_id if auth_identity else None),
+                    team_id=(auth_identity.team_node_id if auth_identity else None),
+                    environment=context_data.get("metadata", {}).get("environment"),
+                    incident_id=context_data.get("metadata", {}).get("incident_id"),
+                    alert_source=context_data.get("metadata", {}).get("alert_source"),
+                    team_config=team_context_dict,
+                )
+                if user_context:
+                    message = f"{user_context}\n## Task\n\n{message}"
+                    logger.info(
+                        "user_context_injected_non_stream",
+                        has_team_config=True,
+                        context_length=len(user_context),
+                    )
+
             # Parse message for multimodal content (embedded images)
             from .core.multimodal import (
                 get_message_preview,
@@ -1482,6 +1511,34 @@ def create_app() -> Sanic:
                         has_git=bool(local_context.get("git")),
                         has_aws=bool(local_context.get("aws")),
                         has_key_context=bool(local_context.get("key_context")),
+                    )
+
+            # Inject user context (runtime metadata + team contextual info)
+            # This allows context to flow naturally to sub-agents when delegating
+            if team_config:
+                from .prompts import build_user_context
+
+                # Extract team context dict from config
+                team_context_dict = None
+                if hasattr(team_config, "model_dump"):
+                    team_context_dict = team_config.model_dump()
+                elif isinstance(team_config, dict):
+                    team_context_dict = team_config
+
+                user_context = build_user_context(
+                    timestamp=datetime.now().isoformat(),
+                    org_id=(auth_identity.org_id if auth_identity else None),
+                    team_id=(auth_identity.team_node_id if auth_identity else None),
+                    environment=context_data.get("metadata", {}).get("environment"),
+                    incident_id=context_data.get("metadata", {}).get("incident_id"),
+                    alert_source=context_data.get("metadata", {}).get("alert_source"),
+                    team_config=team_context_dict,
+                )
+                if user_context:
+                    message = f"{user_context}\n## Task\n\n{message}"
+                    logger.info(
+                        "user_context_injected_stream",
+                        has_team_config=True,
                     )
 
             async def stream_events(response_stream):

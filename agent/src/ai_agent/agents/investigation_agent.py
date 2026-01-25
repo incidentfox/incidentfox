@@ -869,7 +869,7 @@ def create_investigation_agent(
                    Defaults to True since investigation is a sub-orchestrator.
                    Can be set via team config: agents.investigation.is_master: false
     """
-    from ..prompts.layers import apply_role_based_prompt, build_contextual_info
+    from ..prompts.layers import apply_role_based_prompt, build_agent_prompt_sections
 
     config = get_config()
     team_cfg = team_config if team_config is not None else config.team_config
@@ -943,38 +943,18 @@ def create_investigation_agent(
         is_master=effective_is_master,
     )
 
-    # Add Layer 5: Contextual Information (infrastructure defaults, dependencies, etc.)
-    # This is CRITICAL for sub-agents to use correct namespaces, regions, etc.
-    team_config_dict = None
-    if team_cfg:
-        if isinstance(team_cfg, dict):
-            team_config_dict = team_cfg
-        elif hasattr(team_cfg, "model_dump"):
-            # Pydantic v2 model - use model_dump() to get all fields including extras
-            team_config_dict = team_cfg.model_dump()
-        elif hasattr(team_cfg, "__pydantic_extra__") and team_cfg.__pydantic_extra__:
-            # Pydantic model with extra fields - merge __dict__ and __pydantic_extra__
-            team_config_dict = {
-                k: v for k, v in team_cfg.__dict__.items() if not k.startswith("_")
-            }
-            team_config_dict.update(team_cfg.__pydantic_extra__)
-        elif hasattr(team_cfg, "__dict__"):
-            team_config_dict = {
-                k: v for k, v in team_cfg.__dict__.items() if not k.startswith("_")
-            }
-
-    contextual_info = build_contextual_info(team_config_dict)
-    if contextual_info:
-        system_prompt = system_prompt + "\n\n" + contextual_info
-        logger.info(
-            "investigation_agent_contextual_info_added",
-            has_service_info=bool(
-                team_config_dict and team_config_dict.get("service_info")
-            ),
-            has_dependencies=bool(
-                team_config_dict and team_config_dict.get("dependencies")
-            ),
-        )
+    # Add shared sections (error handling, tool limits, evidence format)
+    # NOTE: Contextual information (service_info, namespaces, regions, etc.) is now
+    # passed in the user message, not the system prompt. This allows context to flow
+    # naturally from the planner through to sub-agents when delegating.
+    shared_sections = build_agent_prompt_sections(
+        integration_name="investigation",
+        is_subagent=is_subagent,
+        include_error_handling=True,
+        include_tool_limits=True,
+        include_evidence_format=True,
+    )
+    system_prompt = system_prompt + "\n\n" + shared_sections
 
     # Load direct tools and sub-agent tools
     direct_tools = _load_investigation_direct_tools()
