@@ -315,7 +315,8 @@ def create_app() -> FastAPI:
                 )
                 raise
 
-    app.add_middleware(RequestIdMiddleware)
+    # TEMPORARILY DISABLED for debugging - uncomment after verifying background tasks work
+    # app.add_middleware(RequestIdMiddleware)
 
     @app.get("/health")
     def health():
