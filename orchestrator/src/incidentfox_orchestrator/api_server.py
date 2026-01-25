@@ -243,10 +243,18 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router)
 
     # Pure ASGI middleware for request ID and logging.
-    # NOTE: We use pure ASGI middleware instead of @app.middleware("http") because
-    # BaseHTTPMiddleware breaks BackgroundTasks - it intercepts the response and
-    # creates a new one that doesn't preserve background tasks.
+    #
+    # IMPORTANT: We use pure ASGI middleware instead of @app.middleware("http")
+    # because BaseHTTPMiddleware breaks BackgroundTasks - it intercepts the
+    # response and creates a new one that doesn't preserve background tasks.
+    #
     # See: https://github.com/encode/starlette/issues/919
+    #
+    # The key difference:
+    # - BaseHTTPMiddleware: response = await call_next(request); return response
+    #   → Creates new response, loses BackgroundTasks!
+    # - Pure ASGI: await self.app(scope, receive, send)
+    #   → Passes through, BackgroundTasks preserved!
     class RequestIdMiddleware:
         def __init__(self, app):
             self.app = app
