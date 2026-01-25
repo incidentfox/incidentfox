@@ -315,8 +315,9 @@ def create_app() -> FastAPI:
                 )
                 raise
 
-    # TEMPORARILY DISABLED for debugging - uncomment after verifying background tasks work
-    # app.add_middleware(RequestIdMiddleware)
+    # Re-enabled after local verification that pure ASGI middleware works correctly
+    # with BackgroundTasks (see tests/background_task_*.py for verification tests)
+    app.add_middleware(RequestIdMiddleware)
 
     @app.get("/health")
     def health():
