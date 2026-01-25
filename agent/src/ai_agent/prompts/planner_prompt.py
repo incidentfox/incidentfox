@@ -22,7 +22,6 @@ from .layers import (
     build_capabilities_section,
 )
 
-
 # =============================================================================
 # Planner System Prompt (Inline)
 # =============================================================================
@@ -426,7 +425,9 @@ def build_planner_system_prompt_from_team_config(
                     config_dict["agents"] = agents
                 elif hasattr(agents, "__dict__"):
                     config_dict["agents"] = {
-                        k: v for k, v in agents.__dict__.items() if not k.startswith("_")
+                        k: v
+                        for k, v in agents.__dict__.items()
+                        if not k.startswith("_")
                     }
 
             # Check for planner-specific config
