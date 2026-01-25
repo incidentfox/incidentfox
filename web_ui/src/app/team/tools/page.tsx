@@ -49,6 +49,7 @@ interface ToolItem {
   enabled: boolean;
   config_schema: Record<string, ConfigField>;
   config_values: Record<string, string>;
+  config_sources?: Record<string, 'team' | 'inherited'>;  // NEW: Track which values are team-level
   source: 'org' | 'team';
   category?: string;
   command?: string;
@@ -210,15 +211,20 @@ export default function TeamToolsPage() {
         const teamSchema = config.team_config_schema || {};
         const mergedSchema = { ...orgSchema, ...teamSchema };
 
-        // Extract config values from the flat structure
-        // Values are stored at the integration top level (e.g., slack.bot_token),
-        // not in a nested config_values object
-        const extractedValues: Record<string, string> = {};
-        for (const fieldName of Object.keys(mergedSchema)) {
-          if (config[fieldName] !== undefined) {
-            extractedValues[fieldName] = config[fieldName];
+        // Backend now provides config_values and config_sources directly
+        // Fallback to extracting from flat structure for backwards compatibility
+        let extractedValues: Record<string, string> = config.config_values || {};
+        if (Object.keys(extractedValues).length === 0) {
+          // Fallback: extract from flat structure
+          for (const fieldName of Object.keys(mergedSchema)) {
+            if (config[fieldName] !== undefined) {
+              extractedValues[fieldName] = config[fieldName];
+            }
           }
         }
+
+        // Get config_sources from backend (indicates team vs inherited for each field)
+        const configSources: Record<string, 'team' | 'inherited'> = config.config_sources || {};
 
         return {
           id,
@@ -228,6 +234,7 @@ export default function TeamToolsPage() {
           enabled: true,  // Integrations are always "available", tools use them
           config_schema: mergedSchema,
           config_values: extractedValues,
+          config_sources: configSources,
           source: 'org' as const,
         };
       });
@@ -1213,49 +1220,107 @@ export default function TeamToolsPage() {
             </div>
 
             <div className="p-4 space-y-4 max-h-[60vh] overflow-auto">
-              {Object.entries(editingItem.config_schema || {}).map(([fieldName, field]) => (
-                <div key={fieldName}>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {field.display_name || fieldName}
-                    {field.required && <span className="text-red-500 ml-1">*</span>}
-                  </label>
+              {Object.entries(editingItem.config_schema || {}).map(([fieldName, field]) => {
+                // Check if this field is set at team level (can be cleared to inherit)
+                const isTeamLevel = editingItem.config_sources?.[fieldName] === 'team';
+                const hasValue = editValues[fieldName] !== undefined && editValues[fieldName] !== '';
 
-                  {field.allowed_values ? (
-                    <select
-                      value={editValues[fieldName] || field.default || ''}
-                      onChange={(e) => setEditValues({ ...editValues, [fieldName]: e.target.value })}
-                      className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"
-                    >
-                      {field.allowed_values.map(v => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="relative">
-                      <input
-                        type={field.type === 'secret' && !showSecrets[fieldName] ? 'password' : 'text'}
-                        value={editValues[fieldName] || ''}
-                        onChange={(e) => setEditValues({ ...editValues, [fieldName]: e.target.value })}
-                        placeholder={field.placeholder || field.default || ''}
-                        className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"
-                      />
-                      {field.type === 'secret' && (
-                        <button
-                          type="button"
-                          onClick={() => setShowSecrets({ ...showSecrets, [fieldName]: !showSecrets[fieldName] })}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
-                        >
-                          {showSecrets[fieldName] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
+                return (
+                  <div key={fieldName}>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {field.display_name || fieldName}
+                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                      </label>
+                      {/* Show source indicator and clear button for team-level values */}
+                      {hasValue && (
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                            isTeamLevel
+                              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                          }`}>
+                            {isTeamLevel ? 'team' : 'inherited'}
+                          </span>
+                          {isTeamLevel && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                // Clear this field by sending __INHERIT__ sentinel
+                                setSaving(true);
+                                try {
+                                  const patchRes = await fetch('/api/team/config', {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      integrations: {
+                                        [editingItem.id]: {
+                                          [fieldName]: '__INHERIT__'
+                                        }
+                                      }
+                                    }),
+                                  });
+                                  if (!patchRes.ok) throw new Error('Failed to clear field');
+
+                                  setMessage({ type: 'success', text: `Cleared ${fieldName} - will now inherit from org` });
+                                  // Remove from local state and reload
+                                  const newValues = { ...editValues };
+                                  delete newValues[fieldName];
+                                  setEditValues(newValues);
+                                  loadItems();
+                                } catch (error: any) {
+                                  setMessage({ type: 'error', text: error.message });
+                                } finally {
+                                  setSaving(false);
+                                }
+                              }}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-900/50"
+                              title="Clear this value to inherit from organization settings"
+                            >
+                              Clear (inherit)
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
 
-                  {field.description && (
-                    <p className="text-xs text-gray-500 mt-1">{field.description}</p>
-                  )}
-                </div>
-              ))}
+                    {field.allowed_values ? (
+                      <select
+                        value={editValues[fieldName] || field.default || ''}
+                        onChange={(e) => setEditValues({ ...editValues, [fieldName]: e.target.value })}
+                        className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"
+                      >
+                        {field.allowed_values.map(v => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="relative">
+                        <input
+                          type={field.type === 'secret' && !showSecrets[fieldName] ? 'password' : 'text'}
+                          value={editValues[fieldName] || ''}
+                          onChange={(e) => setEditValues({ ...editValues, [fieldName]: e.target.value })}
+                          placeholder={field.placeholder || field.default || ''}
+                          className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"
+                        />
+                        {field.type === 'secret' && (
+                          <button
+                            type="button"
+                            onClick={() => setShowSecrets({ ...showSecrets, [fieldName]: !showSecrets[fieldName] })}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+                          >
+                            {showSecrets[fieldName] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {field.description && (
+                      <p className="text-xs text-gray-500 mt-1">{field.description}</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="p-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3">
