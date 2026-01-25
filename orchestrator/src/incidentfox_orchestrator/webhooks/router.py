@@ -403,7 +403,9 @@ async def _process_github_webhook(
                         "trigger": "github",
                     },
                 },
-                timeout=int(os.getenv("ORCHESTRATOR_GITHUB_AGENT_TIMEOUT_SECONDS", "180")),
+                timeout=int(
+                    os.getenv("ORCHESTRATOR_GITHUB_AGENT_TIMEOUT_SECONDS", "180")
+                ),
                 max_turns=int(os.getenv("ORCHESTRATOR_GITHUB_AGENT_MAX_TURNS", "30")),
                 correlation_id=correlation_id,
                 agent_base_url=dedicated_agent_url,
