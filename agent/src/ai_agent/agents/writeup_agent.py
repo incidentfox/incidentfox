@@ -216,7 +216,11 @@ def create_writeup_agent(
                    This adds guidance for effective delegation.
                    Can also be set via team config: agents.writeup.is_master: true
     """
-    from ..prompts.layers import apply_role_based_prompt, build_tool_guidance
+    from ..prompts.layers import (
+        apply_role_based_prompt,
+        build_agent_prompt_sections,
+        build_tool_guidance,
+    )
 
     config = get_config()
     team_cfg = team_config if team_config is not None else config.team_config
@@ -272,6 +276,16 @@ def create_writeup_agent(
     tool_guidance = build_tool_guidance(tools)
     if tool_guidance:
         system_prompt = system_prompt + "\n\n" + tool_guidance
+
+    # Add shared sections (error handling, tool limits, evidence format)
+    shared_sections = build_agent_prompt_sections(
+        integration_name="coding",  # Writeup is similar to coding - no specific integration
+        is_subagent=is_subagent,
+        include_error_handling=True,
+        include_tool_limits=True,
+        include_evidence_format=False,  # Writeup doesn't need evidence format
+    )
+    system_prompt = system_prompt + "\n\n" + shared_sections
 
     # Get model settings from team config if available
     model_name = config.openai.model

@@ -574,6 +574,91 @@ def build_contextual_info(team_config: dict[str, Any] | None) -> str:
 
 
 # =============================================================================
+# User Context Builder (for user/task message)
+# =============================================================================
+# Context (runtime metadata, contextual info, behavior overrides) is now passed
+# in the user message, not the system prompt. This allows context to flow
+# naturally to sub-agents when the master agent delegates.
+
+
+def build_user_context(
+    # Runtime metadata (was Layer 2)
+    timestamp: str | None = None,
+    org_id: str | None = None,
+    team_id: str | None = None,
+    environment: str | None = None,
+    incident_id: str | None = None,
+    alert_source: str | None = None,
+    # Team config (for contextual info and behavior overrides - was Layer 5 & 6)
+    team_config: dict[str, Any] | None = None,
+) -> str:
+    """
+    Build context section for the user/task message.
+
+    This context is prepended to the user's actual query. Because it's in the
+    user message (not system prompt), it flows naturally to sub-agents when
+    the master agent includes it in delegation queries.
+
+    Args:
+        timestamp: Current ISO timestamp
+        org_id: Organization identifier
+        team_id: Team identifier
+        environment: Environment (prod, staging, dev)
+        incident_id: Incident/alert ID if applicable
+        alert_source: Source of alert (PagerDuty, Datadog, etc.)
+        team_config: Team configuration dict for contextual info and overrides
+
+    Returns:
+        Formatted context string to prepend to user message (empty if no context)
+
+    Example:
+        context = build_user_context(
+            timestamp="2024-01-15T10:30:00Z",
+            org_id="acme",
+            team_id="checkout",
+            environment="production",
+            team_config={"service_info": "Runs in checkout-prod namespace..."},
+        )
+        full_query = f"{context}\\n\\n## Task\\n{user_query}"
+    """
+    sections = []
+
+    # Runtime metadata (was Layer 2)
+    metadata_parts = []
+    if timestamp:
+        metadata_parts.append(f"- **Timestamp**: {timestamp}")
+    if org_id:
+        metadata_parts.append(f"- **Organization**: {org_id}")
+    if team_id:
+        metadata_parts.append(f"- **Team**: {team_id}")
+    if environment:
+        metadata_parts.append(f"- **Environment**: {environment}")
+    if incident_id:
+        metadata_parts.append(f"- **Incident ID**: {incident_id}")
+    if alert_source:
+        metadata_parts.append(f"- **Alert Source**: {alert_source}")
+
+    if metadata_parts:
+        sections.append("## Current Context\n\n" + "\n".join(metadata_parts))
+
+    # Contextual info from team config (was Layer 5)
+    if team_config:
+        contextual = build_contextual_info(team_config)
+        if contextual:
+            sections.append(contextual)
+
+        # Behavior overrides (was Layer 6)
+        overrides = build_behavior_overrides(team_config)
+        if overrides:
+            sections.append(overrides)
+
+    if not sections:
+        return ""
+
+    return "\n\n".join(sections) + "\n\n---\n"
+
+
+# =============================================================================
 # Layer 6: Behavior Overrides (Team-Specific)
 # =============================================================================
 
@@ -731,6 +816,29 @@ DELEGATION_GUIDANCE = """## DELEGATING TO SUB-AGENTS
 
 When calling sub-agents, your job is to set them up for success. Provide context that helps them focus.
 
+### ⚠️ CRITICAL: Always Pass Context to Sub-agents
+
+**Context you received MUST flow to sub-agents.** If your request includes:
+- Team/service context (namespaces, regions, clusters, infrastructure defaults)
+- Time windows or incident details
+- Prior findings from other agents
+- Team-specific instructions
+
+You MUST include this context when delegating. Sub-agents don't have access to your system prompt or the original user context - they only see what you pass to them.
+
+**Example - Context Flow:**
+```
+You received context:
+  - Team: checkout
+  - Service runs in checkout-prod namespace on prod-us-east-1 cluster
+  - Common issue: DB connection pool exhaustion
+
+When delegating to K8s agent, INCLUDE this context:
+  "Investigate pod health in checkout-prod namespace on prod-us-east-1 cluster.
+   Team context: This service commonly has DB connection pool issues.
+   Check for crashes, OOMKills, resource pressure, and connection-related errors."
+```
+
 ### ⚠️ CRITICAL: Always Include Resource Identifiers
 
 **Sub-agents CANNOT guess resource names.** Without explicit identifiers, their tool calls will fail or target wrong resources.
@@ -745,17 +853,18 @@ When calling sub-agents, your job is to set them up for success. Provide context
 | GitHub | `repo`, `branch`, `PR number`, `commit SHA` |
 | Logs | `log_group`, `log_stream`, `service_name`, `time_range` |
 
-**Example - GOOD (includes identifiers):**
+**Example - GOOD (includes identifiers and context):**
 ```
 "Investigate pod health issues.
 Namespace: checkout-prod
 Deployment: checkout-api
 Cluster: prod-us-east-1
 Time range: Last 2 hours (since 10:30 AM UTC)
-Context: We're seeing HTTP 500 errors. Check for OOMKills, crashes, or resource pressure."
+Team context: This service commonly experiences DB connection pool exhaustion.
+Current issue: We're seeing HTTP 500 errors. Check for OOMKills, crashes, or resource pressure."
 ```
 
-**Example - BAD (missing identifiers):**
+**Example - BAD (missing identifiers and context):**
 ```
 "Check the pods for the checkout service"
 ```
@@ -765,10 +874,11 @@ Context: We're seeing HTTP 500 errors. Check for OOMKills, crashes, or resource 
 ### What to Include in Every Delegation
 
 1. **Resource identifiers** (namespace, service name, region, etc.) - REQUIRED when known
-2. **The specific question or task** - What do you need to know?
-3. **Time context** - When did the issue start? What time range to investigate?
-4. **Prior findings** - What have you or other agents already discovered?
-5. **Focus hints** - If you suspect something, mention it so they can prioritize
+2. **Team context** - Any relevant context from your request (service info, known issues)
+3. **The specific question or task** - What do you need to know?
+4. **Time context** - When did the issue start? What time range to investigate?
+5. **Prior findings** - What have you or other agents already discovered?
+6. **Focus hints** - If you suspect something, mention it so they can prioritize
 
 ### What NOT to Include
 
@@ -1815,6 +1925,8 @@ INTEGRATION_ERRORS_REGISTRY: dict[str, list[dict[str, str]]] = {
 # Default tool call limits per integration
 INTEGRATION_TOOL_LIMITS: dict[str, tuple[int, int]] = {
     # (max_calls, synthesize_after)
+    "planner": (20, 12),  # Planner orchestrates, may need more calls
+    "investigation": (15, 10),  # Investigation sub-orchestrator
     "kubernetes": (15, 10),
     "k8s": (15, 10),
     "aws": (10, 6),
