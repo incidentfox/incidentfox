@@ -142,9 +142,7 @@ async def github_webhook(
         )
     except SignatureVerificationError as e:
         _log("github_webhook_signature_failed", reason=e.reason)
-        raise HTTPException(
-            status_code=401, detail=f"signature_verification_failed: {e.reason}"
-        )
+        raise HTTPException(status_code=401, detail=f"signature_verification_failed: {e.reason}")
 
     # Parse payload
     try:
@@ -207,9 +205,7 @@ async def _process_github_webhook(
     try:
         cfg: ConfigServiceClient = request.app.state.config_service
         agent_api: AgentApiClient = request.app.state.agent_api
-        audit_api: Optional[AuditApiClient] = getattr(
-            request.app.state, "audit_api", None
-        )
+        audit_api: Optional[AuditApiClient] = getattr(request.app.state, "audit_api", None)
 
         # Look up team via routing
         # Use asyncio.to_thread() for sync HTTP calls to avoid blocking the event loop
@@ -255,9 +251,7 @@ async def _process_github_webhook(
                 cfg.get_effective_config, team_token=team_token
             )
             entrance_agent_name = effective_config.get("entrance_agent", "planner")
-            dedicated_agent_url = effective_config.get("agent", {}).get(
-                "dedicated_service_url"
-            )
+            dedicated_agent_url = effective_config.get("agent", {}).get("dedicated_service_url")
         except Exception:
             pass  # Fall back to shared agent
 
@@ -301,17 +295,21 @@ async def _process_github_webhook(
             team_config=team_notifications_config,
         )
 
+        # Log resolved output destinations for debugging
+        _log(
+            "github_webhook_output_destinations_resolved",
+            correlation_id=correlation_id,
+            destination_count=len(output_destinations),
+            destination_types=[d.get("type") for d in output_destinations],
+        )
+
         # Enrich message with PR comment context if this is a PR-related event
         enriched_message = message
         if pr_number:
             try:
                 # Get GitHub token from team config
-                github_config = effective_config.get("integrations", {}).get(
-                    "github", {}
-                )
-                github_token = github_config.get("token") or github_config.get(
-                    "app_private_key"
-                )
+                github_config = effective_config.get("integrations", {}).get("github", {})
+                github_token = github_config.get("token") or github_config.get("app_private_key")
 
                 # For GitHub Apps, we might need to use installation token from payload
                 installation_id = payload.get("installation", {}).get("id")
@@ -341,9 +339,7 @@ async def _process_github_webhook(
                             )
 
                             if context_str:
-                                enriched_message = build_enriched_message(
-                                    context_str, message
-                                )
+                                enriched_message = build_enriched_message(context_str, message)
                                 _log(
                                     "github_webhook_context_enriched",
                                     correlation_id=correlation_id,
@@ -403,9 +399,7 @@ async def _process_github_webhook(
                         "trigger": "github",
                     },
                 },
-                timeout=int(
-                    os.getenv("ORCHESTRATOR_GITHUB_AGENT_TIMEOUT_SECONDS", "180")
-                ),
+                timeout=int(os.getenv("ORCHESTRATOR_GITHUB_AGENT_TIMEOUT_SECONDS", "180")),
                 max_turns=int(os.getenv("ORCHESTRATOR_GITHUB_AGENT_MAX_TURNS", "30")),
                 correlation_id=correlation_id,
                 agent_base_url=dedicated_agent_url,
@@ -521,9 +515,7 @@ async def pagerduty_webhook(
         )
     except SignatureVerificationError as e:
         _log("pagerduty_webhook_signature_failed", reason=e.reason)
-        raise HTTPException(
-            status_code=401, detail=f"signature_verification_failed: {e.reason}"
-        )
+        raise HTTPException(status_code=401, detail=f"signature_verification_failed: {e.reason}")
 
     # Parse payload
     try:
@@ -620,9 +612,7 @@ async def _process_pagerduty_webhook(
         try:
             effective_config = cfg.get_effective_config(team_token=team_token)
             entrance_agent_name = effective_config.get("entrance_agent", "planner")
-            dedicated_agent_url = effective_config.get("agent", {}).get(
-                "dedicated_service_url"
-            )
+            dedicated_agent_url = effective_config.get("agent", {}).get("dedicated_service_url")
         except Exception:
             pass  # Fall back to shared agent
 
@@ -721,6 +711,21 @@ async def _process_pagerduty_webhook(
             team_config=team_notifications_config,
         )
 
+        # Log resolved output destinations for debugging
+        _log(
+            "pagerduty_webhook_output_destinations_resolved",
+            correlation_id=correlation_id,
+            destination_count=len(output_destinations),
+            destination_types=[d.get("type") for d in output_destinations],
+            has_notifications_config=bool(team_notifications_config.get("notifications")),
+            pagerduty_output_channel=team_notifications_config.get("notifications", {})
+            .get("pagerduty_output", {})
+            .get("slack_channel_id"),
+            default_slack_channel=team_notifications_config.get("notifications", {}).get(
+                "default_slack_channel_id"
+            ),
+        )
+
         if audit_api:
             audit_api.create_agent_run(
                 run_id=run_id,
@@ -757,9 +762,7 @@ async def _process_pagerduty_webhook(
             agent_name=entrance_agent_name,
             message=message,
             context=agent_context,
-            timeout=int(
-                os.getenv("ORCHESTRATOR_PAGERDUTY_AGENT_TIMEOUT_SECONDS", "300")
-            ),
+            timeout=int(os.getenv("ORCHESTRATOR_PAGERDUTY_AGENT_TIMEOUT_SECONDS", "300")),
             max_turns=int(os.getenv("ORCHESTRATOR_PAGERDUTY_AGENT_MAX_TURNS", "50")),
             correlation_id=correlation_id,
             agent_base_url=dedicated_agent_url,
@@ -842,9 +845,7 @@ async def incidentio_webhook(
         )
     except SignatureVerificationError as e:
         _log("incidentio_webhook_signature_failed", reason=e.reason)
-        raise HTTPException(
-            status_code=401, detail=f"signature_verification_failed: {e.reason}"
-        )
+        raise HTTPException(status_code=401, detail=f"signature_verification_failed: {e.reason}")
 
     # Parse payload
     try:
@@ -1038,9 +1039,7 @@ async def _process_incidentio_webhook(
                 cfg.get_effective_config, team_token=team_token
             )
             entrance_agent_name = effective_config.get("entrance_agent", "planner")
-            dedicated_agent_url = effective_config.get("agent", {}).get(
-                "dedicated_service_url"
-            )
+            dedicated_agent_url = effective_config.get("agent", {}).get("dedicated_service_url")
         except Exception:
             pass  # Fall back to shared agent
 
@@ -1051,18 +1050,14 @@ async def _process_incidentio_webhook(
             # Public alerts have title, status, priority directly
             name = incident.get("title", "") or incident.get("name", "")
             status = incident.get("status", "unknown")
-            severity = incident.get("priority", "") or incident.get(
-                "severity", "unknown"
-            )
+            severity = incident.get("priority", "") or incident.get("severity", "unknown")
             message = f"Incident.io {event_type}: {name} (status: {status}, priority: {severity})"
         else:
             # Traditional incidents have nested structures
             name = incident.get("name", "")
             severity = incident.get("severity", {}).get("name", "unknown")
             status = incident.get("incident_status", {}).get("name", "unknown")
-            message = (
-                f"Incident.io {event_type}: [{severity}] {name} (status: {status})"
-            )
+            message = f"Incident.io {event_type}: [{severity}] {name} (status: {status})"
 
         # ─────────────────────────────────────────────────────────────────────
         # Alert Correlation (feature-flagged)
@@ -1076,9 +1071,7 @@ async def _process_incidentio_webhook(
                 # Build alert object for correlation
                 alert_for_correlation = {
                     "id": incident_id,
-                    "service": incident.get("affected_resources", [{}])[0].get(
-                        "id", "unknown"
-                    ),
+                    "service": incident.get("affected_resources", [{}])[0].get("id", "unknown"),
                     "title": name,
                     "severity": severity,
                     "timestamp": incident.get("created_at"),
@@ -1150,6 +1143,21 @@ async def _process_incidentio_webhook(
             team_config=team_notifications_config,
         )
 
+        # Log resolved output destinations for debugging
+        _log(
+            "incidentio_webhook_output_destinations_resolved",
+            correlation_id=correlation_id,
+            destination_count=len(output_destinations),
+            destination_types=[d.get("type") for d in output_destinations],
+            has_notifications_config=bool(team_notifications_config.get("notifications")),
+            incidentio_output_channel=team_notifications_config.get("notifications", {})
+            .get("incidentio_output", {})
+            .get("slack_channel_id"),
+            default_slack_channel=team_notifications_config.get("notifications", {}).get(
+                "default_slack_channel_id"
+            ),
+        )
+
         if audit_api:
             # Run sync HTTP call in thread pool to avoid blocking event loop
             await asyncio.to_thread(
@@ -1195,12 +1203,8 @@ async def _process_incidentio_webhook(
                 agent_name=entrance_agent_name,
                 message=message,
                 context=agent_context,
-                timeout=int(
-                    os.getenv("ORCHESTRATOR_INCIDENTIO_AGENT_TIMEOUT_SECONDS", "300")
-                ),
-                max_turns=int(
-                    os.getenv("ORCHESTRATOR_INCIDENTIO_AGENT_MAX_TURNS", "50")
-                ),
+                timeout=int(os.getenv("ORCHESTRATOR_INCIDENTIO_AGENT_TIMEOUT_SECONDS", "300")),
+                max_turns=int(os.getenv("ORCHESTRATOR_INCIDENTIO_AGENT_MAX_TURNS", "50")),
                 correlation_id=correlation_id,
                 agent_base_url=dedicated_agent_url,
                 output_destinations=output_destinations,
