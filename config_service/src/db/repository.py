@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -1142,6 +1142,85 @@ def list_agent_runs(
     stmt = stmt.offset(offset).limit(min(limit, 1000))
 
     return list(session.execute(stmt).scalars().all())
+
+
+def mark_stale_runs_as_timeout(
+    session: Session,
+    *,
+    max_age_seconds: int = 600,  # 10 minutes default (2x typical 5min timeout)
+) -> int:
+    """
+    Mark agent runs stuck in 'running' status as 'timeout'.
+
+    This is a cleanup function to handle runs that were orphaned due to:
+    - Process crash/OOM kill
+    - Network partition during completion recording
+    - Any other failure that prevented proper status recording
+
+    Args:
+        session: Database session
+        max_age_seconds: Mark runs as timeout if they've been running longer than this
+
+    Returns:
+        Number of runs marked as timeout
+    """
+    from datetime import timezone
+
+    cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=max_age_seconds)
+
+    # Find stale running runs
+    stmt = (
+        select(AgentRun)
+        .where(AgentRun.status == "running")
+        .where(AgentRun.started_at < cutoff_time)
+    )
+
+    stale_runs = list(session.execute(stmt).scalars().all())
+
+    if not stale_runs:
+        return 0
+
+    # Mark each as timeout
+    now = datetime.now(timezone.utc)
+    for run in stale_runs:
+        run.status = "timeout"
+        run.completed_at = now
+        run.error_message = f"Run exceeded {max_age_seconds}s without completion (marked by cleanup job)"
+
+        # Calculate duration
+        if run.started_at:
+            started = run.started_at
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            run.duration_seconds = (now - started).total_seconds()
+
+    session.flush()
+    return len(stale_runs)
+
+
+def get_stale_runs_count(
+    session: Session,
+    *,
+    max_age_seconds: int = 600,
+) -> int:
+    """
+    Count agent runs stuck in 'running' status for longer than max_age_seconds.
+
+    Useful for monitoring/alerting without modifying data.
+    """
+    from datetime import timezone
+
+    cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=max_age_seconds)
+
+    stmt = (
+        select(func.count())
+        .select_from(AgentRun)
+        .where(AgentRun.status == "running")
+        .where(AgentRun.started_at < cutoff_time)
+    )
+
+    result = session.execute(stmt).scalar()
+    return result or 0
 
 
 # =============================================================================

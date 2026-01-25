@@ -33,6 +33,11 @@ spec:
       imagePullSecrets:
 {{ toYaml .Values.global.imagePullSecrets | indent 8 }}
       {{- end }}
+      # Allow enough time for graceful shutdown to mark in-flight runs as failed
+      # Default K8s is 30s, but agent runs can take 5+ minutes. We need time to:
+      # 1. Stop accepting new requests
+      # 2. Mark all in-flight runs as failed (HTTP calls to config service)
+      terminationGracePeriodSeconds: {{ .Values.services.agent.terminationGracePeriodSeconds | default 60 }}
       containers:
         - name: agent
           image: {{ required "services.agent.image is required" .Values.services.agent.image }}

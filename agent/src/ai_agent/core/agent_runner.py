@@ -7,6 +7,7 @@ This module provides the core agent execution infrastructure.
 import asyncio
 import builtins
 import os
+import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -36,6 +37,49 @@ logger = get_logger(__name__)
 CONFIG_SERVICE_URL = os.getenv(
     "CONFIG_SERVICE_URL", "http://incidentfox-config-service:8080"
 )
+
+# =============================================================================
+# In-Flight Run Registry
+# =============================================================================
+# Tracks currently executing agent runs. Used for graceful shutdown to mark
+# in-flight runs as failed when the process terminates.
+
+_in_flight_runs: set[str] = set()
+_in_flight_lock = threading.Lock()
+_shutdown_in_progress = False
+
+
+def register_in_flight_run(run_id: str) -> None:
+    """Register a run as in-flight (currently executing)."""
+    with _in_flight_lock:
+        if not _shutdown_in_progress:
+            _in_flight_runs.add(run_id)
+            logger.debug("run_registered_in_flight", run_id=run_id)
+
+
+def unregister_in_flight_run(run_id: str) -> None:
+    """Unregister a run from in-flight tracking."""
+    with _in_flight_lock:
+        _in_flight_runs.discard(run_id)
+        logger.debug("run_unregistered_in_flight", run_id=run_id)
+
+
+def get_in_flight_runs() -> list[str]:
+    """Get list of currently in-flight run IDs."""
+    with _in_flight_lock:
+        return list(_in_flight_runs)
+
+
+def mark_shutdown_in_progress() -> None:
+    """Mark that shutdown is in progress (prevents new runs from being registered)."""
+    global _shutdown_in_progress
+    with _in_flight_lock:
+        _shutdown_in_progress = True
+
+
+def is_shutdown_in_progress() -> bool:
+    """Check if shutdown is in progress."""
+    return _shutdown_in_progress
 
 
 def _track_background_task(coro, task_name: str):
@@ -136,6 +180,63 @@ async def _record_agent_run_complete(
     except Exception as e:
         logger.warning("agent_run_complete_error", error=str(e))
     return False
+
+
+async def _record_agent_run_complete_sync(
+    run_id: str,
+    status: str,
+    duration_seconds: float = 0,
+    output_summary: str = "",
+    error_message: str = "",
+    tool_calls_count: int = 0,
+) -> bool:
+    """
+    Record agent run completion SYNCHRONOUSLY with timeout.
+
+    This is the reliable version that ensures completion is recorded before
+    returning. It wraps _record_agent_run_complete with a timeout to prevent
+    blocking indefinitely if config service is slow/down.
+
+    If recording fails, the cleanup job will catch it later.
+    """
+    try:
+        # Use a 5 second timeout - enough for normal operation,
+        # but won't block too long if config service is having issues
+        success = await asyncio.wait_for(
+            _record_agent_run_complete(
+                run_id=run_id,
+                status=status,
+                duration_seconds=duration_seconds,
+                output_summary=output_summary,
+                error_message=error_message,
+                tool_calls_count=tool_calls_count,
+            ),
+            timeout=5.0,
+        )
+        if success:
+            logger.info(
+                "agent_run_completion_recorded_sync",
+                run_id=run_id,
+                status=status,
+            )
+        return success
+    except asyncio.TimeoutError:
+        logger.warning(
+            "agent_run_completion_recording_timeout",
+            run_id=run_id,
+            status=status,
+            message="Config service slow, cleanup job will catch this",
+        )
+        return False
+    except Exception as e:
+        logger.warning(
+            "agent_run_completion_recording_failed",
+            run_id=run_id,
+            status=status,
+            error=str(e),
+            message="Cleanup job will catch this",
+        )
+        return False
 
 
 async def _record_detailed_tool_calls(
@@ -408,9 +509,13 @@ class AgentRunner(Generic[T]):
             agent_name=agent_name,
             message_preview=user_message[:100],
             correlation_id=exec_ctx.correlation_id,
+            run_id=run_id,
         )
 
-        # Record run start (fire and forget with error tracking)
+        # Register run as in-flight for graceful shutdown tracking
+        register_in_flight_run(run_id)
+
+        # Record run start (fire and forget - OK if this fails, run just won't be tracked)
         _track_background_task(
             _record_agent_run_start(
                 run_id=run_id,
@@ -473,23 +578,24 @@ class AgentRunner(Generic[T]):
             # Get trace data for tool calls count
             trace_data = trace_hooks.get_trace_data()
 
-            # Record run completion
-            _track_background_task(
-                _record_agent_run_complete(
-                    run_id=run_id,
-                    status="completed",
-                    duration_seconds=duration,
-                    output_summary=str(output)[:1000] if output else "",
-                    tool_calls_count=len(trace_data.tool_calls),
-                ),
-                task_name="record_agent_run_complete",
+            # Record run completion SYNCHRONOUSLY to ensure it's recorded
+            # before returning (prevents orphaned "running" status)
+            await _record_agent_run_complete_sync(
+                run_id=run_id,
+                status="completed",
+                duration_seconds=duration,
+                output_summary=str(output)[:1000] if output else "",
+                tool_calls_count=len(trace_data.tool_calls),
             )
 
-            # Record detailed tool calls from trace hooks
+            # Record detailed tool calls (can be async - not critical for status)
             _track_background_task(
                 record_trace(run_id, trace_data),
                 task_name="record_trace",
             )
+
+            # Unregister from in-flight tracking
+            unregister_in_flight_run(run_id)
 
             return AgentResult(
                 success=True,
@@ -518,18 +624,19 @@ class AgentRunner(Generic[T]):
                 timeout_seconds=self.timeout,
                 duration_seconds=round(duration, 3),
                 correlation_id=exec_ctx.correlation_id,
+                run_id=run_id,
             )
 
-            # Record timeout
-            _track_background_task(
-                _record_agent_run_complete(
-                    run_id=run_id,
-                    status="timeout",
-                    duration_seconds=duration,
-                    error_message=error_msg,
-                ),
-                task_name="record_agent_run_timeout",
+            # Record timeout SYNCHRONOUSLY
+            await _record_agent_run_complete_sync(
+                run_id=run_id,
+                status="timeout",
+                duration_seconds=duration,
+                error_message=error_msg,
             )
+
+            # Unregister from in-flight tracking
+            unregister_in_flight_run(run_id)
 
             return AgentResult(
                 success=False,
@@ -560,19 +667,20 @@ class AgentRunner(Generic[T]):
                 error=str(e),
                 duration_seconds=round(duration, 3),
                 correlation_id=exec_ctx.correlation_id,
+                run_id=run_id,
                 exc_info=True,
             )
 
-            # Record failure
-            _track_background_task(
-                _record_agent_run_complete(
-                    run_id=run_id,
-                    status="failed",
-                    duration_seconds=duration,
-                    error_message=error_msg[:500],
-                ),
-                task_name="record_agent_run_retry_exhausted",
+            # Record failure SYNCHRONOUSLY
+            await _record_agent_run_complete_sync(
+                run_id=run_id,
+                status="failed",
+                duration_seconds=duration,
+                error_message=error_msg[:500],
             )
+
+            # Unregister from in-flight tracking
+            unregister_in_flight_run(run_id)
 
             return AgentResult(
                 success=False,
@@ -602,19 +710,20 @@ class AgentRunner(Generic[T]):
                 error_type=type(e).__name__,
                 duration_seconds=round(duration, 3),
                 correlation_id=exec_ctx.correlation_id,
+                run_id=run_id,
                 exc_info=True,
             )
 
-            # Record failure
-            _track_background_task(
-                _record_agent_run_complete(
-                    run_id=run_id,
-                    status="failed",
-                    duration_seconds=duration,
-                    error_message=error_msg[:500],
-                ),
-                task_name="record_agent_run_error",
+            # Record failure SYNCHRONOUSLY
+            await _record_agent_run_complete_sync(
+                run_id=run_id,
+                status="failed",
+                duration_seconds=duration,
+                error_message=error_msg[:500],
             )
+
+            # Unregister from in-flight tracking
+            unregister_in_flight_run(run_id)
 
             return AgentResult(
                 success=False,
