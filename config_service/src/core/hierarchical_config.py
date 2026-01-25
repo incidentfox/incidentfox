@@ -683,8 +683,7 @@ def fetch_integration_schemas_from_db(db: Session) -> Dict[str, Any]:
             "coralogix": {
                 "level": "org",
                 "locked": False,
-                "config_schema": {...},
-                "config": {}
+                "config_schema": {...}
             },
             ...
         }
@@ -728,7 +727,6 @@ def fetch_integration_schemas_from_db(db: Session) -> Dict[str, Any]:
                 "level": "org",
                 "locked": schema.id == "openai",  # Only OpenAI is locked (required)
                 "config_schema": config_schema,
-                "config": {},
             }
 
             if team_config_schema:
@@ -752,7 +750,6 @@ def get_default_integration_config_fallback() -> Dict[str, Any]:
                 "level": "org",
                 "locked": True,
                 "config_schema": {"api_key": {"type": "secret", "required": True}},
-                "config": {},
             }
         }
     }

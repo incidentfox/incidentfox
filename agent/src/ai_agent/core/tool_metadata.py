@@ -350,12 +350,12 @@ def validate_tool_integration(
         return True, []
 
     integration = integrations.get(tool.requires_integration, {})
-    config = integration.get("config", {})
 
-    # Check required fields
+    # Integration values are stored at top-level (not nested in "config")
+    # Check required fields directly on the integration object
     missing_fields = []
     for mapping in tool.integration_fields:
-        if mapping.required and not config.get(mapping.field):
+        if mapping.required and not integration.get(mapping.field):
             missing_fields.append(mapping.field)
 
     return len(missing_fields) == 0, missing_fields
