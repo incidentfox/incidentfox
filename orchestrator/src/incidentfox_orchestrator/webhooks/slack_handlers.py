@@ -299,7 +299,9 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                     timeout=int(
                         os.getenv("ORCHESTRATOR_SLACK_AGENT_TIMEOUT_SECONDS", "300")
                     ),
-                    max_turns=int(os.getenv("ORCHESTRATOR_SLACK_AGENT_MAX_TURNS", "50")),
+                    max_turns=int(
+                        os.getenv("ORCHESTRATOR_SLACK_AGENT_MAX_TURNS", "50")
+                    ),
                     correlation_id=correlation_id,
                     agent_base_url=dedicated_agent_url,
                     output_destinations=output_destinations,
