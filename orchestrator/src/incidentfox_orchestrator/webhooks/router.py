@@ -301,6 +301,14 @@ async def _process_github_webhook(
             team_config=team_notifications_config,
         )
 
+        # Log resolved output destinations for debugging
+        _log(
+            "github_webhook_output_destinations_resolved",
+            correlation_id=correlation_id,
+            destination_count=len(output_destinations),
+            destination_types=[d.get("type") for d in output_destinations],
+        )
+
         # Enrich message with PR comment context if this is a PR-related event
         enriched_message = message
         if pr_number:
@@ -719,6 +727,23 @@ async def _process_pagerduty_webhook(
             trigger_source="pagerduty",
             trigger_payload=trigger_payload,
             team_config=team_notifications_config,
+        )
+
+        # Log resolved output destinations for debugging
+        _log(
+            "pagerduty_webhook_output_destinations_resolved",
+            correlation_id=correlation_id,
+            destination_count=len(output_destinations),
+            destination_types=[d.get("type") for d in output_destinations],
+            has_notifications_config=bool(
+                team_notifications_config.get("notifications")
+            ),
+            pagerduty_output_channel=team_notifications_config.get("notifications", {})
+            .get("pagerduty_output", {})
+            .get("slack_channel_id"),
+            default_slack_channel=team_notifications_config.get(
+                "notifications", {}
+            ).get("default_slack_channel_id"),
         )
 
         if audit_api:
@@ -1148,6 +1173,23 @@ async def _process_incidentio_webhook(
             trigger_source="incidentio",
             trigger_payload=trigger_payload,
             team_config=team_notifications_config,
+        )
+
+        # Log resolved output destinations for debugging
+        _log(
+            "incidentio_webhook_output_destinations_resolved",
+            correlation_id=correlation_id,
+            destination_count=len(output_destinations),
+            destination_types=[d.get("type") for d in output_destinations],
+            has_notifications_config=bool(
+                team_notifications_config.get("notifications")
+            ),
+            incidentio_output_channel=team_notifications_config.get("notifications", {})
+            .get("incidentio_output", {})
+            .get("slack_channel_id"),
+            default_slack_channel=team_notifications_config.get(
+                "notifications", {}
+            ).get("default_slack_channel_id"),
         )
 
         if audit_api:
