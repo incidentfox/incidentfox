@@ -11,29 +11,28 @@ Config Structure:
         "openai": {
             "level": "org",
             "locked": true,
-            "config": {"api_key": "sk-..."},
-            "team_config": {}
+            "config_schema": {...},
+            "api_key": "sk-..."
         },
         "slack": {
             "level": "org",
             "locked": false,
-            "config": {"bot_token": "xoxb-..."},
-            "team_config": {
-                "default_channel": "#incidents",
-                "mention_oncall": true
-            }
+            "config_schema": {...},
+            "team_config_schema": {...},
+            "bot_token": "xoxb-...",
+            "default_channel": "#incidents"
         },
         "grafana": {
             "level": "team",
-            "required": true,
-            "config": {},
-            "team_config": {
-                "base_url": "https://grafana.team.com",
-                "api_key": "glsa_..."
-            }
+            "config_schema": {...},
+            "base_url": "https://grafana.team.com",
+            "api_key": "glsa_..."
         }
     }
 }
+
+Note: Config values are stored at the top level of each integration object,
+alongside metadata keys (level, locked, config_schema, team_config_schema).
 """
 
 from __future__ import annotations

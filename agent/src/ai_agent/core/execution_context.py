@@ -39,15 +39,39 @@ class ExecutionContext:
         """Get integrations configuration for this execution."""
         return self.team_config.get("integrations", {})
 
+    # Metadata keys that are NOT actual configuration values.
+    # These are structural/schema keys from the config system's default structure.
+    _INTEGRATION_METADATA_KEYS = frozenset({
+        "level",              # org/team level indicator
+        "locked",             # whether integration is locked at org level
+        "config_schema",      # schema for org-level fields (for UI display)
+        "team_config_schema", # schema for team-level fields (for UI display)
+        "name",               # display name
+    })
+
     def get_integration_config(self, integration_id: str) -> dict[str, Any]:
         """
         Get configuration for a specific integration.
 
-        Args:
-            integration_id: Integration identifier (e.g., "coralogix", "snowflake")
+        Integration values are stored at the top level of the integration object,
+        alongside metadata keys. This method extracts only the actual config values.
+
+        Example input:
+            {
+                "level": "org",           # metadata - skip
+                "config_schema": {...},   # metadata - skip
+                "token": "ghp_xxx",       # actual value - include
+                "org": "my-org",          # actual value - include
+            }
 
         Returns:
-            Integration config dict, or empty dict if not configured
+            {"token": "ghp_xxx", "org": "my-org"}
+
+        Args:
+            integration_id: Integration identifier (e.g., "github", "slack")
+
+        Returns:
+            Dict of actual config values, or empty dict if not configured
         """
         integration = self.integrations.get(integration_id, {})
 
@@ -60,8 +84,12 @@ class ExecutionContext:
             )
             return {}
 
-        # Return the config section (org + team merged)
-        return integration.get("config", {})
+        # Extract actual config values (everything except metadata keys)
+        return {
+            key: value
+            for key, value in integration.items()
+            if key not in self._INTEGRATION_METADATA_KEYS
+        }
 
     def is_integration_configured(
         self, integration_id: str, required_fields: list[str] = None
