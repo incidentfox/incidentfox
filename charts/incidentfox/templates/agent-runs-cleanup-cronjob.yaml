@@ -1,0 +1,61 @@
+{{- if .Values.services.agent.cleanup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: incidentfox-agent-runs-cleanup
+  namespace: {{ .Values.namespace }}
+spec:
+  schedule: {{ .Values.services.agent.cleanup.schedule | quote }}
+  concurrencyPolicy: Forbid  # Don't run if previous is still running
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 120  # 2 minutes max
+      template:
+        metadata:
+          labels:
+            app: incidentfox-agent-runs-cleanup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cleanup
+              image: curlimages/curl:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  echo "$(date -Iseconds) Starting stale agent runs cleanup"
+
+                  # Check stale count first (for logging)
+                  echo "$(date -Iseconds) Checking stale run count..."
+                  curl -sf \
+                    -H "X-Internal-Service: cleanup-cronjob" \
+                    "${CONFIG_SERVICE_URL}/api/v1/internal/agent-runs/stale-count?max_age_seconds=${MAX_AGE_SECONDS}" || true
+
+                  # Perform cleanup
+                  echo "$(date -Iseconds) Running cleanup..."
+                  RESULT=$(curl -sf \
+                    -X POST \
+                    -H "Content-Type: application/json" \
+                    -H "X-Internal-Service: cleanup-cronjob" \
+                    -d "{\"max_age_seconds\": ${MAX_AGE_SECONDS}}" \
+                    "${CONFIG_SERVICE_URL}/api/v1/internal/agent-runs/cleanup-stale")
+
+                  echo "$(date -Iseconds) Cleanup result: ${RESULT}"
+                  echo "$(date -Iseconds) Done"
+              env:
+                - name: CONFIG_SERVICE_URL
+                  value: {{ .Values.global.configService.url | quote }}
+                - name: MAX_AGE_SECONDS
+                  value: {{ .Values.services.agent.cleanup.maxAgeSeconds | quote }}
+              resources:
+                requests:
+                  cpu: "10m"
+                  memory: "32Mi"
+                limits:
+                  cpu: "100m"
+                  memory: "64Mi"
+{{- end }}

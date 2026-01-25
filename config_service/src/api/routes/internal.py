@@ -251,6 +251,94 @@ def list_agent_runs_internal(
     )
 
 
+# ==================== Stale Run Cleanup ====================
+
+
+class StaleRunsCleanupRequest(BaseModel):
+    """Request to mark stale runs as timeout."""
+
+    max_age_seconds: int = 600  # Default: 10 minutes (2x typical 5min timeout)
+
+
+class StaleRunsCleanupResponse(BaseModel):
+    """Response from stale runs cleanup."""
+
+    marked_count: int
+    max_age_seconds: int
+    message: str
+
+
+class StaleRunsCountResponse(BaseModel):
+    """Response with count of stale runs."""
+
+    stale_count: int
+    max_age_seconds: int
+
+
+@router.post("/agent-runs/cleanup-stale", response_model=StaleRunsCleanupResponse)
+def cleanup_stale_agent_runs(
+    request: StaleRunsCleanupRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Mark stale agent runs as 'timeout'.
+
+    This is a cleanup endpoint to handle runs that were orphaned due to:
+    - Process crash/OOM kill
+    - Network partition during completion recording
+    - Pod termination without graceful shutdown
+
+    Intended to be called by a periodic cronjob.
+    """
+    logger.info(
+        "cleanup_stale_runs_requested",
+        max_age_seconds=request.max_age_seconds,
+        service=service,
+    )
+
+    marked_count = repository.mark_stale_runs_as_timeout(
+        session,
+        max_age_seconds=request.max_age_seconds,
+    )
+    session.commit()
+
+    logger.info(
+        "cleanup_stale_runs_completed",
+        marked_count=marked_count,
+        max_age_seconds=request.max_age_seconds,
+    )
+
+    return StaleRunsCleanupResponse(
+        marked_count=marked_count,
+        max_age_seconds=request.max_age_seconds,
+        message=f"Marked {marked_count} stale runs as timeout",
+    )
+
+
+@router.get("/agent-runs/stale-count", response_model=StaleRunsCountResponse)
+def get_stale_runs_count(
+    max_age_seconds: int = 600,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Get count of stale agent runs (for monitoring/alerting).
+
+    Returns the number of runs stuck in 'running' status for longer
+    than max_age_seconds. Useful for Prometheus metrics or alerts.
+    """
+    count = repository.get_stale_runs_count(
+        session,
+        max_age_seconds=max_age_seconds,
+    )
+
+    return StaleRunsCountResponse(
+        stale_count=count,
+        max_age_seconds=max_age_seconds,
+    )
+
+
 # ==================== Agent Tool Calls ====================
 
 
