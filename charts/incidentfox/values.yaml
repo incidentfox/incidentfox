@@ -163,6 +163,9 @@ services:
     image: "incidentfox/agent:v1.0.0"
     replicas: 2
     servicePort: 8080
+    # Time to allow for graceful shutdown (marking in-flight runs as failed)
+    # Agent runs can take 5+ minutes, but shutdown only needs time to mark them
+    terminationGracePeriodSeconds: 60
     serviceAccount:
       create: true
       name: incidentfox-agent
@@ -207,6 +210,11 @@ services:
       enabled: false
       secretName: incidentfox-team-token
       secretKey: token
+    # Cleanup cronjob for stale agent runs (belt-and-suspenders for edge cases)
+    cleanup:
+      enabled: true
+      schedule: "*/5 * * * *"  # Every 5 minutes
+      maxAgeSeconds: 600       # Mark runs as timeout if running > 10 minutes
   orchestrator:
     enabled: true
     image: "incidentfox/orchestrator:v1.0.0"

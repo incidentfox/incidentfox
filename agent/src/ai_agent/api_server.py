@@ -25,8 +25,11 @@ from .core.agent_runner import (
     AgentRunner,
     ExecutionContext,
     _record_agent_run_complete,
+    _record_agent_run_complete_sync,
     _record_agent_run_start,
     get_agent_registry,
+    get_in_flight_runs,
+    mark_shutdown_in_progress,
 )
 from .core.auth import AuthError, authenticate_request
 from .core.config import get_config
@@ -2200,6 +2203,70 @@ def create_app() -> Sanic:
 
     # NOTE: Webhook endpoints have been removed. All webhooks now handled by Orchestrator.
     # See: orchestrator/src/incidentfox_orchestrator/webhooks/router.py
+
+    # =========================================================================
+    # Graceful Shutdown Handler
+    # =========================================================================
+    # When the server is stopping (SIGTERM, deployment rollout, scale-down),
+    # mark all in-flight agent runs as failed to prevent orphaned "running" status.
+
+    @app.before_server_stop
+    async def cleanup_in_flight_runs(app, loop):
+        """
+        Mark all in-flight agent runs as failed when server is shutting down.
+
+        This prevents runs from being stuck in 'running' status when:
+        - Pod is terminated (deployment rollout, scale-down)
+        - Process receives SIGTERM/SIGINT
+        - Container is stopped
+        """
+        mark_shutdown_in_progress()  # Prevent new runs from being registered
+
+        in_flight = get_in_flight_runs()
+        if not in_flight:
+            logger.info("graceful_shutdown_no_in_flight_runs")
+            return
+
+        logger.info(
+            "graceful_shutdown_marking_in_flight_runs",
+            count=len(in_flight),
+            run_ids=in_flight,
+        )
+
+        # Mark each in-flight run as failed
+        for run_id in in_flight:
+            try:
+                # Use short timeout - we're shutting down, can't wait long
+                await asyncio.wait_for(
+                    _record_agent_run_complete(
+                        run_id=run_id,
+                        status="failed",
+                        duration_seconds=0,  # Unknown duration
+                        error_message="Agent process shutdown while run was in progress",
+                    ),
+                    timeout=2.0,  # Short timeout during shutdown
+                )
+                logger.info(
+                    "graceful_shutdown_run_marked_failed",
+                    run_id=run_id,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "graceful_shutdown_run_mark_timeout",
+                    run_id=run_id,
+                    message="Cleanup job will catch this",
+                )
+            except Exception as e:
+                logger.warning(
+                    "graceful_shutdown_run_mark_error",
+                    run_id=run_id,
+                    error=str(e),
+                )
+
+        logger.info(
+            "graceful_shutdown_complete",
+            processed_count=len(in_flight),
+        )
 
     @app.exception(Exception)
     async def handle_exception(request: Request, exception: Exception):
