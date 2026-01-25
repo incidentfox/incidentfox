@@ -204,16 +204,33 @@ export default function TeamToolsPage() {
 
       // Convert integrations object to array
       // Use schema descriptions (generic) instead of config descriptions (org-specific)
-      const integrationItems = Object.entries(integrations).map(([id, config]: [string, any]) => ({
-        id,
-        name: config.name || id,
-        description: '', // Will be populated from schema in next step
-        type: 'integration',
-        enabled: true,  // Integrations are always "available", tools use them
-        config_schema: config.config_schema || {},
-        config_values: config.config_values || {},
-        source: 'org' as const,
-      }));
+      const integrationItems = Object.entries(integrations).map(([id, config]: [string, any]) => {
+        // Merge org-level and team-level config schemas
+        const orgSchema = config.config_schema || {};
+        const teamSchema = config.team_config_schema || {};
+        const mergedSchema = { ...orgSchema, ...teamSchema };
+
+        // Extract config values from the flat structure
+        // Values are stored at the integration top level (e.g., slack.bot_token),
+        // not in a nested config_values object
+        const extractedValues: Record<string, string> = {};
+        for (const fieldName of Object.keys(mergedSchema)) {
+          if (config[fieldName] !== undefined) {
+            extractedValues[fieldName] = config[fieldName];
+          }
+        }
+
+        return {
+          id,
+          name: config.name || id,
+          description: '', // Will be populated from schema in next step
+          type: 'integration',
+          enabled: true,  // Integrations are always "available", tools use them
+          config_schema: mergedSchema,
+          config_values: extractedValues,
+          source: 'org' as const,
+        };
+      });
 
       // Convert mcp_servers dict to array and extract individual tools
       const mcpServerItems: ToolItem[] = [];
