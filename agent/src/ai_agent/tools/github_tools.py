@@ -1941,7 +1941,9 @@ def get_failed_workflow_annotations(
             job_id = job.get("id")
 
             # Get annotations for each job via check-run API
-            check_url = f"https://api.github.com/repos/{repo}/check-runs/{job_id}/annotations"
+            check_url = (
+                f"https://api.github.com/repos/{repo}/check-runs/{job_id}/annotations"
+            )
             ann_response = requests.get(check_url, headers=headers, timeout=30)
 
             if ann_response.status_code == 200:
@@ -2035,9 +2037,7 @@ def get_check_runs(
                 }
             )
 
-        logger.info(
-            "github_check_runs_listed", repo=repo, ref=ref, count=len(run_list)
-        )
+        logger.info("github_check_runs_listed", repo=repo, ref=ref, count=len(run_list))
         return run_list
 
     except IntegrationNotConfiguredError:
@@ -2168,9 +2168,7 @@ def list_deployments(
                 }
             )
 
-        logger.info(
-            "github_deployments_listed", repo=repo, count=len(deployment_list)
-        )
+        logger.info("github_deployments_listed", repo=repo, count=len(deployment_list))
         return deployment_list
 
     except IntegrationNotConfiguredError:
@@ -2245,7 +2243,9 @@ def get_deployment_status(repo: str, deployment_id: int) -> dict[str, Any] | str
             repo=repo,
             deployment_id=deployment_id,
         )
-        return json.dumps({"error": str(e), "repo": repo, "deployment_id": deployment_id})
+        return json.dumps(
+            {"error": str(e), "repo": repo, "deployment_id": deployment_id}
+        )
 
 
 # List of all GitHub tools for registration
