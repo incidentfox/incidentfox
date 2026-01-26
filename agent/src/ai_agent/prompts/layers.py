@@ -794,10 +794,11 @@ You have NO visibility into the original request or team configuration - only wh
 ### What to Extract from Context
 
 1. **ALL Identifiers and Conventions** - Use EXACTLY as provided (these are team-specific)
-2. **Time Window** - Focus investigation on the reported time (±30 minutes initially)
-3. **Prior Findings** - Don't re-investigate what's already confirmed
-4. **Focus Areas** - Prioritize what caller mentions
-5. **Known Issues/Patterns** - Use team-specific knowledge to guide investigation
+2. **ALL Links and URLs** - GitHub repos, dashboard URLs, runbook links, log endpoints, etc.
+3. **Time Window** - Focus investigation on the reported time (±30 minutes initially)
+4. **Prior Findings** - Don't re-investigate what's already confirmed
+5. **Focus Areas** - Prioritize what caller mentions
+6. **Known Issues/Patterns** - Use team-specific knowledge to guide investigation
 
 ### When Context is Incomplete
 
@@ -924,16 +925,18 @@ You received this context:
 - Namespace: checkout-prod
 - Cluster: prod-us-east-1
 - Label selector: app.kubernetes.io/name=payment (NOT paymentservice)
+- GitHub repo: https://github.com/acme/payment-service
+- Coralogix dashboard: https://cx498.coralogix.com/#/query-new/logs
 - Time window: Last 2 hours since 10:30 UTC
 - Known issue: DB connection pool exhaustion during peak traffic
 ```
 
-When delegating to K8s agent, **pass ALL of it**:
+When delegating to K8s agent, **pass ALL of it** (including links):
 ```
 call_k8s_agent(
     query="Investigate pod health for payment service. Check for crashes, OOMKills, resource pressure.",
     namespace="checkout-prod",
-    context="Cluster: prod-us-east-1. Label selector: app.kubernetes.io/name=payment (NOT paymentservice). Time window: Last 2 hours since 10:30 UTC. Known issue: DB connection pool exhaustion during peak traffic."
+    context="Cluster: prod-us-east-1. Label selector: app.kubernetes.io/name=payment (NOT paymentservice). GitHub: https://github.com/acme/payment-service. Coralogix: https://cx498.coralogix.com/#/query-new/logs. Time window: Last 2 hours since 10:30 UTC. Known issue: DB connection pool exhaustion during peak traffic."
 )
 ```
 
@@ -947,17 +950,18 @@ call_k8s_agent(
     context=""
 )
 ```
-❌ Sub-agent doesn't know: The cluster, the correct label selector format, the time window, the known issue
+❌ Sub-agent doesn't know: The cluster, the correct label selector format, the links, the time window, the known issue
 ❌ Result: Wrong resources investigated, missed findings, wasted effort
 
 ### What to Include in Every Delegation
 
 1. **ALL identifiers and conventions from your context** - pass them exactly as you received them
-2. **Time context** - when the issue started, what time range to investigate
-3. **Prior findings** - what you or other agents have already discovered
-4. **Known issues/patterns** - team-specific knowledge that might be relevant
-5. **The specific question** - what do you need the sub-agent to find out?
-6. **Focus hints** - if you suspect something, mention it so they can prioritize
+2. **ALL links and URLs** - GitHub repos, dashboard URLs, runbook links, log group URLs, etc.
+3. **Time context** - when the issue started, what time range to investigate
+4. **Prior findings** - what you or other agents have already discovered
+5. **Known issues/patterns** - team-specific knowledge that might be relevant
+6. **The specific question** - what do you need the sub-agent to find out?
+7. **Focus hints** - if you suspect something, mention it so they can prioritize
 
 ### What NOT to Include
 
