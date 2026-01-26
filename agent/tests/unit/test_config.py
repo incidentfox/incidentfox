@@ -1,8 +1,9 @@
 """Tests for configuration management."""
 
 import pytest
-from ai_agent.core.config import Config, LoggingConfig, OpenAIConfig
 from pydantic import ValidationError
+
+from ai_agent.core.config import Config, LoggingConfig, OpenAIConfig
 
 
 class TestOpenAIConfig:

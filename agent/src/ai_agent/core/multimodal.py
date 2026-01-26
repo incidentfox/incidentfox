@@ -15,7 +15,6 @@ This module converts that to OpenAI's format:
 """
 
 import re
-from typing import Union
 
 # Pattern to match embedded images
 # Supports: <image src="data:image/png;base64,..." />
@@ -38,7 +37,7 @@ def has_embedded_images(message: str) -> bool:
     return bool(IMAGE_PATTERN.search(message))
 
 
-def parse_multimodal_message(message: str) -> Union[str, list]:
+def parse_multimodal_message(message: str) -> str | list:
     """
     Parse a message and convert embedded images to OpenAI format.
 
@@ -114,7 +113,7 @@ def strip_images_from_message(message: str) -> str:
     return IMAGE_PATTERN.sub("[IMAGE]", message)
 
 
-def get_message_preview(message: Union[str, list], max_length: int = 100) -> str:
+def get_message_preview(message: str | list, max_length: int = 100) -> str:
     """
     Get a preview of a message for logging.
 

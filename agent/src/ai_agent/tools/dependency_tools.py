@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Optional
 
 from agents import function_tool
 
@@ -95,7 +94,6 @@ def get_service_dependencies(service: str, min_confidence: float = 0.5) -> str:
         team_id = _get_team_id()
 
         # Import here to avoid circular imports
-        from sqlalchemy import and_
 
         # Query directly to avoid dependency on dependency_service package
         result = session.execute(

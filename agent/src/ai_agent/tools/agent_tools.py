@@ -13,7 +13,6 @@ from agents import function_tool
 
 from ..core.config_required import make_config_required_response
 from ..core.execution_context import get_execution_context
-from ..core.integration_errors import IntegrationNotConfiguredError
 from ..core.logging import get_logger
 from .human_interaction import ask_human
 
