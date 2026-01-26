@@ -40,7 +40,17 @@ interface AgentModel {
   name: string;
   temperature: number;
   max_tokens: number;
+  reasoning?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+  verbosity?: 'low' | 'medium' | 'high';
 }
+
+// Helper to detect reasoning models (o1, o3, o4, gpt-5 series)
+const isReasoningModel = (modelName: string): boolean => {
+  return modelName.startsWith('o1') ||
+         modelName.startsWith('o3') ||
+         modelName.startsWith('o4') ||
+         modelName.startsWith('gpt-5');
+};
 
 interface AgentPrompt {
   system: string;
@@ -1072,7 +1082,7 @@ export default function AgentSettingsPage() {
                     <h3 className="font-semibold text-gray-900 dark:text-white">Model</h3>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 gap-4 mb-4">
                     <div>
                       <label className="block text-xs font-medium text-gray-500 mb-1">
                         Model Name
@@ -1087,40 +1097,21 @@ export default function AgentSettingsPage() {
                         }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
                       >
-                        <option value="gpt-5">gpt-5</option>
-                        <option value="gpt-4o">gpt-4o</option>
-                        <option value="gpt-4o-2024-11-20">gpt-4o-2024-11-20</option>
-                        <option value="gpt-4o-mini">gpt-4o-mini</option>
-                        <option value="gpt-4-turbo">gpt-4-turbo</option>
-                        <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
-                        <option value="o1">o1</option>
-                        <option value="o1-mini">o1-mini</option>
-                        <option value="o3-mini">o3-mini</option>
-                        <option value="o4-mini">o4-mini</option>
+                        <optgroup label="Reasoning Models">
+                          <option value="gpt-5">gpt-5</option>
+                          <option value="o1">o1</option>
+                          <option value="o1-mini">o1-mini</option>
+                          <option value="o3-mini">o3-mini</option>
+                          <option value="o4-mini">o4-mini</option>
+                        </optgroup>
+                        <optgroup label="Standard Models">
+                          <option value="gpt-4o">gpt-4o</option>
+                          <option value="gpt-4o-2024-11-20">gpt-4o-2024-11-20</option>
+                          <option value="gpt-4o-mini">gpt-4o-mini</option>
+                          <option value="gpt-4-turbo">gpt-4-turbo</option>
+                          <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+                        </optgroup>
                       </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">
-                        Temperature
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="2"
-                        value={editingAgent.model.temperature}
-                        onChange={(e) =>
-                          setEditingAgent({
-                            ...editingAgent,
-                            model: {
-                              ...editingAgent.model,
-                              temperature: parseFloat(e.target.value) || 0,
-                            },
-                          })
-                        }
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-                      />
                     </div>
 
                     <div>
@@ -1142,6 +1133,109 @@ export default function AgentSettingsPage() {
                       />
                     </div>
                   </div>
+
+                  {/* Conditional model parameters based on model type */}
+                  {isReasoningModel(editingAgent.model.name) ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="flex items-center gap-1 mb-1">
+                          <label className="block text-xs font-medium text-gray-500">
+                            Reasoning Effort
+                          </label>
+                          <HelpTip id="reasoning-effort" position="top">
+                            Controls how much the model &quot;thinks&quot; before responding.
+                            Higher values improve quality but increase latency and cost.
+                            Only available for reasoning models (o1, o3, o4, gpt-5).
+                          </HelpTip>
+                        </div>
+                        <select
+                          value={editingAgent.model.reasoning || 'medium'}
+                          onChange={(e) =>
+                            setEditingAgent({
+                              ...editingAgent,
+                              model: {
+                                ...editingAgent.model,
+                                reasoning: e.target.value as AgentModel['reasoning'],
+                              },
+                            })
+                          }
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                        >
+                          <option value="none">None (fastest)</option>
+                          <option value="low">Low</option>
+                          <option value="medium">Medium (default)</option>
+                          <option value="high">High</option>
+                          <option value="xhigh">Extra High (most thorough)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-1 mb-1">
+                          <label className="block text-xs font-medium text-gray-500">
+                            Verbosity
+                          </label>
+                          <HelpTip id="verbosity" position="top">
+                            Controls the length and detail of responses.
+                            Only available for reasoning models (o1, o3, o4, gpt-5).
+                          </HelpTip>
+                        </div>
+                        <select
+                          value={editingAgent.model.verbosity || 'medium'}
+                          onChange={(e) =>
+                            setEditingAgent({
+                              ...editingAgent,
+                              model: {
+                                ...editingAgent.model,
+                                verbosity: e.target.value as AgentModel['verbosity'],
+                              },
+                            })
+                          }
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                        >
+                          <option value="low">Low (concise)</option>
+                          <option value="medium">Medium (default)</option>
+                          <option value="high">High (detailed)</option>
+                        </select>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="flex items-center gap-1 mb-1">
+                          <label className="block text-xs font-medium text-gray-500">
+                            Temperature
+                          </label>
+                          <HelpTip id="temperature" position="top">
+                            Controls randomness in responses. Lower values (0-0.3) are more
+                            deterministic, higher values (0.7-2) are more creative.
+                            Only available for standard models (not reasoning models).
+                          </HelpTip>
+                        </div>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="2"
+                          value={editingAgent.model.temperature}
+                          onChange={(e) =>
+                            setEditingAgent({
+                              ...editingAgent,
+                              model: {
+                                ...editingAgent.model,
+                                temperature: parseFloat(e.target.value) || 0,
+                              },
+                            })
+                          }
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <p className="text-xs text-gray-400 dark:text-gray-500 pb-2">
+                          Reasoning models use &quot;Reasoning Effort&quot; instead of temperature.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* System Prompt */}
