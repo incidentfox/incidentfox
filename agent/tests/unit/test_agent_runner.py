@@ -3,7 +3,6 @@
 from unittest.mock import Mock, patch
 
 import pytest
-
 from ai_agent.core.agent_runner import AgentRegistry, AgentRunner
 
 

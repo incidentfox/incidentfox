@@ -201,12 +201,16 @@ def list_agent_runs_internal(
     if not org_id and not team_node_id:
         # Try to get org_id from team_node_id lookup
         if team_node_id:
-            node = session.query(OrgNode).filter(OrgNode.node_id == team_node_id).first()
+            node = (
+                session.query(OrgNode).filter(OrgNode.node_id == team_node_id).first()
+            )
             if node:
                 org_id = node.org_id
 
     if not org_id:
-        raise HTTPException(status_code=400, detail="Either org_id or team_node_id is required")
+        raise HTTPException(
+            status_code=400, detail="Either org_id or team_node_id is required"
+        )
 
     runs = repository.list_agent_runs(
         session,
@@ -399,7 +403,9 @@ def record_tool_calls(
     including inputs, outputs, and timing information.
     """
     if request.run_id != run_id:
-        raise HTTPException(status_code=400, detail="run_id in path must match request body")
+        raise HTTPException(
+            status_code=400, detail="run_id in path must match request body"
+        )
 
     # Convert to dict format for bulk insert
     tool_calls_data = [
@@ -597,7 +603,9 @@ def create_pending_change_internal(
 
     # Check if change with this ID already exists
     existing = (
-        session.query(PendingConfigChange).filter(PendingConfigChange.id == request.id).first()
+        session.query(PendingConfigChange)
+        .filter(PendingConfigChange.id == request.id)
+        .first()
     )
     if existing:
         # Return existing instead of error (idempotent)
@@ -871,7 +879,9 @@ def create_conversation_mapping(
 ):
     """Create or update a conversation mapping (upsert to handle race conditions)."""
     if not request.openai_conversation_id:
-        raise HTTPException(status_code=400, detail="openai_conversation_id is required")
+        raise HTTPException(
+            status_code=400, detail="openai_conversation_id is required"
+        )
 
     # Use upsert to handle concurrent requests safely
     mapping, created = repository.upsert_conversation_mapping(
@@ -1097,7 +1107,9 @@ def get_meeting_data(
         "provider": meeting.provider,
         "meeting_url": meeting.meeting_url,
         "duration": meeting.duration_seconds,
-        "meeting_time": (meeting.meeting_time.isoformat() if meeting.meeting_time else None),
+        "meeting_time": (
+            meeting.meeting_time.isoformat() if meeting.meeting_time else None
+        ),
         "attendees": meeting.attendees or [],
         "notes": meeting.notes,
         "transcript": meeting.transcript or [],
@@ -1168,7 +1180,9 @@ def search_meetings(
                 "provider": m.provider,
                 "duration": m.duration_seconds,
                 "meeting_time": m.meeting_time.isoformat() if m.meeting_time else None,
-                "attendees": [a.get("email") for a in (m.attendees or []) if a.get("email")],
+                "attendees": [
+                    a.get("email") for a in (m.attendees or []) if a.get("email")
+                ],
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in meetings
