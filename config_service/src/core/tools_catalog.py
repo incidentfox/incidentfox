@@ -46,7 +46,10 @@ def _infer_tool_category(tool_name: str) -> str:
         ]
     ):
         return "observability"
-    elif any(k in name_lower for k in ["snowflake", "bigquery", "postgres", "sql", "query", "database"]):
+    elif any(
+        k in name_lower
+        for k in ["snowflake", "bigquery", "postgres", "sql", "query", "database"]
+    ):
         return "data"
     elif any(k in name_lower for k in ["anomal", "correlate", "detect", "forecast"]):
         return "analytics"
