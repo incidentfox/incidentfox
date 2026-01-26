@@ -88,6 +88,33 @@ AGENT_CAPABILITIES: dict[str, dict[str, Any]] = {
             '"Create a blameless postmortem document with lessons learned and preventive actions."',
         ],
     },
+    "metrics_advisor": {
+        "name": "Metrics Advisor Agent",
+        "tool_name": "call_metrics_advisor_agent",
+        "description": "Expert in observability setup - analyzes services and proposes metrics/alerts based on SRE best practices (RED, USE, Golden Signals). Can discover services, classify types, and generate Prometheus rules or Datadog monitors.",
+        "use_when": [
+            "User wants to set up metrics/alerts for a service",
+            "User wants to assess observability coverage or maturity",
+            "User asks about missing metrics, alert gaps, or SLI/SLO design",
+            "User wants metrics/alerts code generated (Prometheus rules, Datadog monitors)",
+            "User is onboarding a new service and needs observability guidance",
+            "User wants recommendations for what to monitor in a system",
+        ],
+        "do_not_use_when": [
+            "Actively investigating an ongoing incident (use investigation agent)",
+            "Just querying existing metrics values (use metrics agent)",
+            "Writing application code (use coding agent)",
+            "Analyzing why current alerts are firing (use investigation agent)",
+        ],
+        "delegation_examples": [
+            '"Analyze the payment-api service and propose metrics and alerts"',
+            '"What SLIs should we track for this new worker service?"',
+            '"Generate Prometheus alerting rules for our checkout service"',
+            '"Assess the observability maturity of services in the production namespace"',
+            '"Set up monitoring for the new order-processor worker in Kubernetes"',
+            '"What metrics are we missing for our HTTP gateway service?"',
+        ],
+    },
     # =========================================================================
     # SUB-AGENTS (available via Investigation Agent)
     # =========================================================================
@@ -256,10 +283,10 @@ def get_enabled_agent_keys(
     Returns:
         List of enabled agent keys
     """
-    # Starship topology: 3 top-level agents from Planner
+    # Starship topology: 4 top-level agents from Planner
     # Investigation agent has its own subagents (github, k8s, aws, metrics, log_analysis)
     if default_agents is None:
-        default_agents = ["investigation", "coding", "writeup"]
+        default_agents = ["investigation", "coding", "writeup", "metrics_advisor"]
 
     if not team_config:
         return default_agents

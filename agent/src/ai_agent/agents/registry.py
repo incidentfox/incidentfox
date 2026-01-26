@@ -20,6 +20,7 @@ from .coding_agent import create_coding_agent
 from .investigation_agent import create_investigation_agent
 from .k8s_agent import create_k8s_agent
 from .log_analysis_agent import create_log_analysis_agent
+from .metrics_advisor_agent import create_metrics_advisor_agent
 from .metrics_agent import create_metrics_agent
 from .planner import create_planner_agent
 
@@ -91,9 +92,7 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
     team_cfg = team_config if team_config is not None else config.team_config
 
     if not team_cfg:
-        raise ValueError(
-            f"Cannot create agent '{agent_name}': no team config available"
-        )
+        raise ValueError(f"Cannot create agent '{agent_name}': no team config available")
 
     # Get agent config from team configuration
     agent_config = team_cfg.get_agent_config(agent_name)
@@ -142,9 +141,7 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
 
         # Create each sub-agent and wrap it as a tool
         for sub_agent_name in (
-            agent_config.sub_agents.keys()
-            if isinstance(agent_config.sub_agents, dict)
-            else []
+            agent_config.sub_agents.keys() if isinstance(agent_config.sub_agents, dict) else []
         ):
             # Check if sub-agent is enabled
             if not agent_config.sub_agents[sub_agent_name]:
@@ -165,9 +162,7 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
                     continue
 
                 # Otherwise, recursively create the local sub-agent
-                sub_agent = create_generic_agent_from_config(
-                    sub_agent_name, team_config=team_cfg
-                )
+                sub_agent = create_generic_agent_from_config(sub_agent_name, team_config=team_cfg)
 
                 # Create a wrapper function for this sub-agent
                 def make_sub_agent_tool(sub_agent_obj, sub_name):
@@ -204,9 +199,7 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
 
                                     try:
                                         result = new_loop.run_until_complete(
-                                            Runner().run(
-                                                sub_agent_obj, query, max_turns=10
-                                            )
+                                            Runner().run(sub_agent_obj, query, max_turns=10)
                                         )
                                         result_holder["result"] = result
                                     except MaxTurnsExceeded as e:
@@ -216,9 +209,7 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
                                             agent=sub_name,
                                             max_turns=10,
                                         )
-                                        summary = summarize_partial_work(
-                                            e, query, sub_name
-                                        )
+                                        summary = summarize_partial_work(e, query, sub_name)
                                         result_holder["result"] = summary
                                         result_holder["partial"] = True
                                     finally:
@@ -226,9 +217,7 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
                                 except Exception as e:
                                     result_holder["error"] = e
 
-                            thread = threading.Thread(
-                                target=run_in_new_loop, daemon=True
-                            )
+                            thread = threading.Thread(target=run_in_new_loop, daemon=True)
                             thread.start()
                             thread.join(timeout=300)  # 5 minute timeout
 
@@ -250,10 +239,7 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
 
                             # Check if result is a partial work summary
                             result = result_holder["result"]
-                            if (
-                                isinstance(result, dict)
-                                and result.get("status") == "incomplete"
-                            ):
+                            if isinstance(result, dict) and result.get("status") == "incomplete":
                                 logger.info(
                                     f"{sub_name}_agent_partial_results",
                                     findings=len(result.get("findings", [])),
@@ -318,15 +304,9 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
     # Get model settings
     model_name = agent_config.model.name if agent_config.model else config.openai.model
     temperature = (
-        agent_config.model.temperature
-        if agent_config.model
-        else config.openai.temperature
+        agent_config.model.temperature if agent_config.model else config.openai.temperature
     )
-    max_tokens = (
-        agent_config.model.max_tokens
-        if agent_config.model
-        else config.openai.max_tokens
-    )
+    max_tokens = agent_config.model.max_tokens if agent_config.model else config.openai.max_tokens
 
     # Create agent with config
     agent = Agent[TaskContext](
@@ -443,6 +423,7 @@ def initialize_all_agents() -> None:
         "aws_agent": create_aws_agent,
         "coding_agent": create_coding_agent,
         "metrics_agent": create_metrics_agent,
+        "metrics_advisor_agent": create_metrics_advisor_agent,
         "investigation_agent": create_investigation_agent,
         "ci_agent": create_ci_agent,
         "log_analysis_agent": create_log_analysis_agent,
@@ -478,9 +459,7 @@ def initialize_all_agents() -> None:
             # Create generic factory for this config-defined agent
             def make_factory(name):
                 # Closure to capture agent_name
-                return lambda team_config=None: create_generic_agent_from_config(
-                    name, team_config
-                )
+                return lambda team_config=None: create_generic_agent_from_config(name, team_config)
 
             factory = make_factory(agent_name)
             max_retries = agent_config.get("max_retries", 3)

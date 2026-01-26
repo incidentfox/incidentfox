@@ -19,6 +19,7 @@ from .github_agent import create_github_agent
 from .investigation_agent import create_investigation_agent
 from .k8s_agent import create_k8s_agent
 from .log_analysis_agent import create_log_analysis_agent
+from .metrics_advisor_agent import create_metrics_advisor_agent
 from .metrics_agent import create_metrics_agent
 from .planner import create_planner_agent
 from .writeup_agent import create_writeup_agent
@@ -30,6 +31,7 @@ __all__ = [
     # Top-level agents (from Planner)
     "create_coding_agent",
     "create_writeup_agent",
+    "create_metrics_advisor_agent",
     # Sub-agents (from Investigation)
     "create_github_agent",
     "create_k8s_agent",
