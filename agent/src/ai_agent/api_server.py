@@ -1945,7 +1945,9 @@ def create_app() -> Sanic:
 
         # Try to import other agent prompts
         try:
-            from .agents.investigation_agent import SYSTEM_PROMPT as INVESTIGATION_PROMPT
+            from .agents.investigation_agent import (
+                SYSTEM_PROMPT as INVESTIGATION_PROMPT,
+            )
 
             default_prompts["investigation"] = INVESTIGATION_PROMPT
         except ImportError:
