@@ -130,13 +130,17 @@ def postgres_list_tables(schema: str | None = None) -> dict[str, Any]:
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "postgres_list_tables", "postgresql")
+        return handle_integration_not_configured(
+            e, "postgres_list_tables", "postgresql"
+        )
     except Exception as e:
         logger.error("postgres_list_tables_failed", error=str(e))
         raise ToolExecutionError("postgres_list_tables", str(e), e)
 
 
-def postgres_describe_table(table_name: str, schema: str | None = None) -> dict[str, Any]:
+def postgres_describe_table(
+    table_name: str, schema: str | None = None
+) -> dict[str, Any]:
     """
     Get column details for a PostgreSQL table.
 
@@ -250,9 +254,7 @@ def postgres_describe_table(table_name: str, schema: str | None = None) -> dict[
             e, "postgres_describe_table", "postgresql"
         )
     except Exception as e:
-        logger.error(
-            "postgres_describe_table_failed", error=str(e), table=table_name
-        )
+        logger.error("postgres_describe_table_failed", error=str(e), table=table_name)
         raise ToolExecutionError("postgres_describe_table", str(e), e)
 
 
@@ -312,7 +314,9 @@ def postgres_execute_query(
             cursor.close()
             conn.close()
 
-            logger.info("postgres_query_executed", rows=len(results), query_hash=hash(query))
+            logger.info(
+                "postgres_query_executed", rows=len(results), query_hash=hash(query)
+            )
 
             return {
                 "success": True,
