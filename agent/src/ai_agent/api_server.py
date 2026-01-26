@@ -243,16 +243,24 @@ async def _store_conversation_mapping(
         return False
 
 
-async def _create_mcp_servers_for_request(team_config):
+async def _create_mcp_servers_for_request(team_config, agent_name: str = None):
     """
     Create MCP servers for a request using AsyncExitStack pattern.
+
+    Applies two levels of filtering:
+    1. MCP-level: Only creates MCPs where mcp_config.enabled is True (default)
+    2. Agent-level: Only creates MCPs where agents.{agent_name}.mcps.{mcp_id} is True
+
+    Args:
+        team_config: Team configuration with mcp_servers and agents
+        agent_name: Name of the agent to filter MCPs for. If None, loads all enabled MCPs.
 
     Returns tuple of (stack, mcp_servers) where:
     - stack: AsyncExitStack that must be entered with 'async with'
     - mcp_servers: List of MCPServerStdio objects ready to pass to Agent()
 
     Usage:
-        async with await _create_mcp_servers_for_request(team_config) as (stack, mcp_servers):
+        async with await _create_mcp_servers_for_request(team_config, "planner") as (stack, mcp_servers):
             agent = Agent(..., mcp_servers=mcp_servers)
             result = await Runner.run(agent, message)
     """
@@ -268,12 +276,30 @@ async def _create_mcp_servers_for_request(team_config):
     ):
         return None, []
 
+    # Get agent's MCP configuration if agent_name is provided
+    agent_mcps_config = None
+    if agent_name and hasattr(team_config, "get_agent_config"):
+        agent_config = team_config.get_agent_config(agent_name)
+        if agent_config:
+            agent_mcps_config = getattr(agent_config, "mcps", None)
+            # Also check if it's a dict with 'mcps' key
+            if agent_mcps_config is None and hasattr(agent_config, "__getitem__"):
+                try:
+                    agent_mcps_config = agent_config.get("mcps")
+                except (TypeError, AttributeError):
+                    pass
+
     logger.info(
-        "creating_mcp_servers_for_request", mcp_count=len(team_config.mcp_servers)
+        "creating_mcp_servers_for_request",
+        mcp_count=len(team_config.mcp_servers),
+        agent_name=agent_name,
+        agent_mcps_config=agent_mcps_config,
     )
 
     stack = AsyncExitStack()
     mcp_servers = []
+    skipped_disabled = []
+    skipped_not_in_agent = []
 
     try:
         # Create MCPServerStdio objects for each configured MCP server
@@ -288,6 +314,31 @@ async def _create_mcp_servers_for_request(team_config):
             else:
                 mcp_dict = mcp_config
 
+            # Filter 1: Skip if MCP is explicitly disabled at team level
+            if not mcp_dict.get("enabled", True):
+                skipped_disabled.append(mcp_id)
+                logger.debug(
+                    "skipping_disabled_mcp",
+                    mcp_id=mcp_id,
+                    reason="mcp_config.enabled is False",
+                )
+                continue
+
+            # Filter 2: Skip if agent has mcps config and this MCP is not enabled for the agent
+            if agent_mcps_config is not None:
+                # agent_mcps_config is a dict like {"azure-mcp": True, "github-mcp": False}
+                # If the dict is empty {}, no MCPs are enabled for this agent
+                # If the MCP is not in the dict or is False, skip it
+                if not agent_mcps_config.get(mcp_id, False):
+                    skipped_not_in_agent.append(mcp_id)
+                    logger.debug(
+                        "skipping_mcp_not_in_agent_config",
+                        mcp_id=mcp_id,
+                        agent_name=agent_name,
+                        reason="not in agents.{agent}.mcps or set to False",
+                    )
+                    continue
+
             # Get timeout (default 120s for Azure operations)
             timeout_seconds = mcp_dict.get("timeout_seconds", 120)
 
@@ -300,6 +351,7 @@ async def _create_mcp_servers_for_request(team_config):
                     mcp_dict.get("args", [])[:3] if mcp_dict.get("args") else []
                 ),  # First 3 args only
                 env_keys=list(mcp_dict.get("env", {}).keys()),
+                agent_name=agent_name,
             )
 
             # Create and start MCP server using AsyncExitStack
@@ -320,9 +372,16 @@ async def _create_mcp_servers_for_request(team_config):
                 "mcp_server_created_for_request",
                 mcp_id=mcp_id,
                 name=mcp_dict.get("name", mcp_id),
+                agent_name=agent_name,
             )
 
-        logger.info("mcp_servers_ready_for_request", server_count=len(mcp_servers))
+        logger.info(
+            "mcp_servers_ready_for_request",
+            server_count=len(mcp_servers),
+            skipped_disabled=skipped_disabled,
+            skipped_not_in_agent=skipped_not_in_agent,
+            agent_name=agent_name,
+        )
 
         return stack, mcp_servers
 
@@ -897,8 +956,10 @@ def create_app() -> Sanic:
                         ),
                     )
 
-                # Create MCP servers if team has them configured
-                stack, mcp_servers = await _create_mcp_servers_for_request(team_config)
+                # Create MCP servers if team has them configured (filtered by agent's mcps config)
+                stack, mcp_servers = await _create_mcp_servers_for_request(
+                    team_config, agent_name
+                )
 
                 logger.info(
                     "mcp_servers_created_starting_agent_execution",
@@ -1246,8 +1307,10 @@ def create_app() -> Sanic:
                     ),
                 )
 
-            # Create MCP servers if team has them configured
-            stack, mcp_servers = await _create_mcp_servers_for_request(team_config)
+            # Create MCP servers if team has them configured (filtered by agent's mcps config)
+            stack, mcp_servers = await _create_mcp_servers_for_request(
+                team_config, agent_name
+            )
 
             try:
                 # If we have MCP servers, create a fresh AgentRunner with the agent

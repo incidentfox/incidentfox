@@ -67,6 +67,10 @@ class AgentConfig(BaseModel):
     model: AgentModelConfig | None = None
     disable_default_tools: list[str] = Field(default_factory=list)
     enable_extra_tools: list[str] = Field(default_factory=list)
+    # Per-agent MCP configuration: {mcp_id: True/False}
+    # If empty {}, agent gets no MCP tools
+    # If not specified (None), inherits all team-level MCPs
+    mcps: dict[str, bool] | None = None
     timeout_seconds: int | None = None
     max_retries: int | None = None
     max_turns: int | None = None
