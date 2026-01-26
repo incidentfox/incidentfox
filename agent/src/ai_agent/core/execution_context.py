@@ -176,6 +176,35 @@ def clear_execution_context():
     _execution_context.set(None)
 
 
+def propagate_context_to_thread(parent_context: ExecutionContext | None) -> None:
+    """
+    Propagate execution context from parent thread to current thread.
+
+    Python's ContextVar does NOT automatically propagate to new threads.
+    Call this at the start of a new thread to restore the parent's context.
+
+    Usage in sub-agent threads:
+        # In parent thread:
+        parent_ctx = get_execution_context()
+
+        def run_in_new_thread():
+            # At start of new thread:
+            propagate_context_to_thread(parent_ctx)
+            # Now tools can access the context
+            ...
+
+    Args:
+        parent_context: ExecutionContext captured from parent thread
+    """
+    if parent_context:
+        _execution_context.set(parent_context)
+        logger.debug(
+            "execution_context_propagated_to_thread",
+            org_id=parent_context.org_id,
+            team_node_id=parent_context.team_node_id,
+        )
+
+
 def require_execution_context() -> ExecutionContext:
     """
     Get execution context, raising error if not set.

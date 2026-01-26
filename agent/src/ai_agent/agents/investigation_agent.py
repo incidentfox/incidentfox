@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field
 
 from ..core.config import get_config
 from ..core.config_utils import get_agent_sub_agents
+from ..core.execution_context import get_execution_context, propagate_context_to_thread
 from ..core.logging import get_logger
 from ..core.partial_work import summarize_partial_work
 from ..core.stream_events import (
@@ -119,8 +120,10 @@ def _run_agent_in_thread(
     """
     result_holder = {"result": None, "error": None, "partial": False}
 
-    # Capture stream_id from parent thread for event propagation
+    # Capture context from parent thread for propagation to child thread
+    # ContextVars don't automatically propagate to new threads
     parent_stream_id = get_current_stream_id()
+    parent_context = get_execution_context()
     agent_name = getattr(agent, "name", "unknown")
 
     def run_in_new_loop():
@@ -131,6 +134,10 @@ def _run_agent_in_thread(
             # Propagate stream_id to this thread
             if parent_stream_id:
                 set_current_stream_id(parent_stream_id)
+
+            # Propagate execution context to this thread
+            # This enables sub-agent tools to access integration configs (GitHub, etc.)
+            propagate_context_to_thread(parent_context)
 
             try:
                 if parent_stream_id and EventStreamRegistry.stream_exists(
