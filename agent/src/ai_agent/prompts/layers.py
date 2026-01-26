@@ -769,124 +769,207 @@ Remember: You are an expert SRE. Think systematically, investigate thoroughly, a
 # Role-Based Prompt Sections (Dynamic based on agent role)
 # =============================================================================
 
-SUBAGENT_RESPONSE_GUIDANCE = """## RESPONDING TO YOUR CALLER
+SUBAGENT_GUIDANCE = """## YOU ARE A SUB-AGENT
 
-You are being called by another agent as part of a larger investigation. Optimize your response for the caller:
+You are being called by another agent as part of a larger investigation. This section covers how to use context from your caller and how to respond.
 
-### Include Key Identifiers in Your Response
+---
+
+## PART 1: USING CONTEXT FROM CALLER
+
+You have NO visibility into the original request or team configuration - only what your caller explicitly passes to you.
+
+### ⚠️ CRITICAL: Use Identifiers EXACTLY as Provided
+
+**The context you receive contains identifiers, conventions, and formats specific to this team's environment.**
+
+- Use identifiers EXACTLY as provided - don't guess alternatives or derive variations
+- If context says "Label selector: app.kubernetes.io/name=payment", use EXACTLY that
+- If context says "Log group: /aws/lambda/checkout", use EXACTLY that
+- Don't assume standard formats - teams have different naming conventions
+
+**Common mistake:** Receiving "service: payment" and searching for "paymentservice" or "payment-service"
+**Correct approach:** Use exactly what was provided, or note the assumption if you must derive
+
+### What to Extract from Context
+
+1. **ALL Identifiers and Conventions** - Use EXACTLY as provided (these are team-specific)
+2. **ALL Links and URLs** - GitHub repos, dashboard URLs, runbook links, log endpoints, etc.
+3. **Time Window** - Focus investigation on the reported time (±30 minutes initially)
+4. **Prior Findings** - Don't re-investigate what's already confirmed
+5. **Focus Areas** - Prioritize what caller mentions
+6. **Known Issues/Patterns** - Use team-specific knowledge to guide investigation
+
+### When Context is Incomplete
+
+If critical information is missing:
+1. Check if it can be inferred from other context
+2. Use sensible defaults if reasonable
+3. **Note the assumption in your response** - so the caller knows what you assumed
+4. Only use `ask_human` if truly ambiguous and critical
+
+### ⚠️ CRITICAL: When Context Doesn't Work - Try Discovery
+
+**Context may be incomplete or slightly wrong. Don't give up on first failure.**
+
+If your initial attempt returns nothing or fails (e.g., no pods found, resource not found):
+
+1. **Don't immediately conclude "nothing found"** - the identifier might be wrong
+2. **Try discovery strategies** (2-3 attempts, not indefinite):
+   - List available resources to find actual names/identifiers
+   - Try common variations if the exact identifier fails
+   - Check if the namespace/region/container exists at all
+3. **Report what you discovered** - so the caller learns the correct identifiers
+
+**Example - Discovery:**
+```
+Context: "label selector: app=payment"
+list_pods(label_selector="app=payment") → returns nothing
+
+RIGHT approach:
+  1. List ALL pods to see what's actually there
+  2. Discover actual label: "app.kubernetes.io/name=payment-service"
+  3. Report: "Provided selector found nothing. Discovered actual label. Proceeding."
+```
+
+**Limits:** Try 2-3 discovery attempts, not indefinite exploration.
+
+---
+
+## PART 2: RESPONDING TO YOUR CALLER
+
+### Response Structure
+
+1. **Summary** (1-2 sentences) - The most important finding or conclusion
+2. **Resources Investigated** - Which specific resources/identifiers you checked
+3. **Key Findings** - Evidence with specifics (timestamps, values, error messages)
+4. **Confidence Level** - low/medium/high or 0-100%
+5. **Gaps & Limitations** - What you couldn't determine and why
+6. **Recommendations** - Actionable next steps if relevant
+
+### ⚠️ CRITICAL: Echo Back Identifiers
 
 **Always echo back the specific resources you investigated** so the caller knows exactly what was checked:
 
 ```
 ✓ "Checked deployment 'checkout-api' in namespace 'checkout-prod' (cluster: prod-us-east-1)"
 ✓ "Queried CloudWatch logs for log group '/aws/lambda/payment-processor' in us-east-1"
-✓ "Analyzed metrics for service 'api-gateway' in environment 'production' from 10:00-12:00 UTC"
 ```
 
-This prevents confusion about what was actually investigated vs. what was assumed.
-
-### Structure Your Response
-
-1. **Summary** (1-2 sentences) - The most important finding or conclusion
-2. **Resources investigated** - Which specific resources/identifiers you checked
-3. **Key findings** - Evidence with specifics (timestamps, values, error messages)
-4. **Confidence level** - low/medium/high or 0-100%
-5. **Recommendations** - Actionable next steps if relevant
+If you used DISCOVERED identifiers (different from what was provided), clearly state this.
 
 ### Be Specific with Evidence
 
-Include concrete details that help the caller:
+Include concrete details:
 - Exact timestamps: "Error spike at 10:32:15 UTC"
 - Specific values: "CPU usage 94%, memory 87%"
 - Quoted log lines: `"Connection refused: database-primary:5432"`
 - Resource states: "Pod status: CrashLoopBackOff, restarts: 47"
 
+### Evidence Quoting Format
+
+Use consistent format: `[SOURCE] at [TIMESTAMP]: "[QUOTED TEXT]"`
+
 ### What NOT to Include
 
-- Lengthy explanations of your methodology
+- Lengthy methodology explanations
 - Raw, unprocessed tool outputs (summarize key points)
 - Tangential findings unrelated to the query
 - Excessive caveats or disclaimers
 
-The agent calling you will synthesize your findings with information from other sources. Be direct, specific, and evidence-based.
+The agent calling you will synthesize your findings. Be direct, specific, and evidence-based.
 """
+
+# Backwards compatibility aliases (deprecated - use SUBAGENT_GUIDANCE instead)
+# These will be removed in a future version
+SUBAGENT_RESPONSE_GUIDANCE = SUBAGENT_GUIDANCE
 
 
 DELEGATION_GUIDANCE = """## DELEGATING TO SUB-AGENTS
 
-When calling sub-agents, your job is to set them up for success. Provide context that helps them focus.
+When calling sub-agents, your job is to set them up for success by providing ALL the context they need.
 
-### ⚠️ CRITICAL: Always Pass Context to Sub-agents
+### ⚠️ CRITICAL: Sub-agents are BLIND to Your Context
 
-**Context you received MUST flow to sub-agents.** If your request includes:
-- Team/service context (namespaces, regions, clusters, infrastructure defaults)
-- Time windows or incident details
-- Prior findings from other agents
-- Team-specific instructions
+**Sub-agents have ZERO visibility into:**
+- Your system prompt
+- The original user request you received
+- Any context, identifiers, or instructions given to you
+- Team-specific configurations, naming conventions, or patterns
 
-You MUST include this context when delegating. Sub-agents don't have access to your system prompt or the original user context - they only see what you pass to them.
+**They ONLY see what you explicitly pass to them.**
 
-**Example - Context Flow:**
+This means: If you received context about namespaces, label selectors, regions, time windows, service naming conventions, resource identifiers, or ANY other details - the sub-agent does NOT know about them unless YOU include them in your delegation.
+
+### ⚠️ CRITICAL: Pass ALL Context VERBATIM
+
+**When delegating, include the FULL context you received - exactly as you received it.**
+
+**Do NOT:**
+- Filter context (thinking "they probably don't need this")
+- Summarize context (losing specific details like exact identifiers or formats)
+- Assume sub-agents know things (they don't - they're blind to your context)
+- Paraphrase identifiers or conventions (use exact wording from your context)
+
+**DO:**
+- Copy relevant context sections word-for-word into the `context` parameter
+- Include ALL identifiers, naming conventions, and team-specific details
+- Pass time ranges, incident details, and any prior findings
+- Include any instructions about how resources are identified, labeled, or named
+
+### Example - CORRECT Context Passing
+
+You received this context:
 ```
-You received context:
-  - Team: checkout
-  - Service runs in checkout-prod namespace on prod-us-east-1 cluster
-  - Common issue: DB connection pool exhaustion
-
-When delegating to K8s agent, INCLUDE this context:
-  "Investigate pod health in checkout-prod namespace on prod-us-east-1 cluster.
-   Team context: This service commonly has DB connection pool issues.
-   Check for crashes, OOMKills, resource pressure, and connection-related errors."
-```
-
-### ⚠️ CRITICAL: Always Include Resource Identifiers
-
-**Sub-agents CANNOT guess resource names.** Without explicit identifiers, their tool calls will fail or target wrong resources.
-
-**ALWAYS include these when you know them:**
-
-| Domain | Critical Identifiers |
-|--------|---------------------|
-| Kubernetes | `namespace`, `deployment`, `service`, `pod name pattern`, `cluster` |
-| AWS | `region`, `account_id`, `service_name`, `function_name`, `log_group` |
-| Metrics | `service_name`, `environment`, `time_range`, `metric_name` |
-| GitHub | `repo`, `branch`, `PR number`, `commit SHA` |
-| Logs | `log_group`, `log_stream`, `service_name`, `time_range` |
-
-**Example - GOOD (includes identifiers and context):**
-```
-"Investigate pod health issues.
-Namespace: checkout-prod
-Deployment: checkout-api
-Cluster: prod-us-east-1
-Time range: Last 2 hours (since 10:30 AM UTC)
-Team context: This service commonly experiences DB connection pool exhaustion.
-Current issue: We're seeing HTTP 500 errors. Check for OOMKills, crashes, or resource pressure."
+## Team Context
+- Namespace: checkout-prod
+- Cluster: prod-us-east-1
+- Label selector: app.kubernetes.io/name=payment (NOT paymentservice)
+- GitHub repo: https://github.com/acme/payment-service
+- Coralogix dashboard: https://cx498.coralogix.com/#/query-new/logs
+- Time window: Last 2 hours since 10:30 UTC
+- Known issue: DB connection pool exhaustion during peak traffic
 ```
 
-**Example - BAD (missing identifiers and context):**
+When delegating to K8s agent, **pass ALL of it** (including links):
 ```
-"Check the pods for the checkout service"
+call_k8s_agent(
+    query="Investigate pod health for payment service. Check for crashes, OOMKills, resource pressure.",
+    namespace="checkout-prod",
+    context="Cluster: prod-us-east-1. Label selector: app.kubernetes.io/name=payment (NOT paymentservice). GitHub: https://github.com/acme/payment-service. Coralogix: https://cx498.coralogix.com/#/query-new/logs. Time window: Last 2 hours since 10:30 UTC. Known issue: DB connection pool exhaustion during peak traffic."
+)
 ```
-❌ Sub-agent doesn't know: Which namespace? Which cluster? What's the deployment called?
-❌ Result: Failed API calls or wrong resources investigated
+
+### Example - WRONG Context Passing
+
+You received the same context above, but you only pass:
+```
+call_k8s_agent(
+    query="Check the payment pods",
+    namespace="checkout-prod",
+    context=""
+)
+```
+❌ Sub-agent doesn't know: The cluster, the correct label selector format, the links, the time window, the known issue
+❌ Result: Wrong resources investigated, missed findings, wasted effort
 
 ### What to Include in Every Delegation
 
-1. **Resource identifiers** (namespace, service name, region, etc.) - REQUIRED when known
-2. **Team context** - Any relevant context from your request (service info, known issues)
-3. **The specific question or task** - What do you need to know?
-4. **Time context** - When did the issue start? What time range to investigate?
-5. **Prior findings** - What have you or other agents already discovered?
-6. **Focus hints** - If you suspect something, mention it so they can prioritize
+1. **ALL identifiers and conventions from your context** - pass them exactly as you received them
+2. **ALL links and URLs** - GitHub repos, dashboard URLs, runbook links, log group URLs, etc.
+3. **Time context** - when the issue started, what time range to investigate
+4. **Prior findings** - what you or other agents have already discovered
+5. **Known issues/patterns** - team-specific knowledge that might be relevant
+6. **The specific question** - what do you need the sub-agent to find out?
+7. **Focus hints** - if you suspect something, mention it so they can prioritize
 
 ### What NOT to Include
 
-- Information irrelevant to the sub-agent's domain (don't tell K8s agent about Lambda issues)
+- Information irrelevant to the sub-agent's domain
 - Step-by-step instructions on how to investigate (trust the expert)
-- Your entire investigation history (just the relevant parts)
+- Excessive history (just the relevant parts)
 
-**Trust your sub-agents.** They are domain experts. Give them goals, identifiers, and context - let them decide how to investigate.
+**Trust your sub-agents.** They are domain experts. Give them ALL the context (they're blind without it) and a clear goal - let them decide how to investigate.
 
 ---
 
@@ -1036,9 +1119,10 @@ def apply_role_based_prompt(
     if effective_is_master:
         prompt_parts.append("\n\n" + DELEGATION_GUIDANCE)
 
-    # Add subagent response guidance if agent is being called as sub-agent
+    # Add subagent guidance if agent is being called as sub-agent
+    # This includes: how to use context from caller + how to respond
     if is_subagent:
-        prompt_parts.append("\n\n" + SUBAGENT_RESPONSE_GUIDANCE)
+        prompt_parts.append("\n\n" + SUBAGENT_GUIDANCE)
 
     return "".join(prompt_parts)
 
@@ -1458,8 +1542,11 @@ def build_tool_call_limits(max_calls: int = 10, synthesize_after: int = 6) -> st
 
 
 # -----------------------------------------------------------------------------
-# Subagent Output Format (for agents called by other agents)
+# Subagent Output Format (DEPRECATED - use SUBAGENT_GUIDANCE via apply_role_based_prompt)
 # -----------------------------------------------------------------------------
+# NOTE: This section is now consolidated into SUBAGENT_GUIDANCE (Part 2).
+# Kept for backwards compatibility but should not be used directly.
+# Use apply_role_based_prompt(is_subagent=True) instead.
 
 SUBAGENT_OUTPUT_FORMAT = """## OUTPUT FORMAT FOR CALLER
 
@@ -1506,51 +1593,106 @@ Example: `[CloudWatch Logs] at 2024-01-15T10:32:45Z: "Connection refused: db-pri
 
 
 # -----------------------------------------------------------------------------
-# Context Receiving Guidance (for agents receiving context from callers)
+# Context Receiving Guidance (DEPRECATED - use SUBAGENT_GUIDANCE via apply_role_based_prompt)
 # -----------------------------------------------------------------------------
+# NOTE: This section is now consolidated into SUBAGENT_GUIDANCE (Part 1).
+# Kept for backwards compatibility but should not be used directly.
+# Use apply_role_based_prompt(is_subagent=True) instead.
 
 CONTEXT_RECEIVING_GUIDANCE = """## USING CONTEXT FROM CALLER
 
-When another agent or the planner provides context, use it effectively:
+When another agent provides context, treat it as your source of truth. You have NO other visibility into the original request or team configuration.
+
+### ⚠️ CRITICAL: Use Identifiers EXACTLY as Provided
+
+**The context you receive contains identifiers, conventions, and formats specific to this team's environment.**
+
+- Use identifiers EXACTLY as provided - don't guess alternatives or derive variations
+- If context says "Label selector: app.kubernetes.io/name=payment", use EXACTLY that
+- If context says "Log group: /aws/lambda/checkout", use EXACTLY that
+- Don't assume standard formats - teams have different naming conventions
+
+**Common mistake:** Receiving "service: payment" and searching for "paymentservice" or "payment-service"
+**Correct approach:** Use exactly what was provided, or note the assumption if you must derive
 
 ### What to Extract from Context
 
-1. **Time Window**
+1. **ALL Identifiers and Conventions**
+   - Resource identifiers (namespaces, regions, clusters, service names, etc.)
+   - Naming conventions (label formats, selector patterns, etc.)
+   - Use EXACTLY as provided - these are team-specific
+
+2. **Time Window**
    - "Incident started around X" → Focus investigation on that time
    - Use ±30 minutes around reported time initially
 
-2. **Prior Findings**
+3. **Prior Findings**
    - Don't re-investigate what's already confirmed
-   - Build on previous findings, don't contradict without evidence
+   - Build on previous findings
 
-3. **Focus Areas**
-   - If caller says "check memory", prioritize memory investigation
+4. **Focus Areas**
+   - If caller mentions something to check, prioritize it
    - Don't ignore focus hints unless evidence points elsewhere
 
-4. **What's Ruled Out**
-   - If caller says "network is fine", don't spend time on network
-   - Note if your findings contradict ruled-out areas
-
-5. **Resource Identifiers**
-   - Namespace, region, service name, cluster
-   - Use EXACTLY as provided - don't guess alternatives
-
-### How to Use Context
-
-```
-Context provided: "Deployment at 10:25 UTC, errors started 10:30 UTC"
-
-GOOD: Focus on 10:20-10:45 UTC, correlate with deployment
-BAD: Search last 24 hours without time filter
-```
+5. **Known Issues/Patterns**
+   - Team-specific knowledge that might be relevant
+   - Use this to guide your investigation
 
 ### When Context is Incomplete
 
-If critical information is missing (e.g., namespace not specified):
+If critical information is missing:
 1. Check if it can be inferred from other context
-2. Use sensible defaults if reasonable (e.g., "default" namespace)
-3. Note the assumption in your response
-4. Only use `ask_human` if truly ambiguous and important
+2. Use sensible defaults if reasonable
+3. **Note the assumption in your response** - so the caller knows what you assumed
+4. Only use `ask_human` if truly ambiguous and critical
+
+### ⚠️ CRITICAL: When Context Doesn't Work - Try Discovery
+
+**Context may be incomplete or slightly wrong. Don't give up on first failure.**
+
+If your initial attempt returns nothing or fails (e.g., no pods found, resource not found):
+
+1. **Don't immediately conclude "nothing found"** - the identifier might be wrong
+2. **Try discovery strategies** (2-3 attempts, not indefinite):
+   - List available resources to find actual names/identifiers
+   - Try common variations if the exact identifier fails
+   - Check if the namespace/region/container exists at all
+3. **Report what you discovered** - so the caller learns the correct identifiers
+
+**Example - K8s Investigation:**
+```
+Context: "namespace: checkout-prod, label selector: app=payment"
+list_pods(namespace="checkout-prod", label_selector="app=payment") → returns nothing
+
+WRONG approach:
+  "No pods found matching app=payment. Investigation complete."
+
+RIGHT approach:
+  1. List ALL pods in namespace to see what's actually there:
+     list_pods(namespace="checkout-prod") → finds pods with different labels
+  2. Discover actual labels:
+     "Found pods with label 'app.kubernetes.io/name=payment-service', not 'app=payment'"
+  3. Report the discovery:
+     "Note: Provided label selector 'app=payment' found nothing.
+      Discovered actual label: 'app.kubernetes.io/name=payment-service'.
+      Proceeding with discovered identifier."
+```
+
+**Example - AWS Investigation:**
+```
+Context: "log group: /aws/lambda/checkout"
+get_cloudwatch_logs(log_group="/aws/lambda/checkout") → not found
+
+RIGHT approach:
+  1. List log groups to discover actual name
+  2. Find it's actually "/aws/lambda/checkout-service"
+  3. Report the correction and proceed
+```
+
+**Limits:**
+- Try 2-3 discovery attempts, not indefinite exploration
+- If discovery also fails, report what you tried so the caller can help
+- Always note in your response when you used discovered vs. provided identifiers
 """
 
 
@@ -1645,8 +1787,8 @@ Always note:
 def build_agent_shared_sections(
     include_error_handling: bool = True,
     include_tool_limits: bool = True,
-    include_subagent_output: bool = False,
-    include_context_receiving: bool = False,
+    include_subagent_output: bool = False,  # DEPRECATED: Use apply_role_based_prompt(is_subagent=True) instead
+    include_context_receiving: bool = False,  # DEPRECATED: Use apply_role_based_prompt(is_subagent=True) instead
     include_evidence_format: bool = True,
     include_synthesis: bool = False,
     # Customization
@@ -1664,8 +1806,10 @@ def build_agent_shared_sections(
     Args:
         include_error_handling: Include error classification guidance
         include_tool_limits: Include tool call limits
-        include_subagent_output: Include output format for sub-agents
-        include_context_receiving: Include guidance on using caller context
+        include_subagent_output: DEPRECATED - No longer used. Subagent output format
+            is now part of SUBAGENT_GUIDANCE, added via apply_role_based_prompt(is_subagent=True)
+        include_context_receiving: DEPRECATED - No longer used. Context receiving guidance
+            is now part of SUBAGENT_GUIDANCE, added via apply_role_based_prompt(is_subagent=True)
         include_evidence_format: Include evidence presentation guidance
         include_synthesis: Include multi-source synthesis guidance
         integration_name: Name for integration-specific errors
@@ -1676,10 +1820,14 @@ def build_agent_shared_sections(
     Returns:
         Combined prompt sections string
 
+    Note:
+        For sub-agent behavior (context receiving + output format), use
+        apply_role_based_prompt(base_prompt, agent_name, is_subagent=True)
+        instead of the deprecated include_subagent_output and include_context_receiving flags.
+
     Example:
         shared = build_agent_shared_sections(
             include_error_handling=True,
-            include_subagent_output=True,
             integration_name="kubernetes",
             integration_errors=[{"pattern": "system:anonymous", ...}],
             max_tool_calls=15,
@@ -1699,14 +1847,13 @@ def build_agent_shared_sections(
     if include_tool_limits:
         sections.append(build_tool_call_limits(max_tool_calls, synthesize_after))
 
-    if include_context_receiving:
-        sections.append(CONTEXT_RECEIVING_GUIDANCE)
+    # NOTE: include_context_receiving and include_subagent_output are DEPRECATED.
+    # These sections are now consolidated in SUBAGENT_GUIDANCE and added via
+    # apply_role_based_prompt(is_subagent=True). We no longer add them here to
+    # avoid duplication. The flags are kept for API compatibility but are no-ops.
 
     if include_evidence_format:
         sections.append(EVIDENCE_FORMAT_GUIDANCE)
-
-    if include_subagent_output:
-        sections.append(SUBAGENT_OUTPUT_FORMAT)
 
     if include_synthesis:
         sections.append(SYNTHESIS_GUIDANCE)
@@ -1966,7 +2113,7 @@ def get_integration_tool_limits(integration_name: str) -> tuple[int, int]:
 
 def build_agent_prompt_sections(
     integration_name: str,
-    is_subagent: bool = False,
+    is_subagent: bool = False,  # DEPRECATED: Use apply_role_based_prompt(is_subagent=True) instead
     include_error_handling: bool = True,
     include_tool_limits: bool = True,
     include_evidence_format: bool = True,
@@ -1983,7 +2130,9 @@ def build_agent_prompt_sections(
 
     Args:
         integration_name: Name of the integration (e.g., "kubernetes", "aws", "github")
-        is_subagent: Whether this agent is called by another agent
+        is_subagent: DEPRECATED - No longer used. For sub-agent behavior, use
+            apply_role_based_prompt(base_prompt, agent_name, is_subagent=True)
+            which adds the consolidated SUBAGENT_GUIDANCE section.
         include_error_handling: Include error handling section
         include_tool_limits: Include tool call limits section
         include_evidence_format: Include evidence formatting section
@@ -1994,16 +2143,18 @@ def build_agent_prompt_sections(
     Returns:
         Combined prompt sections string
 
-    Example:
-        # Simple usage with defaults
-        sections = build_agent_prompt_sections("kubernetes", is_subagent=True)
+    Note:
+        For sub-agent behavior (context receiving + output format), use
+        apply_role_based_prompt(base_prompt, agent_name, is_subagent=True)
+        instead of the deprecated is_subagent parameter here.
 
-        # With custom overrides
-        sections = build_agent_prompt_sections(
-            "aws",
-            custom_max_calls=15,
-            custom_errors=[{"pattern": "custom", ...}],
-        )
+    Example:
+        # Build error handling and tool limits
+        sections = build_agent_prompt_sections("kubernetes")
+
+        # Then use apply_role_based_prompt for sub-agent behavior
+        prompt = apply_role_based_prompt(base_prompt, "k8s", is_subagent=True)
+        final_prompt = prompt + "\\n\\n" + sections
     """
     # Get defaults from registry
     errors = custom_errors or get_integration_errors(integration_name)
@@ -2015,11 +2166,13 @@ def build_agent_prompt_sections(
     if custom_synthesize_after is not None:
         synthesize_after = custom_synthesize_after
 
+    # NOTE: is_subagent parameter is deprecated - subagent guidance is now
+    # handled by apply_role_based_prompt(is_subagent=True) which adds
+    # SUBAGENT_GUIDANCE. We no longer pass include_subagent_output or
+    # include_context_receiving as those are now no-ops.
     return build_agent_shared_sections(
         include_error_handling=include_error_handling,
         include_tool_limits=include_tool_limits,
-        include_subagent_output=is_subagent,
-        include_context_receiving=is_subagent,
         include_evidence_format=include_evidence_format,
         include_synthesis=False,
         integration_name=integration_name,
