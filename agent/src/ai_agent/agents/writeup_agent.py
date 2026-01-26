@@ -293,6 +293,8 @@ def create_writeup_agent(
     model_name = config.openai.model
     temperature = 0.5  # Slightly higher for creative writing
     max_tokens = config.openai.max_tokens
+    reasoning = None
+    verbosity = None
 
     if team_cfg:
         try:
@@ -315,16 +317,22 @@ def create_writeup_agent(
                         model_name = model_cfg.name
                         temperature = model_cfg.temperature
                         max_tokens = model_cfg.max_tokens
+                        reasoning = getattr(model_cfg, "reasoning", None)
+                        verbosity = getattr(model_cfg, "verbosity", None)
                     elif isinstance(model_cfg, dict):
                         model_name = model_cfg.get("name", model_name)
                         temperature = model_cfg.get("temperature", temperature)
                         max_tokens = model_cfg.get("max_tokens", max_tokens)
+                        reasoning = model_cfg.get("reasoning")
+                        verbosity = model_cfg.get("verbosity")
                     logger.info(
                         "using_team_model_config",
                         agent="writeup",
                         model=model_name,
                         temperature=temperature,
                         max_tokens=max_tokens,
+                        reasoning=reasoning,
+                        verbosity=verbosity,
                     )
         except Exception:
             pass
@@ -337,6 +345,8 @@ def create_writeup_agent(
             model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning=reasoning,
+            verbosity=verbosity,
         ),
         tools=tools,
         output_type=PostmortemDocument,

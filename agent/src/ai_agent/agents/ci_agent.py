@@ -293,6 +293,8 @@ def create_ci_agent(team_config: dict[str, Any] | None = None) -> Agent[TaskCont
     model_name = config.openai.model
     temperature = 0.3  # Lower temp for precision
     max_tokens = config.openai.max_tokens
+    reasoning = None
+    verbosity = None
 
     if team_cfg:
         agent_config = team_cfg.get_agent_config("ci")
@@ -300,12 +302,16 @@ def create_ci_agent(team_config: dict[str, Any] | None = None) -> Agent[TaskCont
             model_name = agent_config.model.name
             temperature = agent_config.model.temperature
             max_tokens = agent_config.model.max_tokens
+            reasoning = getattr(agent_config.model, "reasoning", None)
+            verbosity = getattr(agent_config.model, "verbosity", None)
             logger.info(
                 "using_team_model_config",
                 agent="ci",
                 model=model_name,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                reasoning=reasoning,
+                verbosity=verbosity,
             )
 
     # Note: We don't use output_type because Dict fields aren't compatible with
@@ -319,6 +325,8 @@ def create_ci_agent(team_config: dict[str, Any] | None = None) -> Agent[TaskCont
             model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning=reasoning,
+            verbosity=verbosity,
         ),
         tools=tools,
     )

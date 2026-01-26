@@ -327,6 +327,16 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
         if agent_config.model
         else config.openai.max_tokens
     )
+    reasoning = (
+        getattr(agent_config.model, "reasoning", None)
+        if agent_config.model
+        else None
+    )
+    verbosity = (
+        getattr(agent_config.model, "verbosity", None)
+        if agent_config.model
+        else None
+    )
 
     # Create agent with config
     agent = Agent[TaskContext](
@@ -336,6 +346,8 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
             model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning=reasoning,
+            verbosity=verbosity,
         ),
         instructions=system_prompt,
         tools=tools,
