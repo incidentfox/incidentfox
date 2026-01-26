@@ -463,6 +463,24 @@ class ElasticsearchBackend(LogBackend):
 class CoralogixBackend(LogBackend):
     """Coralogix log backend."""
 
+    def _extract_body(self, record: dict) -> str:
+        """Extract log body from Coralogix record.
+
+        The body is nested in logRecord.body within the parsed userData.
+        """
+        log_record = record.get("logRecord", {})
+        if isinstance(log_record, dict):
+            return str(log_record.get("body", ""))
+        # Fallback to direct body field
+        return str(record.get("body", ""))
+
+    def _extract_trace_id(self, record: dict) -> str | None:
+        """Extract trace ID from Coralogix record."""
+        log_record = record.get("logRecord", {})
+        if isinstance(log_record, dict):
+            return log_record.get("traceId")
+        return record.get("traceId")
+
     def _get_config(self) -> dict:
         """Get Coralogix configuration."""
         api_key = get_env("CORALOGIX_API_KEY")
@@ -573,15 +591,17 @@ class CoralogixBackend(LogBackend):
             if sev in error_severities:
                 error_count += cnt
 
-        pattern_query = "source logs | filter $m.severity == ERROR || $m.severity == CRITICAL | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
+        # Use numeric severity filter: 5=ERROR, 6=CRITICAL
+        pattern_query = "source logs | filter $m.severity >= 5 | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
         if service:
-            pattern_query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity == ERROR || $m.severity == CRITICAL | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
+            pattern_query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity >= 5 | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
 
         pattern_results = self._query(pattern_query, start_time, end_time, limit=10)
-        top_patterns = [
-            {"pattern": r.get("body", "")[:100], "count": r.get("cnt", 0)}
-            for r in pattern_results
-        ]
+        top_patterns = []
+        for r in pattern_results:
+            # GroupBy result may use different field names - try multiple
+            body = r.get("logRecord.body") or r.get("body") or self._extract_body(r) or ""
+            top_patterns.append({"pattern": str(body)[:100], "count": r.get("cnt", 0)})
 
         return {
             "total_count": total_count,
@@ -605,10 +625,11 @@ class CoralogixBackend(LogBackend):
         **kwargs,
     ) -> dict[str, Any]:
         """Sample Coralogix logs."""
+        # Severity levels: 5=ERROR, 6=CRITICAL (numeric in metadata)
         if strategy == "errors_only":
-            query = f"source logs | filter $m.severity == ERROR || $m.severity == CRITICAL | limit {sample_size}"
+            query = f"source logs | filter $m.severity >= 5 | limit {sample_size}"
             if service:
-                query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity == ERROR || $m.severity == CRITICAL | limit {sample_size}"
+                query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity >= 5 | limit {sample_size}"
         else:
             query = f"source logs | limit {sample_size}"
             if service:
@@ -623,8 +644,8 @@ class CoralogixBackend(LogBackend):
                     "timestamp": r.get("timestamp", ""),
                     "service": r.get("subsystemname", ""),
                     "level": r.get("severity", ""),
-                    "message": str(r.get("body", ""))[:500],
-                    "trace_id": r.get("traceId"),
+                    "message": self._extract_body(r)[:500],
+                    "trace_id": self._extract_trace_id(r),
                 }
             )
 
@@ -646,9 +667,12 @@ class CoralogixBackend(LogBackend):
         **kwargs,
     ) -> dict[str, Any]:
         """Search Coralogix by pattern."""
-        query = f"source logs | filter $d.logRecord.body contains '{pattern}' | limit {max_results}"
+        # Escape single quotes in pattern for DataPrime query
+        escaped_pattern = pattern.replace("'", "\\'")
+        # Use ~ operator for substring matching in DataPrime (contains equivalent)
+        query = f"source logs | filter $d.logRecord.body:string ~ '{escaped_pattern}' | limit {max_results}"
         if service:
-            query = f"source logs | filter $l.subsystemname == '{service}' | filter $d.logRecord.body contains '{pattern}' | limit {max_results}"
+            query = f"source logs | filter $l.subsystemname == '{service}' | filter $d.logRecord.body:string ~ '{escaped_pattern}' | limit {max_results}"
 
         results = self._query(query, start_time, end_time, limit=max_results)
 
@@ -659,7 +683,7 @@ class CoralogixBackend(LogBackend):
                     "timestamp": r.get("timestamp", ""),
                     "service": r.get("subsystemname", ""),
                     "level": r.get("severity", ""),
-                    "message": str(r.get("body", ""))[:500],
+                    "message": self._extract_body(r)[:500],
                 }
             )
 
@@ -696,7 +720,7 @@ class CoralogixBackend(LogBackend):
                     "timestamp": r.get("timestamp", ""),
                     "service": r.get("subsystemname", ""),
                     "level": r.get("severity", ""),
-                    "message": str(r.get("body", ""))[:300],
+                    "message": self._extract_body(r)[:300],
                 }
             )
 
