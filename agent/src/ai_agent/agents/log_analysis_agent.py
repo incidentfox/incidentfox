@@ -349,10 +349,12 @@ def create_log_analysis_agent(
         try:
             agent_config = team_cfg.get_agent_config("log_analysis")
             if agent_config and agent_config.prompt:
-                custom_prompt = agent_config.prompt
-                logger.info(
-                    "using_custom_log_analysis_prompt", prompt_length=len(custom_prompt)
-                )
+                custom_prompt = agent_config.get_system_prompt()
+                if custom_prompt:
+                    logger.info(
+                        "using_custom_log_analysis_prompt",
+                        prompt_length=len(custom_prompt),
+                    )
         except Exception:
             pass
 

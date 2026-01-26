@@ -240,8 +240,6 @@ def create_writeup_agent(
             if agent_config:
                 if hasattr(agent_config, "get_system_prompt"):
                     custom_prompt = agent_config.get_system_prompt()
-                elif hasattr(agent_config, "prompt") and agent_config.prompt:
-                    custom_prompt = agent_config.prompt
                 elif isinstance(agent_config, dict) and agent_config.get("prompt"):
                     prompt_cfg = agent_config["prompt"]
                     if isinstance(prompt_cfg, str):
