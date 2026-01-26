@@ -1173,7 +1173,6 @@ export default function AdminConfigPage() {
                                   <option value="gpt-4-turbo">gpt-4-turbo</option>
                                   <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
                                   <option value="o1">o1</option>
-                                  <option value="o1-mini">o1-mini</option>
                                   <option value="o3-mini">o3-mini</option>
                                   <option value="o4-mini">o4-mini</option>
                                 </select>
