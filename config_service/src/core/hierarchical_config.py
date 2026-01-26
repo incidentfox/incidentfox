@@ -445,7 +445,11 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "name": "Investigation Agent",
                 "description": "Sub-orchestrator for incident investigation with 5 specialized sub-agents",
                 "model": {"name": "gpt-4o", "temperature": 0.4, "max_tokens": 16000},
-                "prompt": {"system": DEFAULT_PROMPTS.get("investigation", ""), "prefix": "", "suffix": ""},
+                "prompt": {
+                    "system": DEFAULT_PROMPTS.get("investigation", ""),
+                    "prefix": "",
+                    "suffix": "",
+                },
                 "max_turns": 25,
                 "tools": {"think": True, "llm_call": True, "web_search": True},
                 # STARSHIP: Investigation coordinates 5 specialized agents
@@ -466,7 +470,11 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "name": "Coding Agent",
                 "description": "Code analysis, debugging, and fixes",
                 "model": {"name": "gpt-4o", "temperature": 0.4, "max_tokens": 16000},
-                "prompt": {"system": DEFAULT_PROMPTS.get("coding", ""), "prefix": "", "suffix": ""},
+                "prompt": {
+                    "system": DEFAULT_PROMPTS.get("coding", ""),
+                    "prefix": "",
+                    "suffix": "",
+                },
                 "max_turns": 20,
                 "tools": {
                     "think": True,
@@ -494,7 +502,11 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "name": "Writeup Agent",
                 "description": "Blameless postmortem and incident documentation",
                 "model": {"name": "gpt-4o", "temperature": 0.5, "max_tokens": 16000},
-                "prompt": {"system": DEFAULT_PROMPTS.get("writeup", ""), "prefix": "", "suffix": ""},
+                "prompt": {
+                    "system": DEFAULT_PROMPTS.get("writeup", ""),
+                    "prefix": "",
+                    "suffix": "",
+                },
                 "max_turns": 15,
                 "tools": {"think": True, "llm_call": True, "web_search": True},
                 "sub_agents": {},
@@ -508,7 +520,11 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "name": "GitHub Agent",
                 "description": "GitHub repository analysis for change correlation",
                 "model": {"name": "gpt-4o", "temperature": 0.3, "max_tokens": 16000},
-                "prompt": {"system": DEFAULT_PROMPTS.get("github", ""), "prefix": "", "suffix": ""},
+                "prompt": {
+                    "system": DEFAULT_PROMPTS.get("github", ""),
+                    "prefix": "",
+                    "suffix": "",
+                },
                 "max_turns": 15,
                 "tools": {
                     "think": True,
@@ -529,7 +545,11 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "name": "Kubernetes Agent",
                 "description": "Kubernetes troubleshooting and operations",
                 "model": {"name": "gpt-4o", "temperature": 0.3, "max_tokens": 16000},
-                "prompt": {"system": DEFAULT_PROMPTS.get("k8s", ""), "prefix": "", "suffix": ""},
+                "prompt": {
+                    "system": DEFAULT_PROMPTS.get("k8s", ""),
+                    "prefix": "",
+                    "suffix": "",
+                },
                 "max_turns": 15,
                 "tools": {
                     "think": True,
@@ -557,7 +577,11 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "name": "AWS Agent",
                 "description": "AWS resource management and debugging",
                 "model": {"name": "gpt-4o", "temperature": 0.3, "max_tokens": 16000},
-                "prompt": {"system": DEFAULT_PROMPTS.get("aws", ""), "prefix": "", "suffix": ""},
+                "prompt": {
+                    "system": DEFAULT_PROMPTS.get("aws", ""),
+                    "prefix": "",
+                    "suffix": "",
+                },
                 "max_turns": 15,
                 "tools": {
                     "think": True,
@@ -579,7 +603,11 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "name": "Metrics Agent",
                 "description": "Metrics analysis and anomaly detection",
                 "model": {"name": "gpt-4o", "temperature": 0.2, "max_tokens": 16000},
-                "prompt": {"system": DEFAULT_PROMPTS.get("metrics", ""), "prefix": "", "suffix": ""},
+                "prompt": {
+                    "system": DEFAULT_PROMPTS.get("metrics", ""),
+                    "prefix": "",
+                    "suffix": "",
+                },
                 "max_turns": 15,
                 "tools": {
                     "think": True,
@@ -607,7 +635,11 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "name": "Log Analysis Agent",
                 "description": "Partition-first log investigation specialist",
                 "model": {"name": "gpt-4o", "temperature": 0.2, "max_tokens": 16000},
-                "prompt": {"system": DEFAULT_PROMPTS.get("log_analysis", ""), "prefix": "", "suffix": ""},
+                "prompt": {
+                    "system": DEFAULT_PROMPTS.get("log_analysis", ""),
+                    "prefix": "",
+                    "suffix": "",
+                },
                 "max_turns": 15,
                 "tools": {
                     "think": True,
