@@ -9,6 +9,7 @@ from agents.exceptions import MaxTurnsExceeded
 
 from ..core.agent_runner import get_agent_registry
 from ..core.config import get_config
+from ..core.execution_context import get_execution_context, propagate_context_to_thread
 from ..core.logging import get_logger
 from ..core.partial_work import summarize_partial_work
 from ..integrations.a2a.agent_wrapper import get_remote_agents_for_team
@@ -181,6 +182,10 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
 
                             from agents import Runner
 
+                            # Capture context from parent thread for propagation
+                            # ContextVars don't automatically propagate to new threads
+                            parent_context = get_execution_context()
+
                             # Run sub-agent in a new thread with its own event loop
                             result_holder = {
                                 "result": None,
@@ -192,6 +197,10 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
                                 try:
                                     new_loop = asyncio.new_event_loop()
                                     asyncio.set_event_loop(new_loop)
+
+                                    # Propagate execution context to this thread
+                                    propagate_context_to_thread(parent_context)
+
                                     try:
                                         result = new_loop.run_until_complete(
                                             Runner().run(

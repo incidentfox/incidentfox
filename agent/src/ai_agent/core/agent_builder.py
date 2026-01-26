@@ -25,6 +25,7 @@ from agents import Agent, ModelSettings, Runner, function_tool
 from agents.exceptions import MaxTurnsExceeded
 from pydantic import BaseModel, Field
 
+from .execution_context import get_execution_context, propagate_context_to_thread
 from .logging import get_logger
 from .partial_work import summarize_partial_work
 
@@ -548,10 +549,19 @@ def _run_agent_in_thread(agent: Agent, query: str, max_turns: int = 25) -> Any:
     result_holder = {"result": None, "error": None, "partial": False}
     agent_name = getattr(agent, "name", "unknown")
 
+    # Capture context from parent thread for propagation to child thread
+    # ContextVars don't automatically propagate to new threads
+    parent_context = get_execution_context()
+
     def run_in_new_loop():
         try:
             new_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(new_loop)
+
+            # Propagate execution context to this thread
+            # This enables sub-agent tools to access integration configs (GitHub, etc.)
+            propagate_context_to_thread(parent_context)
+
             try:
                 result = new_loop.run_until_complete(
                     Runner.run(agent, query, max_turns=max_turns)
