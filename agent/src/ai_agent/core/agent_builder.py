@@ -424,10 +424,26 @@ def build_agent_from_config(
 
     # Build model settings
     model_name = model_config.get("name", "gpt-4o")
-    model_settings = ModelSettings(
-        temperature=model_config.get("temperature", 0.4),
-        max_tokens=model_config.get("max_tokens"),
-    )
+
+    # OpenAI reasoning models don't support temperature, top_p, frequency_penalty, etc.
+    # This includes o-series (o1, o3, o4) and gpt-5 series
+    reasoning_model_prefixes = ("o1", "o3", "o4", "gpt-5")
+    is_reasoning_model = model_name.startswith(reasoning_model_prefixes)
+
+    if is_reasoning_model:
+        # Reasoning models use reasoning effort and verbosity instead of temperature
+        reasoning_effort = model_config.get("reasoning", "medium")
+        verbosity = model_config.get("verbosity", "medium")
+        model_settings = ModelSettings(
+            max_tokens=model_config.get("max_tokens"),
+            reasoning={"effort": reasoning_effort} if reasoning_effort else None,
+            verbosity=verbosity,
+        )
+    else:
+        model_settings = ModelSettings(
+            temperature=model_config.get("temperature", 0.4),
+            max_tokens=model_config.get("max_tokens"),
+        )
 
     # Resolve tools
     # Handle both legacy format {enabled: [], disabled: []} and canonical format {tool_id: bool}
@@ -804,24 +820,20 @@ def validate_agent_config(agent_config: dict[str, Any]) -> list[str]:
     # Check model
     model_config = agent_config.get("model", {})
     if "name" in model_config:
-        valid_models = [
-            # GPT-5 series
-            "gpt-5",
-            # GPT-4o series
-            "gpt-4o",
-            "gpt-4o-2024-11-20",
-            "gpt-4o-mini",
-            # Legacy GPT-4
+        model_name = model_config["name"]
+        # Valid model prefixes (allows for versioned models like gpt-5.1, gpt-5.2, etc.)
+        valid_prefixes = (
+            "gpt-5",  # GPT-5 series (reasoning models)
+            "gpt-4o",  # GPT-4o series
             "gpt-4-turbo",
+            "gpt-4.1",  # GPT-4.1 series
             "gpt-3.5-turbo",
-            # Reasoning models
-            "o1",
-            "o1-mini",
-            "o3-mini",
-            "o4-mini",
-        ]
-        if model_config["name"] not in valid_models:
-            errors.append(f"Unknown model: {model_config['name']}")
+            "o1",  # o1 reasoning models
+            "o3",  # o3 reasoning models
+            "o4",  # o4 reasoning models
+        )
+        if not model_name.startswith(valid_prefixes):
+            errors.append(f"Unknown model: {model_name}")
 
     if "temperature" in model_config:
         temp = model_config["temperature"]

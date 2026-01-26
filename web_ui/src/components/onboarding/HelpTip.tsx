@@ -82,7 +82,7 @@ export function HelpTip({ id, children, position = 'top', className = '' }: Help
           role="tooltip"
           className={`absolute z-50 ${positionClasses[position]}`}
         >
-          <div className="relative bg-gray-800 dark:bg-gray-700 text-white text-sm rounded-lg px-3 py-2 shadow-lg max-w-xs">
+          <div className="relative bg-gray-800 dark:bg-gray-700 text-white text-sm rounded-lg px-3 py-2 shadow-lg max-w-2xl">
             <button
               onClick={() => setIsOpen(false)}
               className="absolute top-1 right-1 p-0.5 text-gray-400 hover:text-white"
