@@ -1092,7 +1092,6 @@ export default function AgentSettingsPage() {
                         <optgroup label="Reasoning Models">
                           <option value="gpt-5">gpt-5</option>
                           <option value="o1">o1</option>
-                          <option value="o1-mini">o1-mini</option>
                           <option value="o3-mini">o3-mini</option>
                           <option value="o4-mini">o4-mini</option>
                         </optgroup>
