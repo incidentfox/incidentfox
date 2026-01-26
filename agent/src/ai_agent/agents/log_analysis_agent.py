@@ -391,6 +391,8 @@ def create_log_analysis_agent(
     model_name = config.openai.model
     temperature = 0.2  # Lower temp for analytical tasks
     max_tokens = config.openai.max_tokens
+    reasoning = None
+    verbosity = None
 
     if team_cfg:
         agent_config = team_cfg.get_agent_config("log_analysis")
@@ -398,12 +400,16 @@ def create_log_analysis_agent(
             model_name = agent_config.model.name
             temperature = agent_config.model.temperature
             max_tokens = agent_config.model.max_tokens
+            reasoning = getattr(agent_config.model, "reasoning", None)
+            verbosity = getattr(agent_config.model, "verbosity", None)
             logger.info(
                 "using_team_model_config",
                 agent="log_analysis",
                 model=model_name,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                reasoning=reasoning,
+                verbosity=verbosity,
             )
 
     return Agent[TaskContext](
@@ -414,6 +420,8 @@ def create_log_analysis_agent(
             model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning=reasoning,
+            verbosity=verbosity,
         ),
         tools=tools,
         output_type=LogAnalysisResult,
