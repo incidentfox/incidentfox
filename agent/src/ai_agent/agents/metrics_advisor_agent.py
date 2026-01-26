@@ -200,7 +200,9 @@ class MetricsProposal(BaseModel):
     alert_recommendations: list[AlertRecommendation] = Field(
         default_factory=list, description="Alerts to create"
     )
-    proposal_document: str = Field(default="", description="Full proposal in requested format")
+    proposal_document: str = Field(
+        default="", description="Full proposal in requested format"
+    )
 
 
 METRICS_ADVISOR_PROMPT = """You are a Metrics & Observability Advisor - an expert in SRE best practices for

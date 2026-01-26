@@ -42,12 +42,11 @@ import threading
 from typing import Any
 
 from agents import Agent, Runner, function_tool
-
-from ..core.agent_builder import create_model_settings
 from agents.exceptions import MaxTurnsExceeded
 from agents.stream_events import RunItemStreamEvent
 from pydantic import BaseModel, Field
 
+from ..core.agent_builder import create_model_settings
 from ..core.config import get_config
 from ..core.config_utils import get_agent_sub_agents
 from ..core.execution_context import get_execution_context, propagate_context_to_thread
@@ -87,7 +86,9 @@ DEFAULT_PLANNER_AGENTS = ["investigation", "coding", "writeup", "metrics_advisor
 # =============================================================================
 
 
-def _run_agent_in_thread(agent, query: str, timeout: int = 120, max_turns: int = 25) -> Any:
+def _run_agent_in_thread(
+    agent, query: str, timeout: int = 120, max_turns: int = 25
+) -> Any:
     """
     Run an agent in a separate thread with its own event loop.
 
@@ -134,10 +135,14 @@ def _run_agent_in_thread(agent, query: str, timeout: int = 120, max_turns: int =
             propagate_context_to_thread(parent_context)
 
             try:
-                if parent_stream_id and EventStreamRegistry.stream_exists(parent_stream_id):
+                if parent_stream_id and EventStreamRegistry.stream_exists(
+                    parent_stream_id
+                ):
                     # Streaming mode - emit events to the registry
                     result = new_loop.run_until_complete(
-                        _run_agent_streamed(agent, query, max_turns, parent_stream_id, agent_name)
+                        _run_agent_streamed(
+                            agent, query, max_turns, parent_stream_id, agent_name
+                        )
                     )
                 else:
                     # Non-streaming mode - original behavior
@@ -227,7 +232,8 @@ async def _run_agent_streamed(
                                 parsed = json_mod.loads(tool_input)
                                 if isinstance(parsed, dict):
                                     pairs = [
-                                        f"{k}={repr(v)[:30]}" for k, v in list(parsed.items())[:2]
+                                        f"{k}={repr(v)[:30]}"
+                                        for k, v in list(parsed.items())[:2]
                                     ]
                                     input_preview = ", ".join(pairs)
                             except Exception:
@@ -307,9 +313,15 @@ class InvestigationSummary(BaseModel):
 
     summary: str = Field(description="Brief summary of findings")
     root_cause: str = Field(default="", description="Identified root cause if found")
-    confidence: int = Field(default=0, ge=0, le=100, description="Confidence level 0-100")
-    recommendations: list[str] = Field(default_factory=list, description="Recommended actions")
-    needs_followup: bool = Field(default=False, description="Whether more investigation is needed")
+    confidence: int = Field(
+        default=0, ge=0, le=100, description="Confidence level 0-100"
+    )
+    recommendations: list[str] = Field(
+        default_factory=list, description="Recommended actions"
+    )
+    needs_followup: bool = Field(
+        default=False, description="Whether more investigation is needed"
+    )
 
 
 # =============================================================================
@@ -407,10 +419,14 @@ def create_agent_tools(team_config=None):
     # Investigation agent is created with is_subagent=True (called by planner)
     # It internally sets is_master=True because it delegates to its own sub-agents
     if "investigation" in enabled_agents:
-        investigation_agent = create_investigation_agent(team_config=team_config, is_subagent=True)
+        investigation_agent = create_investigation_agent(
+            team_config=team_config, is_subagent=True
+        )
 
         @function_tool
-        def call_investigation_agent(query: str, context: str = "", instructions: str = "") -> str:
+        def call_investigation_agent(
+            query: str, context: str = "", instructions: str = ""
+        ) -> str:
             """
             Delegate incident investigation to the Investigation Agent.
 
@@ -458,7 +474,9 @@ def create_agent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(result, "output", None)
+                output = getattr(result, "final_output", None) or getattr(
+                    result, "output", None
+                )
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("investigation_agent_failed", error=str(e))
@@ -509,7 +527,9 @@ def create_agent_tools(team_config=None):
                 if instructions:
                     parts.append(f"\n\n## Coding Guidance\n{instructions}")
                 full_query = "".join(parts)
-                result = _run_agent_in_thread(coding_agent, full_query, timeout=60, max_turns=15)
+                result = _run_agent_in_thread(
+                    coding_agent, full_query, timeout=60, max_turns=15
+                )
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
                     logger.info(
@@ -517,7 +537,9 @@ def create_agent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(result, "output", None)
+                output = getattr(result, "final_output", None) or getattr(
+                    result, "output", None
+                )
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("coding_agent_failed", error=str(e))
@@ -557,11 +579,15 @@ def create_agent_tools(team_config=None):
                 logger.info("calling_writeup_agent", query=query[:100])
                 parts = [query]
                 if investigation_findings:
-                    parts.append(f"\n\n## Investigation Findings\n{investigation_findings}")
+                    parts.append(
+                        f"\n\n## Investigation Findings\n{investigation_findings}"
+                    )
                 if template:
                     parts.append(f"\n\n## Template/Format\n{template}")
                 full_query = "".join(parts)
-                result = _run_agent_in_thread(writeup_agent, full_query, timeout=60, max_turns=10)
+                result = _run_agent_in_thread(
+                    writeup_agent, full_query, timeout=60, max_turns=10
+                )
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
                     logger.info(
@@ -569,7 +595,9 @@ def create_agent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(result, "output", None)
+                output = getattr(result, "final_output", None) or getattr(
+                    result, "output", None
+                )
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("writeup_agent_failed", error=str(e))
@@ -632,7 +660,9 @@ def create_agent_tools(team_config=None):
                 if instructions:
                     parts.append(f"\n\n## Requirements\n{instructions}")
                 if output_format != "auto":
-                    parts.append(f"\n\n## Output Format\nPlease provide output as: {output_format}")
+                    parts.append(
+                        f"\n\n## Output Format\nPlease provide output as: {output_format}"
+                    )
                 full_query = "".join(parts)
                 result = _run_agent_in_thread(
                     metrics_advisor_agent, full_query, timeout=180, max_turns=20
@@ -644,7 +674,9 @@ def create_agent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(result, "output", None)
+                output = getattr(result, "final_output", None) or getattr(
+                    result, "output", None
+                )
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("metrics_advisor_agent_failed", error=str(e))

@@ -495,16 +495,22 @@ def classify_service_type(
         kind = deployment_data.get("kind", "")
         if kind == "StatefulSet":
             classifications.append(("database", 50, "StatefulSet workload"))
-            signals.append({"source": "workload_type", "data": "StatefulSet", "result": "database"})
+            signals.append(
+                {"source": "workload_type", "data": "StatefulSet", "result": "database"}
+            )
         elif kind == "DaemonSet":
             classifications.append(("worker", 40, "DaemonSet workload"))
-            signals.append({"source": "workload_type", "data": "DaemonSet", "result": "worker"})
+            signals.append(
+                {"source": "workload_type", "data": "DaemonSet", "result": "worker"}
+            )
 
     # Determine final classification
     if not classifications:
         final_type = "unknown"
         final_confidence = 0
-        reasoning = "No classification signals found. Using default Golden Signals framework."
+        reasoning = (
+            "No classification signals found. Using default Golden Signals framework."
+        )
     else:
         # Sort by confidence, take highest
         classifications.sort(key=lambda x: x[1], reverse=True)
@@ -663,7 +669,9 @@ def analyze_metrics_gap(
         metric_base = normalize_metric(metric["name"])
         # Check if any existing metric matches
         if any(metric_base in norm for norm in existing_normalized):
-            matched.append({"name": metric["name"], "description": metric["description"]})
+            matched.append(
+                {"name": metric["name"], "description": metric["description"]}
+            )
         else:
             missing.append(
                 {
@@ -1130,7 +1138,11 @@ Utilization: {{{{value}}}}
             }
         )
 
-    result = {"monitors": monitors, "service_name": service_name, "count": len(monitors)}
+    result = {
+        "monitors": monitors,
+        "service_name": service_name,
+        "count": len(monitors),
+    }
 
     return json.dumps(result, indent=2)
 
