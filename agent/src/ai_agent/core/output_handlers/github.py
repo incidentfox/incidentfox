@@ -143,7 +143,9 @@ class GitHubOutputHandler(OutputHandler):
 
         summary = output.get("summary") or output.get("result") or output.get("message")
         root_cause = output.get("root_cause") or output.get("cause")
-        recommendations = output.get("recommendations") or output.get("next_steps") or []
+        recommendations = (
+            output.get("recommendations") or output.get("next_steps") or []
+        )
         confidence = output.get("confidence")
 
         if summary:

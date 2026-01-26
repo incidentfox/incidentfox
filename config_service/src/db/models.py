@@ -60,7 +60,9 @@ class OrgNode(Base):
     node_id: Mapped[str] = mapped_column(String(128), primary_key=True)
 
     parent_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    node_type: Mapped[NodeType] = mapped_column(Enum(NodeType, name="node_type"), nullable=False)
+    node_type: Mapped[NodeType] = mapped_column(
+        Enum(NodeType, name="node_type"), nullable=False
+    )
     name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -96,12 +98,18 @@ class TeamToken(Base):
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
-    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     issued_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
     # New fields for enterprise security
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     permissions: Mapped[list] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"),
         nullable=False,
@@ -148,12 +156,18 @@ class OrgAdminToken(Base):
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
-    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     issued_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
     # Security fields
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     label: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     __table_args__ = (
@@ -193,7 +207,9 @@ class ImpersonationJTI(Base):
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
     __table_args__ = (
         ForeignKeyConstraint(
@@ -298,8 +314,12 @@ class SecurityPolicy(Base):
     org_id: Mapped[str] = mapped_column(String(64), primary_key=True)
 
     # Token lifecycle policies
-    token_expiry_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # null = never
-    token_warn_before_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=7)
+    token_expiry_days: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True
+    )  # null = never
+    token_warn_before_days: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, default=7
+    )
     token_revoke_inactive_days: Mapped[Optional[int]] = mapped_column(
         Integer, nullable=True
     )  # null = don't auto-revoke
@@ -322,7 +342,9 @@ class SecurityPolicy(Base):
     require_approval_for_prompts: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
-    require_approval_for_tools: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    require_approval_for_tools: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     log_all_changes: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Metadata
@@ -381,7 +403,9 @@ class Integration(Base):
         String(64), primary_key=True
     )  # slack, openai, k8s, datadog
 
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_configured")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_configured"
+    )
     display_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     config: Mapped[dict] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=False, default=dict
@@ -442,7 +466,9 @@ class PendingConfigChange(Base):
         String(32), nullable=False, default="pending"
     )  # pending, approved, rejected
     reviewed_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     review_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
@@ -476,7 +502,9 @@ class AgentRun(Base):
     correlation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     # Trigger info
-    trigger_source: Mapped[str] = mapped_column(String(32), nullable=False)  # slack, api, web_ui
+    trigger_source: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # slack, api, web_ui
     trigger_actor: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     trigger_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     trigger_channel_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -486,7 +514,9 @@ class AgentRun(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     status: Mapped[str] = mapped_column(
         String(32), nullable=False
     )  # running, completed, failed, timeout
@@ -543,7 +573,9 @@ class AgentToolCall(Base):
     tool_input: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=True
     )
-    tool_output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Truncated output
+    tool_output: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )  # Truncated output
 
     # Timing
     started_at: Mapped[datetime] = mapped_column(
@@ -580,7 +612,9 @@ class AgentFeedback(Base):
     run_id: Mapped[str] = mapped_column(String(64), nullable=False)
 
     # Feedback data
-    feedback_type: Mapped[str] = mapped_column(String(32), nullable=False)  # positive, negative
+    feedback_type: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # positive, negative
     source: Mapped[str] = mapped_column(String(32), nullable=False)  # slack, github
     user_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     correlation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -618,7 +652,9 @@ class ConversationMapping(Base):
     # Context
     org_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     team_node_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    session_type: Mapped[str] = mapped_column(String(32), nullable=False)  # slack, github, api
+    session_type: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # slack, github, api
 
     # Metadata
     created_at: Mapped[datetime] = mapped_column(
@@ -651,7 +687,9 @@ class OrgSettings(Base):
     org_id: Mapped[str] = mapped_column(String(64), primary_key=True)
 
     # Telemetry opt-in/out
-    telemetry_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    telemetry_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
 
     # Metadata
     created_at: Mapped[datetime] = mapped_column(
@@ -733,7 +771,9 @@ class SSOConfig(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Provider type: google, azure, okta, oidc (generic)
-    provider_type: Mapped[str] = mapped_column(String(32), nullable=False, default="oidc")
+    provider_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="oidc"
+    )
     provider_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
     # OIDC Configuration
@@ -748,9 +788,15 @@ class SSOConfig(Base):
     tenant_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
     # Claim mappings
-    email_claim: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, default="email")
-    name_claim: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, default="name")
-    groups_claim: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, default="groups")
+    email_claim: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, default="email"
+    )
+    name_claim: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, default="name"
+    )
+    groups_claim: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, default="groups"
+    )
     admin_group: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     # Domain restrictions (comma-separated)
@@ -806,7 +852,9 @@ class Template(Base):
     demo_video_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     # Template Type
-    is_system_template: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_system_template: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
     org_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     # Visibility & Versioning
@@ -820,7 +868,9 @@ class Template(Base):
     required_tools: Mapped[list] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=False, default=list
     )
-    minimum_agent_version: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    minimum_agent_version: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True
+    )
 
     # Metadata
     created_at: Mapped[datetime] = mapped_column(
@@ -869,7 +919,9 @@ class TemplateApplication(Base):
     template_version: Mapped[str] = mapped_column(String(20), nullable=False)
 
     # Customization Tracking
-    has_customizations: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    has_customizations: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     customization_summary: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=True
     )
@@ -911,8 +963,12 @@ class TemplateAnalytics(Base):
         DateTime(timezone=True), nullable=True
     )
     total_agent_runs: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    avg_agent_success_rate: Mapped[Optional[float]] = mapped_column(Integer, nullable=True)
-    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    avg_agent_success_rate: Mapped[Optional[float]] = mapped_column(
+        Integer, nullable=True
+    )
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Feedback
     user_rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -955,10 +1011,14 @@ class AgentSession(Base):
 
     __tablename__ = "agent_sessions"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
 
     # Session identification
-    investigation_id: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
+    investigation_id: Mapped[str] = mapped_column(
+        String(256), unique=True, nullable=False
+    )
     sdk_session_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     # Session file content (entire .jsonl file)
@@ -982,7 +1042,9 @@ class AgentSession(Base):
     # Stats for monitoring
     message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    total_cost_usd: Mapped[Optional[float]] = mapped_column(Numeric(10, 6), nullable=True)
+    total_cost_usd: Mapped[Optional[float]] = mapped_column(
+        Numeric(10, 6), nullable=True
+    )
 
     # Additional session metadata
     session_metadata: Mapped[Optional[dict]] = mapped_column(
@@ -1020,7 +1082,9 @@ class PendingRemediation(Base):
 
     # Context
     reason: Mapped[str] = mapped_column(Text, nullable=False)
-    urgency: Mapped[str] = mapped_column(String(32), nullable=False, server_default="medium")
+    urgency: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="medium"
+    )
     rollback_action: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Agent context
@@ -1029,18 +1093,26 @@ class PendingRemediation(Base):
     investigation_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Lifecycle
-    proposed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    proposed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow
+    )
     proposed_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
-    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="pending")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="pending"
+    )
 
     # Review
-    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     reviewed_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     review_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Execution
-    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    executed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     execution_result: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=True
     )
@@ -1048,7 +1120,9 @@ class PendingRemediation(Base):
 
     # Rollback tracking
     rolled_back: Mapped[bool] = mapped_column(Boolean, default=False)
-    rollback_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    rollback_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     rollback_result: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=True
     )
@@ -1074,11 +1148,15 @@ class MeetingData(Base):
     meeting_id: Mapped[str] = mapped_column(String(256), primary_key=True)
 
     # Meeting metadata
-    provider: Mapped[str] = mapped_column(String(32), nullable=False)  # circleback, fireflies, etc
+    provider: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # circleback, fireflies, etc
     name: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     meeting_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    meeting_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    meeting_time: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Participants
     attendees: Mapped[Optional[list]] = mapped_column(

@@ -59,7 +59,9 @@ def record_impersonation_jti(
 
 
 def impersonation_jti_exists(session: Session, *, jti: str) -> bool:
-    row = session.execute(select(ImpersonationJTI.jti).where(ImpersonationJTI.jti == jti)).first()
+    row = session.execute(
+        select(ImpersonationJTI.jti).where(ImpersonationJTI.jti == jti)
+    ).first()
     return row is not None
 
 
@@ -124,7 +126,9 @@ def issue_team_token(
     return f"{token_id}.{token_secret}"
 
 
-def revoke_team_token(session: Session, *, token_id: str, revoked_by: Optional[str] = None) -> None:
+def revoke_team_token(
+    session: Session, *, token_id: str, revoked_by: Optional[str] = None
+) -> None:
     row = session.execute(
         select(TeamToken).where(TeamToken.token_id == token_id)
     ).scalar_one_or_none()
@@ -177,7 +181,9 @@ def revoke_team_token_scoped(
     )
 
 
-def list_team_tokens(session: Session, *, org_id: str, team_node_id: str) -> List[TeamToken]:
+def list_team_tokens(
+    session: Session, *, org_id: str, team_node_id: str
+) -> List[TeamToken]:
     return (
         session.execute(
             select(TeamToken)
@@ -193,7 +199,9 @@ def list_org_tokens(session: Session, *, org_id: str) -> List[TeamToken]:
     """List all tokens across all teams in an organization."""
     return (
         session.execute(
-            select(TeamToken).where(TeamToken.org_id == org_id).order_by(TeamToken.issued_at.desc())
+            select(TeamToken)
+            .where(TeamToken.org_id == org_id)
+            .order_by(TeamToken.issued_at.desc())
         )
         .scalars()
         .all()
@@ -418,7 +426,9 @@ def authenticate_org_admin_token(
 def list_org_nodes(session: Session, *, org_id: str) -> List[OrgNode]:
     return (
         session.execute(
-            select(OrgNode).where(OrgNode.org_id == org_id).order_by(OrgNode.node_id.asc())
+            select(OrgNode)
+            .where(OrgNode.org_id == org_id)
+            .order_by(OrgNode.node_id.asc())
         )
         .scalars()
         .all()
@@ -499,7 +509,9 @@ def create_org_node(
         raise ValueError(f"Node already exists: {node_id}")
     if parent_id is not None:
         parent = session.execute(
-            select(OrgNode).where(OrgNode.org_id == org_id, OrgNode.node_id == parent_id)
+            select(OrgNode).where(
+                OrgNode.org_id == org_id, OrgNode.node_id == parent_id
+            )
         ).scalar_one_or_none()
         if parent is None:
             raise ValueError(f"Parent not found: {parent_id}")
@@ -544,7 +556,9 @@ def update_org_node(
         if parent_id == node_id:
             raise ValueError("parent_id cannot equal node_id")
         parent = session.execute(
-            select(OrgNode).where(OrgNode.org_id == org_id, OrgNode.node_id == parent_id)
+            select(OrgNode).where(
+                OrgNode.org_id == org_id, OrgNode.node_id == parent_id
+            )
         ).scalar_one_or_none()
         if parent is None:
             raise ValueError(f"Parent not found: {parent_id}")
@@ -627,7 +641,9 @@ def validate_against_max_values(
             and isinstance(max_val, (int, float))
         ):
             if current > max_val:
-                raise ValueError(f"Value for {path} ({current}) exceeds maximum ({max_val})")
+                raise ValueError(
+                    f"Value for {path} ({current}) exceeds maximum ({max_val})"
+                )
 
 
 @dataclass(frozen=True)
@@ -665,7 +681,9 @@ def authenticate_bearer_token(
         raise ValueError("Invalid token")
 
     # Check expiration
-    if row.expires_at is not None and datetime.utcnow() > row.expires_at.replace(tzinfo=None):
+    if row.expires_at is not None and datetime.utcnow() > row.expires_at.replace(
+        tzinfo=None
+    ):
         # Log expiration event
         record_token_audit(
             session,
@@ -715,7 +733,9 @@ def authenticate_bearer_token_extended(
         raise ValueError("Invalid token")
 
     # Check expiration
-    if row.expires_at is not None and datetime.utcnow() > row.expires_at.replace(tzinfo=None):
+    if row.expires_at is not None and datetime.utcnow() > row.expires_at.replace(
+        tzinfo=None
+    ):
         record_token_audit(
             session,
             org_id=row.org_id,
@@ -835,7 +855,9 @@ def upsert_team_overrides(
     ).scalar_one_or_none()
 
     before = (
-        existing.config_json if existing is not None and existing.config_json is not None else {}
+        existing.config_json
+        if existing is not None and existing.config_json is not None
+        else {}
     )
 
     if existing is None:
@@ -1049,7 +1071,9 @@ def complete_agent_run(
     confidence: Optional[int] = None,
 ) -> Optional[AgentRun]:
     """Mark an agent run as completed/failed/timeout."""
-    run = session.execute(select(AgentRun).where(AgentRun.id == run_id)).scalar_one_or_none()
+    run = session.execute(
+        select(AgentRun).where(AgentRun.id == run_id)
+    ).scalar_one_or_none()
 
     if run is None:
         return None
@@ -1080,7 +1104,9 @@ def complete_agent_run(
 
 def get_agent_run(session: Session, *, run_id: str) -> Optional[AgentRun]:
     """Get a single agent run by ID."""
-    return session.execute(select(AgentRun).where(AgentRun.id == run_id)).scalar_one_or_none()
+    return session.execute(
+        select(AgentRun).where(AgentRun.id == run_id)
+    ).scalar_one_or_none()
 
 
 def list_agent_runs(
@@ -1159,9 +1185,7 @@ def mark_stale_runs_as_timeout(
     for run in stale_runs:
         run.status = "timeout"
         run.completed_at = now
-        run.error_message = (
-            f"Run exceeded {max_age_seconds}s without completion (marked by cleanup job)"
-        )
+        run.error_message = f"Run exceeded {max_age_seconds}s without completion (marked by cleanup job)"
 
         # Calculate duration
         if run.started_at:
@@ -1577,7 +1601,9 @@ def list_unified_audit(
             stmt = stmt.where(AgentRun.team_node_id == team_node_id)
         if event_types:
             agent_types = [
-                et for et in event_types if et in ("completed", "failed", "timeout", "running")
+                et
+                for et in event_types
+                if et in ("completed", "failed", "timeout", "running")
             ]
             if agent_types:
                 stmt = stmt.where(AgentRun.status.in_(agent_types))
@@ -1625,7 +1651,8 @@ def list_unified_audit(
         events = [
             e
             for e in events
-            if search_lower in e.summary.lower() or search_lower in str(e.details).lower()
+            if search_lower in e.summary.lower()
+            or search_lower in str(e.details).lower()
         ]
 
     # --- Sort by timestamp descending ---
@@ -1730,7 +1757,9 @@ def process_token_lifecycle(
                 {
                     "token_id": token.token_id,
                     "team_node_id": token.team_node_id,
-                    "expires_at": (token.expires_at.isoformat() if token.expires_at else None),
+                    "expires_at": (
+                        token.expires_at.isoformat() if token.expires_at else None
+                    ),
                     "label": token.label,
                     "issued_by": token.issued_by,
                 }
@@ -1741,7 +1770,8 @@ def process_token_lifecycle(
                 select(TokenAudit).where(
                     TokenAudit.token_id == token.token_id,
                     TokenAudit.event_type == "expiry_warning",
-                    TokenAudit.event_at >= datetime.utcnow().replace(hour=0, minute=0, second=0),
+                    TokenAudit.event_at
+                    >= datetime.utcnow().replace(hour=0, minute=0, second=0),
                 )
             ).first()
             if not existing_warning:
@@ -1753,7 +1783,9 @@ def process_token_lifecycle(
                     event_type="expiry_warning",
                     actor="system",
                     details={
-                        "expires_at": (token.expires_at.isoformat() if token.expires_at else None),
+                        "expires_at": (
+                            token.expires_at.isoformat() if token.expires_at else None
+                        ),
                         "days_remaining": (
                             (token.expires_at - datetime.utcnow()).days
                             if token.expires_at
@@ -1857,7 +1889,9 @@ def list_pending_changes(
     return list(session.execute(stmt).scalars().all())
 
 
-def get_pending_change(session: Session, *, change_id: str) -> Optional[PendingConfigChange]:
+def get_pending_change(
+    session: Session, *, change_id: str
+) -> Optional[PendingConfigChange]:
     """Get a pending change by ID."""
     return session.execute(
         select(PendingConfigChange).where(PendingConfigChange.id == change_id)
@@ -1902,7 +1936,9 @@ def approve_pending_change(
             current[keys[-1]] = change.proposed_value
         else:
             # Direct value
-            patch = change.proposed_value if isinstance(change.proposed_value, dict) else {}
+            patch = (
+                change.proposed_value if isinstance(change.proposed_value, dict) else {}
+            )
 
         if patch:
             # Lazy import to avoid circular dependency
@@ -1975,7 +2011,9 @@ def get_conversation_mapping(
     session_id: str,
 ) -> Optional[ConversationMapping]:
     """Get conversation mapping by session_id."""
-    stmt = select(ConversationMapping).where(ConversationMapping.session_id == session_id)
+    stmt = select(ConversationMapping).where(
+        ConversationMapping.session_id == session_id
+    )
     return session.execute(stmt).scalar_one_or_none()
 
 
