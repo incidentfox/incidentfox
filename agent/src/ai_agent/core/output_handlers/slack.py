@@ -12,7 +12,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from ..logging import get_logger
 from ..output_handler import OutputHandler, OutputResult
@@ -55,9 +56,7 @@ async def _retry_with_backoff(
 
             # Check if this is a rate limit error (429) or transient error (5xx)
             is_rate_limit = "rate" in error_msg or "429" in error_msg
-            is_server_error = any(
-                code in error_msg for code in ["500", "502", "503", "504"]
-            )
+            is_server_error = any(code in error_msg for code in ["500", "502", "503", "504"])
 
             if attempt < max_retries and (is_rate_limit or is_server_error):
                 delay = min(base_delay * (2**attempt), max_delay)
@@ -257,9 +256,7 @@ class SlackOutputHandler(OutputHandler):
                 )
                 fallback_text = "✅ Task completed"
             else:
-                blocks = self._build_error_blocks(
-                    error or str(output), agent_name, user_id
-                )
+                blocks = self._build_error_blocks(error or str(output), agent_name, user_id)
                 fallback_text = "❌ Task failed"
 
             if message_id:
@@ -322,9 +319,7 @@ class SlackOutputHandler(OutputHandler):
         """Build blocks for initial working message."""
         mention = f"<@{user_id}> " if user_id else ""
         task_preview = (
-            task_description[:200] + "..."
-            if len(task_description) > 200
-            else task_description
+            task_description[:200] + "..." if len(task_description) > 200 else task_description
         )
 
         return [
@@ -422,7 +417,7 @@ class SlackOutputHandler(OutputHandler):
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "Helpful",
+                            "text": "👍",
                             "emoji": True,
                         },
                         "style": "primary",
@@ -433,7 +428,7 @@ class SlackOutputHandler(OutputHandler):
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "Not Helpful",
+                            "text": "👎",
                             "emoji": True,
                         },
                         "action_id": "feedback_negative",
@@ -526,9 +521,7 @@ class SlackOutputHandler(OutputHandler):
         # Look for common structured fields
         summary = output.get("summary") or output.get("result") or output.get("message")
         root_cause = output.get("root_cause") or output.get("cause")
-        recommendations = (
-            output.get("recommendations") or output.get("next_steps") or []
-        )
+        recommendations = output.get("recommendations") or output.get("next_steps") or []
         confidence = output.get("confidence")
 
         if summary:
@@ -563,9 +556,7 @@ class SlackOutputHandler(OutputHandler):
             blocks.append(
                 {
                     "type": "context",
-                    "elements": [
-                        {"type": "mrkdwn", "text": f"*Confidence:* {confidence}%"}
-                    ],
+                    "elements": [{"type": "mrkdwn", "text": f"*Confidence:* {confidence}%"}],
                 }
             )
 

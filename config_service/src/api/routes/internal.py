@@ -201,16 +201,12 @@ def list_agent_runs_internal(
     if not org_id and not team_node_id:
         # Try to get org_id from team_node_id lookup
         if team_node_id:
-            node = (
-                session.query(OrgNode).filter(OrgNode.node_id == team_node_id).first()
-            )
+            node = session.query(OrgNode).filter(OrgNode.node_id == team_node_id).first()
             if node:
                 org_id = node.org_id
 
     if not org_id:
-        raise HTTPException(
-            status_code=400, detail="Either org_id or team_node_id is required"
-        )
+        raise HTTPException(status_code=400, detail="Either org_id or team_node_id is required")
 
     runs = repository.list_agent_runs(
         session,
@@ -403,9 +399,7 @@ def record_tool_calls(
     including inputs, outputs, and timing information.
     """
     if request.run_id != run_id:
-        raise HTTPException(
-            status_code=400, detail="run_id in path must match request body"
-        )
+        raise HTTPException(status_code=400, detail="run_id in path must match request body")
 
     # Convert to dict format for bulk insert
     tool_calls_data = [
@@ -603,9 +597,7 @@ def create_pending_change_internal(
 
     # Check if change with this ID already exists
     existing = (
-        session.query(PendingConfigChange)
-        .filter(PendingConfigChange.id == request.id)
-        .first()
+        session.query(PendingConfigChange).filter(PendingConfigChange.id == request.id).first()
     )
     if existing:
         # Return existing instead of error (idempotent)
@@ -879,9 +871,7 @@ def create_conversation_mapping(
 ):
     """Create or update a conversation mapping (upsert to handle race conditions)."""
     if not request.openai_conversation_id:
-        raise HTTPException(
-            status_code=400, detail="openai_conversation_id is required"
-        )
+        raise HTTPException(status_code=400, detail="openai_conversation_id is required")
 
     # Use upsert to handle concurrent requests safely
     mapping, created = repository.upsert_conversation_mapping(
@@ -1107,9 +1097,7 @@ def get_meeting_data(
         "provider": meeting.provider,
         "meeting_url": meeting.meeting_url,
         "duration": meeting.duration_seconds,
-        "meeting_time": (
-            meeting.meeting_time.isoformat() if meeting.meeting_time else None
-        ),
+        "meeting_time": (meeting.meeting_time.isoformat() if meeting.meeting_time else None),
         "attendees": meeting.attendees or [],
         "notes": meeting.notes,
         "transcript": meeting.transcript or [],
@@ -1180,12 +1168,138 @@ def search_meetings(
                 "provider": m.provider,
                 "duration": m.duration_seconds,
                 "meeting_time": m.meeting_time.isoformat() if m.meeting_time else None,
-                "attendees": [
-                    a.get("email") for a in (m.attendees or []) if a.get("email")
-                ],
+                "attendees": [a.get("email") for a in (m.attendees or []) if a.get("email")],
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in meetings
         ],
         total=len(meetings),
+    )
+
+
+# ==================== Feedback Recording ====================
+
+
+class FeedbackRequest(BaseModel):
+    """Request to record user feedback."""
+
+    run_id: str
+    correlation_id: Optional[str] = None
+    feedback: str  # "positive" or "negative"
+    user_id: Optional[str] = None
+    source: str = "unknown"  # slack, github, web
+
+
+class FeedbackResponse(BaseModel):
+    """Response with created feedback."""
+
+    id: str
+    run_id: str
+    feedback_type: str
+    source: str
+    created_at: datetime
+
+
+@router.post("/feedback", response_model=FeedbackResponse)
+def record_feedback(
+    request: FeedbackRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Record user feedback on an agent run.
+
+    Called by orchestrator when users click feedback buttons in Slack
+    or react to GitHub comments.
+    """
+    import uuid
+
+    from src.core.metrics import FEEDBACK_TOTAL
+
+    logger.info(
+        "record_feedback",
+        run_id=request.run_id,
+        feedback=request.feedback,
+        source=request.source,
+        user_id=request.user_id,
+    )
+
+    feedback_id = uuid.uuid4().hex
+
+    feedback = repository.create_agent_feedback(
+        session,
+        feedback_id=feedback_id,
+        run_id=request.run_id,
+        feedback_type=request.feedback,
+        source=request.source,
+        user_id=request.user_id,
+        correlation_id=request.correlation_id,
+    )
+    session.commit()
+
+    # Increment Prometheus counter
+    FEEDBACK_TOTAL.labels(
+        feedback_type=request.feedback,
+        source=request.source,
+    ).inc()
+
+    return FeedbackResponse(
+        id=feedback.id,
+        run_id=feedback.run_id,
+        feedback_type=feedback.feedback_type,
+        source=feedback.source,
+        created_at=feedback.created_at,
+    )
+
+
+class FeedbackStatsResponse(BaseModel):
+    """Aggregated feedback statistics."""
+
+    total: int
+    positive: int
+    negative: int
+    positive_rate: float
+    by_source: Dict[str, Dict[str, int]]
+
+
+@router.get("/feedback/stats", response_model=FeedbackStatsResponse)
+def get_feedback_statistics(
+    org_id: Optional[str] = None,
+    team_node_id: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Get aggregated feedback statistics.
+
+    Returns counts and rates for positive/negative feedback by source.
+    """
+    since_dt = None
+    until_dt = None
+
+    if since:
+        since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+    if until:
+        until_dt = datetime.fromisoformat(until.replace("Z", "+00:00"))
+
+    stats = repository.get_feedback_stats(
+        session,
+        org_id=org_id,
+        team_node_id=team_node_id,
+        since=since_dt,
+        until=until_dt,
+    )
+
+    positive_rate = 0.0
+    if stats["total"] > 0:
+        positive_rate = stats["positive"] / stats["total"]
+
+    return FeedbackStatsResponse(
+        total=stats["total"],
+        positive=stats["positive"],
+        negative=stats["negative"],
+        positive_rate=positive_rate,
+        by_source=stats["by_source"],
     )

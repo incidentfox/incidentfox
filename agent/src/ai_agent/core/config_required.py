@@ -9,7 +9,6 @@ Pattern adopted from kubernetes.py which successfully implements this flow.
 """
 
 import json
-from typing import Any
 
 from .logging import get_logger
 
