@@ -6,7 +6,7 @@ from .layers import (
     # Integration-specific error definitions
     AWS_ERRORS,
     CODING_ERRORS,
-    CONTEXT_RECEIVING_GUIDANCE,
+    CONTEXT_RECEIVING_GUIDANCE,  # Deprecated: use SUBAGENT_GUIDANCE
     DELEGATION_GUIDANCE,
     ERROR_HANDLING_COMMON,
     EVIDENCE_FORMAT_GUIDANCE,
@@ -19,8 +19,9 @@ from .layers import (
     LAYER_7_OUTPUT_AND_RULES,
     LOGS_ERRORS,
     METRICS_ERRORS,
-    SUBAGENT_OUTPUT_FORMAT,
-    SUBAGENT_RESPONSE_GUIDANCE,
+    SUBAGENT_GUIDANCE,  # Consolidated subagent guidance (context receiving + output format)
+    SUBAGENT_OUTPUT_FORMAT,  # Deprecated: use SUBAGENT_GUIDANCE
+    SUBAGENT_RESPONSE_GUIDANCE,  # Alias for SUBAGENT_GUIDANCE
     SYNTHESIS_GUIDANCE,
     TOOL_CALL_LIMITS_TEMPLATE,
     # Builder functions - planner layers
@@ -61,8 +62,9 @@ __all__ = [
     # Shared templates for all agents
     "ERROR_HANDLING_COMMON",
     "TOOL_CALL_LIMITS_TEMPLATE",
-    "SUBAGENT_OUTPUT_FORMAT",
-    "CONTEXT_RECEIVING_GUIDANCE",
+    "SUBAGENT_GUIDANCE",  # Recommended: consolidated subagent guidance
+    "SUBAGENT_OUTPUT_FORMAT",  # Deprecated: use SUBAGENT_GUIDANCE
+    "CONTEXT_RECEIVING_GUIDANCE",  # Deprecated: use SUBAGENT_GUIDANCE
     "EVIDENCE_FORMAT_GUIDANCE",
     "SYNTHESIS_GUIDANCE",
     # Integration-specific error definitions

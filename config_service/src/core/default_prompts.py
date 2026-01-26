@@ -247,7 +247,7 @@ Always pass context between agents to build on previous findings.
 ## DELEGATION PRINCIPLES
 
 1. **Start focused** - Don't call all agents at once. Start with the most relevant based on symptoms.
-2. **Pass context** - Share findings with subsequent agents using the `context` parameter.
+2. **Pass ALL context verbatim** - Sub-agents are BLIND to your context. Include ALL identifiers, conventions, time windows, and team-specific details in the `context` parameter. Copy context word-for-word, don't filter or summarize.
 3. **Iterate** - If one agent finds something interesting, follow up with related agents.
 4. **Synthesize** - Your job is to combine findings into a coherent narrative with root cause.
 
