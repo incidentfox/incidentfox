@@ -421,7 +421,7 @@ class SlackUpdateHooks(RunHooks):
             logger.debug("slack_hook_tool_start", tool=tool_name, category=category)
 
         except Exception as e:
-            logger.warning("slack_hook_error", error=str(e), event="on_tool_start")
+            logger.warning("slack_hook_error", error=str(e), hook="on_tool_start")
 
     async def on_tool_end(
         self,
@@ -480,7 +480,7 @@ class SlackUpdateHooks(RunHooks):
             await self._schedule_update()
 
         except Exception as e:
-            logger.warning("slack_hook_error", error=str(e), event="on_tool_end")
+            logger.warning("slack_hook_error", error=str(e), hook="on_tool_end")
 
     def _infer_category_from_name(self, tool_name: str) -> str | None:
         """Infer category from tool name patterns when module detection fails."""
