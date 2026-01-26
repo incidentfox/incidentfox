@@ -1368,6 +1368,105 @@ def list_tool_calls(
 
 
 # =============================================================================
+# Agent Feedback Functions
+# =============================================================================
+
+
+def create_agent_feedback(
+    session: Session,
+    *,
+    feedback_id: str,
+    run_id: str,
+    feedback_type: str,
+    source: str,
+    user_id: Optional[str] = None,
+    correlation_id: Optional[str] = None,
+) -> "AgentFeedback":
+    """Create a feedback record for an agent run."""
+    from .models import AgentFeedback
+
+    feedback = AgentFeedback(
+        id=feedback_id,
+        run_id=run_id,
+        feedback_type=feedback_type,
+        source=source,
+        user_id=user_id,
+        correlation_id=correlation_id,
+    )
+    session.add(feedback)
+    session.flush()
+    return feedback
+
+
+def get_feedback_for_run(
+    session: Session,
+    *,
+    run_id: str,
+) -> List["AgentFeedback"]:
+    """Get all feedback for a specific run."""
+    from .models import AgentFeedback
+
+    stmt = select(AgentFeedback).where(AgentFeedback.run_id == run_id)
+    return list(session.execute(stmt).scalars().all())
+
+
+def get_feedback_stats(
+    session: Session,
+    *,
+    org_id: Optional[str] = None,
+    team_node_id: Optional[str] = None,
+    since: Optional[datetime] = None,
+    until: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Get aggregated feedback statistics."""
+    from .models import AgentFeedback
+
+    # Build base query joining feedback to runs for org/team filtering
+    stmt = select(
+        AgentFeedback.feedback_type,
+        AgentFeedback.source,
+        func.count().label("count"),
+    ).select_from(AgentFeedback)
+
+    if org_id or team_node_id:
+        stmt = stmt.join(AgentRun, AgentRun.id == AgentFeedback.run_id)
+        if org_id:
+            stmt = stmt.where(AgentRun.org_id == org_id)
+        if team_node_id:
+            stmt = stmt.where(AgentRun.team_node_id == team_node_id)
+
+    if since:
+        stmt = stmt.where(AgentFeedback.created_at >= since)
+    if until:
+        stmt = stmt.where(AgentFeedback.created_at <= until)
+
+    stmt = stmt.group_by(AgentFeedback.feedback_type, AgentFeedback.source)
+
+    results = session.execute(stmt).all()
+
+    # Aggregate results
+    stats: Dict[str, Any] = {
+        "total": 0,
+        "positive": 0,
+        "negative": 0,
+        "by_source": {},
+    }
+
+    for row in results:
+        stats["total"] += row.count
+        if row.feedback_type == "positive":
+            stats["positive"] += row.count
+        else:
+            stats["negative"] += row.count
+
+        if row.source not in stats["by_source"]:
+            stats["by_source"][row.source] = {"positive": 0, "negative": 0}
+        stats["by_source"][row.source][row.feedback_type] = row.count
+
+    return stats
+
+
+# =============================================================================
 # Unified Audit Functions
 # =============================================================================
 

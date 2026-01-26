@@ -1189,3 +1189,131 @@ def search_meetings(
         ],
         total=len(meetings),
     )
+
+
+# ==================== Feedback Recording ====================
+
+
+class FeedbackRequest(BaseModel):
+    """Request to record user feedback."""
+
+    run_id: str
+    correlation_id: Optional[str] = None
+    feedback: str  # "positive" or "negative"
+    user_id: Optional[str] = None
+    source: str = "unknown"  # slack, github, web
+
+
+class FeedbackResponse(BaseModel):
+    """Response with created feedback."""
+
+    id: str
+    run_id: str
+    feedback_type: str
+    source: str
+    created_at: datetime
+
+
+@router.post("/feedback", response_model=FeedbackResponse)
+def record_feedback(
+    request: FeedbackRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Record user feedback on an agent run.
+
+    Called by orchestrator when users click feedback buttons in Slack
+    or react to GitHub comments.
+    """
+    import uuid
+
+    from src.core.metrics import FEEDBACK_TOTAL
+
+    logger.info(
+        "record_feedback",
+        run_id=request.run_id,
+        feedback=request.feedback,
+        source=request.source,
+        user_id=request.user_id,
+    )
+
+    feedback_id = uuid.uuid4().hex
+
+    feedback = repository.create_agent_feedback(
+        session,
+        feedback_id=feedback_id,
+        run_id=request.run_id,
+        feedback_type=request.feedback,
+        source=request.source,
+        user_id=request.user_id,
+        correlation_id=request.correlation_id,
+    )
+    session.commit()
+
+    # Increment Prometheus counter
+    FEEDBACK_TOTAL.labels(
+        feedback_type=request.feedback,
+        source=request.source,
+    ).inc()
+
+    return FeedbackResponse(
+        id=feedback.id,
+        run_id=feedback.run_id,
+        feedback_type=feedback.feedback_type,
+        source=feedback.source,
+        created_at=feedback.created_at,
+    )
+
+
+class FeedbackStatsResponse(BaseModel):
+    """Aggregated feedback statistics."""
+
+    total: int
+    positive: int
+    negative: int
+    positive_rate: float
+    by_source: Dict[str, Dict[str, int]]
+
+
+@router.get("/feedback/stats", response_model=FeedbackStatsResponse)
+def get_feedback_statistics(
+    org_id: Optional[str] = None,
+    team_node_id: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Get aggregated feedback statistics.
+
+    Returns counts and rates for positive/negative feedback by source.
+    """
+    since_dt = None
+    until_dt = None
+
+    if since:
+        since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+    if until:
+        until_dt = datetime.fromisoformat(until.replace("Z", "+00:00"))
+
+    stats = repository.get_feedback_stats(
+        session,
+        org_id=org_id,
+        team_node_id=team_node_id,
+        since=since_dt,
+        until=until_dt,
+    )
+
+    positive_rate = 0.0
+    if stats["total"] > 0:
+        positive_rate = stats["positive"] / stats["total"]
+
+    return FeedbackStatsResponse(
+        total=stats["total"],
+        positive=stats["positive"],
+        negative=stats["negative"],
+        positive_rate=positive_rate,
+        by_source=stats["by_source"],
+    )

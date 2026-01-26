@@ -86,6 +86,7 @@ class GitHubOutputHandler(OutputHandler):
         agent_name: str,
         duration_seconds: float | None,
         error: str | None,
+        run_id: str | None = None,
     ) -> str:
         """Format agent output as GitHub markdown."""
         lines = []
@@ -100,6 +101,10 @@ class GitHubOutputHandler(OutputHandler):
             lines.append("")
             if duration_seconds:
                 lines.append(f"*Duration: {duration_seconds:.1f}s*")
+            # Embed run_id for feedback tracking (even on errors)
+            if run_id:
+                lines.append("")
+                lines.append(f"<!-- incidentfox:run_id={run_id} -->")
             return "\n".join(lines)
 
         # Format output
@@ -124,6 +129,11 @@ class GitHubOutputHandler(OutputHandler):
         lines.append("")
         if duration_seconds:
             lines.append(f"*Duration: {duration_seconds:.1f}s*")
+
+        # Embed run_id for feedback tracking (react with 👍 or 👎)
+        if run_id:
+            lines.append("")
+            lines.append(f"<!-- incidentfox:run_id={run_id} -->")
 
         return "\n".join(lines)
 
@@ -277,6 +287,7 @@ class GitHubPRCommentHandler(GitHubOutputHandler):
         repo = config.get("repo")
         pr_number = config.get("pr_number")
         token = self._get_token(config)
+        run_id = config.get("run_id")
 
         if not repo or not pr_number or not token:
             return OutputResult(
@@ -292,6 +303,7 @@ class GitHubPRCommentHandler(GitHubOutputHandler):
                 agent_name=agent_name,
                 duration_seconds=duration_seconds,
                 error=error,
+                run_id=run_id,
             )
 
             if message_id:
@@ -410,6 +422,7 @@ class GitHubIssueCommentHandler(GitHubOutputHandler):
         repo = config.get("repo")
         issue_number = config.get("issue_number")
         token = self._get_token(config)
+        run_id = config.get("run_id")
 
         if not repo or not issue_number or not token:
             return OutputResult(
@@ -425,6 +438,7 @@ class GitHubIssueCommentHandler(GitHubOutputHandler):
                 agent_name=agent_name,
                 duration_seconds=duration_seconds,
                 error=error,
+                run_id=run_id,
             )
 
             if message_id:

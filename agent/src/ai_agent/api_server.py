@@ -25,7 +25,6 @@ from .core.agent_runner import (
     AgentRunner,
     ExecutionContext,
     _record_agent_run_complete,
-    _record_agent_run_complete_sync,
     _record_agent_run_start,
     get_agent_registry,
     get_in_flight_runs,
@@ -2307,7 +2306,7 @@ def create_app() -> Sanic:
                     "graceful_shutdown_run_marked_failed",
                     run_id=run_id,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     "graceful_shutdown_run_mark_timeout",
                     run_id=run_id,
