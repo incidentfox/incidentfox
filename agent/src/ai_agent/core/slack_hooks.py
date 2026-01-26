@@ -272,7 +272,10 @@ def get_category_display(category: str) -> dict[str, str]:
     """Get display configuration for a category."""
     return CATEGORY_DISPLAY.get(
         category,
-        {**DEFAULT_CATEGORY_DISPLAY, "label": f"{category.replace('_', ' ').title()}: Analysis"},
+        {
+            **DEFAULT_CATEGORY_DISPLAY,
+            "label": f"{category.replace('_', ' ').title()}: Analysis",
+        },
     )
 
 
@@ -445,10 +448,15 @@ class SlackUpdateHooks(RunHooks):
             # Store phase result
             if category not in self.state.phase_results:
                 self.state.phase_results[category] = ""
-            self.state.phase_results[category] += f"\n\n**{tool_name}:**\n{result[:1000]}"
+            self.state.phase_results[
+                category
+            ] += f"\n\n**{tool_name}:**\n{result[:1000]}"
 
             logger.debug(
-                "slack_hook_tool_end", tool=tool_name, category=category, duration=duration
+                "slack_hook_tool_end",
+                tool=tool_name,
+                category=category,
+                duration=duration,
             )
 
             await self._schedule_update()
@@ -528,7 +536,9 @@ class SlackUpdateHooks(RunHooks):
             elif self._pending_update_task is None or self._pending_update_task.done():
                 # Schedule delayed update
                 delay = self.state.update_debounce_seconds - time_since_last
-                self._pending_update_task = asyncio.create_task(self._delayed_update(delay))
+                self._pending_update_task = asyncio.create_task(
+                    self._delayed_update(delay)
+                )
 
     async def _delayed_update(self, delay: float) -> None:
         """Wait then send update."""
@@ -637,7 +647,9 @@ class SlackUpdateHooks(RunHooks):
                 blocks=blocks,
             )
 
-            logger.info("slack_investigation_finalized", incident_id=self.state.incident_id)
+            logger.info(
+                "slack_investigation_finalized", incident_id=self.state.incident_id
+            )
 
         except Exception as e:
             logger.error("slack_finalize_failed", error=str(e))

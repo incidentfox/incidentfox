@@ -141,7 +141,9 @@ def build_progress_section(
             blocks.append(
                 {
                     "type": "context",
-                    "elements": [{"type": "mrkdwn", "text": f"{status_icon} _{display_text}_"}],
+                    "elements": [
+                        {"type": "mrkdwn", "text": f"{status_icon} _{display_text}_"}
+                    ],
                 }
             )
         elif status in ("done", "failed"):
@@ -194,7 +196,9 @@ def build_findings_section(
         blocks.append(
             {
                 "type": "context",
-                "elements": [{"type": "mrkdwn", "text": f"*Confidence:* {confidence}%"}],
+                "elements": [
+                    {"type": "mrkdwn", "text": f"*Confidence:* {confidence}%"}
+                ],
             }
         )
 
@@ -385,13 +389,17 @@ def build_all_phases_modal(
         )
 
         for chunk in chunk_mrkdwn(text, limit=2900):
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": chunk}})
+            blocks.append(
+                {"type": "section", "text": {"type": "mrkdwn", "text": chunk}}
+            )
 
         blocks.append({"type": "divider"})
 
         # Slack has a 100 block limit
         if len(blocks) >= 95:
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "_(truncated)_"}})
+            blocks.append(
+                {"type": "section", "text": {"type": "mrkdwn", "text": "_(truncated)_"}}
+            )
             break
 
     return {

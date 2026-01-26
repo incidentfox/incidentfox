@@ -92,7 +92,9 @@ def _build_session_id(context_data: dict) -> str | None:
 
 
 # Config service URL for conversation mapping storage
-CONFIG_SERVICE_URL = os.getenv("CONFIG_SERVICE_URL", "http://incidentfox-config-service:8080")
+CONFIG_SERVICE_URL = os.getenv(
+    "CONFIG_SERVICE_URL", "http://incidentfox-config-service:8080"
+)
 
 
 async def _get_or_create_conversation_id(
@@ -269,7 +271,11 @@ async def _create_mcp_servers_for_request(team_config, agent_name: str = None):
     from agents.mcp import MCPServerStdio
 
     # Check if team has MCP servers configured
-    if not team_config or not hasattr(team_config, "mcp_servers") or not team_config.mcp_servers:
+    if (
+        not team_config
+        or not hasattr(team_config, "mcp_servers")
+        or not team_config.mcp_servers
+    ):
         return None, []
 
     # Get agent's MCP configuration if agent_name is provided
@@ -384,7 +390,9 @@ async def _create_mcp_servers_for_request(team_config, agent_name: str = None):
     except Exception as e:
         # Cleanup on error
         await stack.aclose()
-        logger.error("failed_to_create_mcp_servers_for_request", error=str(e), exc_info=True)
+        logger.error(
+            "failed_to_create_mcp_servers_for_request", error=str(e), exc_info=True
+        )
         raise
 
 
@@ -396,7 +404,9 @@ def _infer_tool_category(tool_name: str) -> str:
         return "kubernetes"
     elif any(k in name_lower for k in ["aws", "ec2", "s3", "lambda", "cloudwatch"]):
         return "aws"
-    elif any(k in name_lower for k in ["github", "git", "pr", "pull_request", "commit"]):
+    elif any(
+        k in name_lower for k in ["github", "git", "pr", "pull_request", "commit"]
+    ):
         return "github"
     elif any(k in name_lower for k in ["slack"]):
         return "communication"
@@ -419,9 +429,15 @@ def _infer_tool_category(tool_name: str) -> str:
         return "analytics"
     elif any(k in name_lower for k in ["docker", "container"]):
         return "docker"
-    elif any(k in name_lower for k in ["pipeline", "workflow", "codepipeline", "cicd", "ci", "cd"]):
+    elif any(
+        k in name_lower
+        for k in ["pipeline", "workflow", "codepipeline", "cicd", "ci", "cd"]
+    ):
         return "cicd"
-    elif any(k in name_lower for k in ["file", "read", "write", "filesystem", "directory", "path"]):
+    elif any(
+        k in name_lower
+        for k in ["file", "read", "write", "filesystem", "directory", "path"]
+    ):
         return "filesystem"
     elif any(k in name_lower for k in ["incident", "pagerduty"]):
         return "incident"
@@ -516,7 +532,9 @@ def create_app() -> Sanic:
 
                 # In shared-runtime mode there may be no process-level team token, so skip.
                 if not os.getenv("INCIDENTFOX_TEAM_TOKEN"):
-                    raise RuntimeError("INCIDENTFOX_TEAM_TOKEN not set (shared runtime)")
+                    raise RuntimeError(
+                        "INCIDENTFOX_TEAM_TOKEN not set (shared runtime)"
+                    )
                 client = get_config_service_client()
                 identity = client.fetch_auth_identity()
                 health_status["config_service"] = {
@@ -564,7 +582,9 @@ def create_app() -> Sanic:
 
             # Calculate overall health
             all_healthy = (
-                all(h["healthy"] for h in health_results.values()) if health_results else True
+                all(h["healthy"] for h in health_results.values())
+                if health_results
+                else True
             )
             healthy_count = sum(1 for h in health_results.values() if h["healthy"])
 
@@ -700,7 +720,9 @@ def create_app() -> Sanic:
 
                 if agent_config and agent_config.enabled:
                     # Create agent dynamically
-                    agent = create_generic_agent_from_config(agent_name, team_config=team_config)
+                    agent = create_generic_agent_from_config(
+                        agent_name, team_config=team_config
+                    )
 
                     # Get max_retries from config
                     max_retries = agent_config.max_retries or 3
@@ -893,7 +915,10 @@ def create_app() -> Sanic:
                     dest_types = [d.type for d in output_destinations]
                     if "slack" in dest_types:
                         trigger_source = "slack"
-                    elif "github_pr_comment" in dest_types or "github_issue_comment" in dest_types:
+                    elif (
+                        "github_pr_comment" in dest_types
+                        or "github_issue_comment" in dest_types
+                    ):
                         trigger_source = "github"
 
                 # Record agent run start (fire and forget)
@@ -1003,7 +1028,9 @@ def create_app() -> Sanic:
                     )
 
                 # Create MCP servers if team has them configured (filtered by agent's mcps config)
-                stack, mcp_servers = await _create_mcp_servers_for_request(team_config, agent_name)
+                stack, mcp_servers = await _create_mcp_servers_for_request(
+                    team_config, agent_name
+                )
 
                 logger.info(
                     "mcp_servers_created_starting_agent_execution",
@@ -1022,9 +1049,7 @@ def create_app() -> Sanic:
                         session_type = (
                             "slack"
                             if session_id.startswith("slack_")
-                            else "github"
-                            if session_id.startswith("github_")
-                            else "api"
+                            else "github" if session_id.startswith("github_") else "api"
                         )
 
                         # Look up existing OpenAI conversation_id from config service
@@ -1032,7 +1057,9 @@ def create_app() -> Sanic:
                             session_id=session_id,
                             session_type=session_type,
                             org_id=auth_identity.org_id if auth_identity else None,
-                            team_node_id=(auth_identity.team_node_id if auth_identity else None),
+                            team_node_id=(
+                                auth_identity.team_node_id if auth_identity else None
+                            ),
                         )
 
                         if conversation_id:
@@ -1059,7 +1086,11 @@ def create_app() -> Sanic:
                                     if hasattr(base_agent, "model_settings")
                                     else None
                                 ),
-                                tools=(base_agent.tools if hasattr(base_agent, "tools") else []),
+                                tools=(
+                                    base_agent.tools
+                                    if hasattr(base_agent, "tools")
+                                    else []
+                                ),
                                 output_type=(
                                     base_agent.output_type
                                     if hasattr(base_agent, "output_type")
@@ -1110,15 +1141,23 @@ def create_app() -> Sanic:
                                 and hasattr(agent_result, "last_response_id")
                             ):
                                 # Extract conversation_id from the result (OpenAI creates it automatically)
-                                new_conv_id = getattr(agent_result, "conversation_id", None)
+                                new_conv_id = getattr(
+                                    agent_result, "conversation_id", None
+                                )
                                 if new_conv_id:
                                     await _store_conversation_mapping(
                                         session_id=session_id,
                                         openai_conversation_id=new_conv_id,
                                         session_type=session_type,
-                                        org_id=(auth_identity.org_id if auth_identity else None),
+                                        org_id=(
+                                            auth_identity.org_id
+                                            if auth_identity
+                                            else None
+                                        ),
                                         team_node_id=(
-                                            auth_identity.team_node_id if auth_identity else None
+                                            auth_identity.team_node_id
+                                            if auth_identity
+                                            else None
                                         ),
                                     )
 
@@ -1167,15 +1206,23 @@ def create_app() -> Sanic:
                                 session_type = (
                                     "slack"
                                     if session_id.startswith("slack_")
-                                    else ("github" if session_id.startswith("github_") else "api")
+                                    else (
+                                        "github"
+                                        if session_id.startswith("github_")
+                                        else "api"
+                                    )
                                 )
                                 await _store_conversation_mapping(
                                     session_id=session_id,
                                     openai_conversation_id=new_conv_id,
                                     session_type=session_type,
-                                    org_id=(auth_identity.org_id if auth_identity else None),
+                                    org_id=(
+                                        auth_identity.org_id if auth_identity else None
+                                    ),
                                     team_node_id=(
-                                        auth_identity.team_node_id if auth_identity else None
+                                        auth_identity.team_node_id
+                                        if auth_identity
+                                        else None
                                     ),
                                 )
 
@@ -1225,7 +1272,9 @@ def create_app() -> Sanic:
 
                     # Post final results to non-Slack destinations
                     # (Slack is already handled by hooks.finalize() if slack_finalized)
-                    non_slack_destinations = [d for d in output_destinations if d.type != "slack"]
+                    non_slack_destinations = [
+                        d for d in output_destinations if d.type != "slack"
+                    ]
                     # If Slack finalization failed, include it in post_to_destinations
                     if not slack_finalized:
                         non_slack_destinations = output_destinations
@@ -1404,7 +1453,9 @@ def create_app() -> Sanic:
                 )
 
             # Create MCP servers if team has them configured (filtered by agent's mcps config)
-            stack, mcp_servers = await _create_mcp_servers_for_request(team_config, agent_name)
+            stack, mcp_servers = await _create_mcp_servers_for_request(
+                team_config, agent_name
+            )
 
             try:
                 # If we have MCP servers, create a fresh AgentRunner with the agent
@@ -1426,7 +1477,9 @@ def create_app() -> Sanic:
                                 if hasattr(base_agent, "model_settings")
                                 else None
                             ),
-                            tools=(base_agent.tools if hasattr(base_agent, "tools") else []),
+                            tools=(
+                                base_agent.tools if hasattr(base_agent, "tools") else []
+                            ),
                             output_type=(
                                 base_agent.output_type
                                 if hasattr(base_agent, "output_type")
@@ -1442,7 +1495,9 @@ def create_app() -> Sanic:
                         )
 
                         # Create fresh AgentRunner with the MCP-enabled agent
-                        mcp_runner = AgentRunner(agent_with_mcp, max_retries=runner.max_retries)
+                        mcp_runner = AgentRunner(
+                            agent_with_mcp, max_retries=runner.max_retries
+                        )
 
                         # Create context
                         task_context = TaskContext(
@@ -1618,7 +1673,9 @@ def create_app() -> Sanic:
         # Get the agent
         runner = registry.get_runner(
             agent_name,
-            team_config_hash=(str(hash(team_config.model_dump_json())) if team_config else None),
+            team_config_hash=(
+                str(hash(team_config.model_dump_json())) if team_config else None
+            ),
             factory_kwargs={"team_config": team_config} if team_config else None,
         )
 
@@ -1772,7 +1829,9 @@ def create_app() -> Sanic:
                     # Parse message for multimodal content (embedded images)
                     # Converts <image src="data:..."/> to OpenAI's format
                     parsed_message = parse_multimodal_message(message)
-                    message_preview = get_message_preview(parsed_message, max_length=100)
+                    message_preview = get_message_preview(
+                        parsed_message, max_length=100
+                    )
 
                     logger.info(
                         "starting_streamed_agent_execution",
@@ -1814,7 +1873,9 @@ def create_app() -> Sanic:
                                     "timestamp": event.timestamp,
                                     **event.data,
                                 }
-                                await response_stream.write(sse_event(event.event_type, event_data))
+                                await response_stream.write(
+                                    sse_event(event.event_type, event_data)
+                                )
                             except Exception:
                                 break
 
@@ -1833,15 +1894,17 @@ def create_app() -> Sanic:
                                 # Tool call started
                                 if item_type == "tool_call_item":
                                     raw_item = getattr(item, "raw_item", None)
-                                    tool_name = getattr(raw_item, "name", None) or getattr(
-                                        item, "name", "unknown"
-                                    )
+                                    tool_name = getattr(
+                                        raw_item, "name", None
+                                    ) or getattr(item, "name", "unknown")
                                     tool_args = None
                                     if raw_item and hasattr(raw_item, "arguments"):
                                         try:
                                             tool_args = json.loads(raw_item.arguments)
                                         except Exception:
-                                            tool_args = {"raw": str(raw_item.arguments)[:200]}
+                                            tool_args = {
+                                                "raw": str(raw_item.arguments)[:200]
+                                            }
 
                                     tool_calls_count += 1
                                     await response_stream.write(
@@ -1864,7 +1927,9 @@ def create_app() -> Sanic:
                                             "tool_completed",
                                             {
                                                 "output_preview": (
-                                                    str(output)[:500] if output else None
+                                                    str(output)[:500]
+                                                    if output
+                                                    else None
                                                 ),
                                                 "sequence": tool_calls_count,
                                                 "timestamp": datetime.utcnow().isoformat(),
@@ -1880,7 +1945,9 @@ def create_app() -> Sanic:
                                             sse_event(
                                                 "message",
                                                 {
-                                                    "content_preview": str(content)[:500],
+                                                    "content_preview": str(content)[
+                                                        :500
+                                                    ],
                                                     "timestamp": datetime.utcnow().isoformat(),
                                                 },
                                             )
@@ -1893,7 +1960,9 @@ def create_app() -> Sanic:
                                     sse_event(
                                         "agent_handoff",
                                         {
-                                            "new_agent": getattr(new_agent, "name", "unknown"),
+                                            "new_agent": getattr(
+                                                new_agent, "name", "unknown"
+                                            ),
                                             "timestamp": datetime.utcnow().isoformat(),
                                         },
                                     )
@@ -2166,21 +2235,25 @@ def create_app() -> Sanic:
 
             # Fetch team-specific config from config service if available
             if config.use_config_service:
-                team_token = request.headers.get("X-IncidentFox-Team-Token") or request.headers.get(
-                    "Authorization", ""
-                ).replace("Bearer ", "")
+                team_token = request.headers.get(
+                    "X-IncidentFox-Team-Token"
+                ) or request.headers.get("Authorization", "").replace("Bearer ", "")
                 if team_token:
                     try:
                         from .core.config_service import get_config_service_client
 
                         client = get_config_service_client()
-                        team_config = client.fetch_effective_config(team_token=team_token)
+                        team_config = client.fetch_effective_config(
+                            team_token=team_token
+                        )
                         logger.debug(
                             "team_config_fetched_for_catalog",
                             team_token=team_token[:10] + "...",
                         )
                     except Exception as e:
-                        logger.warning("failed_to_fetch_team_config_for_catalog", error=str(e))
+                        logger.warning(
+                            "failed_to_fetch_team_config_for_catalog", error=str(e)
+                        )
 
             # Get the tool pool with source information
             tool_pool, tool_sources = get_team_tool_pool_with_sources(team_config)
@@ -2251,21 +2324,25 @@ def create_app() -> Sanic:
 
             # Fetch team-specific config from config service if available
             if config.use_config_service:
-                team_token = request.headers.get("X-IncidentFox-Team-Token") or request.headers.get(
-                    "Authorization", ""
-                ).replace("Bearer ", "")
+                team_token = request.headers.get(
+                    "X-IncidentFox-Team-Token"
+                ) or request.headers.get("Authorization", "").replace("Bearer ", "")
                 if team_token:
                     try:
                         from .core.config_service import get_config_service_client
 
                         client = get_config_service_client()
-                        team_config = client.fetch_effective_config(team_token=team_token)
+                        team_config = client.fetch_effective_config(
+                            team_token=team_token
+                        )
                         logger.debug(
                             "team_config_fetched_for_health",
                             team_token=team_token[:10] + "...",
                         )
                     except Exception as e:
-                        logger.warning("failed_to_fetch_team_config_for_health", error=str(e))
+                        logger.warning(
+                            "failed_to_fetch_team_config_for_health", error=str(e)
+                        )
 
             if not team_config:
                 return response.json(
@@ -2369,7 +2446,9 @@ def create_app() -> Sanic:
             logger.info(
                 "mcp_health_checked",
                 total_servers=len(team_mcps),
-                healthy=sum(1 for r in servers_health.values() if r["status"] == "healthy"),
+                healthy=sum(
+                    1 for r in servers_health.values() if r["status"] == "healthy"
+                ),
             )
 
             return response.json(
