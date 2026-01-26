@@ -20,6 +20,10 @@ _execution_context: ContextVar[ExecutionContext | None] = ContextVar(
     "execution_context", default=None
 )
 
+# Separate storage for hooks (not serializable, needs separate ContextVar)
+# This is used to propagate Slack progress hooks to subagents
+_execution_hooks: ContextVar[Any] = ContextVar("execution_hooks", default=None)
+
 
 @dataclass
 class ExecutionContext:
@@ -133,9 +137,7 @@ def set_execution_context(
     Returns:
         The created ExecutionContext
     """
-    context = ExecutionContext(
-        org_id=org_id, team_node_id=team_node_id, team_config=team_config
-    )
+    context = ExecutionContext(org_id=org_id, team_node_id=team_node_id, team_config=team_config)
 
     _execution_context.set(context)
 
@@ -229,6 +231,54 @@ def require_execution_context() -> ExecutionContext:
     return context
 
 
+# =============================================================================
+# Hooks Propagation for Subagents
+# =============================================================================
+
+
+def set_execution_hooks(hooks: Any) -> None:
+    """
+    Set hooks for current execution context.
+
+    Hooks are stored separately from ExecutionContext because they're not
+    serializable and need special handling for thread propagation.
+
+    This enables Slack progress hooks to be propagated to subagents,
+    so tool calls from subagents appear in the investigation dashboard.
+
+    Args:
+        hooks: RunHooks instance (e.g., SlackUpdateHooks) or None
+    """
+    _execution_hooks.set(hooks)
+    if hooks:
+        logger.debug("execution_hooks_set", hooks_type=type(hooks).__name__)
+
+
+def get_execution_hooks() -> Any:
+    """
+    Get hooks for current execution context.
+
+    Returns:
+        RunHooks instance if set, None otherwise
+    """
+    return _execution_hooks.get()
+
+
+def propagate_hooks_to_thread(hooks: Any) -> None:
+    """
+    Propagate hooks from parent thread to current thread.
+
+    Call this alongside propagate_context_to_thread() when setting up
+    a new thread for subagent execution.
+
+    Args:
+        hooks: Hooks captured from parent thread via get_execution_hooks()
+    """
+    if hooks:
+        _execution_hooks.set(hooks)
+        logger.debug("execution_hooks_propagated_to_thread", hooks_type=type(hooks).__name__)
+
+
 async def create_mcp_servers_for_subagent(agent_name: str) -> tuple[Any, list]:
     """
     Create MCP servers for a sub-agent from execution context.
@@ -314,11 +364,7 @@ async def create_mcp_servers_for_subagent(agent_name: str) -> tuple[Any, list]:
         resolved_env = {}
         config_values = mcp_dict.get("config_values", {})
         for key, value in env.items():
-            if (
-                isinstance(value, str)
-                and value.startswith("${")
-                and value.endswith("}")
-            ):
+            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
                 var_name = value[2:-1]
                 resolved_env[key] = config_values.get(var_name, "")
             else:
@@ -379,18 +425,14 @@ class ExecutionContextManager:
         self.context: ExecutionContext | None = None
 
     def __enter__(self) -> ExecutionContext:
-        self.context = set_execution_context(
-            self.org_id, self.team_node_id, self.team_config
-        )
+        self.context = set_execution_context(self.org_id, self.team_node_id, self.team_config)
         return self.context
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         clear_execution_context()
 
     async def __aenter__(self) -> ExecutionContext:
-        self.context = set_execution_context(
-            self.org_id, self.team_node_id, self.team_config
-        )
+        self.context = set_execution_context(self.org_id, self.team_node_id, self.team_config)
         return self.context
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

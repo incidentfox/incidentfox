@@ -37,7 +37,12 @@ from pydantic import BaseModel, Field
 from ..core.agent_builder import create_model_settings
 from ..core.config import get_config
 from ..core.config_utils import get_agent_sub_agents
-from ..core.execution_context import get_execution_context, propagate_context_to_thread
+from ..core.execution_context import (
+    get_execution_context,
+    get_execution_hooks,
+    propagate_context_to_thread,
+    propagate_hooks_to_thread,
+)
 from ..core.logging import get_logger
 from ..core.partial_work import summarize_partial_work
 from ..core.stream_events import (
@@ -82,9 +87,7 @@ class InvestigationResult(BaseModel):
     affected_systems: list[str] = Field(
         default_factory=list, description="Systems/services affected"
     )
-    recommendations: list[str] = Field(
-        default_factory=list, description="Recommended actions"
-    )
+    recommendations: list[str] = Field(default_factory=list, description="Recommended actions")
     requires_escalation: bool = Field(default=False)
 
 
@@ -93,9 +96,7 @@ class InvestigationResult(BaseModel):
 # =============================================================================
 
 
-def _run_agent_in_thread(
-    agent, query: str, timeout: int = 60, max_turns: int = 15
-) -> Any:
+def _run_agent_in_thread(agent, query: str, timeout: int = 60, max_turns: int = 15) -> Any:
     """
     Run an agent in a separate thread with its own event loop.
 
@@ -125,6 +126,7 @@ def _run_agent_in_thread(
     # ContextVars don't automatically propagate to new threads
     parent_stream_id = get_current_stream_id()
     parent_context = get_execution_context()
+    parent_hooks = get_execution_hooks()
     agent_name = getattr(agent, "name", "unknown")
 
     def run_in_new_loop():
@@ -140,20 +142,25 @@ def _run_agent_in_thread(
             # This enables sub-agent tools to access integration configs (GitHub, etc.)
             propagate_context_to_thread(parent_context)
 
+            # Propagate hooks to this thread
+            # This enables Slack progress updates from subagent tool calls
+            propagate_hooks_to_thread(parent_hooks)
+
+            # Get hooks from context for Runner
+            hooks = get_execution_hooks()
+
             try:
-                if parent_stream_id and EventStreamRegistry.stream_exists(
-                    parent_stream_id
-                ):
+                if parent_stream_id and EventStreamRegistry.stream_exists(parent_stream_id):
                     # Streaming mode - emit events to the registry
                     result = new_loop.run_until_complete(
                         _run_agent_streamed(
-                            agent, query, max_turns, parent_stream_id, agent_name
+                            agent, query, max_turns, parent_stream_id, agent_name, hooks
                         )
                     )
                 else:
-                    # Non-streaming mode - original behavior
+                    # Non-streaming mode with hooks
                     result = new_loop.run_until_complete(
-                        Runner.run(agent, query, max_turns=max_turns)
+                        Runner.run(agent, query, max_turns=max_turns, hooks=hooks)
                     )
                 result_holder["result"] = result
             except MaxTurnsExceeded as e:
@@ -186,13 +193,21 @@ def _run_agent_in_thread(
 
 
 async def _run_agent_streamed(
-    agent, query: str, max_turns: int, stream_id: str, agent_name: str
+    agent, query: str, max_turns: int, stream_id: str, agent_name: str, hooks: Any = None
 ) -> Any:
     """
     Run an agent in streaming mode and emit events to the registry.
 
     This enables nested agent visibility - events from sub-agents are
     forwarded to the main SSE stream.
+
+    Args:
+        agent: The agent to run
+        query: The query/task
+        max_turns: Max LLM turns
+        stream_id: Stream ID for event registry
+        agent_name: Name of the agent
+        hooks: Optional RunHooks for progress updates (e.g., SlackUpdateHooks)
     """
     # Push this agent onto the stack for nesting context
     EventStreamRegistry.push_agent(stream_id, agent_name)
@@ -208,7 +223,7 @@ async def _run_agent_streamed(
     tool_sequence = 0
 
     try:
-        result = Runner.run_streamed(agent, query, max_turns=max_turns)
+        result = Runner.run_streamed(agent, query, max_turns=max_turns, hooks=hooks)
 
         async for event in result.stream_events():
             if isinstance(event, RunItemStreamEvent):
@@ -236,8 +251,7 @@ async def _run_agent_streamed(
                                 parsed = json_mod.loads(tool_input)
                                 if isinstance(parsed, dict):
                                     pairs = [
-                                        f"{k}={repr(v)[:30]}"
-                                        for k, v in list(parsed.items())[:2]
+                                        f"{k}={repr(v)[:30]}" for k, v in list(parsed.items())[:2]
                                     ]
                                     input_preview = ", ".join(pairs)
                             except Exception:
@@ -396,17 +410,13 @@ def _create_subagent_tools(team_config=None):
     # Each agent is created with is_subagent=True for concise responses
     agents = {}
     if "github" in enabled_subagents:
-        agents["github"] = create_github_agent(
-            team_config=team_config, is_subagent=True
-        )
+        agents["github"] = create_github_agent(team_config=team_config, is_subagent=True)
     if "k8s" in enabled_subagents:
         agents["k8s"] = create_k8s_agent(team_config=team_config, is_subagent=True)
     if "aws" in enabled_subagents:
         agents["aws"] = create_aws_agent(team_config=team_config, is_subagent=True)
     if "metrics" in enabled_subagents:
-        agents["metrics"] = create_metrics_agent(
-            team_config=team_config, is_subagent=True
-        )
+        agents["metrics"] = create_metrics_agent(team_config=team_config, is_subagent=True)
     if "log_analysis" in enabled_subagents:
         agents["log_analysis"] = create_log_analysis_agent(
             team_config=team_config, is_subagent=True
@@ -419,9 +429,7 @@ def _create_subagent_tools(team_config=None):
         github_agent = agents["github"]
 
         @function_tool
-        def call_github_agent(
-            query: str, repository: str = "", context: str = ""
-        ) -> str:
+        def call_github_agent(query: str, repository: str = "", context: str = "") -> str:
             """
             Delegate GitHub repository investigation to the GitHub Agent.
 
@@ -456,9 +464,7 @@ def _create_subagent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(
-                    result, "output", None
-                )
+                output = getattr(result, "final_output", None) or getattr(result, "output", None)
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("github_agent_failed", error=str(e))
@@ -470,9 +476,7 @@ def _create_subagent_tools(team_config=None):
         k8s_agent = agents["k8s"]
 
         @function_tool
-        def call_k8s_agent(
-            query: str, namespace: str = "default", context: str = ""
-        ) -> str:
+        def call_k8s_agent(query: str, namespace: str = "default", context: str = "") -> str:
             """
             Delegate Kubernetes investigation to the K8s Agent.
 
@@ -506,9 +510,7 @@ def _create_subagent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(
-                    result, "output", None
-                )
+                output = getattr(result, "final_output", None) or getattr(result, "output", None)
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("k8s_agent_failed", error=str(e))
@@ -520,9 +522,7 @@ def _create_subagent_tools(team_config=None):
         aws_agent = agents["aws"]
 
         @function_tool
-        def call_aws_agent(
-            query: str, region: str = "us-east-1", context: str = ""
-        ) -> str:
+        def call_aws_agent(query: str, region: str = "us-east-1", context: str = "") -> str:
             """
             Delegate AWS investigation to the AWS Agent.
 
@@ -556,9 +556,7 @@ def _create_subagent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(
-                    result, "output", None
-                )
+                output = getattr(result, "final_output", None) or getattr(result, "output", None)
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("aws_agent_failed", error=str(e))
@@ -570,9 +568,7 @@ def _create_subagent_tools(team_config=None):
         metrics_agent = agents["metrics"]
 
         @function_tool
-        def call_metrics_agent(
-            query: str, time_range: str = "1h", context: str = ""
-        ) -> str:
+        def call_metrics_agent(query: str, time_range: str = "1h", context: str = "") -> str:
             """
             Delegate metrics analysis to the Metrics Agent.
 
@@ -592,9 +588,7 @@ def _create_subagent_tools(team_config=None):
                 If max turns exceeded, returns partial findings with status="incomplete"
             """
             try:
-                logger.info(
-                    "calling_metrics_agent", query=query[:100], time_range=time_range
-                )
+                logger.info("calling_metrics_agent", query=query[:100], time_range=time_range)
                 parts = [query, f"\n\nTime range: {time_range}"]
                 if context:
                     parts.append(f"\n\n## Prior Findings\n{context}")
@@ -607,9 +601,7 @@ def _create_subagent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(
-                    result, "output", None
-                )
+                output = getattr(result, "final_output", None) or getattr(result, "output", None)
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("metrics_agent_failed", error=str(e))
@@ -644,9 +636,7 @@ def _create_subagent_tools(team_config=None):
                 If max turns exceeded, returns partial findings with status="incomplete"
             """
             try:
-                logger.info(
-                    "calling_log_analysis_agent", query=query[:100], service=service
-                )
+                logger.info("calling_log_analysis_agent", query=query[:100], service=service)
                 parts = [query]
                 if service:
                     parts.append(f"\n\nService: {service}")
@@ -654,9 +644,7 @@ def _create_subagent_tools(team_config=None):
                 if context:
                     parts.append(f"\n\n## Prior Findings\n{context}")
                 full_query = "".join(parts)
-                result = _run_agent_in_thread(
-                    log_analysis_agent, full_query, max_turns=15
-                )
+                result = _run_agent_in_thread(log_analysis_agent, full_query, max_turns=15)
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
                     logger.info(
@@ -664,9 +652,7 @@ def _create_subagent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(
-                    result, "output", None
-                )
+                output = getattr(result, "final_output", None) or getattr(result, "output", None)
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("log_analysis_agent_failed", error=str(e))
@@ -681,14 +667,10 @@ def _create_subagent_tools(team_config=None):
 
             remote_agents = get_remote_agents_for_team(team_config)
             if remote_agents:
-                logger.info(
-                    "adding_remote_agents_to_investigation", count=len(remote_agents)
-                )
+                logger.info("adding_remote_agents_to_investigation", count=len(remote_agents))
                 tools.extend(remote_agents.values())
         except Exception as e:
-            logger.warning(
-                "failed_to_load_remote_agents_for_investigation", error=str(e)
-            )
+            logger.warning("failed_to_load_remote_agents_for_investigation", error=str(e))
 
     return tools
 
@@ -916,9 +898,7 @@ def create_investigation_agent(
                     agent_cfg = team_cfg.get_agent_config("investigation")
             elif isinstance(team_cfg, dict):
                 agents = team_cfg.get("agents", {})
-                agent_cfg = agents.get("investigation_agent") or agents.get(
-                    "investigation"
-                )
+                agent_cfg = agents.get("investigation_agent") or agents.get("investigation")
 
             if agent_cfg:
                 if hasattr(agent_cfg, "get_system_prompt"):

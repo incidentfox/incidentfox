@@ -50,7 +50,9 @@ from ..core.config_utils import get_agent_sub_agents
 from ..core.execution_context import (
     create_mcp_servers_for_subagent,
     get_execution_context,
+    get_execution_hooks,
     propagate_context_to_thread,
+    propagate_hooks_to_thread,
 )
 from ..core.logging import get_logger
 from ..core.partial_work import summarize_partial_work
@@ -87,9 +89,7 @@ DEFAULT_PLANNER_AGENTS = ["investigation", "coding", "writeup"]
 # =============================================================================
 
 
-def _run_agent_in_thread(
-    agent, query: str, timeout: int = 120, max_turns: int = 25
-) -> Any:
+def _run_agent_in_thread(agent, query: str, timeout: int = 120, max_turns: int = 25) -> Any:
     """
     Run an agent in a separate thread with its own event loop.
 
@@ -122,6 +122,7 @@ def _run_agent_in_thread(
     # ContextVars don't automatically propagate to new threads
     parent_stream_id = get_current_stream_id()
     parent_context = get_execution_context()
+    parent_hooks = get_execution_hooks()
     agent_name = getattr(agent, "name", "unknown")
 
     def run_in_new_loop():
@@ -137,6 +138,10 @@ def _run_agent_in_thread(
             # Propagate execution context to this thread
             # This enables sub-agent tools to access integration configs (GitHub, etc.)
             propagate_context_to_thread(parent_context)
+
+            # Propagate hooks to this thread
+            # This enables Slack progress updates from subagent tool calls
+            propagate_hooks_to_thread(parent_hooks)
 
             try:
                 # Run the async agent execution with MCP support
@@ -200,6 +205,9 @@ async def _run_agent_with_mcp(
     Returns:
         Agent result
     """
+    # Get hooks from execution context for Slack progress updates
+    hooks = get_execution_hooks()
+
     # Try to create MCP servers for this sub-agent
     stack, mcp_servers = await create_mcp_servers_for_subagent(agent_name)
 
@@ -232,6 +240,7 @@ async def _run_agent_with_mcp(
                     parent_stream_id,
                     agent_name,
                     mcp_servers=entered_servers if entered_servers else None,
+                    hooks=hooks,
                 )
             else:
                 # Non-streaming mode with MCP
@@ -240,17 +249,18 @@ async def _run_agent_with_mcp(
                     query,
                     max_turns=max_turns,
                     mcp_servers=entered_servers if entered_servers else None,
+                    hooks=hooks,
                 )
     else:
         # No MCP servers configured for this agent
         if parent_stream_id and EventStreamRegistry.stream_exists(parent_stream_id):
             # Streaming mode - emit events to the registry
             return await _run_agent_streamed(
-                agent, query, max_turns, parent_stream_id, agent_name
+                agent, query, max_turns, parent_stream_id, agent_name, hooks=hooks
             )
         else:
             # Non-streaming mode - original behavior
-            return await Runner.run(agent, query, max_turns=max_turns)
+            return await Runner.run(agent, query, max_turns=max_turns, hooks=hooks)
 
 
 async def _run_agent_streamed(
@@ -260,6 +270,7 @@ async def _run_agent_streamed(
     stream_id: str,
     agent_name: str,
     mcp_servers: list | None = None,
+    hooks: Any = None,
 ) -> Any:
     """
     Run an agent in streaming mode and emit events to the registry.
@@ -274,6 +285,7 @@ async def _run_agent_streamed(
         stream_id: Stream ID for event registry
         agent_name: Name of the agent
         mcp_servers: Optional list of MCP servers for this agent
+        hooks: Optional RunHooks for progress updates (e.g., SlackUpdateHooks)
     """
     # Push this agent onto the stack for nesting context
     EventStreamRegistry.push_agent(stream_id, agent_name)
@@ -292,13 +304,13 @@ async def _run_agent_streamed(
     tool_sequence = 0
 
     try:
-        # Pass MCP servers to Runner if available
+        # Pass MCP servers and hooks to Runner
         if mcp_servers:
             result = Runner.run_streamed(
-                agent, query, max_turns=max_turns, mcp_servers=mcp_servers
+                agent, query, max_turns=max_turns, mcp_servers=mcp_servers, hooks=hooks
             )
         else:
-            result = Runner.run_streamed(agent, query, max_turns=max_turns)
+            result = Runner.run_streamed(agent, query, max_turns=max_turns, hooks=hooks)
 
         async for event in result.stream_events():
             if isinstance(event, RunItemStreamEvent):
@@ -326,8 +338,7 @@ async def _run_agent_streamed(
                                 parsed = json_mod.loads(tool_input)
                                 if isinstance(parsed, dict):
                                     pairs = [
-                                        f"{k}={repr(v)[:30]}"
-                                        for k, v in list(parsed.items())[:2]
+                                        f"{k}={repr(v)[:30]}" for k, v in list(parsed.items())[:2]
                                     ]
                                     input_preview = ", ".join(pairs)
                             except Exception:
@@ -407,15 +418,9 @@ class InvestigationSummary(BaseModel):
 
     summary: str = Field(description="Brief summary of findings")
     root_cause: str = Field(default="", description="Identified root cause if found")
-    confidence: int = Field(
-        default=0, ge=0, le=100, description="Confidence level 0-100"
-    )
-    recommendations: list[str] = Field(
-        default_factory=list, description="Recommended actions"
-    )
-    needs_followup: bool = Field(
-        default=False, description="Whether more investigation is needed"
-    )
+    confidence: int = Field(default=0, ge=0, le=100, description="Confidence level 0-100")
+    recommendations: list[str] = Field(default_factory=list, description="Recommended actions")
+    needs_followup: bool = Field(default=False, description="Whether more investigation is needed")
 
 
 # =============================================================================
@@ -512,14 +517,10 @@ def create_agent_tools(team_config=None):
     # Investigation agent is created with is_subagent=True (called by planner)
     # It internally sets is_master=True because it delegates to its own sub-agents
     if "investigation" in enabled_agents:
-        investigation_agent = create_investigation_agent(
-            team_config=team_config, is_subagent=True
-        )
+        investigation_agent = create_investigation_agent(team_config=team_config, is_subagent=True)
 
         @function_tool
-        def call_investigation_agent(
-            query: str, context: str = "", instructions: str = ""
-        ) -> str:
+        def call_investigation_agent(query: str, context: str = "", instructions: str = "") -> str:
             """
             Delegate incident investigation to the Investigation Agent.
 
@@ -567,9 +568,7 @@ def create_agent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(
-                    result, "output", None
-                )
+                output = getattr(result, "final_output", None) or getattr(result, "output", None)
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("investigation_agent_failed", error=str(e))
@@ -620,9 +619,7 @@ def create_agent_tools(team_config=None):
                 if instructions:
                     parts.append(f"\n\n## Coding Guidance\n{instructions}")
                 full_query = "".join(parts)
-                result = _run_agent_in_thread(
-                    coding_agent, full_query, timeout=60, max_turns=15
-                )
+                result = _run_agent_in_thread(coding_agent, full_query, timeout=60, max_turns=15)
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
                     logger.info(
@@ -630,9 +627,7 @@ def create_agent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(
-                    result, "output", None
-                )
+                output = getattr(result, "final_output", None) or getattr(result, "output", None)
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("coding_agent_failed", error=str(e))
@@ -672,15 +667,11 @@ def create_agent_tools(team_config=None):
                 logger.info("calling_writeup_agent", query=query[:100])
                 parts = [query]
                 if investigation_findings:
-                    parts.append(
-                        f"\n\n## Investigation Findings\n{investigation_findings}"
-                    )
+                    parts.append(f"\n\n## Investigation Findings\n{investigation_findings}")
                 if template:
                     parts.append(f"\n\n## Template/Format\n{template}")
                 full_query = "".join(parts)
-                result = _run_agent_in_thread(
-                    writeup_agent, full_query, timeout=60, max_turns=10
-                )
+                result = _run_agent_in_thread(writeup_agent, full_query, timeout=60, max_turns=10)
                 # Check if result is a partial work summary (dict with status="incomplete")
                 if isinstance(result, dict) and result.get("status") == "incomplete":
                     logger.info(
@@ -688,9 +679,7 @@ def create_agent_tools(team_config=None):
                         findings=len(result.get("findings", [])),
                     )
                     return json.dumps(result)
-                output = getattr(result, "final_output", None) or getattr(
-                    result, "output", None
-                )
+                output = getattr(result, "final_output", None) or getattr(result, "output", None)
                 return _serialize_agent_output(output)
             except Exception as e:
                 logger.error("writeup_agent_failed", error=str(e))
