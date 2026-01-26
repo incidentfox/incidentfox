@@ -34,6 +34,8 @@ from .core.auth import AuthError, authenticate_request
 from .core.config import get_config
 from .core.logging import get_correlation_id, get_logger, set_correlation_id
 from .core.metrics import get_metrics_collector
+from .core.slack_hooks import SlackUpdateHooks, SlackUpdateState
+from .integrations.slack_ui import build_investigation_dashboard
 
 logger = get_logger(__name__)
 
@@ -939,6 +941,75 @@ def create_app() -> Sanic:
                     agent_name=display_name,
                 )
 
+                # Set up Slack progressive dashboard hooks if Slack destination exists
+                slack_hooks = None
+                slack_dest = None
+                for dest in output_destinations:
+                    if dest.type == "slack":
+                        slack_dest = dest
+                        break
+
+                if slack_dest and message_ids.get("slack"):
+                    try:
+                        # Get Slack client
+                        slack_token = slack_dest.config.get("bot_token") or os.getenv(
+                            "SLACK_BOT_TOKEN", ""
+                        )
+                        if slack_token:
+                            try:
+                                from slack_sdk.web.async_client import AsyncWebClient
+
+                                slack_client = AsyncWebClient(token=slack_token)
+                            except ImportError:
+                                slack_client = None
+
+                            if slack_client:
+                                channel_id = slack_dest.config.get("channel_id")
+                                message_ts = message_ids.get("slack")
+                                thread_ts = slack_dest.config.get("thread_ts")
+
+                                # Create initial dashboard with empty phases
+                                # (phases will be discovered dynamically as tools run)
+                                initial_blocks = build_investigation_dashboard(
+                                    phase_status={},
+                                    title=f"{display_name} Investigation",
+                                    context_text=f"_Investigating: {message[:100]}{'...' if len(message) > 100 else ''}_",
+                                    phases={},  # Empty - will be populated dynamically
+                                )
+
+                                # Update the initial message with dashboard format
+                                await slack_client.chat_update(
+                                    channel=channel_id,
+                                    ts=message_ts,
+                                    text="Investigation in progress...",
+                                    blocks=initial_blocks,
+                                )
+
+                                # Create hooks for progressive updates
+                                slack_state = SlackUpdateState(
+                                    channel_id=channel_id,
+                                    message_ts=message_ts,
+                                    thread_ts=thread_ts,
+                                    title=f"{display_name} Investigation",
+                                )
+                                slack_hooks = SlackUpdateHooks(
+                                    state=slack_state,
+                                    slack_client=slack_client,
+                                )
+
+                                logger.info(
+                                    "slack_hooks_initialized",
+                                    channel_id=channel_id,
+                                    message_ts=message_ts,
+                                )
+                    except Exception as e:
+                        logger.warning(
+                            "slack_hooks_init_failed",
+                            error=str(e),
+                            exc_info=True,
+                        )
+                        slack_hooks = None
+
                 # Set team execution context for integration access
                 from .core.execution_context import (
                     clear_execution_context,
@@ -1049,6 +1120,7 @@ def create_app() -> Sanic:
                                 session_id=session_id,
                                 correlation_id=request.ctx.correlation_id,
                                 is_multimodal=is_multimodal,
+                                has_slack_hooks=slack_hooks is not None,
                             )
 
                             agent_result = await asyncio.wait_for(
@@ -1057,6 +1129,7 @@ def create_app() -> Sanic:
                                     parsed_message,
                                     conversation_id=conversation_id,  # Pass conversation_id directly
                                     max_turns=max_turns or 100,
+                                    hooks=slack_hooks,  # Progressive Slack updates
                                 ),
                                 timeout=timeout or 600,
                             )
@@ -1110,6 +1183,7 @@ def create_app() -> Sanic:
                             session_id=session_id,
                             correlation_id=request.ctx.correlation_id,
                             is_multimodal=is_multimodal,
+                            has_slack_hooks=slack_hooks is not None,
                         )
 
                         agent_result = await asyncio.wait_for(
@@ -1118,6 +1192,7 @@ def create_app() -> Sanic:
                                 parsed_message,
                                 conversation_id=conversation_id,  # Pass conversation_id directly
                                 max_turns=max_turns or 100,
+                                hooks=slack_hooks,  # Progressive Slack updates
                             ),
                             timeout=timeout or 600,
                         )
@@ -1163,15 +1238,67 @@ def create_app() -> Sanic:
                         agent_result, "output", None
                     )
 
-                    # Post final results to all destinations
+                    # Finalize Slack hooks if they were used (rich dashboard update)
+                    slack_finalized = False
+                    if slack_hooks:
+                        try:
+                            # Extract findings from output for the dashboard
+                            findings = None
+                            confidence = None
+                            if isinstance(output, dict):
+                                findings = output.get("summary") or output.get("result")
+                                confidence = output.get("confidence")
+                            elif hasattr(output, "summary"):
+                                findings = output.summary
+                                confidence = getattr(output, "confidence", None)
+                            elif isinstance(output, str):
+                                findings = output
+
+                            await slack_hooks.finalize(
+                                findings=findings,
+                                confidence=confidence,
+                            )
+                            slack_finalized = True
+                            logger.info(
+                                "slack_hooks_finalized",
+                                has_findings=findings is not None,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "slack_hooks_finalize_failed",
+                                error=str(e),
+                                exc_info=True,
+                            )
+
+                    # Post final results to non-Slack destinations
+                    # (Slack is already handled by hooks.finalize() if slack_finalized)
+                    non_slack_destinations = [
+                        d for d in output_destinations if d.type != "slack"
+                    ]
+                    # If Slack finalization failed, include it in post_to_destinations
+                    if not slack_finalized:
+                        non_slack_destinations = output_destinations
+
                     results = await post_to_destinations(
-                        destinations=output_destinations,
+                        destinations=non_slack_destinations,
                         output=output,
                         success=True,
                         duration_seconds=duration,
                         agent_name=display_name,
                         message_ids=message_ids,
                     )
+
+                    # Add Slack to results if finalized via hooks
+                    if slack_finalized:
+                        from .core.output_handler import OutputResult
+
+                        results.append(
+                            OutputResult(
+                                success=True,
+                                destination_type="slack",
+                                message_id=message_ids.get("slack"),
+                            )
+                        )
 
                     # Record agent run completion
                     output_summary = ""
@@ -1206,6 +1333,15 @@ def create_app() -> Sanic:
                 except TimeoutError:
                     duration = time.time() - start_time
                     error_msg = f"Agent timed out after {timeout or 600}s"
+
+                    # If Slack hooks exist, mark phases as failed
+                    if slack_hooks:
+                        try:
+                            for phase in slack_hooks.state.phase_status:
+                                if slack_hooks.state.phase_status[phase] == "running":
+                                    slack_hooks.state.phase_status[phase] = "failed"
+                        except Exception:
+                            pass
 
                     await post_to_destinations(
                         destinations=output_destinations,
@@ -1242,6 +1378,15 @@ def create_app() -> Sanic:
                 except Exception as e:
                     duration = time.time() - start_time
                     error_msg = str(e)
+
+                    # If Slack hooks exist, mark phases as failed
+                    if slack_hooks:
+                        try:
+                            for phase in slack_hooks.state.phase_status:
+                                if slack_hooks.state.phase_status[phase] == "running":
+                                    slack_hooks.state.phase_status[phase] = "failed"
+                        except Exception:
+                            pass
 
                     await post_to_destinations(
                         destinations=output_destinations,

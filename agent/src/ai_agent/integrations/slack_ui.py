@@ -5,6 +5,7 @@ Builds rich, interactive Slack messages with:
 - Progressive status updates during investigation
 - Expandable modals for detailed findings
 - Action buttons for remediation
+- Dynamic phases based on tools used (not hardcoded)
 """
 
 from __future__ import annotations
@@ -13,39 +14,39 @@ from typing import Any
 
 from .slack_mrkdwn import chunk_mrkdwn
 
-# Investigation phases for the SRE workflow
-INVESTIGATION_PHASES: dict[str, dict[str, str]] = {
+# Default investigation phases (used if no dynamic phases provided)
+# These are for backwards compatibility - the new system uses dynamic phases
+# detected from tool modules automatically.
+DEFAULT_INVESTIGATION_PHASES: dict[str, dict[str, str]] = {
     "snowflake_history": {
         "label": "Snowflake: Historical incident patterns",
         "action_id": "view_snowflake_history",
-        "title": "❄️ Snowflake — History",
-        "icon": ":snowflake:",
+        "icon": "❄️",
     },
     "coralogix_logs": {
         "label": "Coralogix: Error logs & traces",
         "action_id": "view_coralogix_logs",
-        "title": ":coralogix: Coralogix — Logs",
-        "icon": ":coralogix:",
+        "icon": "📊",
     },
     "coralogix_metrics": {
         "label": "Coralogix: Service metrics",
         "action_id": "view_coralogix_metrics",
-        "title": ":coralogix: Coralogix — Metrics",
-        "icon": ":chart_with_upwards_trend:",
+        "icon": "📈",
     },
     "kubernetes": {
         "label": "Kubernetes: Pod health & events",
         "action_id": "view_kubernetes",
-        "title": "☸️ Kubernetes — Status",
-        "icon": ":kubernetes:",
+        "icon": "☸️",
     },
     "root_cause_analysis": {
         "label": "Root cause analysis",
         "action_id": "view_rca",
-        "title": "🎯 Root Cause",
-        "icon": ":dart:",
+        "icon": "🎯",
     },
 }
+
+# Alias for backwards compatibility
+INVESTIGATION_PHASES = DEFAULT_INVESTIGATION_PHASES
 
 
 def icon_for_status(status: str) -> str:
@@ -101,6 +102,7 @@ def build_investigation_header(
 def build_progress_section(
     phase_status: dict[str, str],
     show_pending: bool = False,
+    phases: dict[str, dict[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Build the investigation progress section with status indicators.
@@ -108,7 +110,12 @@ def build_progress_section(
     Args:
         phase_status: Dict mapping phase key to status ('pending', 'running', 'done', 'failed')
         show_pending: Whether to show pending phases
+        phases: Optional dict of phase key -> display info. If None, uses DEFAULT_INVESTIGATION_PHASES.
+                Each phase should have 'label', 'icon', and 'action_id' keys.
     """
+    # Use provided phases or fall back to defaults
+    active_phases = phases if phases is not None else DEFAULT_INVESTIGATION_PHASES
+
     blocks: list[dict[str, Any]] = [
         {
             "type": "section",
@@ -116,34 +123,41 @@ def build_progress_section(
         },
     ]
 
-    for key, meta in INVESTIGATION_PHASES.items():
+    for key, meta in active_phases.items():
         status = phase_status.get(key, "pending")
 
         if status == "pending" and not show_pending:
             continue
 
-        icon = icon_for_status(status)
-        label = meta["label"]
+        status_icon = icon_for_status(status)
+        phase_icon = meta.get("icon", "")
+        label = meta.get("label", key.replace("_", " ").title())
+
+        # Combine phase icon with label
+        display_text = f"{phase_icon} {label}" if phase_icon else label
 
         if status == "running":
             # Running items shown as context (no button)
             blocks.append(
                 {
                     "type": "context",
-                    "elements": [{"type": "mrkdwn", "text": f"{icon} _{label}_"}],
+                    "elements": [
+                        {"type": "mrkdwn", "text": f"{status_icon} _{display_text}_"}
+                    ],
                 }
             )
         elif status in ("done", "failed"):
             # Completed items shown with View button
+            action_id = meta.get("action_id", f"view_{key}")
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"{icon} {label}"},
+                    "text": {"type": "mrkdwn", "text": f"{status_icon} {display_text}"},
                     "accessory": {
                         "type": "button",
                         "text": {"type": "plain_text", "text": "View"},
                         "value": key,
-                        "action_id": meta["action_id"],
+                        "action_id": action_id,
                     },
                 }
             )
@@ -243,6 +257,7 @@ def build_investigation_dashboard(
     confidence: int | None = None,
     show_actions: bool = False,
     custom_actions: list[dict[str, str]] | None = None,
+    phases: dict[str, dict[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Build the complete investigation dashboard.
@@ -259,6 +274,8 @@ def build_investigation_dashboard(
         confidence: Optional confidence score 0-100
         show_actions: Whether to show action buttons
         custom_actions: Custom action buttons to show
+        phases: Optional dict of phase key -> display info for dynamic phases.
+                If None, uses DEFAULT_INVESTIGATION_PHASES.
 
     Returns:
         List of Slack Block Kit blocks
@@ -283,8 +300,8 @@ def build_investigation_dashboard(
             }
         )
 
-    # Progress section
-    blocks.extend(build_progress_section(phase_status))
+    # Progress section with dynamic phases
+    blocks.extend(build_progress_section(phase_status, phases=phases))
 
     # Findings (if investigation complete)
     if findings:
@@ -328,16 +345,22 @@ def build_phase_modal(
 
 def build_all_phases_modal(
     results_by_phase: dict[str, str],
+    phases: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """
     Build a modal showing all investigation phases and their results.
 
     Args:
         results_by_phase: Dict mapping phase key to result text
+        phases: Optional dict of phase key -> display info for dynamic phases.
+                If None, uses DEFAULT_INVESTIGATION_PHASES.
 
     Returns:
         Slack modal view payload
     """
+    # Use provided phases or fall back to defaults
+    active_phases = phases if phases is not None else DEFAULT_INVESTIGATION_PHASES
+
     blocks: list[dict[str, Any]] = [
         {
             "type": "header",
@@ -350,15 +373,18 @@ def build_all_phases_modal(
         {"type": "divider"},
     ]
 
-    for key, meta in INVESTIGATION_PHASES.items():
+    for key, meta in active_phases.items():
         text = results_by_phase.get(key)
         if not text:
             continue
 
+        icon = meta.get("icon", "")
+        label = meta.get("label", key.replace("_", " ").title())
+
         blocks.append(
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"*{meta['icon']} {meta['label']}*"},
+                "text": {"type": "mrkdwn", "text": f"*{icon} {label}*"},
             }
         )
 
