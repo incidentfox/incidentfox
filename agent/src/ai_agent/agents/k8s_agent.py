@@ -1,10 +1,9 @@
 """Kubernetes troubleshooting and operations agent."""
 
 from agents import Agent, Tool, function_tool
-
-from ..core.agent_builder import create_model_settings
 from pydantic import BaseModel, Field
 
+from ..core.agent_builder import create_model_settings
 from ..core.config import get_config
 from ..core.logging import get_logger
 from ..tools.agent_tools import ask_human, llm_call, web_search

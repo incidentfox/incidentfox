@@ -314,7 +314,11 @@ async def create_mcp_servers_for_subagent(agent_name: str) -> tuple[Any, list]:
         resolved_env = {}
         config_values = mcp_dict.get("config_values", {})
         for key, value in env.items():
-            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+            if (
+                isinstance(value, str)
+                and value.startswith("${")
+                and value.endswith("}")
+            ):
                 var_name = value[2:-1]
                 resolved_env[key] = config_values.get(var_name, "")
             else:

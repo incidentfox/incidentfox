@@ -958,7 +958,9 @@ def create_app() -> Sanic:
                     )
 
                 # Create MCP servers if team has them configured (filtered by agent's mcps config)
-                stack, mcp_servers = await _create_mcp_servers_for_request(team_config, agent_name)
+                stack, mcp_servers = await _create_mcp_servers_for_request(
+                    team_config, agent_name
+                )
 
                 logger.info(
                     "mcp_servers_created_starting_agent_execution",
@@ -1307,7 +1309,9 @@ def create_app() -> Sanic:
                 )
 
             # Create MCP servers if team has them configured (filtered by agent's mcps config)
-            stack, mcp_servers = await _create_mcp_servers_for_request(team_config, agent_name)
+            stack, mcp_servers = await _create_mcp_servers_for_request(
+                team_config, agent_name
+            )
 
             try:
                 # If we have MCP servers, create a fresh AgentRunner with the agent

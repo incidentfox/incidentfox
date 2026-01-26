@@ -40,12 +40,11 @@ import threading
 from typing import Any
 
 from agents import Agent, Runner, function_tool
-
-from ..core.agent_builder import create_model_settings
 from agents.exceptions import MaxTurnsExceeded
 from agents.stream_events import RunItemStreamEvent
 from pydantic import BaseModel, Field
 
+from ..core.agent_builder import create_model_settings
 from ..core.config import get_config
 from ..core.config_utils import get_agent_sub_agents
 from ..core.execution_context import (
@@ -227,13 +226,19 @@ async def _run_agent_with_mcp(
             if parent_stream_id and EventStreamRegistry.stream_exists(parent_stream_id):
                 # Streaming mode with MCP
                 return await _run_agent_streamed(
-                    agent, query, max_turns, parent_stream_id, agent_name,
+                    agent,
+                    query,
+                    max_turns,
+                    parent_stream_id,
+                    agent_name,
                     mcp_servers=entered_servers if entered_servers else None,
                 )
             else:
                 # Non-streaming mode with MCP
                 return await Runner.run(
-                    agent, query, max_turns=max_turns,
+                    agent,
+                    query,
+                    max_turns=max_turns,
                     mcp_servers=entered_servers if entered_servers else None,
                 )
     else:
@@ -249,8 +254,12 @@ async def _run_agent_with_mcp(
 
 
 async def _run_agent_streamed(
-    agent, query: str, max_turns: int, stream_id: str, agent_name: str,
-    mcp_servers: list | None = None
+    agent,
+    query: str,
+    max_turns: int,
+    stream_id: str,
+    agent_name: str,
+    mcp_servers: list | None = None,
 ) -> Any:
     """
     Run an agent in streaming mode and emit events to the registry.
@@ -285,7 +294,9 @@ async def _run_agent_streamed(
     try:
         # Pass MCP servers to Runner if available
         if mcp_servers:
-            result = Runner.run_streamed(agent, query, max_turns=max_turns, mcp_servers=mcp_servers)
+            result = Runner.run_streamed(
+                agent, query, max_turns=max_turns, mcp_servers=mcp_servers
+            )
         else:
             result = Runner.run_streamed(agent, query, max_turns=max_turns)
 
