@@ -253,6 +253,9 @@ export default function AdminConfigPage() {
   const [loadingTools, setLoadingTools] = useState(false);
   const [mcpServers, setMcpServers] = useState<Record<string, any>>({});
 
+  // Default prompts from agent code (used as placeholders when config is empty)
+  const [defaultPrompts, setDefaultPrompts] = useState<Record<string, string>>({});
+
   // Integration editing states
   const [editingIntegration, setEditingIntegration] = useState<string | null>(null);
   const [integrationDraft, setIntegrationDraft] = useState<{ config: Record<string, string | boolean>; team_config: Record<string, string | boolean> }>({ config: {}, team_config: {} });
@@ -428,6 +431,22 @@ export default function AdminConfigPage() {
       }
     };
     loadToolMetadata();
+  }, []);
+
+  // Load default prompts from agent service (used as placeholders in UI)
+  useEffect(() => {
+    const loadDefaultPrompts = async () => {
+      try {
+        const res = await fetch('/api/agents/prompts/defaults');
+        if (res.ok) {
+          const data = await res.json();
+          setDefaultPrompts(data.prompts || {});
+        }
+      } catch (e) {
+        console.error('Failed to load default prompts:', e);
+      }
+    };
+    loadDefaultPrompts();
   }, []);
 
   const saveConfig = async (patch: Record<string, unknown>) => {
@@ -1251,23 +1270,49 @@ export default function AdminConfigPage() {
                             </div>
 
                             {showPrompt ? (
-                              <textarea
-                                value={agentDraft.prompt?.system || ''}
-                                onChange={(e) =>
-                                  setAgentDraft({
-                                    ...agentDraft,
-                                    prompt: { ...(agentDraft.prompt || { system: '', prefix: '', suffix: '' }), system: e.target.value },
-                                  })
-                                }
-                                rows={12}
-                                className="w-full px-3 py-2 text-sm font-mono rounded-lg border border-slate-600 bg-slate-900 text-white resize-y"
-                                placeholder="Enter system prompt..."
-                              />
+                              <div className="space-y-2">
+                                {!agentDraft.prompt?.system && selectedAgentId && defaultPrompts[selectedAgentId] && (
+                                  <div className="flex items-center gap-2 text-xs text-amber-400">
+                                    <span className="px-2 py-0.5 bg-amber-500/20 rounded">Using code default</span>
+                                    <span className="text-slate-500">Edit below to customize</span>
+                                  </div>
+                                )}
+                                <textarea
+                                  value={agentDraft.prompt?.system || ''}
+                                  onChange={(e) =>
+                                    setAgentDraft({
+                                      ...agentDraft,
+                                      prompt: { ...(agentDraft.prompt || { system: '', prefix: '', suffix: '' }), system: e.target.value },
+                                    })
+                                  }
+                                  rows={12}
+                                  className="w-full px-3 py-2 text-sm font-mono rounded-lg border border-slate-600 bg-slate-900 text-white resize-y"
+                                  placeholder={selectedAgentId && defaultPrompts[selectedAgentId]
+                                    ? defaultPrompts[selectedAgentId]
+                                    : "Enter system prompt..."}
+                                />
+                                {!agentDraft.prompt?.system && selectedAgentId && defaultPrompts[selectedAgentId] && (
+                                  <button
+                                    onClick={() => setAgentDraft({
+                                      ...agentDraft,
+                                      prompt: { ...(agentDraft.prompt || { system: '', prefix: '', suffix: '' }), system: defaultPrompts[selectedAgentId] },
+                                    })}
+                                    className="text-xs text-blue-400 hover:text-blue-300"
+                                  >
+                                    Copy default to editor
+                                  </button>
+                                )}
+                              </div>
                             ) : (
                               <div className="text-sm text-slate-500 italic">
                                 {agentDraft.prompt?.system
                                   ? `${agentDraft.prompt.system.slice(0, 150)}...`
-                                  : 'No prompt configured'}
+                                  : (selectedAgentId && defaultPrompts[selectedAgentId]
+                                    ? <span className="flex items-center gap-2">
+                                        <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs not-italic">Default</span>
+                                        {defaultPrompts[selectedAgentId].slice(0, 100)}...
+                                      </span>
+                                    : 'No prompt configured')}
                               </div>
                             )}
                           </div>

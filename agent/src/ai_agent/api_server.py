@@ -1926,6 +1926,74 @@ def create_app() -> Sanic:
                 status=500,
             )
 
+    # Get default prompts for all agents (used by UI to show placeholders)
+    # NOTE: This route must be defined BEFORE /agents/<agent_name> to avoid conflict
+    @app.get("/agents/prompts/defaults")
+    async def get_default_prompts(request: Request) -> JSONResponse:
+        """Get default system prompts for all agents from code.
+
+        These are the fallback prompts used when config has empty prompt.system.
+        The UI uses these to show placeholders/defaults without storing them.
+        """
+        from .prompts.planner_prompt import PLANNER_SYSTEM_PROMPT
+
+        # Import default prompts from each agent module
+        # These are the base prompts before role-based sections are added
+        default_prompts = {
+            "planner": PLANNER_SYSTEM_PROMPT,
+        }
+
+        # Try to import other agent prompts
+        try:
+            from .agents.investigation_agent import (
+                SYSTEM_PROMPT as INVESTIGATION_PROMPT,
+            )
+
+            default_prompts["investigation"] = INVESTIGATION_PROMPT
+        except ImportError:
+            pass
+
+        try:
+            from .agents.github_agent import SYSTEM_PROMPT as GITHUB_PROMPT
+
+            default_prompts["github"] = GITHUB_PROMPT
+        except ImportError:
+            pass
+
+        try:
+            from .agents.writeup_agent import SYSTEM_PROMPT as WRITEUP_PROMPT
+
+            default_prompts["writeup"] = WRITEUP_PROMPT
+        except ImportError:
+            pass
+
+        try:
+            from .agents.log_analysis_agent import SYSTEM_PROMPT as LOG_ANALYSIS_PROMPT
+
+            default_prompts["log_analysis"] = LOG_ANALYSIS_PROMPT
+        except ImportError:
+            pass
+
+        # For agents with inline prompts, extract from their create functions
+        # k8s, aws, metrics, coding have inline prompts - we'll provide summaries
+        inline_prompt_agents = {
+            "k8s": "You are a Kubernetes expert specializing in troubleshooting, diagnostics, and operations...",
+            "aws": "You are an AWS cloud infrastructure expert...",
+            "metrics": "You are a metrics and observability expert...",
+            "coding": "You are a senior software engineer and code analyst...",
+        }
+        for agent_name, summary in inline_prompt_agents.items():
+            if agent_name not in default_prompts:
+                default_prompts[agent_name] = summary
+
+        return response.json(
+            {
+                "prompts": default_prompts,
+                "note": "These are code defaults used when config prompt is empty. "
+                "Role-based sections are appended at runtime.",
+            }
+        )
+
     # Get agent info
     @app.get("/agents/<agent_name>")
     async def get_agent_info(request: Request, agent_name: str) -> JSONResponse:
