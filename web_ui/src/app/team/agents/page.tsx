@@ -782,14 +782,6 @@ export default function AgentSettingsPage() {
                   Show inheritance details
                 </button>
               </div>
-              <a
-                href="https://docs.incidentfox.ai/config"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-gray-400 hover:text-gray-300 flex items-center gap-1"
-              >
-                Docs <ExternalLink className="w-3 h-3" />
-              </a>
             </div>
 
             <div className="flex-1 min-h-0 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-6">
