@@ -137,7 +137,9 @@ def set_execution_context(
     Returns:
         The created ExecutionContext
     """
-    context = ExecutionContext(org_id=org_id, team_node_id=team_node_id, team_config=team_config)
+    context = ExecutionContext(
+        org_id=org_id, team_node_id=team_node_id, team_config=team_config
+    )
 
     _execution_context.set(context)
 
@@ -276,7 +278,9 @@ def propagate_hooks_to_thread(hooks: Any) -> None:
     """
     if hooks:
         _execution_hooks.set(hooks)
-        logger.debug("execution_hooks_propagated_to_thread", hooks_type=type(hooks).__name__)
+        logger.debug(
+            "execution_hooks_propagated_to_thread", hooks_type=type(hooks).__name__
+        )
 
 
 async def create_mcp_servers_for_subagent(agent_name: str) -> tuple[Any, list]:
@@ -364,7 +368,11 @@ async def create_mcp_servers_for_subagent(agent_name: str) -> tuple[Any, list]:
         resolved_env = {}
         config_values = mcp_dict.get("config_values", {})
         for key, value in env.items():
-            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+            if (
+                isinstance(value, str)
+                and value.startswith("${")
+                and value.endswith("}")
+            ):
                 var_name = value[2:-1]
                 resolved_env[key] = config_values.get(var_name, "")
             else:
@@ -425,14 +433,18 @@ class ExecutionContextManager:
         self.context: ExecutionContext | None = None
 
     def __enter__(self) -> ExecutionContext:
-        self.context = set_execution_context(self.org_id, self.team_node_id, self.team_config)
+        self.context = set_execution_context(
+            self.org_id, self.team_node_id, self.team_config
+        )
         return self.context
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         clear_execution_context()
 
     async def __aenter__(self) -> ExecutionContext:
-        self.context = set_execution_context(self.org_id, self.team_node_id, self.team_config)
+        self.context = set_execution_context(
+            self.org_id, self.team_node_id, self.team_config
+        )
         return self.context
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

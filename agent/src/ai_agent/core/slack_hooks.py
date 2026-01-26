@@ -466,7 +466,9 @@ class SlackUpdateHooks(RunHooks):
                 # Store phase result
                 if category not in self.state.phase_results:
                     self.state.phase_results[category] = ""
-                self.state.phase_results[category] += f"\n\n**{tool_name}:**\n{result[:1000]}"
+                self.state.phase_results[
+                    category
+                ] += f"\n\n**{tool_name}:**\n{result[:1000]}"
 
             logger.debug(
                 "slack_hook_tool_end",
@@ -555,7 +557,9 @@ class SlackUpdateHooks(RunHooks):
             elif self._pending_update_task is None or self._pending_update_task.done():
                 # Schedule delayed update
                 delay = debounce_seconds - time_since_last
-                self._pending_update_task = asyncio.create_task(self._delayed_update(delay))
+                self._pending_update_task = asyncio.create_task(
+                    self._delayed_update(delay)
+                )
 
     async def _delayed_update(self, delay: float) -> None:
         """Wait then send update."""
@@ -589,7 +593,10 @@ class SlackUpdateHooks(RunHooks):
                             if self.on_phase_complete:
                                 # Queue callback to run outside lock
                                 phase_complete_callbacks.append(
-                                    (update.phase, self.state.phase_results[update.phase])
+                                    (
+                                        update.phase,
+                                        self.state.phase_results[update.phase],
+                                    )
                                 )
 
                 self.state.pending_tool_updates.clear()
@@ -693,7 +700,9 @@ class SlackUpdateHooks(RunHooks):
                 blocks=blocks,
             )
 
-            logger.info("slack_investigation_finalized", incident_id=self.state.incident_id)
+            logger.info(
+                "slack_investigation_finalized", incident_id=self.state.incident_id
+            )
 
         except Exception as e:
             logger.error("slack_finalize_failed", error=str(e))
