@@ -232,12 +232,10 @@ def create_writeup_agent(
         try:
             agent_config = None
             if hasattr(team_cfg, "get_agent_config"):
-                agent_config = team_cfg.get_agent_config("writeup_agent")
-                if not agent_config:
-                    agent_config = team_cfg.get_agent_config("writeup")
+                agent_config = team_cfg.get_agent_config("writeup")
             elif isinstance(team_cfg, dict):
                 agents = team_cfg.get("agents", {})
-                agent_config = agents.get("writeup_agent") or agents.get("writeup")
+                agent_config = agents.get("writeup")
 
             if agent_config:
                 if hasattr(agent_config, "get_system_prompt"):
