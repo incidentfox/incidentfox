@@ -269,7 +269,7 @@ def create_ci_agent(team_config: dict[str, Any] | None = None) -> Agent[TaskCont
     # Check if team has custom prompt
     custom_prompt = None
     if team_cfg:
-        agent_config = team_cfg.get_agent_config("ci_agent")
+        agent_config = team_cfg.get_agent_config("ci")
         if agent_config and agent_config.prompt:
             custom_prompt = agent_config.get_system_prompt()
             if custom_prompt:
