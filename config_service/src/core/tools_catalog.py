@@ -327,6 +327,63 @@ BUILT_IN_TOOLS_METADATA = [
         "category": "github",
         "required_integrations": ["github"],
     },
+    # New GitHub CI/CD and deployment tools
+    {
+        "id": "get_repo_tree",
+        "name": "Get Repo Tree",
+        "description": "Get full recursive file structure in one API call",
+        "category": "github",
+        "required_integrations": ["github"],
+    },
+    {
+        "id": "get_workflow_run_jobs",
+        "name": "Get Workflow Run Jobs",
+        "description": "Get individual job statuses and steps for a workflow run",
+        "category": "cicd",
+        "required_integrations": ["github"],
+    },
+    {
+        "id": "get_workflow_run_logs",
+        "name": "Get Workflow Run Logs",
+        "description": "Get workflow run logs download URL",
+        "category": "cicd",
+        "required_integrations": ["github"],
+    },
+    {
+        "id": "get_failed_workflow_annotations",
+        "name": "Get Failed Workflow Annotations",
+        "description": "Get error messages and annotations from failed workflow runs",
+        "category": "cicd",
+        "required_integrations": ["github"],
+    },
+    {
+        "id": "get_check_runs",
+        "name": "Get Check Runs",
+        "description": "Get CI check status for commits or pull requests",
+        "category": "cicd",
+        "required_integrations": ["github"],
+    },
+    {
+        "id": "get_combined_status",
+        "name": "Get Combined Status",
+        "description": "Get overall commit pass/fail status from all checks",
+        "category": "cicd",
+        "required_integrations": ["github"],
+    },
+    {
+        "id": "list_deployments",
+        "name": "List Deployments",
+        "description": "List deployment history for incident correlation",
+        "category": "cicd",
+        "required_integrations": ["github"],
+    },
+    {
+        "id": "get_deployment_status",
+        "name": "Get Deployment Status",
+        "description": "Get detailed deployment status history",
+        "category": "cicd",
+        "required_integrations": ["github"],
+    },
     # Elasticsearch tools
     {
         "id": "search_logs",

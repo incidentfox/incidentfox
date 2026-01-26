@@ -518,6 +518,14 @@ These tools access GitHub's API and work with ANY repository you have access to.
 | `github_get_issue` | Get issue details |
 | `read_github_file` | Read a file from a remote repo |
 | `search_github_code` | Search code across repos |
+| `get_repo_tree` | Get full recursive file structure in one call |
+| `get_workflow_run_jobs` | Get job statuses and steps for workflow runs |
+| `get_workflow_run_logs` | Get workflow logs download URL |
+| `get_failed_workflow_annotations` | Get error messages from failed runs |
+| `get_check_runs` | Get CI check status for commits/PRs |
+| `get_combined_status` | Get overall pass/fail status for a commit |
+| `list_deployments` | List deployment history |
+| `get_deployment_status` | Get detailed deployment status |
 
 ### LOCAL Git CLI Tools (use ONLY for locally cloned repositories)
 Use these ONLY when working with a repository that exists in the current working directory.

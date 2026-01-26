@@ -189,8 +189,16 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
                 create_branch,
                 create_issue,
                 create_pull_request,
+                get_check_runs,
+                get_combined_status,
+                get_deployment_status,
+                get_failed_workflow_annotations,
                 get_repo_info,
+                get_repo_tree,
+                get_workflow_run_jobs,
+                get_workflow_run_logs,
                 list_branches,
+                list_deployments,
                 list_files,
                 list_issues,
                 list_pull_requests,
@@ -217,9 +225,18 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
                     get_repo_info,
                     trigger_workflow,
                     list_workflow_runs,
+                    # New tools for CI/CD and deployment investigation
+                    get_repo_tree,
+                    get_workflow_run_jobs,
+                    get_workflow_run_logs,
+                    get_failed_workflow_annotations,
+                    get_check_runs,
+                    get_combined_status,
+                    list_deployments,
+                    get_deployment_status,
                 ]
             )
-            logger.debug("github_tools_loaded", count=14)
+            logger.debug("github_tools_loaded", count=22)
         except Exception as e:
             logger.warning("github_tools_load_failed", error=str(e))
 
