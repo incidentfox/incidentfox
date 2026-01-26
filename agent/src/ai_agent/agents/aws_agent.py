@@ -65,7 +65,7 @@ def create_aws_agent(
     # Check if team has custom prompt
     custom_prompt = None
     if team_cfg:
-        agent_config = team_cfg.get_agent_config("aws_agent")
+        agent_config = team_cfg.get_agent_config("aws")
         if agent_config.prompt:
             custom_prompt = agent_config.get_system_prompt()
             if custom_prompt:

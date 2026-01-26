@@ -911,14 +911,10 @@ def create_investigation_agent(
         try:
             agent_cfg = None
             if hasattr(team_cfg, "get_agent_config"):
-                agent_cfg = team_cfg.get_agent_config("investigation_agent")
-                if not agent_cfg:
-                    agent_cfg = team_cfg.get_agent_config("investigation")
+                agent_cfg = team_cfg.get_agent_config("investigation")
             elif isinstance(team_cfg, dict):
                 agents = team_cfg.get("agents", {})
-                agent_cfg = agents.get("investigation_agent") or agents.get(
-                    "investigation"
-                )
+                agent_cfg = agents.get("investigation")
 
             if agent_cfg:
                 if hasattr(agent_cfg, "get_system_prompt"):
