@@ -229,6 +229,136 @@ def require_execution_context() -> ExecutionContext:
     return context
 
 
+async def create_mcp_servers_for_subagent(agent_name: str) -> tuple[Any, list]:
+    """
+    Create MCP servers for a sub-agent from execution context.
+
+    This enables sub-agents to use MCP tools configured for them in team config.
+    Each sub-agent gets fresh MCP connections appropriate for its event loop.
+
+    Args:
+        agent_name: Name of the sub-agent (e.g., "investigation", "k8s_agent")
+
+    Returns:
+        Tuple of (AsyncExitStack, list of MCPServerStdio objects)
+        Returns (None, []) if no MCPs configured or no execution context
+    """
+    from contextlib import AsyncExitStack
+
+    context = get_execution_context()
+    if not context:
+        logger.debug("no_execution_context_for_mcp", agent_name=agent_name)
+        return None, []
+
+    team_config = context.team_config
+    mcp_servers_config = team_config.get("mcp_servers", {})
+
+    if not mcp_servers_config:
+        logger.debug("no_mcp_servers_in_team_config", agent_name=agent_name)
+        return None, []
+
+    # Get agent's MCP configuration for filtering
+    agents_config = team_config.get("agents", {})
+    agent_config = agents_config.get(agent_name, {})
+    agent_mcps_config = agent_config.get("mcps")
+
+    logger.debug(
+        "creating_mcp_servers_for_subagent",
+        agent_name=agent_name,
+        total_mcps=len(mcp_servers_config),
+        agent_mcps_config=agent_mcps_config,
+    )
+
+    try:
+        from agents.mcp import MCPServerStdio
+    except ImportError:
+        logger.warning("mcp_import_failed_for_subagent", agent_name=agent_name)
+        return None, []
+
+    stack = AsyncExitStack()
+    mcp_servers = []
+    skipped = []
+
+    for mcp_id, mcp_config in mcp_servers_config.items():
+        # Convert to dict if needed
+        if hasattr(mcp_config, "model_dump"):
+            mcp_dict = mcp_config.model_dump()
+        elif hasattr(mcp_config, "dict"):
+            mcp_dict = mcp_config.dict()
+        elif isinstance(mcp_config, dict):
+            mcp_dict = dict(mcp_config)
+        else:
+            mcp_dict = mcp_config
+
+        # Filter 1: Skip if MCP is disabled at team level
+        if not mcp_dict.get("enabled", True):
+            skipped.append((mcp_id, "disabled"))
+            continue
+
+        # Filter 2: Skip if agent has mcps config and this MCP is not enabled for agent
+        if agent_mcps_config is not None:
+            if not agent_mcps_config.get(mcp_id, False):
+                skipped.append((mcp_id, "not_in_agent_mcps"))
+                continue
+
+        # Create MCPServerStdio
+        command = mcp_dict.get("command")
+        args = mcp_dict.get("args", [])
+        env = mcp_dict.get("env", {})
+
+        if not command:
+            skipped.append((mcp_id, "no_command"))
+            continue
+
+        # Resolve environment variable placeholders
+        resolved_env = {}
+        config_values = mcp_dict.get("config_values", {})
+        for key, value in env.items():
+            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+                var_name = value[2:-1]
+                resolved_env[key] = config_values.get(var_name, "")
+            else:
+                resolved_env[key] = value
+
+        try:
+            mcp_server = MCPServerStdio(
+                name=mcp_dict.get("name", mcp_id),
+                command=command,
+                args=args,
+                env=resolved_env,
+            )
+            mcp_servers.append(mcp_server)
+            logger.debug(
+                "mcp_server_created_for_subagent",
+                mcp_id=mcp_id,
+                agent_name=agent_name,
+            )
+        except Exception as e:
+            logger.warning(
+                "mcp_server_creation_failed_for_subagent",
+                mcp_id=mcp_id,
+                agent_name=agent_name,
+                error=str(e),
+            )
+            skipped.append((mcp_id, f"error: {e}"))
+
+    if skipped:
+        logger.debug(
+            "mcp_servers_skipped_for_subagent",
+            agent_name=agent_name,
+            skipped=skipped,
+        )
+
+    logger.info(
+        "mcp_servers_ready_for_subagent",
+        agent_name=agent_name,
+        mcp_count=len(mcp_servers),
+        mcp_ids=[getattr(s, "name", "unknown") for s in mcp_servers],
+    )
+
+    return stack, mcp_servers
+
+
 class ExecutionContextManager:
     """
     Context manager for execution context.
