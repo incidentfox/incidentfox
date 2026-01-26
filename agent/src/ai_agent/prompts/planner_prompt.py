@@ -350,10 +350,14 @@ def build_planner_system_prompt(
         base_prompt = custom_prompt
     elif team_config:
         # Check for custom prompt in team config
+        # Config structure: agents.planner.prompt.system (string) or agents.planner.prompt (string)
         planner_config = team_config.get("agents", {}).get("planner", {})
-        config_prompt = planner_config.get("system_prompt") or planner_config.get(
-            "prompt"
-        )
+        config_prompt = None
+        prompt_cfg = planner_config.get("prompt")
+        if isinstance(prompt_cfg, str) and prompt_cfg:
+            config_prompt = prompt_cfg
+        elif isinstance(prompt_cfg, dict):
+            config_prompt = prompt_cfg.get("system")
         base_prompt = config_prompt if config_prompt else PLANNER_SYSTEM_PROMPT
     else:
         base_prompt = PLANNER_SYSTEM_PROMPT
