@@ -9,7 +9,9 @@ This agent specializes in:
 
 from typing import Any
 
-from agents import Agent, ModelSettings, function_tool
+from agents import Agent, function_tool
+
+from ..core.agent_builder import create_model_settings
 from pydantic import BaseModel, Field
 
 from ..core.config import get_config
@@ -313,7 +315,8 @@ def create_ci_agent(team_config: dict[str, Any] | None = None) -> Agent[TaskCont
         name="CIAgent",
         instructions=system_prompt,
         model=model_name,
-        model_settings=ModelSettings(
+        model_settings=create_model_settings(
+            model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
         ),

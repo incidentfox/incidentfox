@@ -82,8 +82,9 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
     Returns:
         Configured Agent instance
     """
-    from agents import Agent, ModelSettings
+    from agents import Agent
 
+    from ..core.agent_builder import create_model_settings
     from ..tools.agent_tools import get_agent_tools
 
     config = get_config()
@@ -331,7 +332,8 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
     agent = Agent[TaskContext](
         name=agent_config.name or agent_name,
         model=model_name,
-        model_settings=ModelSettings(
+        model_settings=create_model_settings(
+            model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
         ),

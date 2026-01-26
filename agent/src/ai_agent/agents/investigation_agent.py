@@ -29,7 +29,9 @@ import json
 import threading
 from typing import Any
 
-from agents import Agent, ModelSettings, Runner, function_tool
+from agents import Agent, Runner, function_tool
+
+from ..core.agent_builder import create_model_settings
 from agents.exceptions import MaxTurnsExceeded
 from agents.stream_events import RunItemStreamEvent
 from pydantic import BaseModel, Field
@@ -1019,7 +1021,8 @@ def create_investigation_agent(
         name="InvestigationAgent",
         instructions=system_prompt,
         model=model_name,
-        model_settings=ModelSettings(
+        model_settings=create_model_settings(
+            model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
         ),

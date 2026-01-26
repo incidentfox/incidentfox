@@ -33,6 +33,61 @@ logger = get_logger(__name__)
 
 
 # =============================================================================
+# Model Settings Helper
+# =============================================================================
+
+# OpenAI reasoning models don't support temperature, top_p, frequency_penalty, etc.
+# This includes o-series (o1, o3, o4) and gpt-5 series
+REASONING_MODEL_PREFIXES = ("o1", "o3", "o4", "gpt-5")
+
+
+def is_reasoning_model(model_name: str) -> bool:
+    """Check if a model is a reasoning model that doesn't support temperature."""
+    return model_name.startswith(REASONING_MODEL_PREFIXES)
+
+
+def create_model_settings(
+    model_name: str,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    reasoning: str | None = None,
+    verbosity: str | None = None,
+) -> ModelSettings:
+    """
+    Create ModelSettings with appropriate parameters based on model type.
+
+    For reasoning models (o1, o3, o4, gpt-5): Uses reasoning effort and verbosity.
+    For standard models: Uses temperature.
+
+    Args:
+        model_name: The model name (e.g., "gpt-4o", "gpt-5", "o3-mini")
+        temperature: Temperature for standard models (ignored for reasoning models)
+        max_tokens: Maximum tokens for response
+        reasoning: Reasoning effort for reasoning models ('none', 'low', 'medium', 'high', 'xhigh')
+        verbosity: Verbosity for reasoning models ('low', 'medium', 'high')
+
+    Returns:
+        ModelSettings configured appropriately for the model type
+    """
+    if is_reasoning_model(model_name):
+        # Reasoning models use reasoning effort and verbosity instead of temperature
+        effort = reasoning or "medium"
+        verb = verbosity or "medium"
+        return ModelSettings(
+            max_tokens=max_tokens,
+            reasoning={"effort": effort},
+            verbosity=verb,
+        )
+    else:
+        # Standard models use temperature
+        temp = temperature if temperature is not None else 0.4
+        return ModelSettings(
+            temperature=temp,
+            max_tokens=max_tokens,
+        )
+
+
+# =============================================================================
 # Output Types
 # =============================================================================
 
@@ -422,28 +477,15 @@ def build_agent_from_config(
     if prompt_config.get("suffix"):
         system_prompt = system_prompt + "\n\n" + prompt_config["suffix"]
 
-    # Build model settings
+    # Build model settings using shared helper
     model_name = model_config.get("name", "gpt-4o")
-
-    # OpenAI reasoning models don't support temperature, top_p, frequency_penalty, etc.
-    # This includes o-series (o1, o3, o4) and gpt-5 series
-    reasoning_model_prefixes = ("o1", "o3", "o4", "gpt-5")
-    is_reasoning_model = model_name.startswith(reasoning_model_prefixes)
-
-    if is_reasoning_model:
-        # Reasoning models use reasoning effort and verbosity instead of temperature
-        reasoning_effort = model_config.get("reasoning", "medium")
-        verbosity = model_config.get("verbosity", "medium")
-        model_settings = ModelSettings(
-            max_tokens=model_config.get("max_tokens"),
-            reasoning={"effort": reasoning_effort} if reasoning_effort else None,
-            verbosity=verbosity,
-        )
-    else:
-        model_settings = ModelSettings(
-            temperature=model_config.get("temperature", 0.4),
-            max_tokens=model_config.get("max_tokens"),
-        )
+    model_settings = create_model_settings(
+        model_name=model_name,
+        temperature=model_config.get("temperature", 0.4),
+        max_tokens=model_config.get("max_tokens"),
+        reasoning=model_config.get("reasoning"),
+        verbosity=model_config.get("verbosity"),
+    )
 
     # Resolve tools
     # Handle both legacy format {enabled: [], disabled: []} and canonical format {tool_id: bool}

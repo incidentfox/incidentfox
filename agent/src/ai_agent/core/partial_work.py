@@ -196,12 +196,21 @@ Respond in this exact JSON format:
 
 Only output the JSON, no other text."""
 
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,
-            temperature=0,
-        )
+        # Reasoning models (o1, o3, o4, gpt-5) don't support temperature
+        reasoning_prefixes = ("o1", "o3", "o4", "gpt-5")
+        if model.startswith(reasoning_prefixes):
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+            )
+        else:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+                temperature=0,
+            )
 
         # Parse the response
         try:

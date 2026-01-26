@@ -195,12 +195,23 @@ def llm_call(prompt: str, system_prompt: str = "", purpose: str = "") -> str:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
-            messages=messages,
-            temperature=0.7,
-            max_tokens=2000,
-        )
+        model = os.getenv("OPENAI_MODEL", "gpt-4o")
+
+        # Reasoning models (o1, o3, o4, gpt-5) don't support temperature
+        reasoning_prefixes = ("o1", "o3", "o4", "gpt-5")
+        if model.startswith(reasoning_prefixes):
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=2000,
+            )
+        else:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=2000,
+            )
         return json.dumps(
             {
                 "purpose": purpose,
