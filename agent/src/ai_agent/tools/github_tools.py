@@ -1685,11 +1685,575 @@ def github_create_pr_review(
         return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
+# ============================================================================
+# Repository Structure Tools
+# ============================================================================
+
+
+@function_tool
+def get_repo_tree(
+    repo: str,
+    ref: str = "main",
+    path_filter: str | None = None,
+    max_items: int = 1000,
+) -> dict[str, Any] | str:
+    """
+    Get full recursive tree structure of a repository.
+
+    Much more efficient than calling list_files multiple times when you need
+    to understand the overall codebase structure.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        ref: Branch/tag/commit (default: "main")
+        path_filter: Optional path prefix to filter results (e.g., "src/")
+        max_items: Maximum items to return (default 1000)
+
+    Returns:
+        Dict with total counts and tree structure, or config_required response
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+
+        # Get the commit to find the tree SHA
+        commit = repository.get_commit(ref)
+        tree_sha = commit.commit.tree.sha
+
+        # Get the full tree recursively
+        tree = repository.get_git_tree(tree_sha, recursive=True)
+
+        items = []
+        files_count = 0
+        dirs_count = 0
+
+        for item in tree.tree:
+            # Apply path filter if specified
+            if path_filter and not item.path.startswith(path_filter):
+                continue
+
+            if len(items) >= max_items:
+                break
+
+            item_data = {
+                "path": item.path,
+                "type": "file" if item.type == "blob" else "directory",
+                "size": item.size if item.type == "blob" else None,
+            }
+            items.append(item_data)
+
+            if item.type == "blob":
+                files_count += 1
+            else:
+                dirs_count += 1
+
+        logger.info(
+            "github_repo_tree_fetched",
+            repo=repo,
+            ref=ref,
+            files=files_count,
+            dirs=dirs_count,
+        )
+
+        return {
+            "repo": repo,
+            "ref": ref,
+            "total_files": files_count,
+            "total_directories": dirs_count,
+            "truncated": tree.truncated or len(items) >= max_items,
+            "tree": items,
+        }
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="get_repo_tree")
+        return _github_config_required_response("get_repo_tree")
+
+    except Exception as e:
+        logger.error("github_get_tree_failed", error=str(e), repo=repo, ref=ref)
+        return json.dumps({"error": str(e), "repo": repo, "ref": ref})
+
+
+# ============================================================================
+# GitHub Actions - Enhanced Tools
+# ============================================================================
+
+
+@function_tool
+def get_workflow_run_jobs(
+    repo: str, run_id: int, filter_status: str | None = None, max_results: int = 50
+) -> list[dict[str, Any]] | str:
+    """
+    Get jobs for a specific workflow run.
+
+    Use this to see individual job statuses within a workflow run,
+    especially useful when a workflow has multiple jobs and you need
+    to identify which specific job failed.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        run_id: Workflow run ID
+        filter_status: Filter by status (queued, in_progress, completed)
+        max_results: Maximum jobs to return
+
+    Returns:
+        List of jobs with status, conclusion, and timing info
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        run = repository.get_workflow_run(run_id)
+
+        jobs = run.jobs()
+
+        job_list = []
+        for i, job in enumerate(jobs):
+            if i >= max_results:
+                break
+
+            if filter_status and job.status != filter_status:
+                continue
+
+            # Get step information
+            steps = []
+            if hasattr(job, "steps") and job.steps:
+                for step in job.steps:
+                    steps.append(
+                        {
+                            "name": step.name,
+                            "status": step.status,
+                            "conclusion": step.conclusion,
+                            "number": step.number,
+                        }
+                    )
+
+            job_list.append(
+                {
+                    "id": job.id,
+                    "name": job.name,
+                    "status": job.status,
+                    "conclusion": job.conclusion,
+                    "started_at": str(job.started_at) if job.started_at else None,
+                    "completed_at": str(job.completed_at) if job.completed_at else None,
+                    "url": job.html_url,
+                    "steps": steps,
+                }
+            )
+
+        logger.info(
+            "github_workflow_jobs_listed", repo=repo, run_id=run_id, count=len(job_list)
+        )
+        return job_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="get_workflow_run_jobs")
+        return _github_config_required_response("get_workflow_run_jobs")
+
+    except Exception as e:
+        logger.error(
+            "github_get_workflow_jobs_failed", error=str(e), repo=repo, run_id=run_id
+        )
+        return json.dumps({"error": str(e), "repo": repo, "run_id": run_id})
+
+
+@function_tool
+def get_workflow_run_logs(repo: str, run_id: int) -> dict[str, Any] | str:
+    """
+    Get logs download URL for a workflow run.
+
+    Note: GitHub's API provides a URL to download logs as a zip file.
+    This tool returns the download URL which can be used to fetch logs.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        run_id: Workflow run ID
+
+    Returns:
+        Dict with logs_url for downloading, or config_required response
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        run = repository.get_workflow_run(run_id)
+
+        # Get the logs URL - this is a redirect URL to download logs
+        logs_url = run.logs_url
+
+        logger.info("github_workflow_logs_url_fetched", repo=repo, run_id=run_id)
+
+        return {
+            "repo": repo,
+            "run_id": run_id,
+            "run_name": run.name,
+            "status": run.status,
+            "conclusion": run.conclusion,
+            "logs_url": logs_url,
+            "html_url": run.html_url,
+            "note": "Use the logs_url to download logs as a zip file. The URL requires authentication.",
+        }
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="get_workflow_run_logs")
+        return _github_config_required_response("get_workflow_run_logs")
+
+    except Exception as e:
+        logger.error(
+            "github_get_workflow_logs_failed", error=str(e), repo=repo, run_id=run_id
+        )
+        return json.dumps({"error": str(e), "repo": repo, "run_id": run_id})
+
+
+@function_tool
+def get_failed_workflow_annotations(
+    repo: str, run_id: int
+) -> list[dict[str, Any]] | str:
+    """
+    Get error annotations from a failed workflow run.
+
+    This is often more useful than full logs - it extracts just the
+    error messages and warnings that GitHub detected in the workflow output.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        run_id: Workflow run ID
+
+    Returns:
+        List of annotations (errors, warnings) from the run
+    """
+    try:
+        import requests
+
+        config = _get_github_config()
+        headers = {
+            "Authorization": f"Bearer {config['token']}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        # Get check runs for this workflow run
+        url = f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs"
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+
+        jobs_data = response.json()
+        annotations = []
+
+        for job in jobs_data.get("jobs", []):
+            job_id = job.get("id")
+
+            # Get annotations for each job via check-run API
+            check_url = f"https://api.github.com/repos/{repo}/check-runs/{job_id}/annotations"
+            ann_response = requests.get(check_url, headers=headers, timeout=30)
+
+            if ann_response.status_code == 200:
+                job_annotations = ann_response.json()
+                for ann in job_annotations:
+                    annotations.append(
+                        {
+                            "job_name": job.get("name"),
+                            "job_conclusion": job.get("conclusion"),
+                            "level": ann.get("annotation_level"),
+                            "message": ann.get("message"),
+                            "path": ann.get("path"),
+                            "start_line": ann.get("start_line"),
+                            "end_line": ann.get("end_line"),
+                            "title": ann.get("title"),
+                        }
+                    )
+
+        logger.info(
+            "github_workflow_annotations_fetched",
+            repo=repo,
+            run_id=run_id,
+            count=len(annotations),
+        )
+
+        return annotations
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="get_failed_workflow_annotations")
+        return _github_config_required_response("get_failed_workflow_annotations")
+
+    except Exception as e:
+        logger.error(
+            "github_get_annotations_failed", error=str(e), repo=repo, run_id=run_id
+        )
+        return json.dumps({"error": str(e), "repo": repo, "run_id": run_id})
+
+
+# ============================================================================
+# Check Runs / CI Status
+# ============================================================================
+
+
+@function_tool
+def get_check_runs(
+    repo: str, ref: str, check_name: str | None = None, max_results: int = 50
+) -> list[dict[str, Any]] | str:
+    """
+    Get check runs (CI status) for a commit or branch.
+
+    Use this to see which CI checks passed or failed for a PR or commit.
+    This shows GitHub Actions checks, as well as external CI integrations.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        ref: Commit SHA or branch name
+        check_name: Filter by check name (optional)
+        max_results: Maximum check runs to return
+
+    Returns:
+        List of check runs with status and conclusion
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+
+        # Get the commit
+        commit = repository.get_commit(ref)
+
+        # Get check runs
+        check_runs = commit.get_check_runs()
+
+        run_list = []
+        for i, run in enumerate(check_runs):
+            if i >= max_results:
+                break
+
+            if check_name and run.name != check_name:
+                continue
+
+            run_list.append(
+                {
+                    "id": run.id,
+                    "name": run.name,
+                    "status": run.status,
+                    "conclusion": run.conclusion,
+                    "started_at": str(run.started_at) if run.started_at else None,
+                    "completed_at": str(run.completed_at) if run.completed_at else None,
+                    "url": run.html_url,
+                    "app": run.app.name if run.app else None,
+                }
+            )
+
+        logger.info(
+            "github_check_runs_listed", repo=repo, ref=ref, count=len(run_list)
+        )
+        return run_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="get_check_runs")
+        return _github_config_required_response("get_check_runs")
+
+    except Exception as e:
+        logger.error("github_get_check_runs_failed", error=str(e), repo=repo, ref=ref)
+        return json.dumps({"error": str(e), "repo": repo, "ref": ref})
+
+
+@function_tool
+def get_combined_status(repo: str, ref: str) -> dict[str, Any] | str:
+    """
+    Get combined commit status (legacy status API + check runs summary).
+
+    This provides a quick overview of whether a commit/branch is passing
+    all checks, without needing to look at individual check runs.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        ref: Commit SHA or branch name
+
+    Returns:
+        Combined status with overall state and individual statuses
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        commit = repository.get_commit(ref)
+
+        # Get combined status (legacy API)
+        combined = commit.get_combined_status()
+
+        statuses = []
+        for status in combined.statuses:
+            statuses.append(
+                {
+                    "context": status.context,
+                    "state": status.state,
+                    "description": status.description,
+                    "target_url": status.target_url,
+                }
+            )
+
+        logger.info("github_combined_status_fetched", repo=repo, ref=ref)
+
+        return {
+            "state": combined.state,  # success, pending, failure
+            "total_count": combined.total_count,
+            "statuses": statuses,
+            "sha": combined.sha,
+            "url": combined.url,
+        }
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="get_combined_status")
+        return _github_config_required_response("get_combined_status")
+
+    except Exception as e:
+        logger.error(
+            "github_get_combined_status_failed", error=str(e), repo=repo, ref=ref
+        )
+        return json.dumps({"error": str(e), "repo": repo, "ref": ref})
+
+
+# ============================================================================
+# Deployments
+# ============================================================================
+
+
+@function_tool
+def list_deployments(
+    repo: str,
+    environment: str | None = None,
+    ref: str | None = None,
+    max_results: int = 20,
+) -> list[dict[str, Any]] | str:
+    """
+    List deployments for a repository.
+
+    Useful for correlating incidents with deployment events.
+    Shows when code was deployed to different environments.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        environment: Filter by environment name (e.g., "production", "staging")
+        ref: Filter by ref (branch, tag, SHA)
+        max_results: Maximum deployments to return
+
+    Returns:
+        List of deployments with status and environment info
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+
+        kwargs = {}
+        if environment:
+            kwargs["environment"] = environment
+        if ref:
+            kwargs["ref"] = ref
+
+        deployments = repository.get_deployments(**kwargs)
+
+        deployment_list = []
+        for i, dep in enumerate(deployments):
+            if i >= max_results:
+                break
+
+            # Get latest status for this deployment
+            statuses = list(dep.get_statuses())
+            latest_status = statuses[0] if statuses else None
+
+            deployment_list.append(
+                {
+                    "id": dep.id,
+                    "ref": dep.ref,
+                    "environment": dep.environment,
+                    "description": dep.description,
+                    "created_at": str(dep.created_at),
+                    "creator": dep.creator.login if dep.creator else None,
+                    "sha": dep.sha,
+                    "status": latest_status.state if latest_status else "unknown",
+                    "status_description": (
+                        latest_status.description if latest_status else None
+                    ),
+                }
+            )
+
+        logger.info(
+            "github_deployments_listed", repo=repo, count=len(deployment_list)
+        )
+        return deployment_list
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="list_deployments")
+        return _github_config_required_response("list_deployments")
+
+    except Exception as e:
+        logger.error("github_list_deployments_failed", error=str(e), repo=repo)
+        return json.dumps({"error": str(e), "repo": repo})
+
+
+@function_tool
+def get_deployment_status(repo: str, deployment_id: int) -> dict[str, Any] | str:
+    """
+    Get detailed status history for a specific deployment.
+
+    Shows all status updates for a deployment, useful for understanding
+    deployment progress and any failures.
+
+    Args:
+        repo: Repository (format: "owner/repo")
+        deployment_id: Deployment ID
+
+    Returns:
+        Deployment details with full status history
+    """
+    try:
+        g = _get_github_client()
+        repository = g.get_repo(repo)
+        deployment = repository.get_deployment(deployment_id)
+
+        statuses = []
+        for status in deployment.get_statuses():
+            statuses.append(
+                {
+                    "id": status.id,
+                    "state": status.state,
+                    "description": status.description,
+                    "environment": status.environment,
+                    "created_at": str(status.created_at),
+                    "creator": status.creator.login if status.creator else None,
+                    "log_url": status.log_url,
+                    "environment_url": status.environment_url,
+                }
+            )
+
+        logger.info(
+            "github_deployment_status_fetched",
+            repo=repo,
+            deployment_id=deployment_id,
+        )
+
+        return {
+            "id": deployment.id,
+            "ref": deployment.ref,
+            "sha": deployment.sha,
+            "environment": deployment.environment,
+            "description": deployment.description,
+            "created_at": str(deployment.created_at),
+            "creator": deployment.creator.login if deployment.creator else None,
+            "statuses": statuses,
+        }
+
+    except IntegrationNotConfiguredError:
+        logger.warning("github_not_configured", tool="get_deployment_status")
+        return _github_config_required_response("get_deployment_status")
+
+    except Exception as e:
+        logger.error(
+            "github_get_deployment_status_failed",
+            error=str(e),
+            repo=repo,
+            deployment_id=deployment_id,
+        )
+        return json.dumps({"error": str(e), "repo": repo, "deployment_id": deployment_id})
+
+
 # List of all GitHub tools for registration
 GITHUB_TOOLS = [
     # Repository info
     get_repo_info,
     list_files,
+    get_repo_tree,  # NEW: Full recursive tree structure
     read_github_file,
     search_github_code,
     github_list_contributors,
@@ -1725,4 +2289,13 @@ GITHUB_TOOLS = [
     # GitHub Actions
     trigger_workflow,
     list_workflow_runs,
+    get_workflow_run_jobs,  # NEW: Individual job statuses
+    get_workflow_run_logs,  # NEW: Logs download URL
+    get_failed_workflow_annotations,  # NEW: Error annotations
+    # CI Status / Check Runs
+    get_check_runs,  # NEW: CI check status for commits/PRs
+    get_combined_status,  # NEW: Overall commit status
+    # Deployments
+    list_deployments,  # NEW: Deployment history
+    get_deployment_status,  # NEW: Deployment details
 ]

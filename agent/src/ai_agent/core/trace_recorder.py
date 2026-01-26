@@ -207,7 +207,7 @@ class TraceRecorderHooks(RunHooks):
             )
 
         except Exception as e:
-            logger.warning("trace_recorder_error", event="on_tool_start", error=str(e))
+            logger.warning("trace_recorder_error", hook="on_tool_start", error=str(e))
 
     async def on_tool_end(
         self,
@@ -266,7 +266,7 @@ class TraceRecorderHooks(RunHooks):
                 self.trace.tool_calls.append(record)
 
         except Exception as e:
-            logger.warning("trace_recorder_error", event="on_tool_end", error=str(e))
+            logger.warning("trace_recorder_error", hook="on_tool_end", error=str(e))
 
     async def on_handoff(
         self,
@@ -306,7 +306,7 @@ class TraceRecorderHooks(RunHooks):
             )
 
         except Exception as e:
-            logger.warning("trace_recorder_error", event="on_handoff", error=str(e))
+            logger.warning("trace_recorder_error", hook="on_handoff", error=str(e))
 
     def get_trace_data(self) -> TraceData:
         """Get the complete trace data."""
