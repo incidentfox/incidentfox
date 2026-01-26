@@ -629,6 +629,48 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
         except Exception as e:
             logger.warning("snowflake_tools_load_failed", error=str(e))
 
+    # PostgreSQL tools (if psycopg2 available) - works with RDS, Aurora, etc.
+    if is_integration_available("psycopg2"):
+        try:
+            from .postgres_tools import (
+                postgres_describe_table,
+                postgres_execute_query,
+                postgres_list_tables,
+            )
+
+            tools.extend(
+                [
+                    postgres_list_tables,
+                    postgres_describe_table,
+                    postgres_execute_query,
+                ]
+            )
+            logger.debug("postgres_tools_loaded", count=3)
+        except Exception as e:
+            logger.warning("postgres_tools_load_failed", error=str(e))
+
+    # BigQuery tools (if google-cloud-bigquery available)
+    if is_integration_available("google.cloud.bigquery"):
+        try:
+            from .bigquery_tools import (
+                bigquery_get_table_schema,
+                bigquery_list_datasets,
+                bigquery_list_tables,
+                bigquery_query,
+            )
+
+            tools.extend(
+                [
+                    bigquery_query,
+                    bigquery_list_datasets,
+                    bigquery_list_tables,
+                    bigquery_get_table_schema,
+                ]
+            )
+            logger.debug("bigquery_tools_loaded", count=4)
+        except Exception as e:
+            logger.warning("bigquery_tools_load_failed", error=str(e))
+
     # Coralogix tools (if httpx available - already a dependency)
     if is_integration_available("httpx"):
         try:
@@ -732,6 +774,186 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
             logger.debug("meeting_tools_loaded", count=5)
         except Exception as e:
             logger.warning("meeting_tools_load_failed", error=str(e))
+
+    # PagerDuty tools (uses requests - core dependency)
+    try:
+        from .pagerduty_tools import (
+            pagerduty_calculate_mttr,
+            pagerduty_get_escalation_policy,
+            pagerduty_get_incident,
+            pagerduty_get_incident_log_entries,
+            pagerduty_list_incidents,
+        )
+
+        tools.extend(
+            [
+                pagerduty_get_incident,
+                pagerduty_get_incident_log_entries,
+                pagerduty_list_incidents,
+                pagerduty_get_escalation_policy,
+                pagerduty_calculate_mttr,
+            ]
+        )
+        logger.debug("pagerduty_tools_loaded", count=5)
+    except Exception as e:
+        logger.warning("pagerduty_tools_load_failed", error=str(e))
+
+    # Sentry tools (uses requests - core dependency)
+    try:
+        from .sentry_tools import (
+            sentry_get_issue_details,
+            sentry_get_project_stats,
+            sentry_list_issues,
+            sentry_list_projects,
+            sentry_list_releases,
+            sentry_update_issue_status,
+        )
+
+        tools.extend(
+            [
+                sentry_list_issues,
+                sentry_get_issue_details,
+                sentry_update_issue_status,
+                sentry_list_projects,
+                sentry_get_project_stats,
+                sentry_list_releases,
+            ]
+        )
+        logger.debug("sentry_tools_loaded", count=6)
+    except Exception as e:
+        logger.warning("sentry_tools_load_failed", error=str(e))
+
+    # Splunk tools (if splunk-sdk available)
+    if is_integration_available("splunklib"):
+        try:
+            from .splunk_tools import (
+                splunk_get_alerts,
+                splunk_get_saved_searches,
+                splunk_list_indexes,
+                splunk_search,
+            )
+
+            tools.extend(
+                [
+                    splunk_search,
+                    splunk_list_indexes,
+                    splunk_get_saved_searches,
+                    splunk_get_alerts,
+                ]
+            )
+            logger.debug("splunk_tools_loaded", count=4)
+        except Exception as e:
+            logger.warning("splunk_tools_load_failed", error=str(e))
+
+    # Jira tools (if jira package available)
+    if is_integration_available("jira"):
+        try:
+            from .jira_tools import (
+                jira_add_comment,
+                jira_create_epic,
+                jira_create_issue,
+                jira_get_issue,
+                jira_list_issues,
+                jira_update_issue,
+            )
+
+            tools.extend(
+                [
+                    jira_create_issue,
+                    jira_create_epic,
+                    jira_get_issue,
+                    jira_add_comment,
+                    jira_update_issue,
+                    jira_list_issues,
+                ]
+            )
+            logger.debug("jira_tools_loaded", count=6)
+        except Exception as e:
+            logger.warning("jira_tools_load_failed", error=str(e))
+
+    # GitLab tools (if python-gitlab available)
+    if is_integration_available("gitlab"):
+        try:
+            from .gitlab_tools import (
+                gitlab_add_mr_comment,
+                gitlab_get_merge_requests,
+                gitlab_get_pipeline_jobs,
+                gitlab_get_pipelines,
+                gitlab_list_projects,
+            )
+
+            tools.extend(
+                [
+                    gitlab_list_projects,
+                    gitlab_get_pipelines,
+                    gitlab_get_merge_requests,
+                    gitlab_add_mr_comment,
+                    gitlab_get_pipeline_jobs,
+                ]
+            )
+            logger.debug("gitlab_tools_loaded", count=5)
+        except Exception as e:
+            logger.warning("gitlab_tools_load_failed", error=str(e))
+
+    # Linear tools (uses requests - core dependency)
+    try:
+        from .linear_tools import (
+            linear_create_issue,
+            linear_create_project,
+            linear_get_issue,
+            linear_list_issues,
+        )
+
+        tools.extend(
+            [
+                linear_create_issue,
+                linear_create_project,
+                linear_get_issue,
+                linear_list_issues,
+            ]
+        )
+        logger.debug("linear_tools_loaded", count=4)
+    except Exception as e:
+        logger.warning("linear_tools_load_failed", error=str(e))
+
+    # Notion tools (if notion-client available)
+    if is_integration_available("notion_client"):
+        try:
+            from .notion_tools import (
+                notion_create_page,
+                notion_search,
+                notion_write_content,
+            )
+
+            tools.extend(
+                [
+                    notion_create_page,
+                    notion_write_content,
+                    notion_search,
+                ]
+            )
+            logger.debug("notion_tools_loaded", count=3)
+        except Exception as e:
+            logger.warning("notion_tools_load_failed", error=str(e))
+
+    # Microsoft Teams tools (uses requests - core dependency)
+    try:
+        from .msteams_tools import (
+            send_teams_adaptive_card,
+            send_teams_alert,
+            send_teams_message,
+        )
+
+        tools.extend(
+            [
+                send_teams_message,
+                send_teams_adaptive_card,
+                send_teams_alert,
+            ]
+        )
+        logger.debug("msteams_tools_loaded", count=3)
+    except Exception as e:
+        logger.warning("msteams_tools_load_failed", error=str(e))
 
     # Load MCP tools (dynamically discovered from configured MCP servers)
     try:

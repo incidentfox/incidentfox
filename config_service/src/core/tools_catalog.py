@@ -46,7 +46,10 @@ def _infer_tool_category(tool_name: str) -> str:
         ]
     ):
         return "observability"
-    elif any(k in name_lower for k in ["snowflake", "sql", "query", "database"]):
+    elif any(
+        k in name_lower
+        for k in ["snowflake", "bigquery", "postgres", "sql", "query", "database"]
+    ):
         return "data"
     elif any(k in name_lower for k in ["anomal", "correlate", "detect", "forecast"]):
         return "analytics"
@@ -412,21 +415,21 @@ BUILT_IN_TOOLS_METADATA = [
         "name": "Read Google Doc",
         "description": "Read a Google Doc",
         "category": "other",
-        "required_integrations": ["google_workspace"],
+        "required_integrations": ["google_docs"],
     },
     {
         "id": "search_google_drive",
         "name": "Search Google Drive",
         "description": "Search for files in Google Drive",
         "category": "other",
-        "required_integrations": ["google_workspace"],
+        "required_integrations": ["google_docs"],
     },
     {
         "id": "list_folder_contents",
         "name": "List Folder Contents",
         "description": "List contents of a Google Drive folder",
         "category": "other",
-        "required_integrations": ["google_workspace"],
+        "required_integrations": ["google_docs"],
     },
     # Git tools (local, no integration required)
     {
@@ -1056,6 +1059,28 @@ BUILT_IN_TOOLS_METADATA = [
         "description": "Get schema of a BigQuery table",
         "category": "data",
         "required_integrations": ["bigquery"],
+    },
+    # PostgreSQL tools (works with RDS, Aurora, standard PostgreSQL)
+    {
+        "id": "postgres_list_tables",
+        "name": "PostgreSQL List Tables",
+        "description": "List all tables in a PostgreSQL database schema",
+        "category": "data",
+        "required_integrations": ["postgresql"],
+    },
+    {
+        "id": "postgres_describe_table",
+        "name": "PostgreSQL Describe Table",
+        "description": "Get column details, primary keys, and foreign keys for a PostgreSQL table",
+        "category": "data",
+        "required_integrations": ["postgresql"],
+    },
+    {
+        "id": "postgres_execute_query",
+        "name": "PostgreSQL Execute Query",
+        "description": "Execute SQL query against PostgreSQL and return results",
+        "category": "data",
+        "required_integrations": ["postgresql"],
     },
     # Splunk tools
     {

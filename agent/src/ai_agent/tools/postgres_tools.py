@@ -1,44 +1,97 @@
-"""PostgreSQL tools for database queries and schema inspection."""
+"""PostgreSQL tools for database queries and schema inspection.
 
-import json
-import logging
+Supports:
+- AWS RDS PostgreSQL
+- AWS Aurora PostgreSQL
+- Standard PostgreSQL
+- Any PostgreSQL-compatible database
+"""
 
-logger = logging.getLogger(__name__)
+import os
+from typing import Any
+
+from ..core.config_required import handle_integration_not_configured
+from ..core.errors import ToolExecutionError
+from ..core.execution_context import get_execution_context
+from ..core.integration_errors import IntegrationNotConfiguredError
+from ..core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
-def postgres_list_tables(
-    database: str,
-    schema: str = "public",
-    host: str = "localhost",
-    port: int = 5432,
-    user: str | None = None,
-    password: str | None = None,
-) -> str:
+def _get_postgres_config() -> dict:
+    """Get PostgreSQL configuration from execution context or environment."""
+    # 1. Try execution context (production, thread-safe)
+    context = get_execution_context()
+    if context:
+        config = context.get_integration_config("postgresql")
+        if config and config.get("host") and config.get("database"):
+            return config
+
+    # 2. Try environment variables (dev/testing fallback)
+    if os.getenv("POSTGRES_HOST") and os.getenv("POSTGRES_DATABASE"):
+        return {
+            "host": os.getenv("POSTGRES_HOST"),
+            "port": int(os.getenv("POSTGRES_PORT", "5432")),
+            "database": os.getenv("POSTGRES_DATABASE"),
+            "user": os.getenv("POSTGRES_USER"),
+            "password": os.getenv("POSTGRES_PASSWORD"),
+            "schema": os.getenv("POSTGRES_SCHEMA", "public"),
+            "ssl_mode": os.getenv("POSTGRES_SSL_MODE", "prefer"),
+        }
+
+    # 3. Not configured - raise error
+    raise IntegrationNotConfiguredError(
+        integration_id="postgresql",
+        tool_id="postgres_tools",
+        missing_fields=["host", "database", "user", "password"],
+    )
+
+
+def _get_postgres_connection():
+    """Get PostgreSQL connection using configured credentials."""
+    try:
+        import psycopg2
+    except ImportError:
+        raise ToolExecutionError(
+            "postgres",
+            "psycopg2 not installed. Install with: pip install psycopg2-binary",
+        )
+
+    config = _get_postgres_config()
+
+    # Build connection kwargs
+    conn_kwargs = {
+        "host": config["host"],
+        "port": config.get("port", 5432),
+        "database": config["database"],
+        "user": config.get("user"),
+        "password": config.get("password"),
+    }
+
+    # Add SSL mode if specified
+    ssl_mode = config.get("ssl_mode")
+    if ssl_mode and ssl_mode != "disable":
+        conn_kwargs["sslmode"] = ssl_mode
+
+    return psycopg2.connect(**conn_kwargs)
+
+
+def postgres_list_tables(schema: str | None = None) -> dict[str, Any]:
     """
     List all tables in a PostgreSQL database schema.
 
     Args:
-        database: Database name
-        schema: Schema name (default: public)
-        host: Database host
-        port: Database port
-        user: Database user
-        password: Database password
+        schema: Schema name (uses config default if not specified)
 
     Returns:
-        List of tables as JSON string
+        Dict with table list including names and sizes
     """
     try:
-        import psycopg2
-    except ImportError:
-        return json.dumps(
-            {"error": "psycopg2 is required. Install with: pip install psycopg2-binary"}
-        )
+        config = _get_postgres_config()
+        schema = schema or config.get("schema", "public")
 
-    try:
-        conn = psycopg2.connect(
-            database=database, user=user, password=password, host=host, port=port
-        )
+        conn = _get_postgres_connection()
         cursor = conn.cursor()
 
         query = """
@@ -66,55 +119,43 @@ def postgres_list_tables(
         cursor.close()
         conn.close()
 
-        return json.dumps(
-            {
-                "database": database,
-                "schema": schema,
-                "table_count": len(result),
-                "tables": result,
-            }
-        )
+        logger.info("postgres_tables_listed", schema=schema, count=len(result))
 
+        return {
+            "database": config["database"],
+            "schema": schema,
+            "table_count": len(result),
+            "tables": result,
+            "success": True,
+        }
+
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "postgres_list_tables", "postgresql"
+        )
     except Exception as e:
-        logger.error(f"failed_to_list_postgres_tables: {e}")
-        return json.dumps({"error": str(e)})
+        logger.error("postgres_list_tables_failed", error=str(e))
+        raise ToolExecutionError("postgres_list_tables", str(e), e)
 
 
 def postgres_describe_table(
-    table_name: str,
-    database: str,
-    schema: str = "public",
-    host: str = "localhost",
-    port: int = 5432,
-    user: str | None = None,
-    password: str | None = None,
-) -> str:
+    table_name: str, schema: str | None = None
+) -> dict[str, Any]:
     """
     Get column details for a PostgreSQL table.
 
     Args:
         table_name: Table name
-        database: Database name
-        schema: Schema name (default: public)
-        host: Database host
-        port: Database port
-        user: Database user
-        password: Database password
+        schema: Schema name (uses config default if not specified)
 
     Returns:
-        Table schema as JSON string
+        Dict with table schema including columns, primary keys, and foreign keys
     """
     try:
-        import psycopg2
-    except ImportError:
-        return json.dumps(
-            {"error": "psycopg2 is required. Install with: pip install psycopg2-binary"}
-        )
+        config = _get_postgres_config()
+        schema = schema or config.get("schema", "public")
 
-    try:
-        conn = psycopg2.connect(
-            database=database, user=user, password=password, host=host, port=port
-        )
+        conn = _get_postgres_connection()
         cursor = conn.cursor()
 
         # Get columns
@@ -169,7 +210,7 @@ def postgres_describe_table(
         }
 
         # Get row count
-        count_query = f"SELECT COUNT(*) FROM {schema}.{table_name}"
+        count_query = f'SELECT COUNT(*) FROM "{schema}"."{table_name}"'
         cursor.execute(count_query)
         row_count = cursor.fetchone()[0]
 
@@ -191,58 +232,57 @@ def postgres_describe_table(
         cursor.close()
         conn.close()
 
-        return json.dumps(
-            {
-                "database": database,
-                "schema": schema,
-                "table": table_name,
-                "row_count": row_count,
-                "column_count": len(result),
-                "columns": result,
-            }
+        logger.info(
+            "postgres_table_described",
+            schema=schema,
+            table=table_name,
+            columns=len(result),
         )
 
+        return {
+            "database": config["database"],
+            "schema": schema,
+            "table": table_name,
+            "row_count": row_count,
+            "column_count": len(result),
+            "columns": result,
+            "success": True,
+        }
+
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "postgres_describe_table", "postgresql"
+        )
     except Exception as e:
-        logger.error(f"failed_to_describe_postgres_table: {e}")
-        return json.dumps({"error": str(e), "table": table_name})
+        logger.error("postgres_describe_table_failed", error=str(e), table=table_name)
+        raise ToolExecutionError("postgres_describe_table", str(e), e)
 
 
 def postgres_execute_query(
     query: str,
-    database: str,
-    host: str = "localhost",
-    port: int = 5432,
-    user: str | None = None,
-    password: str | None = None,
     limit: int = 100,
-) -> str:
+) -> dict[str, Any]:
     """
     Execute a SQL query against PostgreSQL and return results.
 
     Args:
         query: SQL query to execute
-        database: Database name
-        host: Database host
-        port: Database port
-        user: Database user
-        password: Database password
-        limit: Maximum number of rows to return
+        limit: Maximum number of rows to return (default: 100)
 
     Returns:
-        Query results as JSON string
+        Dict with query results including rows and column names
     """
     try:
-        import psycopg2
         from psycopg2.extras import RealDictCursor
     except ImportError:
-        return json.dumps(
-            {"error": "psycopg2 is required. Install with: pip install psycopg2-binary"}
+        raise ToolExecutionError(
+            "postgres",
+            "psycopg2 not installed. Install with: pip install psycopg2-binary",
         )
 
     try:
-        conn = psycopg2.connect(
-            database=database, user=user, password=password, host=host, port=port
-        )
+        config = _get_postgres_config()
+        conn = _get_postgres_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
         # Add limit if not present
@@ -274,15 +314,16 @@ def postgres_execute_query(
             cursor.close()
             conn.close()
 
-            return json.dumps(
-                {
-                    "success": True,
-                    "row_count": len(results),
-                    "columns": columns,
-                    "rows": results,
-                },
-                default=str,
+            logger.info(
+                "postgres_query_executed", rows=len(results), query_hash=hash(query)
             )
+
+            return {
+                "success": True,
+                "row_count": len(results),
+                "columns": columns,
+                "rows": results,
+            }
         else:
             # For INSERT/UPDATE/DELETE
             conn.commit()
@@ -290,11 +331,17 @@ def postgres_execute_query(
             cursor.close()
             conn.close()
 
-            return json.dumps({"success": True, "rows_affected": rows_affected})
+            logger.info("postgres_query_executed", rows_affected=rows_affected)
 
+            return {"success": True, "rows_affected": rows_affected}
+
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "postgres_execute_query", "postgresql"
+        )
     except Exception as e:
-        logger.error(f"postgres_query_failed: {e}")
-        return json.dumps({"success": False, "error": str(e)})
+        logger.error("postgres_query_failed", error=str(e))
+        raise ToolExecutionError("postgres_execute_query", str(e), e)
 
 
 # List of all Postgres tools for registration
