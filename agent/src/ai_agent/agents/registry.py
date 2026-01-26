@@ -328,14 +328,10 @@ def create_generic_agent_from_config(agent_name: str, team_config=None) -> Agent
         else config.openai.max_tokens
     )
     reasoning = (
-        getattr(agent_config.model, "reasoning", None)
-        if agent_config.model
-        else None
+        getattr(agent_config.model, "reasoning", None) if agent_config.model else None
     )
     verbosity = (
-        getattr(agent_config.model, "verbosity", None)
-        if agent_config.model
-        else None
+        getattr(agent_config.model, "verbosity", None) if agent_config.model else None
     )
 
     # Create agent with config
