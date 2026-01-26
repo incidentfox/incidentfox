@@ -12,6 +12,7 @@ investigation dashboard UI.
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -292,7 +293,12 @@ class PhaseUpdate:
 
 @dataclass
 class SlackUpdateState:
-    """Tracks state for Slack updates during an investigation."""
+    """
+    Tracks state for Slack updates during an investigation.
+
+    Thread-safe: Uses a lock to protect concurrent access from multiple
+    agent threads (planner, investigation, k8s, etc.).
+    """
 
     channel_id: str
     message_ts: str
@@ -319,6 +325,9 @@ class SlackUpdateState:
     incident_id: str | None = None
     severity: str | None = None
     title: str = "IncidentFox Investigation"
+
+    # Thread synchronization lock for multi-agent access
+    _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def get_active_phases(self) -> dict[str, dict[str, str]]:
         """
@@ -388,19 +397,26 @@ class SlackUpdateHooks(RunHooks):
                 logger.debug("slack_hook_tool_no_category", tool=tool_name)
                 return
 
-            self.state.tool_start_times[tool_name] = time.time()
-            self.state.tool_categories[tool_name] = category
+            # Thread-safe state update
+            should_update = False
+            with self.state._lock:
+                self.state.tool_start_times[tool_name] = time.time()
+                self.state.tool_categories[tool_name] = category
 
-            # Track this category if we haven't seen it yet
-            if category not in self.state.discovered_categories:
-                self.state.discovered_categories.append(category)
+                # Track this category if we haven't seen it yet
+                if category not in self.state.discovered_categories:
+                    self.state.discovered_categories.append(category)
 
-            # Mark phase as running if not already done
-            if self.state.phase_status.get(category) != "done":
-                old_status = self.state.phase_status.get(category)
-                if old_status != "running":
-                    self.state.phase_status[category] = "running"
-                    await self._schedule_update()
+                # Mark phase as running if not already done
+                if self.state.phase_status.get(category) != "done":
+                    old_status = self.state.phase_status.get(category)
+                    if old_status != "running":
+                        self.state.phase_status[category] = "running"
+                        should_update = True
+
+            # Schedule update outside the lock to avoid deadlock
+            if should_update:
+                await self._schedule_update()
 
             logger.debug("slack_hook_tool_start", tool=tool_name, category=category)
 
@@ -418,39 +434,39 @@ class SlackUpdateHooks(RunHooks):
         try:
             tool_name = getattr(tool, "name", str(tool))
 
-            # Get category from tracking (set in on_tool_start)
-            category = self.state.tool_categories.pop(tool_name, None)
-            if not category:
-                # Fallback: try to detect again
-                category = get_category_from_tool(tool)
+            # Thread-safe state update
+            with self.state._lock:
+                # Get category from tracking (set in on_tool_start)
+                category = self.state.tool_categories.pop(tool_name, None)
                 if not category:
-                    category = self._infer_category_from_name(tool_name)
-                if not category:
-                    return
+                    # Fallback: try to detect again
+                    category = get_category_from_tool(tool)
+                    if not category:
+                        category = self._infer_category_from_name(tool_name)
+                    if not category:
+                        return
 
-            # Calculate duration
-            start_time = self.state.tool_start_times.pop(tool_name, None)
-            duration = time.time() - start_time if start_time else None
+                # Calculate duration
+                start_time = self.state.tool_start_times.pop(tool_name, None)
+                duration = time.time() - start_time if start_time else None
 
-            # Extract a brief summary from the result
-            summary = self._extract_summary(tool_name, result)
+                # Extract a brief summary from the result
+                summary = self._extract_summary(tool_name, result)
 
-            # Queue the update
-            update = PhaseUpdate(
-                phase=category,
-                status="done",
-                tool_name=tool_name,
-                summary=summary,
-                duration_seconds=duration,
-            )
-            self.state.pending_tool_updates.append(update)
+                # Queue the update
+                update = PhaseUpdate(
+                    phase=category,
+                    status="done",
+                    tool_name=tool_name,
+                    summary=summary,
+                    duration_seconds=duration,
+                )
+                self.state.pending_tool_updates.append(update)
 
-            # Store phase result
-            if category not in self.state.phase_results:
-                self.state.phase_results[category] = ""
-            self.state.phase_results[
-                category
-            ] += f"\n\n**{tool_name}:**\n{result[:1000]}"
+                # Store phase result
+                if category not in self.state.phase_results:
+                    self.state.phase_results[category] = ""
+                self.state.phase_results[category] += f"\n\n**{tool_name}:**\n{result[:1000]}"
 
             logger.debug(
                 "slack_hook_tool_end",
@@ -527,18 +543,19 @@ class SlackUpdateHooks(RunHooks):
     async def _schedule_update(self) -> None:
         """Schedule a debounced Slack update."""
         async with self._update_lock:
-            now = time.time()
-            time_since_last = now - self.state.last_update_time
+            # Thread-safe read of debounce timing
+            with self.state._lock:
+                now = time.time()
+                time_since_last = now - self.state.last_update_time
+                debounce_seconds = self.state.update_debounce_seconds
 
-            if time_since_last >= self.state.update_debounce_seconds:
+            if time_since_last >= debounce_seconds:
                 # Update immediately
                 await self._send_update()
             elif self._pending_update_task is None or self._pending_update_task.done():
                 # Schedule delayed update
-                delay = self.state.update_debounce_seconds - time_since_last
-                self._pending_update_task = asyncio.create_task(
-                    self._delayed_update(delay)
-                )
+                delay = debounce_seconds - time_since_last
+                self._pending_update_task = asyncio.create_task(self._delayed_update(delay))
 
     async def _delayed_update(self, delay: float) -> None:
         """Wait then send update."""
@@ -551,49 +568,68 @@ class SlackUpdateHooks(RunHooks):
         try:
             from ..integrations.slack_ui import build_investigation_dashboard
 
-            # Determine which phases are complete
-            # A phase is "done" if we've received tool results from it
-            # and there are no more tools running in that phase
-            running_tools_by_category: dict[str, int] = {}
-            for tool_name, category in self.state.tool_categories.items():
-                if tool_name in self.state.tool_start_times:
-                    running_tools_by_category[category] = (
-                        running_tools_by_category.get(category, 0) + 1
-                    )
+            # Thread-safe state snapshot and update
+            phase_complete_callbacks = []
+            with self.state._lock:
+                # Determine which phases are complete
+                # A phase is "done" if we've received tool results from it
+                # and there are no more tools running in that phase
+                running_tools_by_category: dict[str, int] = {}
+                for tool_name, category in self.state.tool_categories.items():
+                    if tool_name in self.state.tool_start_times:
+                        running_tools_by_category[category] = (
+                            running_tools_by_category.get(category, 0) + 1
+                        )
 
-            for update in self.state.pending_tool_updates:
-                # If no more tools running in this category and we have results, mark done
-                if running_tools_by_category.get(update.phase, 0) == 0:
-                    if update.phase in self.state.phase_results:
-                        self.state.phase_status[update.phase] = "done"
-                        if self.on_phase_complete:
-                            await self.on_phase_complete(
-                                update.phase, self.state.phase_results[update.phase]
-                            )
+                for update in self.state.pending_tool_updates:
+                    # If no more tools running in this category and we have results, mark done
+                    if running_tools_by_category.get(update.phase, 0) == 0:
+                        if update.phase in self.state.phase_results:
+                            self.state.phase_status[update.phase] = "done"
+                            if self.on_phase_complete:
+                                # Queue callback to run outside lock
+                                phase_complete_callbacks.append(
+                                    (update.phase, self.state.phase_results[update.phase])
+                                )
 
-            self.state.pending_tool_updates.clear()
+                self.state.pending_tool_updates.clear()
 
-            # Get the active phases for this investigation (dynamic)
-            active_phases = self.state.get_active_phases()
+                # Get the active phases for this investigation (dynamic)
+                active_phases = self.state.get_active_phases()
 
-            # Build and send dashboard with dynamic phases
+                # Snapshot current state for building blocks
+                phase_status_snapshot = dict(self.state.phase_status)
+                title = self.state.title
+                incident_id = self.state.incident_id
+                severity = self.state.severity
+                channel_id = self.state.channel_id
+                message_ts = self.state.message_ts
+
+            # Run callbacks outside the lock to avoid deadlock
+            for phase, results in phase_complete_callbacks:
+                await self.on_phase_complete(phase, results)
+
+            # Build and send dashboard (outside lock - read-only operations)
             blocks = build_investigation_dashboard(
-                phase_status=self.state.phase_status,
-                title=self.state.title,
-                incident_id=self.state.incident_id,
-                severity=self.state.severity,
-                phases=active_phases,  # Pass dynamic phases
+                phase_status=phase_status_snapshot,
+                title=title,
+                incident_id=incident_id,
+                severity=severity,
+                phases=active_phases,
             )
 
             await self.slack_client.chat_update(
-                channel=self.state.channel_id,
-                ts=self.state.message_ts,
+                channel=channel_id,
+                ts=message_ts,
                 text="Investigation in progress...",
                 blocks=blocks,
             )
 
-            self.state.last_update_time = time.time()
-            logger.debug("slack_update_sent", phases=self.state.phase_status)
+            # Update timestamp (thread-safe)
+            with self.state._lock:
+                self.state.last_update_time = time.time()
+
+            logger.debug("slack_update_sent", phases=phase_status_snapshot)
 
         except Exception as e:
             logger.error("slack_update_failed", error=str(e))
@@ -613,43 +649,51 @@ class SlackUpdateHooks(RunHooks):
         try:
             from ..integrations.slack_ui import build_investigation_dashboard
 
-            # Mark all in-progress phases as done
-            for phase in self.state.phase_status:
-                if self.state.phase_status[phase] == "running":
-                    self.state.phase_status[phase] = "done"
+            # Thread-safe state update and snapshot
+            with self.state._lock:
+                # Mark all in-progress phases as done
+                for phase in list(self.state.phase_status.keys()):
+                    if self.state.phase_status[phase] == "running":
+                        self.state.phase_status[phase] = "done"
 
-            # Mark RCA phase as done
-            self.state.phase_status["root_cause_analysis"] = "done"
+                # Mark RCA phase as done
+                self.state.phase_status["root_cause_analysis"] = "done"
 
-            # Ensure RCA is in discovered categories
-            if "root_cause_analysis" not in self.state.discovered_categories:
-                self.state.discovered_categories.append("root_cause_analysis")
+                # Ensure RCA is in discovered categories
+                if "root_cause_analysis" not in self.state.discovered_categories:
+                    self.state.discovered_categories.append("root_cause_analysis")
 
-            # Get the active phases for this investigation (dynamic)
-            active_phases = self.state.get_active_phases()
+                # Get the active phases for this investigation (dynamic)
+                active_phases = self.state.get_active_phases()
 
-            # Build final dashboard with dynamic phases
+                # Snapshot state for building blocks
+                phase_status_snapshot = dict(self.state.phase_status)
+                title = self.state.title
+                incident_id = self.state.incident_id
+                severity = self.state.severity
+                channel_id = self.state.channel_id
+                message_ts = self.state.message_ts
+
+            # Build final dashboard with dynamic phases (outside lock)
             blocks = build_investigation_dashboard(
-                phase_status=self.state.phase_status,
-                title=self.state.title,
-                incident_id=self.state.incident_id,
-                severity=self.state.severity,
+                phase_status=phase_status_snapshot,
+                title=title,
+                incident_id=incident_id,
+                severity=severity,
                 findings=findings,
                 confidence=confidence,
                 show_actions=True,
-                phases=active_phases,  # Pass dynamic phases
+                phases=active_phases,
             )
 
             await self.slack_client.chat_update(
-                channel=self.state.channel_id,
-                ts=self.state.message_ts,
+                channel=channel_id,
+                ts=message_ts,
                 text="Investigation complete",
                 blocks=blocks,
             )
 
-            logger.info(
-                "slack_investigation_finalized", incident_id=self.state.incident_id
-            )
+            logger.info("slack_investigation_finalized", incident_id=self.state.incident_id)
 
         except Exception as e:
             logger.error("slack_finalize_failed", error=str(e))
