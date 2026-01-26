@@ -37,7 +37,12 @@ from pydantic import BaseModel, Field
 from ..core.agent_builder import create_model_settings
 from ..core.config import get_config
 from ..core.config_utils import get_agent_sub_agents
-from ..core.execution_context import get_execution_context, propagate_context_to_thread
+from ..core.execution_context import (
+    get_execution_context,
+    get_execution_hooks,
+    propagate_context_to_thread,
+    propagate_hooks_to_thread,
+)
 from ..core.logging import get_logger
 from ..core.partial_work import summarize_partial_work
 from ..core.stream_events import (
@@ -125,6 +130,7 @@ def _run_agent_in_thread(
     # ContextVars don't automatically propagate to new threads
     parent_stream_id = get_current_stream_id()
     parent_context = get_execution_context()
+    parent_hooks = get_execution_hooks()
     agent_name = getattr(agent, "name", "unknown")
 
     def run_in_new_loop():
@@ -140,6 +146,13 @@ def _run_agent_in_thread(
             # This enables sub-agent tools to access integration configs (GitHub, etc.)
             propagate_context_to_thread(parent_context)
 
+            # Propagate hooks to this thread
+            # This enables Slack progress updates from subagent tool calls
+            propagate_hooks_to_thread(parent_hooks)
+
+            # Get hooks from context for Runner
+            hooks = get_execution_hooks()
+
             try:
                 if parent_stream_id and EventStreamRegistry.stream_exists(
                     parent_stream_id
@@ -147,13 +160,13 @@ def _run_agent_in_thread(
                     # Streaming mode - emit events to the registry
                     result = new_loop.run_until_complete(
                         _run_agent_streamed(
-                            agent, query, max_turns, parent_stream_id, agent_name
+                            agent, query, max_turns, parent_stream_id, agent_name, hooks
                         )
                     )
                 else:
-                    # Non-streaming mode - original behavior
+                    # Non-streaming mode with hooks
                     result = new_loop.run_until_complete(
-                        Runner.run(agent, query, max_turns=max_turns)
+                        Runner.run(agent, query, max_turns=max_turns, hooks=hooks)
                     )
                 result_holder["result"] = result
             except MaxTurnsExceeded as e:
@@ -186,13 +199,26 @@ def _run_agent_in_thread(
 
 
 async def _run_agent_streamed(
-    agent, query: str, max_turns: int, stream_id: str, agent_name: str
+    agent,
+    query: str,
+    max_turns: int,
+    stream_id: str,
+    agent_name: str,
+    hooks: Any = None,
 ) -> Any:
     """
     Run an agent in streaming mode and emit events to the registry.
 
     This enables nested agent visibility - events from sub-agents are
     forwarded to the main SSE stream.
+
+    Args:
+        agent: The agent to run
+        query: The query/task
+        max_turns: Max LLM turns
+        stream_id: Stream ID for event registry
+        agent_name: Name of the agent
+        hooks: Optional RunHooks for progress updates (e.g., SlackUpdateHooks)
     """
     # Push this agent onto the stack for nesting context
     EventStreamRegistry.push_agent(stream_id, agent_name)
@@ -208,7 +234,7 @@ async def _run_agent_streamed(
     tool_sequence = 0
 
     try:
-        result = Runner.run_streamed(agent, query, max_turns=max_turns)
+        result = Runner.run_streamed(agent, query, max_turns=max_turns, hooks=hooks)
 
         async for event in result.stream_events():
             if isinstance(event, RunItemStreamEvent):

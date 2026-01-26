@@ -50,7 +50,9 @@ from ..core.config_utils import get_agent_sub_agents
 from ..core.execution_context import (
     create_mcp_servers_for_subagent,
     get_execution_context,
+    get_execution_hooks,
     propagate_context_to_thread,
+    propagate_hooks_to_thread,
 )
 from ..core.logging import get_logger
 from ..core.partial_work import summarize_partial_work
@@ -122,6 +124,7 @@ def _run_agent_in_thread(
     # ContextVars don't automatically propagate to new threads
     parent_stream_id = get_current_stream_id()
     parent_context = get_execution_context()
+    parent_hooks = get_execution_hooks()
     agent_name = getattr(agent, "name", "unknown")
 
     def run_in_new_loop():
@@ -137,6 +140,10 @@ def _run_agent_in_thread(
             # Propagate execution context to this thread
             # This enables sub-agent tools to access integration configs (GitHub, etc.)
             propagate_context_to_thread(parent_context)
+
+            # Propagate hooks to this thread
+            # This enables Slack progress updates from subagent tool calls
+            propagate_hooks_to_thread(parent_hooks)
 
             try:
                 # Run the async agent execution with MCP support
@@ -200,6 +207,9 @@ async def _run_agent_with_mcp(
     Returns:
         Agent result
     """
+    # Get hooks from execution context for Slack progress updates
+    hooks = get_execution_hooks()
+
     # Try to create MCP servers for this sub-agent
     stack, mcp_servers = await create_mcp_servers_for_subagent(agent_name)
 
@@ -232,6 +242,7 @@ async def _run_agent_with_mcp(
                     parent_stream_id,
                     agent_name,
                     mcp_servers=entered_servers if entered_servers else None,
+                    hooks=hooks,
                 )
             else:
                 # Non-streaming mode with MCP
@@ -240,17 +251,18 @@ async def _run_agent_with_mcp(
                     query,
                     max_turns=max_turns,
                     mcp_servers=entered_servers if entered_servers else None,
+                    hooks=hooks,
                 )
     else:
         # No MCP servers configured for this agent
         if parent_stream_id and EventStreamRegistry.stream_exists(parent_stream_id):
             # Streaming mode - emit events to the registry
             return await _run_agent_streamed(
-                agent, query, max_turns, parent_stream_id, agent_name
+                agent, query, max_turns, parent_stream_id, agent_name, hooks=hooks
             )
         else:
             # Non-streaming mode - original behavior
-            return await Runner.run(agent, query, max_turns=max_turns)
+            return await Runner.run(agent, query, max_turns=max_turns, hooks=hooks)
 
 
 async def _run_agent_streamed(
@@ -260,6 +272,7 @@ async def _run_agent_streamed(
     stream_id: str,
     agent_name: str,
     mcp_servers: list | None = None,
+    hooks: Any = None,
 ) -> Any:
     """
     Run an agent in streaming mode and emit events to the registry.
@@ -274,6 +287,7 @@ async def _run_agent_streamed(
         stream_id: Stream ID for event registry
         agent_name: Name of the agent
         mcp_servers: Optional list of MCP servers for this agent
+        hooks: Optional RunHooks for progress updates (e.g., SlackUpdateHooks)
     """
     # Push this agent onto the stack for nesting context
     EventStreamRegistry.push_agent(stream_id, agent_name)
@@ -292,13 +306,13 @@ async def _run_agent_streamed(
     tool_sequence = 0
 
     try:
-        # Pass MCP servers to Runner if available
+        # Pass MCP servers and hooks to Runner
         if mcp_servers:
             result = Runner.run_streamed(
-                agent, query, max_turns=max_turns, mcp_servers=mcp_servers
+                agent, query, max_turns=max_turns, mcp_servers=mcp_servers, hooks=hooks
             )
         else:
-            result = Runner.run_streamed(agent, query, max_turns=max_turns)
+            result = Runner.run_streamed(agent, query, max_turns=max_turns, hooks=hooks)
 
         async for event in result.stream_events():
             if isinstance(event, RunItemStreamEvent):

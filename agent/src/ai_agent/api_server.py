@@ -1014,6 +1014,7 @@ def create_app() -> Sanic:
                 from .core.execution_context import (
                     clear_execution_context,
                     set_execution_context,
+                    set_execution_hooks,
                 )
 
                 if auth_identity and team_config:
@@ -1026,6 +1027,11 @@ def create_app() -> Sanic:
                             else team_config
                         ),
                     )
+
+                # Store hooks in context for propagation to subagents
+                # This enables tool calls from subagents to appear in Slack dashboard
+                if slack_hooks:
+                    set_execution_hooks(slack_hooks)
 
                 # Create MCP servers if team has them configured (filtered by agent's mcps config)
                 stack, mcp_servers = await _create_mcp_servers_for_request(
