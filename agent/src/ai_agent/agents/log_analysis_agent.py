@@ -347,7 +347,7 @@ def create_log_analysis_agent(
     custom_prompt = None
     if team_cfg:
         try:
-            agent_config = team_cfg.get_agent_config("log_analysis_agent")
+            agent_config = team_cfg.get_agent_config("log_analysis")
             if agent_config and agent_config.prompt:
                 custom_prompt = agent_config.prompt
                 logger.info(
