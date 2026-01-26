@@ -600,7 +600,9 @@ class CoralogixBackend(LogBackend):
         top_patterns = []
         for r in pattern_results:
             # GroupBy result may use different field names - try multiple
-            body = r.get("logRecord.body") or r.get("body") or self._extract_body(r) or ""
+            body = (
+                r.get("logRecord.body") or r.get("body") or self._extract_body(r) or ""
+            )
             top_patterns.append({"pattern": str(body)[:100], "count": r.get("cnt", 0)})
 
         return {
