@@ -149,7 +149,7 @@ class Config(BaseSettings):
     )
 
     @classmethod
-    def from_yaml(cls, path: Path | str) -> "Config":
+    def from_yaml(cls, path: Path | str) -> Config:
         """Load configuration from YAML file."""
         path = Path(path)
         if not path.exists():

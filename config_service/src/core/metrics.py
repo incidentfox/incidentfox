@@ -39,3 +39,12 @@ ADMIN_ACTIONS_TOTAL = Counter(
     "Total admin actions",
     ["action", "outcome"],
 )
+
+FEEDBACK_TOTAL = Counter(
+    "incidentfox_agent_feedback_total",
+    "Total agent feedback received",
+    [
+        "feedback_type",
+        "source",
+    ],  # feedback_type: positive/negative, source: slack/github
+)

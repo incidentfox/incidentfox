@@ -12,7 +12,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from ..logging import get_logger
 from ..output_handler import OutputHandler, OutputResult
@@ -422,7 +423,7 @@ class SlackOutputHandler(OutputHandler):
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "Helpful",
+                            "text": "👍",
                             "emoji": True,
                         },
                         "style": "primary",
@@ -433,7 +434,7 @@ class SlackOutputHandler(OutputHandler):
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "Not Helpful",
+                            "text": "👎",
                             "emoji": True,
                         },
                         "action_id": "feedback_negative",

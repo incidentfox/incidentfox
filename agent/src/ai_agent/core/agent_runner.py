@@ -220,7 +220,7 @@ async def _record_agent_run_complete_sync(
                 status=status,
             )
         return success
-    except asyncio.TimeoutError:
+    except builtins.TimeoutError:
         logger.warning(
             "agent_run_completion_recording_timeout",
             run_id=run_id,

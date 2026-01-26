@@ -5,7 +5,7 @@ Fetches team-specific configuration from the centralized config service.
 """
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 from pydantic import BaseModel, Field
@@ -225,7 +225,7 @@ class TeamLevelConfig(BaseModel):
     remote_agents: dict[str, Any] = Field(default_factory=dict)
 
     # Remote A2A agents (flat dict by agent_id)
-    remote_agents: Dict[str, Any] = Field(default_factory=dict)
+    remote_agents: dict[str, Any] = Field(default_factory=dict)
 
     # Disabled alerts
     alerts: dict[str, list[str]] | None = None

@@ -54,6 +54,89 @@ def _log(event: str, **fields: Any) -> None:
         print(f"{event} {fields}")
 
 
+import re
+
+# Pattern to extract run_id from GitHub comment body
+_INCIDENTFOX_RUN_ID_PATTERN = re.compile(
+    r"<!--\s*incidentfox:run_id=([a-zA-Z0-9]+)\s*-->"
+)
+
+
+def _extract_run_id_from_comment(comment_body: str) -> str | None:
+    """Extract run_id from a GitHub comment body if it contains our marker."""
+    if not comment_body:
+        return None
+    match = _INCIDENTFOX_RUN_ID_PATTERN.search(comment_body)
+    return match.group(1) if match else None
+
+
+async def _check_github_reactions_and_record_feedback(
+    comment_id: int,
+    run_id: str,
+    repo_full_name: str,
+    github_token: str,
+    audit_api: Any,
+) -> None:
+    """
+    Check reactions on a GitHub comment and record feedback.
+
+    GitHub reactions:
+    - +1 (👍) -> positive feedback
+    - -1 (👎) -> negative feedback
+    """
+    import httpx
+
+    url = f"https://api.github.com/repos/{repo_full_name}/issues/comments/{comment_id}/reactions"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                url,
+                headers={
+                    "Authorization": f"Bearer {github_token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+            resp.raise_for_status()
+            reactions = resp.json()
+
+        # Track which users have given feedback to avoid duplicates
+        # (In a full implementation, we'd store which reactions we've already processed)
+        for reaction in reactions:
+            content = reaction.get("content")
+            user = reaction.get("user", {})
+            user_id = user.get("login", "")
+
+            if content == "+1":
+                feedback_type = "positive"
+            elif content == "-1":
+                feedback_type = "negative"
+            else:
+                continue  # Ignore other reactions
+
+            _log(
+                "github_reaction_feedback",
+                run_id=run_id,
+                feedback_type=feedback_type,
+                user_id=user_id,
+                comment_id=comment_id,
+            )
+
+            # Record feedback via audit API
+            if audit_api:
+                await asyncio.to_thread(
+                    audit_api.record_feedback,
+                    run_id=run_id,
+                    feedback=feedback_type,
+                    user_id=user_id,
+                    source="github",
+                )
+
+    except Exception as e:
+        _log("github_reactions_fetch_failed", error=str(e), comment_id=comment_id)
+
+
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
@@ -260,6 +343,51 @@ async def _process_github_webhook(
             )
         except Exception:
             pass  # Fall back to shared agent
+
+        # Check for GitHub reactions on issue_comment events
+        # If the comment contains our marker, check reactions and record feedback
+        if event_type == "issue_comment":
+            comment = payload.get("comment", {})
+            comment_body = comment.get("body", "")
+            comment_id = comment.get("id")
+
+            marker_run_id = _extract_run_id_from_comment(comment_body)
+            if marker_run_id and comment_id:
+                # This comment was posted by IncidentFox - check reactions
+                _log(
+                    "github_comment_with_marker_detected",
+                    correlation_id=correlation_id,
+                    comment_id=comment_id,
+                    marker_run_id=marker_run_id,
+                )
+
+                # Get GitHub token from team config
+                github_config = effective_config.get("integrations", {}).get(
+                    "github", {}
+                )
+                github_token = github_config.get("token") or github_config.get(
+                    "app_private_key"
+                )
+
+                if github_token and audit_api:
+                    await _check_github_reactions_and_record_feedback(
+                        comment_id=comment_id,
+                        run_id=marker_run_id,
+                        repo_full_name=repo_full_name,
+                        github_token=github_token,
+                        audit_api=audit_api,
+                    )
+
+                # Don't trigger agent for comments on our own posts
+                # (unless it's a new comment from a user, not an edit/reaction)
+                action = payload.get("action", "")
+                if action in ("edited", "deleted"):
+                    _log(
+                        "github_comment_skipped_own_comment",
+                        correlation_id=correlation_id,
+                        action=action,
+                    )
+                    return
 
         run_id = __import__("uuid").uuid4().hex
 

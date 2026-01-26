@@ -599,6 +599,39 @@ class AgentToolCall(Base):
     )
 
 
+class AgentFeedback(Base):
+    """
+    User feedback on agent responses.
+
+    Tracks thumbs up/down feedback from Slack buttons and GitHub reactions.
+    """
+
+    __tablename__ = "agent_feedback"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    # Feedback data
+    feedback_type: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # positive, negative
+    source: Mapped[str] = mapped_column(String(32), nullable=False)  # slack, github
+    user_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_agent_feedback_run_id", "run_id"),
+        Index("ix_agent_feedback_type", "feedback_type"),
+        Index("ix_agent_feedback_source", "source"),
+        Index("ix_agent_feedback_created_at", "created_at"),
+    )
+
+
 class ConversationMapping(Base):
     """
     Map external session identifiers to OpenAI conversation IDs.
