@@ -17,8 +17,18 @@ export async function GET(request: NextRequest) {
         headers: { 'Authorization': `Bearer ${token}` },
       }
     );
-    
-    const data = await res.json();
+
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // Backend returned non-JSON response (e.g., "Internal Server Error")
+      return NextResponse.json(
+        { error: text || `Request failed with status ${res.status}` },
+        { status: res.status >= 400 ? res.status : 500 }
+      );
+    }
     return NextResponse.json(data, { status: res.status });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Failed to fetch' }, { status: 500 });

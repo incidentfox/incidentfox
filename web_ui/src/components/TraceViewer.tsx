@@ -85,8 +85,8 @@ export function TraceViewer({ runId, correlationId }: TraceViewerProps) {
           const data = await res.json();
           setTrace(data);
         } else {
-          const errData = await res.json();
-          setError(errData.error || 'Failed to load trace');
+          const errData = await res.json().catch(() => ({}));
+          setError(errData.error || `Failed to load trace (${res.status})`);
         }
       } catch (e: any) {
         setError(e?.message || 'Failed to load trace');
