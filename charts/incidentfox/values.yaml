@@ -326,38 +326,8 @@ services:
       enabled: false  # Single replica, PDB not useful
       minAvailable: 1
 
-  # Self-Learning System (Premium Feature)
-  # Continuous AI improvement through knowledge ingestion, teaching processing, and maintenance
-  selfLearning:
-    enabled: false  # Premium feature - requires enterprise license
-    image: "incidentfox/ai-pipeline:v1.0.0"
-    # Optional: restrict to specific team (leave empty for all teams in org)
-    teamNodeId: ""
-    # Knowledge Base API URL
-    raptorUrl: "http://incidentfox-knowledge-base:8000"
-    # Resource limits for CronJob pods
-    resources:
-      requests:
-        cpu: "200m"
-        memory: "512Mi"
-      limits:
-        cpu: "1000m"
-        memory: "2Gi"
-    # Knowledge Ingestion - pulls docs from external sources
-    ingestion:
-      enabled: true
-      schedule: "0 3 * * *"  # Daily at 3 AM UTC
-      timeoutSeconds: 3600   # 1 hour max
-    # Teaching Processor - processes agent-learned knowledge
-    teaching:
-      enabled: true
-      schedule: "*/30 * * * *"  # Every 30 minutes
-      timeoutSeconds: 1800      # 30 minutes max
-    # Maintenance - tree health, decay, gap detection
-    maintenance:
-      enabled: true
-      schedule: "0 4 * * 0"  # Weekly on Sunday at 4 AM UTC
-      timeoutSeconds: 7200   # 2 hours max
+  # NOTE: Self-Learning CronJobs are created dynamically by the Orchestrator
+  # during team provisioning. See orchestrator/src/.../k8s/cronjobs.py
 
   webUi:
     enabled: true
