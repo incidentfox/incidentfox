@@ -160,8 +160,10 @@ class MaintenanceResponse(BaseModel):
 # ==================== /api/v1 Compatibility Models ====================
 # These models match the old knowledge_base/api_server.py interface
 
+
 class V1SearchRequest(BaseModel):
     """v1 API search request (backward compatible)."""
+
     query: str = Field(..., description="Search query")
     tree: Optional[str] = Field(None, description="Tree name")
     top_k: int = Field(5, description="Number of results")
@@ -170,6 +172,7 @@ class V1SearchRequest(BaseModel):
 
 class V1SearchResult(BaseModel):
     """v1 API search result."""
+
     text: str
     score: float
     layer: int
@@ -179,6 +182,7 @@ class V1SearchResult(BaseModel):
 
 class V1SearchResponse(BaseModel):
     """v1 API search response."""
+
     query: str
     tree: str
     results: List[V1SearchResult]
@@ -187,6 +191,7 @@ class V1SearchResponse(BaseModel):
 
 class V1AnswerRequest(BaseModel):
     """v1 API answer request."""
+
     question: str = Field(..., description="Question to answer")
     tree: Optional[str] = Field(None, description="Tree name")
     top_k: int = Field(5, description="Context chunks to use")
@@ -194,6 +199,7 @@ class V1AnswerRequest(BaseModel):
 
 class V1AnswerResponse(BaseModel):
     """v1 API answer response."""
+
     question: str
     answer: str
     tree: str
@@ -203,6 +209,7 @@ class V1AnswerResponse(BaseModel):
 
 class V1IncidentSearchRequest(BaseModel):
     """v1 API incident search request."""
+
     symptoms: str = Field(..., description="Incident symptoms")
     affected_service: str = Field("", description="Affected service name")
     include_runbooks: bool = Field(True, description="Include runbooks")
@@ -212,6 +219,7 @@ class V1IncidentSearchRequest(BaseModel):
 
 class V1IncidentSearchResponse(BaseModel):
     """v1 API incident search response."""
+
     ok: bool
     symptoms: str
     affected_service: str
@@ -222,6 +230,7 @@ class V1IncidentSearchResponse(BaseModel):
 
 class V1GraphQueryRequest(BaseModel):
     """v1 API graph query request."""
+
     entity_name: str = Field(..., description="Entity to query")
     query_type: str = Field("dependencies", description="Query type")
     max_hops: int = Field(2, description="Max traversal hops")
@@ -229,6 +238,7 @@ class V1GraphQueryRequest(BaseModel):
 
 class V1GraphQueryResponse(BaseModel):
     """v1 API graph query response."""
+
     ok: bool
     entity: str
     query_type: str
@@ -244,17 +254,21 @@ class V1GraphQueryResponse(BaseModel):
 
 class V1TeachRequest(BaseModel):
     """v1 API teach request."""
+
     content: str = Field(..., description="Knowledge to teach")
     knowledge_type: str = Field("procedural", description="Type of knowledge")
     source: str = Field("agent_learning", description="Source")
     confidence: float = Field(0.7, description="Confidence score")
-    related_entities: List[str] = Field(default_factory=list, description="Related services")
+    related_entities: List[str] = Field(
+        default_factory=list, description="Related services"
+    )
     learned_from: str = Field("agent_investigation", description="Learning context")
     task_context: str = Field("", description="Task context")
 
 
 class V1TeachResponse(BaseModel):
     """v1 API teach response."""
+
     status: str
     action: Optional[str] = None
     node_id: Optional[int] = None
@@ -263,6 +277,7 @@ class V1TeachResponse(BaseModel):
 
 class V1SimilarIncidentsRequest(BaseModel):
     """v1 API similar incidents request."""
+
     symptoms: str = Field(..., description="Current symptoms")
     service: str = Field("", description="Service filter")
     limit: int = Field(5, description="Max results")
@@ -270,6 +285,7 @@ class V1SimilarIncidentsRequest(BaseModel):
 
 class V1SimilarIncident(BaseModel):
     """A similar past incident."""
+
     incident_id: Optional[str] = None
     date: Optional[str] = None
     similarity: float = 0.0
@@ -281,6 +297,7 @@ class V1SimilarIncident(BaseModel):
 
 class V1SimilarIncidentsResponse(BaseModel):
     """v1 API similar incidents response."""
+
     ok: bool
     query_symptoms: str
     similar_incidents: List[V1SimilarIncident]
@@ -290,6 +307,7 @@ class V1SimilarIncidentsResponse(BaseModel):
 
 class V1AddDocumentsRequest(BaseModel):
     """v1 API add documents request."""
+
     content: str = Field(..., description="Content to add")
     tree: Optional[str] = Field(None, description="Tree name")
     similarity_threshold: float = Field(0.25, description="Cluster threshold")
@@ -299,6 +317,7 @@ class V1AddDocumentsRequest(BaseModel):
 
 class V1AddDocumentsResponse(BaseModel):
     """v1 API add documents response."""
+
     tree: str
     new_leaves: int
     updated_clusters: int
@@ -830,13 +849,15 @@ class UltimateRAGServer:
 
                 results = []
                 for i, chunk in enumerate(result.chunks):
-                    results.append(V1SearchResult(
-                        text=chunk.text[:2000],
-                        score=chunk.score,
-                        layer=chunk.metadata.get("layer", 0),
-                        node_id=str(chunk.metadata.get("node_id", i)),
-                        is_summary=chunk.metadata.get("layer", 0) > 0,
-                    ))
+                    results.append(
+                        V1SearchResult(
+                            text=chunk.text[:2000],
+                            score=chunk.score,
+                            layer=chunk.metadata.get("layer", 0),
+                            node_id=str(chunk.metadata.get("node_id", i)),
+                            is_summary=chunk.metadata.get("layer", 0) > 0,
+                        )
+                    )
 
                 return V1SearchResponse(
                     query=request.query,
@@ -882,7 +903,11 @@ class UltimateRAGServer:
                 logger.error(f"v1 answer failed: {e}")
                 raise HTTPException(500, str(e))
 
-        @app.post("/api/v1/incident-search", response_model=V1IncidentSearchResponse, tags=["v1-compat"])
+        @app.post(
+            "/api/v1/incident-search",
+            response_model=V1IncidentSearchResponse,
+            tags=["v1-compat"],
+        )
         async def v1_incident_search(request: V1IncidentSearchRequest):
             """
             Search with incident awareness (v1 compatible).
@@ -893,7 +918,9 @@ class UltimateRAGServer:
                 raise HTTPException(503, "Server not initialized")
 
             try:
-                services = [request.affected_service] if request.affected_service else None
+                services = (
+                    [request.affected_service] if request.affected_service else None
+                )
 
                 result = await self.retriever.retrieve_for_incident(
                     symptoms=request.symptoms,
@@ -911,24 +938,30 @@ class UltimateRAGServer:
                     category = metadata.get("category", "general")
 
                     if category == "runbook" and request.include_runbooks:
-                        runbooks.append({
-                            "title": metadata.get("title", ""),
-                            "text": chunk.text[:500],
-                            "relevance": chunk.score,
-                            "runbook_id": metadata.get("runbook_id"),
-                        })
+                        runbooks.append(
+                            {
+                                "title": metadata.get("title", ""),
+                                "text": chunk.text[:500],
+                                "relevance": chunk.score,
+                                "runbook_id": metadata.get("runbook_id"),
+                            }
+                        )
                     elif category == "incident" and request.include_past_incidents:
-                        past_incidents.append({
-                            "incident_id": metadata.get("incident_id"),
-                            "summary": chunk.text[:500],
-                            "resolution": metadata.get("resolution", ""),
-                            "relevance": chunk.score,
-                        })
+                        past_incidents.append(
+                            {
+                                "incident_id": metadata.get("incident_id"),
+                                "summary": chunk.text[:500],
+                                "resolution": metadata.get("resolution", ""),
+                                "relevance": chunk.score,
+                            }
+                        )
                     else:
-                        service_context.append({
-                            "text": chunk.text[:500],
-                            "relevance": chunk.score,
-                        })
+                        service_context.append(
+                            {
+                                "text": chunk.text[:500],
+                                "relevance": chunk.score,
+                            }
+                        )
 
                 return V1IncidentSearchResponse(
                     ok=True,
@@ -950,7 +983,11 @@ class UltimateRAGServer:
                     service_context=[{"text": f"Error: {e}", "relevance": 0}],
                 )
 
-        @app.post("/api/v1/graph/query", response_model=V1GraphQueryResponse, tags=["v1-compat"])
+        @app.post(
+            "/api/v1/graph/query",
+            response_model=V1GraphQueryResponse,
+            tags=["v1-compat"],
+        )
         async def v1_graph_query(request: V1GraphQueryRequest):
             """Query service graph (v1 compatible)."""
             if not self.graph:
@@ -971,14 +1008,22 @@ class UltimateRAGServer:
                         break
 
                 if not entity:
-                    result.hint = f"Entity '{request.entity_name}' not found in knowledge graph"
+                    result.hint = (
+                        f"Entity '{request.entity_name}' not found in knowledge graph"
+                    )
                     return result
 
                 # Get relationships based on query type
-                relationships = self.graph.get_relationships_for_entity(entity.entity_id)
+                relationships = self.graph.get_relationships_for_entity(
+                    entity.entity_id
+                )
 
                 if request.query_type == "dependencies":
-                    deps = [r.target_id for r in relationships if r.relationship_type.value == "depends_on"]
+                    deps = [
+                        r.target_id
+                        for r in relationships
+                        if r.relationship_type.value == "depends_on"
+                    ]
                     result.dependencies = deps
                     result.hint = "Services this entity depends on"
 
@@ -986,7 +1031,10 @@ class UltimateRAGServer:
                     # Reverse lookup - find entities that depend on this one
                     deps = []
                     for rel in self.graph.relationships.values():
-                        if rel.target_id == entity.entity_id and rel.relationship_type.value == "depends_on":
+                        if (
+                            rel.target_id == entity.entity_id
+                            and rel.relationship_type.value == "depends_on"
+                        ):
                             deps.append(rel.source_id)
                     result.dependents = deps
                     result.hint = "Services that depend on this entity"
@@ -1006,20 +1054,24 @@ class UltimateRAGServer:
                     rbs = []
                     for r in relationships:
                         if r.relationship_type.value == "has_runbook":
-                            rbs.append({
-                                "runbook_id": r.target_id,
-                                "properties": r.properties,
-                            })
+                            rbs.append(
+                                {
+                                    "runbook_id": r.target_id,
+                                    "properties": r.properties,
+                                }
+                            )
                     result.runbooks = rbs
 
                 elif request.query_type == "incidents":
                     incs = []
                     for r in relationships:
                         if r.relationship_type.value == "had_incident":
-                            incs.append({
-                                "incident_id": r.target_id,
-                                "properties": r.properties,
-                            })
+                            incs.append(
+                                {
+                                    "incident_id": r.target_id,
+                                    "properties": r.properties,
+                                }
+                            )
                     result.incidents = incs
 
                 elif request.query_type == "blast_radius":
@@ -1035,7 +1087,10 @@ class UltimateRAGServer:
                         visited.add(current)
 
                         for rel in self.graph.relationships.values():
-                            if rel.target_id == current and rel.relationship_type.value == "depends_on":
+                            if (
+                                rel.target_id == current
+                                and rel.relationship_type.value == "depends_on"
+                            ):
                                 affected.add(rel.source_id)
                                 if len(visited) < request.max_hops:
                                     to_visit.append(rel.source_id)
@@ -1074,7 +1129,9 @@ class UltimateRAGServer:
                     "temporal": KnowledgeType.TEMPORAL,
                     "relational": KnowledgeType.RELATIONAL,
                 }
-                knowledge_type = type_map.get(request.knowledge_type, KnowledgeType.PROCEDURAL)
+                knowledge_type = type_map.get(
+                    request.knowledge_type, KnowledgeType.PROCEDURAL
+                )
 
                 result = await self.teaching.teach(
                     knowledge=request.content,
@@ -1097,7 +1154,9 @@ class UltimateRAGServer:
                 elif status == "pending_review":
                     message = "Knowledge queued for human review before adding."
                 elif status == "contradiction":
-                    message = "This may contradict existing knowledge. Queued for review."
+                    message = (
+                        "This may contradict existing knowledge. Queued for review."
+                    )
 
                 return V1TeachResponse(
                     status=status,
@@ -1110,7 +1169,11 @@ class UltimateRAGServer:
                 logger.error(f"v1 teach failed: {e}")
                 raise HTTPException(500, str(e))
 
-        @app.post("/api/v1/similar-incidents", response_model=V1SimilarIncidentsResponse, tags=["v1-compat"])
+        @app.post(
+            "/api/v1/similar-incidents",
+            response_model=V1SimilarIncidentsResponse,
+            tags=["v1-compat"],
+        )
         async def v1_similar_incidents(request: V1SimilarIncidentsRequest):
             """
             Find similar past incidents (v1 compatible).
@@ -1140,20 +1203,27 @@ class UltimateRAGServer:
 
                     metadata = chunk.metadata
                     # Only include if it looks like an incident
-                    if metadata.get("category") == "incident" or "incident" in chunk.text.lower():
-                        similar.append(V1SimilarIncident(
-                            incident_id=metadata.get("incident_id"),
-                            date=metadata.get("date"),
-                            similarity=chunk.score,
-                            symptoms=metadata.get("symptoms", chunk.text[:200]),
-                            root_cause=metadata.get("root_cause", ""),
-                            resolution=metadata.get("resolution", ""),
-                            services_affected=metadata.get("services_affected", []),
-                        ))
+                    if (
+                        metadata.get("category") == "incident"
+                        or "incident" in chunk.text.lower()
+                    ):
+                        similar.append(
+                            V1SimilarIncident(
+                                incident_id=metadata.get("incident_id"),
+                                date=metadata.get("date"),
+                                similarity=chunk.score,
+                                symptoms=metadata.get("symptoms", chunk.text[:200]),
+                                root_cause=metadata.get("root_cause", ""),
+                                resolution=metadata.get("resolution", ""),
+                                services_affected=metadata.get("services_affected", []),
+                            )
+                        )
 
                 hint = None
                 if not similar:
-                    hint = "No similar past incidents found. This may be a new issue type."
+                    hint = (
+                        "No similar past incidents found. This may be a new issue type."
+                    )
 
                 return V1SimilarIncidentsResponse(
                     ok=True,
@@ -1187,13 +1257,15 @@ class UltimateRAGServer:
 
                 chunks = []
                 for chunk in result.chunks:
-                    chunks.append({
-                        "text": chunk.text,
-                        "score": chunk.score,
-                        "layer": chunk.metadata.get("layer", 0),
-                        "is_summary": chunk.metadata.get("layer", 0) > 0,
-                        "source_url": chunk.metadata.get("source"),
-                    })
+                    chunks.append(
+                        {
+                            "text": chunk.text,
+                            "score": chunk.score,
+                            "layer": chunk.metadata.get("layer", 0),
+                            "is_summary": chunk.metadata.get("layer", 0) > 0,
+                            "source_url": chunk.metadata.get("source"),
+                        }
+                    )
 
                 return {
                     "query": query,
@@ -1205,8 +1277,14 @@ class UltimateRAGServer:
                 logger.error(f"v1 retrieve failed: {e}")
                 raise HTTPException(500, str(e))
 
-        @app.post("/api/v1/tree/documents", response_model=V1AddDocumentsResponse, tags=["v1-compat"])
-        async def v1_add_documents(request: V1AddDocumentsRequest, background_tasks: BackgroundTasks):
+        @app.post(
+            "/api/v1/tree/documents",
+            response_model=V1AddDocumentsResponse,
+            tags=["v1-compat"],
+        )
+        async def v1_add_documents(
+            request: V1AddDocumentsRequest, background_tasks: BackgroundTasks
+        ):
             """Add documents to tree (v1 compatible)."""
             if not self.processor or not self.teaching:
                 raise HTTPException(503, "Server not initialized")

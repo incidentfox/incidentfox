@@ -11,9 +11,9 @@ from src.api.routes.integration_schemas import router as integration_schemas_rou
 from src.api.routes.internal import router as internal_router
 from src.api.routes.metrics import router as metrics_router
 from src.api.routes.remediation import router as remediation_router
-from src.api.routes.teaching import router as teaching_router
 from src.api.routes.security import router as security_router
 from src.api.routes.sso import router as sso_router
+from src.api.routes.teaching import router as teaching_router
 from src.api.routes.team import router as team_router
 from src.api.routes.templates import router as templates_router
 from src.api.routes.tool_metadata import router as tool_metadata_router

@@ -64,7 +64,11 @@ class KnowledgeIngestionTask:
             self._raptor_client = httpx.AsyncClient(base_url=raptor_url, timeout=60.0)
 
         self._initialized = True
-        _log("ingestion_task_initialized", org_id=self.org_id, team_node_id=self.team_node_id)
+        _log(
+            "ingestion_task_initialized",
+            org_id=self.org_id,
+            team_node_id=self.team_node_id,
+        )
 
     async def run(self) -> Dict[str, Any]:
         """Run the ingestion task."""
@@ -83,7 +87,9 @@ class KnowledgeIngestionTask:
         if self.sources_config.get("confluence_enabled"):
             try:
                 source_result = await self._ingest_confluence()
-                results["sources_processed"].append({"source": "confluence", **source_result})
+                results["sources_processed"].append(
+                    {"source": "confluence", **source_result}
+                )
                 results["documents_processed"] += source_result.get("documents", 0)
                 results["chunks_created"] += source_result.get("chunks", 0)
             except Exception as e:
@@ -93,7 +99,9 @@ class KnowledgeIngestionTask:
         if self.sources_config.get("github_enabled"):
             try:
                 source_result = await self._ingest_github()
-                results["sources_processed"].append({"source": "github", **source_result})
+                results["sources_processed"].append(
+                    {"source": "github", **source_result}
+                )
                 results["documents_processed"] += source_result.get("documents", 0)
                 results["chunks_created"] += source_result.get("chunks", 0)
             except Exception as e:
@@ -103,7 +111,9 @@ class KnowledgeIngestionTask:
         if self.sources_config.get("incidents_enabled", True):
             try:
                 source_result = await self._ingest_incidents()
-                results["sources_processed"].append({"source": "incidents", **source_result})
+                results["sources_processed"].append(
+                    {"source": "incidents", **source_result}
+                )
                 results["documents_processed"] += source_result.get("documents", 0)
                 results["chunks_created"] += source_result.get("chunks", 0)
             except Exception as e:
@@ -113,7 +123,9 @@ class KnowledgeIngestionTask:
         if self.sources_config.get("grafana_enabled"):
             try:
                 source_result = await self._ingest_grafana()
-                results["sources_processed"].append({"source": "grafana", **source_result})
+                results["sources_processed"].append(
+                    {"source": "grafana", **source_result}
+                )
                 results["documents_processed"] += source_result.get("documents", 0)
                 results["chunks_created"] += source_result.get("chunks", 0)
             except Exception as e:

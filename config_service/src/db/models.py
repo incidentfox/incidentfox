@@ -328,9 +328,7 @@ class PendingKnowledgeTeaching(Base):
     source: Mapped[str] = mapped_column(
         String(128), nullable=False, server_default="agent_learning"
     )
-    confidence: Mapped[float] = mapped_column(
-        nullable=False, server_default="0.7"
-    )
+    confidence: Mapped[float] = mapped_column(nullable=False, server_default="0.7")
     related_services: Mapped[Optional[list]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=True
     )

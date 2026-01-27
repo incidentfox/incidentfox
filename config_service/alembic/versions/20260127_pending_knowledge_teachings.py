@@ -35,7 +35,9 @@ def upgrade() -> None:
             server_default="procedural",
         ),
         # Metadata
-        sa.Column("source", sa.String(128), nullable=False, server_default="agent_learning"),
+        sa.Column(
+            "source", sa.String(128), nullable=False, server_default="agent_learning"
+        ),
         sa.Column("confidence", sa.Float(), nullable=False, server_default="0.7"),
         sa.Column(
             "related_services",

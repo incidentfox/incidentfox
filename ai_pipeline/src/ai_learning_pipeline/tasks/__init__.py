@@ -7,7 +7,7 @@ Pipeline tasks for the Self-Learning System.
 """
 
 from .ingestion import KnowledgeIngestionTask
-from .teaching import TeachingProcessorTask
 from .maintenance import MaintenanceTask
+from .teaching import TeachingProcessorTask
 
 __all__ = ["KnowledgeIngestionTask", "TeachingProcessorTask", "MaintenanceTask"]
