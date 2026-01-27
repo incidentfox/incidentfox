@@ -227,7 +227,8 @@ def list_pull_requests(
             )
 
         logger.info("github_prs_listed", repo=repo, count=len(pr_list))
-        return pr_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"pr_count": len(pr_list), "pull_requests": pr_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="list_pull_requests")
@@ -366,7 +367,8 @@ def list_issues(
             )
 
         logger.info("github_issues_listed", repo=repo, count=len(issue_list))
-        return issue_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"issue_count": len(issue_list), "issues": issue_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="list_issues")
@@ -378,9 +380,7 @@ def list_issues(
 
 
 @function_tool
-def close_issue(
-    repo: str, issue_number: int, comment: str | None = None
-) -> dict[str, Any] | str:
+def close_issue(repo: str, issue_number: int, comment: str | None = None) -> dict[str, Any] | str:
     """
     Close an issue.
 
@@ -414,9 +414,7 @@ def close_issue(
 
 
 @function_tool
-def create_branch(
-    repo: str, branch_name: str, source_branch: str = "main"
-) -> dict[str, Any] | str:
+def create_branch(repo: str, branch_name: str, source_branch: str = "main") -> dict[str, Any] | str:
     """
     Create a new branch.
 
@@ -432,9 +430,7 @@ def create_branch(
         g = _get_github_client()
         repository = g.get_repo(repo)
         source = repository.get_branch(source_branch)
-        ref = repository.create_git_ref(
-            ref=f"refs/heads/{branch_name}", sha=source.commit.sha
-        )
+        ref = repository.create_git_ref(ref=f"refs/heads/{branch_name}", sha=source.commit.sha)
 
         logger.info("github_branch_created", repo=repo, branch=branch_name)
         return {
@@ -483,7 +479,8 @@ def list_branches(repo: str, max_results: int = 30) -> list[dict[str, Any]] | st
             )
 
         logger.info("github_branches_listed", repo=repo, count=len(branch_list))
-        return branch_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"branch_count": len(branch_list), "branches": branch_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="list_branches")
@@ -495,9 +492,7 @@ def list_branches(repo: str, max_results: int = 30) -> list[dict[str, Any]] | st
 
 
 @function_tool
-def list_files(
-    repo: str, path: str = "", ref: str | None = None
-) -> list[dict[str, Any]] | str:
+def list_files(repo: str, path: str = "", ref: str | None = None) -> list[dict[str, Any]] | str:
     """
     List files in a repository directory.
 
@@ -539,7 +534,8 @@ def list_files(
             )
 
         logger.info("github_files_listed", repo=repo, path=path, count=len(file_list))
-        return file_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"file_count": len(file_list), "files": file_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="list_files")
@@ -615,9 +611,7 @@ def trigger_workflow(
         workflow = repository.get_workflow(workflow_id)
         result = workflow.create_dispatch(ref=ref, inputs=inputs_dict)
 
-        logger.info(
-            "github_workflow_triggered", repo=repo, workflow=workflow_id, ref=ref
-        )
+        logger.info("github_workflow_triggered", repo=repo, workflow=workflow_id, ref=ref)
         return {"ok": result, "workflow_id": workflow_id, "ref": ref}
 
     except IntegrationNotConfiguredError:
@@ -679,7 +673,8 @@ def list_workflow_runs(
             )
 
         logger.info("github_workflow_runs_listed", repo=repo, count=len(run_list))
-        return run_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"run_count": len(run_list), "workflow_runs": run_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="list_workflow_runs")
@@ -731,9 +726,7 @@ def github_get_pr(repo: str, pr_number: int) -> dict[str, Any] | str:
         return _github_config_required_response("github_get_pr")
 
     except Exception as e:
-        logger.error(
-            "github_get_pr_failed", error=str(e), repo=repo, pr_number=pr_number
-        )
+        logger.error("github_get_pr_failed", error=str(e), repo=repo, pr_number=pr_number)
         return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
@@ -783,19 +776,16 @@ def github_list_commits(
                     "sha": commit.sha,
                     "short_sha": commit.sha[:7],
                     "message": commit.commit.message,
-                    "author": (
-                        commit.commit.author.name if commit.commit.author else None
-                    ),
+                    "author": (commit.commit.author.name if commit.commit.author else None),
                     "author_login": commit.author.login if commit.author else None,
-                    "date": (
-                        str(commit.commit.author.date) if commit.commit.author else None
-                    ),
+                    "date": (str(commit.commit.author.date) if commit.commit.author else None),
                     "url": commit.html_url,
                 }
             )
 
         logger.info("github_commits_listed", repo=repo, count=len(commit_list))
-        return commit_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"commit_count": len(commit_list), "commits": commit_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="github_list_commits")
@@ -841,9 +831,7 @@ def github_get_commit(repo: str, sha: str) -> dict[str, Any] | str:
             "sha": commit.sha,
             "message": commit.commit.message,
             "author": commit.commit.author.name if commit.commit.author else None,
-            "author_email": (
-                commit.commit.author.email if commit.commit.author else None
-            ),
+            "author_email": (commit.commit.author.email if commit.commit.author else None),
             "author_login": commit.author.login if commit.author else None,
             "date": str(commit.commit.author.date) if commit.commit.author else None,
             "url": commit.html_url,
@@ -955,7 +943,8 @@ def github_list_tags(repo: str, max_results: int = 30) -> list[dict[str, Any]] |
             )
 
         logger.info("github_tags_listed", repo=repo, count=len(tag_list))
-        return tag_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"tag_count": len(tag_list), "tags": tag_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="github_list_tags")
@@ -1001,16 +990,15 @@ def github_list_releases(
                     "draft": release.draft,
                     "prerelease": release.prerelease,
                     "created_at": str(release.created_at),
-                    "published_at": (
-                        str(release.published_at) if release.published_at else None
-                    ),
+                    "published_at": (str(release.published_at) if release.published_at else None),
                     "url": release.html_url,
                     "author": release.author.login if release.author else None,
                 }
             )
 
         logger.info("github_releases_listed", repo=repo, count=len(release_list))
-        return release_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"release_count": len(release_list), "releases": release_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="github_list_releases")
@@ -1063,16 +1051,15 @@ def github_get_pr_files(
             pr_number=pr_number,
             count=len(file_list),
         )
-        return file_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"file_count": len(file_list), "files": file_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="github_get_pr_files")
         return _github_config_required_response("github_get_pr_files")
 
     except Exception as e:
-        logger.error(
-            "github_get_pr_files_failed", error=str(e), repo=repo, pr_number=pr_number
-        )
+        logger.error("github_get_pr_files_failed", error=str(e), repo=repo, pr_number=pr_number)
         return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
@@ -1102,9 +1089,7 @@ def github_list_pr_reviews(repo: str, pr_number: int) -> list[dict[str, Any]] | 
                     "user": review.user.login if review.user else None,
                     "state": review.state,
                     "body": review.body,
-                    "submitted_at": (
-                        str(review.submitted_at) if review.submitted_at else None
-                    ),
+                    "submitted_at": (str(review.submitted_at) if review.submitted_at else None),
                     "url": review.html_url,
                 }
             )
@@ -1115,7 +1100,8 @@ def github_list_pr_reviews(repo: str, pr_number: int) -> list[dict[str, Any]] | 
             pr_number=pr_number,
             count=len(review_list),
         )
-        return review_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"review_count": len(review_list), "reviews": review_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="github_list_pr_reviews")
@@ -1221,7 +1207,8 @@ def github_list_issue_comments(
             issue_number=issue_number,
             count=len(comment_list),
         )
-        return comment_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"comment_count": len(comment_list), "comments": comment_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="github_list_issue_comments")
@@ -1238,9 +1225,7 @@ def github_list_issue_comments(
 
 
 @function_tool
-def github_add_issue_comment(
-    repo: str, issue_number: int, body: str
-) -> dict[str, Any] | str:
+def github_add_issue_comment(repo: str, issue_number: int, body: str) -> dict[str, Any] | str:
     """
     Add a comment to an issue.
 
@@ -1313,16 +1298,12 @@ def github_add_pr_comment(repo: str, pr_number: int, body: str) -> dict[str, Any
         return _github_config_required_response("github_add_pr_comment")
 
     except Exception as e:
-        logger.error(
-            "github_add_pr_comment_failed", error=str(e), repo=repo, pr_number=pr_number
-        )
+        logger.error("github_add_pr_comment_failed", error=str(e), repo=repo, pr_number=pr_number)
         return json.dumps({"error": str(e), "repo": repo, "pr_number": pr_number})
 
 
 @function_tool
-def github_list_contributors(
-    repo: str, max_results: int = 30
-) -> list[dict[str, Any]] | str:
+def github_list_contributors(repo: str, max_results: int = 30) -> list[dict[str, Any]] | str:
     """
     List contributors to a repository.
 
@@ -1351,10 +1332,9 @@ def github_list_contributors(
                 }
             )
 
-        logger.info(
-            "github_contributors_listed", repo=repo, count=len(contributor_list)
-        )
-        return contributor_list
+        logger.info("github_contributors_listed", repo=repo, count=len(contributor_list))
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"contributor_count": len(contributor_list), "contributors": contributor_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="github_list_contributors")
@@ -1414,7 +1394,8 @@ def github_search_issues(
             )
 
         logger.info("github_issues_searched", query=query, count=len(issue_list))
-        return issue_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"issue_count": len(issue_list), "issues": issue_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="github_search_issues")
@@ -1477,7 +1458,8 @@ def github_search_prs(
             )
 
         logger.info("github_prs_searched", query=query, count=len(pr_list))
-        return pr_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"pr_count": len(pr_list), "pull_requests": pr_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="github_search_prs")
@@ -1495,7 +1477,7 @@ def github_search_commits_by_timerange(
     until: str | None = None,
     author: str | None = None,
     max_results: int = 50,
-) -> list[dict[str, Any]] | str:
+) -> dict[str, Any] | str:
     """
     Search commits in a repository by time range.
 
@@ -1507,7 +1489,7 @@ def github_search_commits_by_timerange(
         max_results: Maximum commits to return
 
     Returns:
-        List of commits or config_required response
+        Dict with commit_count and commits list, or config_required response
     """
     try:
         from datetime import datetime
@@ -1543,12 +1525,11 @@ def github_search_commits_by_timerange(
             )
 
         logger.info("github_commits_searched", repo=repo, count=len(commit_list))
-        return commit_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"commit_count": len(commit_list), "commits": commit_list}
 
     except IntegrationNotConfiguredError:
-        logger.warning(
-            "github_not_configured", tool="github_search_commits_by_timerange"
-        )
+        logger.warning("github_not_configured", tool="github_search_commits_by_timerange")
         return _github_config_required_response("github_search_commits_by_timerange")
 
     except Exception as e:
@@ -1586,24 +1567,14 @@ def github_list_pr_commits(
                 {
                     "sha": commit.sha,
                     "message": commit.commit.message,
-                    "author": (
-                        commit.commit.author.name if commit.commit.author else None
-                    ),
-                    "author_email": (
-                        commit.commit.author.email if commit.commit.author else None
-                    ),
-                    "date": (
-                        str(commit.commit.author.date) if commit.commit.author else None
-                    ),
+                    "author": (commit.commit.author.name if commit.commit.author else None),
+                    "author_email": (commit.commit.author.email if commit.commit.author else None),
+                    "date": (str(commit.commit.author.date) if commit.commit.author else None),
                     "url": commit.html_url,
                     "files_changed": (
                         commit.files.totalCount
                         if hasattr(commit.files, "totalCount")
-                        else (
-                            len(list(commit.files))
-                            if hasattr(commit, "files")
-                            else None
-                        )
+                        else (len(list(commit.files)) if hasattr(commit, "files") else None)
                     ),
                 }
             )
@@ -1614,7 +1585,8 @@ def github_list_pr_commits(
             pr_number=pr_number,
             count=len(commit_list),
         )
-        return commit_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"commit_count": len(commit_list), "commits": commit_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="github_list_pr_commits")
@@ -1658,9 +1630,7 @@ def github_create_pr_review(
 
         review = pr.create_review(body=body, event=event)
 
-        logger.info(
-            "github_pr_review_created", repo=repo, pr_number=pr_number, event=event
-        )
+        logger.info("github_pr_review_created", repo=repo, pr_number=pr_number, event=event)
 
         return {
             "id": review.id,
@@ -1839,19 +1809,16 @@ def get_workflow_run_jobs(
                 }
             )
 
-        logger.info(
-            "github_workflow_jobs_listed", repo=repo, run_id=run_id, count=len(job_list)
-        )
-        return job_list
+        logger.info("github_workflow_jobs_listed", repo=repo, run_id=run_id, count=len(job_list))
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"job_count": len(job_list), "jobs": job_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="get_workflow_run_jobs")
         return _github_config_required_response("get_workflow_run_jobs")
 
     except Exception as e:
-        logger.error(
-            "github_get_workflow_jobs_failed", error=str(e), repo=repo, run_id=run_id
-        )
+        logger.error("github_get_workflow_jobs_failed", error=str(e), repo=repo, run_id=run_id)
         return json.dumps({"error": str(e), "repo": repo, "run_id": run_id})
 
 
@@ -1896,16 +1863,12 @@ def get_workflow_run_logs(repo: str, run_id: int) -> dict[str, Any] | str:
         return _github_config_required_response("get_workflow_run_logs")
 
     except Exception as e:
-        logger.error(
-            "github_get_workflow_logs_failed", error=str(e), repo=repo, run_id=run_id
-        )
+        logger.error("github_get_workflow_logs_failed", error=str(e), repo=repo, run_id=run_id)
         return json.dumps({"error": str(e), "repo": repo, "run_id": run_id})
 
 
 @function_tool
-def get_failed_workflow_annotations(
-    repo: str, run_id: int
-) -> list[dict[str, Any]] | str:
+def get_failed_workflow_annotations(repo: str, run_id: int) -> list[dict[str, Any]] | str:
     """
     Get error annotations from a failed workflow run.
 
@@ -1941,9 +1904,7 @@ def get_failed_workflow_annotations(
             job_id = job.get("id")
 
             # Get annotations for each job via check-run API
-            check_url = (
-                f"https://api.github.com/repos/{repo}/check-runs/{job_id}/annotations"
-            )
+            check_url = f"https://api.github.com/repos/{repo}/check-runs/{job_id}/annotations"
             ann_response = requests.get(check_url, headers=headers, timeout=30)
 
             if ann_response.status_code == 200:
@@ -1976,9 +1937,7 @@ def get_failed_workflow_annotations(
         return _github_config_required_response("get_failed_workflow_annotations")
 
     except Exception as e:
-        logger.error(
-            "github_get_annotations_failed", error=str(e), repo=repo, run_id=run_id
-        )
+        logger.error("github_get_annotations_failed", error=str(e), repo=repo, run_id=run_id)
         return json.dumps({"error": str(e), "repo": repo, "run_id": run_id})
 
 
@@ -2038,7 +1997,8 @@ def get_check_runs(
             )
 
         logger.info("github_check_runs_listed", repo=repo, ref=ref, count=len(run_list))
-        return run_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"run_count": len(run_list), "check_runs": run_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="get_check_runs")
@@ -2098,9 +2058,7 @@ def get_combined_status(repo: str, ref: str) -> dict[str, Any] | str:
         return _github_config_required_response("get_combined_status")
 
     except Exception as e:
-        logger.error(
-            "github_get_combined_status_failed", error=str(e), repo=repo, ref=ref
-        )
+        logger.error("github_get_combined_status_failed", error=str(e), repo=repo, ref=ref)
         return json.dumps({"error": str(e), "repo": repo, "ref": ref})
 
 
@@ -2162,14 +2120,13 @@ def list_deployments(
                     "creator": dep.creator.login if dep.creator else None,
                     "sha": dep.sha,
                     "status": latest_status.state if latest_status else "unknown",
-                    "status_description": (
-                        latest_status.description if latest_status else None
-                    ),
+                    "status_description": (latest_status.description if latest_status else None),
                 }
             )
 
         logger.info("github_deployments_listed", repo=repo, count=len(deployment_list))
-        return deployment_list
+        # Return dict instead of bare list to ensure truthy output for OpenAI tracing
+        return {"deployment_count": len(deployment_list), "deployments": deployment_list}
 
     except IntegrationNotConfiguredError:
         logger.warning("github_not_configured", tool="list_deployments")
@@ -2243,9 +2200,7 @@ def get_deployment_status(repo: str, deployment_id: int) -> dict[str, Any] | str
             repo=repo,
             deployment_id=deployment_id,
         )
-        return json.dumps(
-            {"error": str(e), "repo": repo, "deployment_id": deployment_id}
-        )
+        return json.dumps({"error": str(e), "repo": repo, "deployment_id": deployment_id})
 
 
 # List of all GitHub tools for registration
