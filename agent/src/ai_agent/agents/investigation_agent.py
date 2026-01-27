@@ -1390,5 +1390,6 @@ def create_investigation_agent(
             verbosity=verbosity,
         ),
         tools=tools,
-        output_type=InvestigationResult,
+        # Removed output_type=InvestigationResult to allow flexible XML-based output format
+        # defined in system prompt. This enables hot-reloadable output schema via config.
     )

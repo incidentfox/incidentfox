@@ -442,5 +442,6 @@ When you find strong correlation, you've likely found the root cause path!"""
             verbosity=verbosity,
         ),
         tools=tools,
-        output_type=MetricsAnalysis,
+        # Removed output_type=MetricsAnalysis to allow flexible XML-based output format
+        # defined in system prompt. This enables hot-reloadable output schema via config.
     )

@@ -425,5 +425,6 @@ def create_log_analysis_agent(
             verbosity=verbosity,
         ),
         tools=tools,
-        output_type=LogAnalysisResult,
+        # Removed output_type=LogAnalysisResult to allow flexible XML-based output format
+        # defined in system prompt. This enables hot-reloadable output schema via config.
     )

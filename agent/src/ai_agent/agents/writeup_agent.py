@@ -344,5 +344,6 @@ def create_writeup_agent(
             verbosity=verbosity,
         ),
         tools=tools,
-        output_type=PostmortemDocument,
+        # Removed output_type=PostmortemDocument to allow flexible XML-based output format
+        # defined in system prompt. This enables hot-reloadable output schema via config.
     )
