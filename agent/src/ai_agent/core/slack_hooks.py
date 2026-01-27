@@ -374,8 +374,11 @@ class SlackUpdateHooks(RunHooks):
         self.state = state
         self.slack_client = slack_client
         self.on_phase_complete = on_phase_complete
-        self._update_lock = asyncio.Lock()
-        self._pending_update_task: asyncio.Task | None = None
+        # NOTE: We use threading.Lock for cross-event-loop safety.
+        # asyncio.Lock() fails when hooks are called from subagent threads
+        # that run in different event loops. Simple debounce without deferred
+        # updates is sufficient for progress tracking.
+        self._debounce_lock = threading.Lock()
 
     async def on_tool_start(
         self,
@@ -543,28 +546,31 @@ class SlackUpdateHooks(RunHooks):
         return first_line if len(first_line) > 10 else None
 
     async def _schedule_update(self) -> None:
-        """Schedule a debounced Slack update."""
-        async with self._update_lock:
-            # Thread-safe read of debounce timing
+        """Schedule a debounced Slack update.
+
+        Uses threading.Lock for cross-event-loop safety. Subagents run in
+        separate threads with their own event loops, so asyncio.Lock would
+        fail with "bound to a different event loop" error.
+
+        Simple debounce: if enough time has passed, send immediately.
+        Otherwise skip (next event will trigger update anyway).
+        """
+        now = time.time()
+        should_update = False
+
+        # Thread-safe check and update of debounce timing
+        with self._debounce_lock:
             with self.state._lock:
-                now = time.time()
                 time_since_last = now - self.state.last_update_time
                 debounce_seconds = self.state.update_debounce_seconds
 
-            if time_since_last >= debounce_seconds:
-                # Update immediately
-                await self._send_update()
-            elif self._pending_update_task is None or self._pending_update_task.done():
-                # Schedule delayed update
-                delay = debounce_seconds - time_since_last
-                self._pending_update_task = asyncio.create_task(
-                    self._delayed_update(delay)
-                )
+                if time_since_last >= debounce_seconds:
+                    # Mark that we're sending an update
+                    self.state.last_update_time = now
+                    should_update = True
 
-    async def _delayed_update(self, delay: float) -> None:
-        """Wait then send update."""
-        await asyncio.sleep(delay)
-        async with self._update_lock:
+        # Send update outside locks
+        if should_update:
             await self._send_update()
 
     async def _send_update(self) -> None:
