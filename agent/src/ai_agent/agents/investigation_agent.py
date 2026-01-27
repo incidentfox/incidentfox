@@ -124,6 +124,9 @@ def _run_agent_in_thread(
     Returns:
         The agent result, or a partial work summary dict if max_turns was exceeded
     """
+    import time as time_module
+
+    start_time = time_module.time()
     result_holder = {"result": None, "error": None, "partial": False}
 
     # Capture context from parent thread for propagation to child thread
@@ -133,8 +136,24 @@ def _run_agent_in_thread(
     parent_hooks = get_execution_hooks()
     agent_name = getattr(agent, "name", "unknown")
 
+    logger.info(
+        "subagent_thread_starting",
+        agent=agent_name,
+        timeout=timeout,
+        max_turns=max_turns,
+        has_stream_id=bool(parent_stream_id),
+        query_preview=query[:100] if query else "",
+    )
+
     def run_in_new_loop():
         try:
+            thread_start = time_module.time()
+            logger.info(
+                "subagent_thread_entered",
+                agent=agent_name,
+                elapsed_ms=int((thread_start - start_time) * 1000),
+            )
+
             new_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(new_loop)
 
@@ -158,6 +177,11 @@ def _run_agent_in_thread(
                     parent_stream_id
                 ):
                     # Streaming mode - emit events to the registry
+                    logger.info(
+                        "subagent_starting_streamed",
+                        agent=agent_name,
+                        stream_id=parent_stream_id[:16] if parent_stream_id else None,
+                    )
                     result = new_loop.run_until_complete(
                         _run_agent_streamed(
                             agent, query, max_turns, parent_stream_id, agent_name, hooks
@@ -165,9 +189,19 @@ def _run_agent_in_thread(
                     )
                 else:
                     # Non-streaming mode with hooks
+                    logger.info(
+                        "subagent_starting_non_streamed",
+                        agent=agent_name,
+                    )
                     result = new_loop.run_until_complete(
                         Runner.run(agent, query, max_turns=max_turns, hooks=hooks)
                     )
+                logger.info(
+                    "subagent_run_complete",
+                    agent=agent_name,
+                    has_result=result is not None,
+                    elapsed_ms=int((time_module.time() - start_time) * 1000),
+                )
                 result_holder["result"] = result
             except MaxTurnsExceeded as e:
                 # Capture partial work instead of losing it
@@ -186,15 +220,39 @@ def _run_agent_in_thread(
 
     thread = threading.Thread(target=run_in_new_loop, daemon=True)
     thread.start()
+    logger.info("subagent_thread_started", agent=agent_name)
+
     thread.join(timeout=timeout)
+    elapsed = time_module.time() - start_time
 
     if thread.is_alive():
-        logger.warning("subagent_thread_timeout", timeout=timeout)
+        logger.warning(
+            "subagent_thread_timeout",
+            agent=agent_name,
+            timeout=timeout,
+            elapsed_ms=int(elapsed * 1000),
+            thread_alive=True,
+            has_result=result_holder["result"] is not None,
+            has_error=result_holder["error"] is not None,
+        )
         raise TimeoutError(f"Agent execution timed out after {timeout}s")
 
     if result_holder["error"]:
+        logger.error(
+            "subagent_thread_error",
+            agent=agent_name,
+            error=str(result_holder["error"]),
+            elapsed_ms=int(elapsed * 1000),
+        )
         raise result_holder["error"]
 
+    logger.info(
+        "subagent_thread_complete",
+        agent=agent_name,
+        elapsed_ms=int(elapsed * 1000),
+        has_result=result_holder["result"] is not None,
+        is_partial=result_holder["partial"],
+    )
     return result_holder["result"]
 
 
@@ -220,6 +278,26 @@ async def _run_agent_streamed(
         agent_name: Name of the agent
         hooks: Optional RunHooks for progress updates (e.g., SlackUpdateHooks)
     """
+    import time as time_module
+    import traceback
+
+    stream_start_time = time_module.time()
+    last_event_time = stream_start_time
+    event_count = 0
+    tool_call_count = 0
+    tool_output_count = 0
+    message_output_count = 0
+
+    # Track pending tool calls (called but not yet returned)
+    pending_tools: dict[int, dict] = {}
+
+    logger.info(
+        "streamed_agent_starting",
+        agent=agent_name,
+        stream_id=stream_id[:16] if stream_id else None,
+        max_turns=max_turns,
+    )
+
     # Push this agent onto the stack for nesting context
     EventStreamRegistry.push_agent(stream_id, agent_name)
 
@@ -234,73 +312,211 @@ async def _run_agent_streamed(
     tool_sequence = 0
 
     try:
+        logger.info(
+            "streamed_agent_calling_runner",
+            agent=agent_name,
+            elapsed_ms=int((time_module.time() - stream_start_time) * 1000),
+        )
+
         result = Runner.run_streamed(agent, query, max_turns=max_turns, hooks=hooks)
 
+        logger.info(
+            "streamed_agent_runner_returned",
+            agent=agent_name,
+            result_type=type(result).__name__,
+            elapsed_ms=int((time_module.time() - stream_start_time) * 1000),
+        )
+
+        logger.info(
+            "streamed_agent_entering_event_loop",
+            agent=agent_name,
+            elapsed_ms=int((time_module.time() - stream_start_time) * 1000),
+        )
+
         async for event in result.stream_events():
+            now = time_module.time()
+            time_since_last = now - last_event_time
+            last_event_time = now
+            event_count += 1
+
+            event_type_name = type(event).__name__
+
+            # Log ALL events at INFO level for debugging, with time since last event
+            logger.info(
+                "streamed_agent_event",
+                agent=agent_name,
+                event_count=event_count,
+                event_type=event_type_name,
+                time_since_last_ms=int(time_since_last * 1000),
+                elapsed_ms=int((now - stream_start_time) * 1000),
+                pending_tools=len(pending_tools),
+            )
+
             if isinstance(event, RunItemStreamEvent):
                 item = event.item
+                item_type = getattr(item, "type", "unknown")
+
+                # Log item details for ALL item types
+                logger.info(
+                    "streamed_agent_item",
+                    agent=agent_name,
+                    item_type=item_type,
+                    item_class=type(item).__name__,
+                    has_raw_item=hasattr(item, "raw_item"),
+                    elapsed_ms=int((now - stream_start_time) * 1000),
+                )
 
                 # Handle tool call events
-                if hasattr(item, "type"):
-                    if item.type == "tool_call_item":
-                        tool_sequence += 1
-                        # Tool name is in raw_item.name or item.name
-                        raw_item = getattr(item, "raw_item", None)
-                        tool_name = getattr(raw_item, "name", None) or getattr(
-                            item, "name", "unknown"
-                        )
-                        tool_input = ""
-                        if raw_item and hasattr(raw_item, "arguments"):
-                            tool_input = raw_item.arguments
+                if item_type == "tool_call_item":
+                    tool_sequence += 1
+                    tool_call_count += 1
+                    # Tool name is in raw_item.name or item.name
+                    raw_item = getattr(item, "raw_item", None)
+                    tool_name = getattr(raw_item, "name", None) or getattr(
+                        item, "name", "unknown"
+                    )
+                    tool_call_id = getattr(raw_item, "call_id", None) or getattr(
+                        item, "call_id", f"seq_{tool_sequence}"
+                    )
 
-                        # Try to parse input preview
-                        input_preview = ""
-                        if tool_input:
-                            try:
-                                import json as json_mod
+                    # Track this pending tool
+                    pending_tools[tool_sequence] = {
+                        "name": tool_name,
+                        "call_id": tool_call_id,
+                        "started_at": now,
+                    }
 
-                                parsed = json_mod.loads(tool_input)
-                                if isinstance(parsed, dict):
-                                    pairs = [
-                                        f"{k}={repr(v)[:30]}"
-                                        for k, v in list(parsed.items())[:2]
-                                    ]
-                                    input_preview = ", ".join(pairs)
-                            except Exception:
-                                input_preview = str(tool_input)[:50]
+                    logger.info(
+                        "streamed_agent_tool_call",
+                        agent=agent_name,
+                        tool_name=tool_name,
+                        tool_call_id=tool_call_id,
+                        tool_sequence=tool_sequence,
+                        pending_count=len(pending_tools),
+                        elapsed_ms=int((now - stream_start_time) * 1000),
+                    )
+                    tool_input = ""
+                    if raw_item and hasattr(raw_item, "arguments"):
+                        tool_input = raw_item.arguments
 
-                        EventStreamRegistry.emit_event(
-                            stream_id=stream_id,
-                            event_type="tool_started",
-                            agent_name=agent_name,
-                            data={
-                                "tool": tool_name,
-                                "sequence": tool_sequence,
-                                "input_preview": input_preview,
-                            },
-                        )
+                    # Try to parse input preview
+                    input_preview = ""
+                    if tool_input:
+                        try:
+                            import json as json_mod
 
-                    elif item.type == "tool_call_output_item":
-                        output_preview = ""
-                        output = getattr(item, "output", None)
-                        if output:
-                            if isinstance(output, str):
-                                # Use 500 chars to capture full config_required JSON
-                                output_preview = output[:500]
-                            else:
-                                output_preview = str(output)[:500]
+                            parsed = json_mod.loads(tool_input)
+                            if isinstance(parsed, dict):
+                                pairs = [
+                                    f"{k}={repr(v)[:30]}"
+                                    for k, v in list(parsed.items())[:2]
+                                ]
+                                input_preview = ", ".join(pairs)
+                        except Exception:
+                            input_preview = str(tool_input)[:50]
 
-                        EventStreamRegistry.emit_event(
-                            stream_id=stream_id,
-                            event_type="tool_completed",
-                            agent_name=agent_name,
-                            data={
-                                "sequence": tool_sequence,
-                                "output_preview": output_preview,
-                            },
-                        )
+                    EventStreamRegistry.emit_event(
+                        stream_id=stream_id,
+                        event_type="tool_started",
+                        agent_name=agent_name,
+                        data={
+                            "tool": tool_name,
+                            "sequence": tool_sequence,
+                            "input_preview": input_preview,
+                        },
+                    )
+
+                elif item_type == "tool_call_output_item":
+                    tool_output_count += 1
+                    output_preview = ""
+                    output = getattr(item, "output", None)
+                    raw_item = getattr(item, "raw_item", None)
+                    output_call_id = getattr(raw_item, "call_id", None)
+
+                    # Find and remove from pending
+                    completed_tool = None
+                    tool_duration_ms = None
+                    for seq, info in list(pending_tools.items()):
+                        if info.get("call_id") == output_call_id or seq == tool_sequence:
+                            completed_tool = info
+                            tool_duration_ms = int((now - info["started_at"]) * 1000)
+                            del pending_tools[seq]
+                            break
+
+                    if output:
+                        if isinstance(output, str):
+                            # Use 500 chars to capture full config_required JSON
+                            output_preview = output[:500]
+                        else:
+                            output_preview = str(output)[:500]
+
+                    logger.info(
+                        "streamed_agent_tool_output",
+                        agent=agent_name,
+                        tool_name=completed_tool["name"] if completed_tool else "unknown",
+                        tool_call_id=output_call_id,
+                        tool_output_count=tool_output_count,
+                        tool_sequence=tool_sequence,
+                        output_length=len(output) if output else 0,
+                        tool_duration_ms=tool_duration_ms,
+                        pending_count=len(pending_tools),
+                        elapsed_ms=int((now - stream_start_time) * 1000),
+                    )
+
+                    EventStreamRegistry.emit_event(
+                        stream_id=stream_id,
+                        event_type="tool_completed",
+                        agent_name=agent_name,
+                        data={
+                            "sequence": tool_sequence,
+                            "output_preview": output_preview,
+                        },
+                    )
+
+                elif item_type == "message_output_item":
+                    message_output_count += 1
+                    # This is when the agent produces a text response
+                    raw_item = getattr(item, "raw_item", None)
+                    content_preview = ""
+                    if raw_item and hasattr(raw_item, "content"):
+                        content = raw_item.content
+                        if content and len(content) > 0:
+                            first_content = content[0]
+                            if hasattr(first_content, "text"):
+                                content_preview = first_content.text[:100]
+
+                    logger.info(
+                        "streamed_agent_message_output",
+                        agent=agent_name,
+                        message_count=message_output_count,
+                        content_preview=content_preview,
+                        elapsed_ms=int((now - stream_start_time) * 1000),
+                    )
 
         # After streaming completes, result.final_output is available
+        elapsed_total = time_module.time() - stream_start_time
+        logger.info(
+            "streamed_agent_event_loop_complete",
+            agent=agent_name,
+            event_count=event_count,
+            tool_call_count=tool_call_count,
+            tool_output_count=tool_output_count,
+            message_output_count=message_output_count,
+            pending_tools_remaining=len(pending_tools),
+            elapsed_ms=int(elapsed_total * 1000),
+        )
+
+        # Warn if there are still pending tools (indicates a problem)
+        if pending_tools:
+            logger.warning(
+                "streamed_agent_pending_tools_at_end",
+                agent=agent_name,
+                pending_tools=[
+                    {"seq": k, "name": v["name"], "call_id": v["call_id"]}
+                    for k, v in pending_tools.items()
+                ],
+            )
+
         # Emit subagent completed event
         output = result.final_output
         output_preview = ""
@@ -309,6 +525,15 @@ async def _run_agent_streamed(
                 output_preview = output[:200]
             else:
                 output_preview = str(output)[:200]
+
+        logger.info(
+            "streamed_agent_final_output",
+            agent=agent_name,
+            has_output=output is not None,
+            output_type=type(output).__name__ if output else None,
+            output_length=len(str(output)) if output else 0,
+            elapsed_ms=int((time_module.time() - stream_start_time) * 1000),
+        )
 
         EventStreamRegistry.emit_event(
             stream_id=stream_id,
@@ -320,6 +545,24 @@ async def _run_agent_streamed(
         return result
 
     except Exception as e:
+        elapsed_total = time_module.time() - stream_start_time
+        # Get full traceback for debugging
+        tb_str = traceback.format_exc()
+        logger.error(
+            "streamed_agent_error",
+            agent=agent_name,
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=tb_str,
+            event_count=event_count,
+            tool_call_count=tool_call_count,
+            tool_output_count=tool_output_count,
+            pending_tools=[
+                {"seq": k, "name": v["name"], "call_id": v.get("call_id")}
+                for k, v in pending_tools.items()
+            ],
+            elapsed_ms=int(elapsed_total * 1000),
+        )
         EventStreamRegistry.emit_event(
             stream_id=stream_id,
             event_type="subagent_completed",
