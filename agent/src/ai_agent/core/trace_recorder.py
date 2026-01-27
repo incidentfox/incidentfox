@@ -285,6 +285,87 @@ class TraceRecorderHooks(RunHooks):
         except Exception as e:
             logger.warning("trace_recorder_error", hook="on_tool_end", error=str(e))
 
+    async def on_agent_start(
+        self,
+        context: RunContextWrapper,
+        agent: Agent,
+    ) -> None:
+        """Called when an agent starts execution."""
+        try:
+            agent_name = getattr(agent, "name", str(agent))
+            agent_model = getattr(agent, "model", "unknown")
+
+            logger.info(
+                "trace_agent_start",
+                run_id=self.trace.run_id,
+                agent=agent_name,
+                model=agent_model,
+                stack_depth=len(self.trace.agent_stack),
+            )
+
+        except Exception as e:
+            logger.warning("trace_recorder_error", hook="on_agent_start", error=str(e))
+
+    async def on_agent_end(
+        self,
+        context: RunContextWrapper,
+        agent: Agent,
+        output: str,
+    ) -> None:
+        """Called when an agent finishes execution - CRITICAL for debugging stuck agents."""
+        try:
+            agent_name = getattr(agent, "name", str(agent))
+
+            # Analyze the output to understand what happened
+            output_preview = ""
+            output_length = 0
+            output_type = type(output).__name__
+
+            if output is None:
+                output_preview = "<None>"
+            elif isinstance(output, str):
+                output_length = len(output)
+                output_preview = output[:500] if output else "<empty string>"
+            else:
+                output_str = str(output)
+                output_length = len(output_str)
+                output_preview = output_str[:500]
+
+            # Check if output looks like an error or empty
+            is_empty_output = (
+                output is None
+                or (isinstance(output, str) and not output.strip())
+                or output_preview in ["<None>", "<empty string>", "None", ""]
+            )
+
+            logger.info(
+                "trace_agent_end",
+                run_id=self.trace.run_id,
+                agent=agent_name,
+                output_type=output_type,
+                output_length=output_length,
+                output_preview=output_preview[:200],
+                is_empty_output=is_empty_output,
+                tool_calls_made=len(self.trace.tool_calls),
+            )
+
+            # Log a warning if agent ended with empty output after making tool calls
+            if is_empty_output and len(self.trace.tool_calls) > 0:
+                logger.warning(
+                    "agent_ended_with_empty_output_after_tool_calls",
+                    run_id=self.trace.run_id,
+                    agent=agent_name,
+                    tool_calls_made=len(self.trace.tool_calls),
+                    last_tool=(
+                        self.trace.tool_calls[-1].tool_name
+                        if self.trace.tool_calls
+                        else None
+                    ),
+                )
+
+        except Exception as e:
+            logger.warning("trace_recorder_error", hook="on_agent_end", error=str(e))
+
     async def on_handoff(
         self,
         context: RunContextWrapper,
@@ -317,7 +398,7 @@ class TraceRecorderHooks(RunHooks):
                     )
                 )
 
-            logger.debug(
+            logger.info(
                 "trace_handoff",
                 run_id=self.trace.run_id,
                 from_agent=from_name,
@@ -414,6 +495,43 @@ class CompositeHooks(RunHooks):
             hooks: RunHooks instances to compose
         """
         self._hooks: list[RunHooks] = [h for h in hooks if h is not None]
+
+    async def on_agent_start(
+        self,
+        context: RunContextWrapper,
+        agent: Agent,
+    ) -> None:
+        """Forward agent start to all hooks."""
+        for hook in self._hooks:
+            try:
+                if hasattr(hook, "on_agent_start"):
+                    await hook.on_agent_start(context, agent)
+            except Exception as e:
+                logger.warning(
+                    "composite_hook_error",
+                    hook=type(hook).__name__,
+                    event="on_agent_start",
+                    error=str(e),
+                )
+
+    async def on_agent_end(
+        self,
+        context: RunContextWrapper,
+        agent: Agent,
+        output: str,
+    ) -> None:
+        """Forward agent end to all hooks."""
+        for hook in self._hooks:
+            try:
+                if hasattr(hook, "on_agent_end"):
+                    await hook.on_agent_end(context, agent, output)
+            except Exception as e:
+                logger.warning(
+                    "composite_hook_error",
+                    hook=type(hook).__name__,
+                    event="on_agent_end",
+                    error=str(e),
+                )
 
     async def on_tool_start(
         self,
