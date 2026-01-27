@@ -16,7 +16,7 @@ from typing import Any, Generic, TypeVar
 
 # Tracing disabled - using OpenAI's native tracing UI
 import httpx
-from agents import Agent, Runner, RunResult
+from agents import Agent, RunHooks, Runner, RunResult
 from tenacity import (
     RetryError,
     retry,
@@ -29,7 +29,11 @@ from .config import get_config
 from .errors import TimeoutError
 from .logging import get_correlation_id, get_logger, set_correlation_id
 from .metrics import get_metrics_collector
-from .trace_recorder import TraceRecorderHooks, record_trace
+from .trace_recorder import (
+    TraceRecorderHooks,
+    create_composite_hooks,
+    record_trace,
+)
 
 logger = get_logger(__name__)
 
@@ -734,6 +738,168 @@ class AgentRunner(Generic[T]):
                 correlation_id=exec_ctx.correlation_id,
                 metadata=exec_ctx.metadata,
             )
+
+    async def run_streaming(
+        self,
+        input_message: str | list,
+        *,
+        run_id: str,
+        max_turns: int = 200,
+        hooks: RunHooks | None = None,
+        previous_response_id: str | None = None,
+        mcp_servers: list | None = None,
+        org_id: str = "",
+        team_node_id: str = "",
+    ):
+        """
+        Run the agent in streaming mode with trace recording.
+
+        This method returns the StreamedRunResult directly. The caller is responsible
+        for iterating over stream_events() and handling completion/cleanup.
+
+        Key features:
+        - Always adds TraceRecorderHooks for tool call tracing
+        - Composes with caller-provided hooks (e.g., SlackUpdateHooks)
+        - Supports conversation chaining via previous_response_id
+        - MCP servers are passed through (caller manages their lifecycle)
+
+        Args:
+            input_message: User message or multimodal content
+            run_id: Unique run ID for tracing and tracking
+            max_turns: Maximum conversation turns
+            hooks: Optional RunHooks to compose with (e.g., SlackUpdateHooks)
+            previous_response_id: For conversation chaining
+            mcp_servers: Optional list of MCP servers (caller manages lifecycle)
+            org_id: Organization ID for run tracking
+            team_node_id: Team ID for run tracking
+
+        Returns:
+            Tuple of (StreamedRunResult, TraceRecorderHooks)
+            - StreamedRunResult: The streaming result to iterate over
+            - TraceRecorderHooks: For accessing trace data after completion
+        """
+        agent_name = self.agent.name or "unknown"
+        correlation_id = get_correlation_id()
+
+        logger.info(
+            "agent_streaming_started",
+            agent_name=agent_name,
+            run_id=run_id,
+            correlation_id=correlation_id,
+            has_hooks=hooks is not None,
+            has_mcp_servers=bool(mcp_servers),
+            has_previous_response=previous_response_id is not None,
+        )
+
+        # Register run as in-flight for graceful shutdown tracking
+        register_in_flight_run(run_id)
+
+        # Record run start (fire and forget)
+        _track_background_task(
+            _record_agent_run_start(
+                run_id=run_id,
+                agent_name=agent_name,
+                correlation_id=correlation_id,
+                trigger_source="api_stream",
+                trigger_message=str(input_message)[:500] if input_message else "",
+                org_id=org_id,
+                team_node_id=team_node_id,
+            ),
+            task_name="record_agent_run_start_streaming",
+        )
+
+        # Create trace recorder and compose with caller hooks
+        if hooks:
+            trace_hooks, composite_hooks = create_composite_hooks(
+                run_id, agent_name, hooks
+            )
+        else:
+            trace_hooks, composite_hooks = create_composite_hooks(run_id, agent_name)
+
+        # Build run_streamed kwargs
+        run_kwargs = {
+            "max_turns": max_turns,
+            "hooks": composite_hooks,
+        }
+
+        if previous_response_id:
+            run_kwargs["previous_response_id"] = previous_response_id
+
+        if mcp_servers:
+            run_kwargs["mcp_servers"] = mcp_servers
+
+        # Start streaming run
+        streamed_result = self.runner.run_streamed(
+            self.agent,
+            input_message,
+            **run_kwargs,
+        )
+
+        return streamed_result, trace_hooks
+
+    async def complete_streaming_run(
+        self,
+        run_id: str,
+        trace_hooks: TraceRecorderHooks,
+        *,
+        status: str = "completed",
+        duration_seconds: float = 0,
+        output_summary: str = "",
+        error_message: str = "",
+    ) -> None:
+        """
+        Complete a streaming run by recording trace and completion status.
+
+        Call this after the stream has been fully consumed.
+
+        Args:
+            run_id: The run ID
+            trace_hooks: TraceRecorderHooks from run_streaming()
+            status: Final status (completed, failed, timeout)
+            duration_seconds: Total execution time
+            output_summary: Summary of output for display
+            error_message: Error message if failed
+        """
+        agent_name = self.agent.name or "unknown"
+
+        # Get trace data
+        trace_data = trace_hooks.get_trace_data()
+        tool_calls_count = len(trace_data.tool_calls)
+
+        logger.info(
+            "agent_streaming_completed",
+            agent_name=agent_name,
+            run_id=run_id,
+            status=status,
+            duration_seconds=round(duration_seconds, 3),
+            tool_calls_count=tool_calls_count,
+        )
+
+        # Record metrics
+        self.metrics.record_agent_request(
+            agent_name=agent_name,
+            duration=duration_seconds,
+            status=status,
+        )
+
+        # Record run completion SYNCHRONOUSLY
+        await _record_agent_run_complete_sync(
+            run_id=run_id,
+            status=status,
+            duration_seconds=duration_seconds,
+            output_summary=output_summary,
+            error_message=error_message,
+            tool_calls_count=tool_calls_count,
+        )
+
+        # Record detailed tool calls
+        _track_background_task(
+            record_trace(run_id, trace_data),
+            task_name="record_trace_streaming",
+        )
+
+        # Unregister from in-flight tracking
+        unregister_in_flight_run(run_id)
 
     def _extract_token_usage(self, run_result: RunResult) -> dict | None:
         """Extract token usage from run result."""
