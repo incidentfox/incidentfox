@@ -16,7 +16,6 @@ import threading
 import time
 from dataclasses import dataclass
 
-
 # ============================================================================
 # PROBLEM: Current implementation with asyncio.Lock
 # ============================================================================
@@ -35,22 +34,26 @@ class BrokenHooks:
         self._last_update_time = 0.0
         self._update_count = 0
         self._creation_loop = asyncio.get_running_loop()
-        print(f"  [BrokenHooks] Created with lock bound to loop {id(self._creation_loop)}")
+        print(
+            f"  [BrokenHooks] Created with lock bound to loop {id(self._creation_loop)}"
+        )
 
     async def use_lock_in_main_loop(self):
         """Simulates the hook being used in main loop BEFORE subagent starts."""
         async with self._update_lock:
             self._last_update_time = time.time()
             self._update_count += 1
-            print(f"  [BrokenHooks] Initial update in main loop (binds lock)")
+            print("  [BrokenHooks] Initial update in main loop (binds lock)")
 
     async def hold_lock_during_subagent(self, duration: float = 0.2):
         """Hold lock in main loop while subagent runs - creates contention."""
-        print(f"  [BrokenHooks] Main loop acquiring lock (will hold for {duration}s)...")
+        print(
+            f"  [BrokenHooks] Main loop acquiring lock (will hold for {duration}s)..."
+        )
         async with self._update_lock:
-            print(f"  [BrokenHooks] Main loop holding lock...")
+            print("  [BrokenHooks] Main loop holding lock...")
             await asyncio.sleep(duration)
-            print(f"  [BrokenHooks] Main loop releasing lock")
+            print("  [BrokenHooks] Main loop releasing lock")
 
     async def on_tool_end(self, tool_name: str, result: str):
         """Called when a tool finishes - this will fail in different event loop."""
@@ -271,7 +274,7 @@ async def test_hooks_async(hooks_class, name: str):
             None, lambda: run_subagent_in_thread(hooks, tool_names, results)
         )
 
-    print(f"\n  Results:")
+    print("\n  Results:")
     print(f"    Success count: {results.get('success', 0)}/{len(tool_names)}")
     if results.get("error"):
         print(f"    Error: {results['error']}")
