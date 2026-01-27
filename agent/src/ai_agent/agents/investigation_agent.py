@@ -233,7 +233,9 @@ def _run_agent_in_thread(
                             has_final_output=final_output is not None,
                             output_length=len(output_str),
                             is_empty_output=is_empty,
-                            output_preview=output_str[:200] if output_str else "<empty>",
+                            output_preview=(
+                                output_str[:200] if output_str else "<empty>"
+                            ),
                             elapsed_ms=int((time_module.time() - start_time) * 1000),
                         )
 
