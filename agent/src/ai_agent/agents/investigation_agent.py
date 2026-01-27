@@ -222,8 +222,23 @@ def _run_agent_in_thread(
     thread.start()
     logger.info("subagent_thread_started", agent=agent_name)
 
+    # Log before blocking on join to track if we ever reach here
+    logger.info(
+        "subagent_thread_join_waiting",
+        agent=agent_name,
+        timeout=timeout,
+        elapsed_ms=int((time_module.time() - start_time) * 1000),
+    )
     thread.join(timeout=timeout)
     elapsed = time_module.time() - start_time
+
+    # Log immediately after join returns to confirm we didn't hang
+    logger.info(
+        "subagent_thread_join_returned",
+        agent=agent_name,
+        elapsed_ms=int(elapsed * 1000),
+        thread_alive=thread.is_alive(),
+    )
 
     if thread.is_alive():
         logger.warning(
