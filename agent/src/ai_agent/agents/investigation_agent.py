@@ -513,6 +513,54 @@ async def _run_agent_streamed(
                         elapsed_ms=int((now - stream_start_time) * 1000),
                     )
 
+                elif item_type == "reasoning_item":
+                    # CRITICAL: This captures o1 model reasoning events
+                    # "Empty reasoning item" indicates the model had nothing to say
+                    raw_item = getattr(item, "raw_item", None)
+                    reasoning_preview = ""
+                    reasoning_empty = False
+
+                    if raw_item:
+                        # Try to extract reasoning summary
+                        if hasattr(raw_item, "summary"):
+                            summary = raw_item.summary
+                            if summary and len(summary) > 0:
+                                if hasattr(summary[0], "text"):
+                                    reasoning_preview = summary[0].text[:200]
+                            else:
+                                reasoning_empty = True
+                                reasoning_preview = "<empty summary>"
+                        else:
+                            reasoning_preview = "<no summary attribute>"
+
+                    logger.info(
+                        "streamed_agent_reasoning_item",
+                        agent=agent_name,
+                        reasoning_preview=reasoning_preview,
+                        reasoning_empty=reasoning_empty,
+                        elapsed_ms=int((now - stream_start_time) * 1000),
+                    )
+
+                    # Warn about empty reasoning - this often precedes a "stuck" agent
+                    if reasoning_empty:
+                        logger.warning(
+                            "streamed_agent_empty_reasoning",
+                            agent=agent_name,
+                            event_count=event_count,
+                            tool_call_count=tool_call_count,
+                            message="Empty reasoning item detected - agent may be stuck",
+                        )
+
+                else:
+                    # Log any other item types we haven't explicitly handled
+                    logger.info(
+                        "streamed_agent_unknown_item_type",
+                        agent=agent_name,
+                        item_type=item_type,
+                        item_class=type(item).__name__,
+                        elapsed_ms=int((now - stream_start_time) * 1000),
+                    )
+
         # After streaming completes, result.final_output is available
         elapsed_total = time_module.time() - stream_start_time
         logger.info(
@@ -546,14 +594,39 @@ async def _run_agent_streamed(
             else:
                 output_preview = str(output)[:200]
 
+        # Detect if output is empty or trivial
+        output_str = str(output) if output else ""
+        is_empty_output = not output_str.strip() or output is None
+
         logger.info(
             "streamed_agent_final_output",
             agent=agent_name,
             has_output=output is not None,
             output_type=type(output).__name__ if output else None,
-            output_length=len(str(output)) if output else 0,
+            output_length=len(output_str),
+            is_empty_output=is_empty_output,
             elapsed_ms=int((time_module.time() - stream_start_time) * 1000),
         )
+
+        # CRITICAL WARNING: Agent completed but produced no useful output
+        # This indicates the "stuck" agent scenario - model stopped responding
+        if is_empty_output and tool_call_count == 0:
+            logger.error(
+                "streamed_agent_stuck_no_work",
+                agent=agent_name,
+                message="Agent completed with NO tool calls and NO output - likely stuck",
+                event_count=event_count,
+                elapsed_ms=int((time_module.time() - stream_start_time) * 1000),
+            )
+        elif is_empty_output and tool_call_count > 0:
+            logger.warning(
+                "streamed_agent_empty_output_after_tools",
+                agent=agent_name,
+                message="Agent completed with tool calls but empty output",
+                tool_call_count=tool_call_count,
+                tool_output_count=tool_output_count,
+                elapsed_ms=int((time_module.time() - stream_start_time) * 1000),
+            )
 
         EventStreamRegistry.emit_event(
             stream_id=stream_id,
