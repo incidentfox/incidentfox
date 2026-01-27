@@ -129,7 +129,7 @@ def search_coralogix_logs(
     Example queries:
     - List all services: "source logs | groupby $l.subsystemname aggregate count() as cnt | orderby cnt desc | limit 20"
     - Get service errors: "source logs | filter $l.subsystemname == '<service>' | filter $m.severity == ERROR || $m.severity == CRITICAL | limit 50"
-    - Search for text: "source logs | filter $d.logRecord.body contains 'error' | limit 20"
+    - Search for text: "source logs | filter $d.logRecord.body:string ~ 'error' | limit 20"
 
     Args:
         query: DataPrime query string. ALWAYS start with "source logs |"
