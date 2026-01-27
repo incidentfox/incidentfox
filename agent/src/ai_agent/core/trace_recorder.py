@@ -37,6 +37,7 @@ from agents import Agent, RunHooks
 from agents.run_context import RunContextWrapper
 from agents.tool import Tool
 
+from .health_server import update_heartbeat
 from .logging import get_logger
 
 logger = get_logger(__name__)
@@ -237,9 +238,7 @@ class TraceRecorderHooks(RunHooks):
 
                 if record:
                     record.ended_at = datetime.now(UTC)
-                    record.tool_output = (
-                        str(result)[:5000] if result is not None else None
-                    )
+                    record.tool_output = str(result)[:5000] if result is not None else None
                     record.status = "success"
 
                     # Calculate duration
@@ -264,9 +263,7 @@ class TraceRecorderHooks(RunHooks):
                         agent_name=self.current_agent,
                         parent_agent=self.parent_agent,
                         tool_input=None,
-                        tool_output=(
-                            str(result)[:5000] if result is not None else None
-                        ),
+                        tool_output=(str(result)[:5000] if result is not None else None),
                         started_at=datetime.now(UTC),
                         duration_ms=0,
                         status="success",
@@ -357,9 +354,7 @@ class TraceRecorderHooks(RunHooks):
                     agent=agent_name,
                     tool_calls_made=len(self.trace.tool_calls),
                     last_tool=(
-                        self.trace.tool_calls[-1].tool_name
-                        if self.trace.tool_calls
-                        else None
+                        self.trace.tool_calls[-1].tool_name if self.trace.tool_calls else None
                     ),
                 )
 
@@ -489,18 +484,21 @@ class CompositeHooks(RunHooks):
     DIAGNOSTIC: All hook executions are timed to detect hanging hooks.
     """
 
-    def __init__(self, *hooks: RunHooks):
+    def __init__(self, *hooks: RunHooks, run_id: str | None = None):
         """
         Initialize with multiple hooks.
 
         Args:
             hooks: RunHooks instances to compose
+            run_id: Optional run ID for heartbeat tracking
         """
         self._hooks: list[RunHooks] = [h for h in hooks if h is not None]
+        self._run_id = run_id
         logger.info(
             "composite_hooks_initialized",
             hook_count=len(self._hooks),
             hook_types=[type(h).__name__ for h in self._hooks],
+            run_id=run_id,
         )
 
     async def on_agent_start(
@@ -513,6 +511,14 @@ class CompositeHooks(RunHooks):
 
         agent_name = getattr(agent, "name", "unknown")
         event_start = time.time()
+
+        # Update heartbeat to keep health server responsive
+        update_heartbeat(
+            status="agent_running",
+            operation=f"agent:{agent_name}:start",
+            run_id=self._run_id,
+        )
+
         logger.info(
             "composite_hook_event_start",
             hook_event="on_agent_start",
@@ -567,6 +573,14 @@ class CompositeHooks(RunHooks):
         agent_name = getattr(agent, "name", "unknown")
         event_start = time.time()
         output_preview = str(output)[:100] if output else "<None>"
+
+        # Update heartbeat to keep health server responsive
+        update_heartbeat(
+            status="agent_running",
+            operation=f"agent:{agent_name}:end",
+            run_id=self._run_id,
+        )
+
         logger.info(
             "composite_hook_event_start",
             hook_event="on_agent_end",
@@ -621,7 +635,13 @@ class CompositeHooks(RunHooks):
 
         tool_name = getattr(tool, "name", str(tool))
         agent_name = getattr(agent, "name", "unknown")
-        event_start = time.time()
+
+        # Update heartbeat to keep health server responsive
+        update_heartbeat(
+            status="tool_running",
+            operation=f"tool:{tool_name}:start:{agent_name}",
+            run_id=self._run_id,
+        )
 
         for i, hook in enumerate(self._hooks):
             hook_name = type(hook).__name__
@@ -660,7 +680,13 @@ class CompositeHooks(RunHooks):
 
         tool_name = getattr(tool, "name", str(tool))
         agent_name = getattr(agent, "name", "unknown")
-        event_start = time.time()
+
+        # Update heartbeat to keep health server responsive
+        update_heartbeat(
+            status="tool_running",
+            operation=f"tool:{tool_name}:end:{agent_name}",
+            run_id=self._run_id,
+        )
 
         for i, hook in enumerate(self._hooks):
             hook_name = type(hook).__name__
@@ -699,6 +725,14 @@ class CompositeHooks(RunHooks):
         from_name = getattr(from_agent, "name", "unknown")
         to_name = getattr(to_agent, "name", "unknown")
         event_start = time.time()
+
+        # Update heartbeat to keep health server responsive
+        update_heartbeat(
+            status="agent_running",
+            operation=f"handoff:{from_name}:{to_name}",
+            run_id=self._run_id,
+        )
+
         logger.info(
             "composite_hook_event_start",
             hook_event="on_handoff",
@@ -773,5 +807,5 @@ def create_composite_hooks(
         return trace_hooks, trace_hooks
 
     # Compose trace hooks with other hooks
-    composite = CompositeHooks(trace_hooks, *valid_other_hooks)
+    composite = CompositeHooks(trace_hooks, *valid_other_hooks, run_id=run_id)
     return trace_hooks, composite
