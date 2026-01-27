@@ -1554,7 +1554,10 @@ def create_app() -> Sanic:
 
                         # Create execution context with run_id in metadata
                         # AgentRunner.run() will use this run_id for tracing
-                        exec_metadata = {**context_data.get("metadata", {}), "run_id": run_id}
+                        exec_metadata = {
+                            **context_data.get("metadata", {}),
+                            "run_id": run_id,
+                        }
                         exec_context = ExecutionContext(
                             correlation_id=request.ctx.correlation_id,
                             metadata=exec_metadata,
@@ -1588,7 +1591,10 @@ def create_app() -> Sanic:
 
                     # Create execution context with run_id in metadata
                     # AgentRunner.run() will use this run_id for tracing
-                    exec_metadata = {**context_data.get("metadata", {}), "run_id": run_id}
+                    exec_metadata = {
+                        **context_data.get("metadata", {}),
+                        "run_id": run_id,
+                    }
                     exec_context = ExecutionContext(
                         correlation_id=request.ctx.correlation_id,
                         metadata=exec_metadata,
