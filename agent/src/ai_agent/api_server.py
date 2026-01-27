@@ -29,6 +29,8 @@ from .core.agent_runner import (
     get_agent_registry,
     get_in_flight_runs,
     mark_shutdown_in_progress,
+    register_in_flight_run,
+    unregister_in_flight_run,
 )
 from .core.auth import AuthError, authenticate_request
 from .core.config import get_config
@@ -1049,6 +1051,9 @@ def create_app() -> Sanic:
                 # Initialize trace_hooks before try block so it's available in exception handlers
                 trace_hooks = None
 
+                # Register run for graceful shutdown tracking
+                register_in_flight_run(run_id)
+
                 try:
                     # Build session ID and look up/create OpenAI conversation_id
                     session_id = _build_session_id(context_data)
@@ -1462,6 +1467,9 @@ def create_app() -> Sanic:
                         status=200,
                     )
                 finally:
+                    # Unregister from graceful shutdown tracking
+                    unregister_in_flight_run(run_id)
+
                     # Always clear execution context after agent run
                     if auth_identity and team_config:
                         clear_execution_context()
@@ -1476,6 +1484,9 @@ def create_app() -> Sanic:
                 "Configure notifications.incidentio_output.slack_channel_id or "
                 "notifications.default_slack_channel_id in team config to enable Slack output.",
             )
+
+            # Generate run_id for tracking (will be passed to AgentRunner via metadata)
+            run_id = str(uuid.uuid4())
 
             # Set team execution context for integration access
             from .core.execution_context import (
@@ -1549,10 +1560,15 @@ def create_app() -> Sanic:
                             metadata=context_data.get("metadata", {}),
                         )
 
-                        # Create execution context
+                        # Create execution context with run_id in metadata
+                        # AgentRunner.run() will use this run_id for tracing
+                        exec_metadata = {
+                            **context_data.get("metadata", {}),
+                            "run_id": run_id,
+                        }
                         exec_context = ExecutionContext(
                             correlation_id=request.ctx.correlation_id,
-                            metadata=context_data.get("metadata", {}),
+                            metadata=exec_metadata,
                             timeout=timeout,
                             max_turns=max_turns if isinstance(max_turns, int) else None,
                         )
@@ -1581,10 +1597,15 @@ def create_app() -> Sanic:
                         metadata=context_data.get("metadata", {}),
                     )
 
-                    # Create execution context
+                    # Create execution context with run_id in metadata
+                    # AgentRunner.run() will use this run_id for tracing
+                    exec_metadata = {
+                        **context_data.get("metadata", {}),
+                        "run_id": run_id,
+                    }
                     exec_context = ExecutionContext(
                         correlation_id=request.ctx.correlation_id,
-                        metadata=context_data.get("metadata", {}),
+                        metadata=exec_metadata,
                         timeout=timeout,
                         max_turns=max_turns if isinstance(max_turns, int) else None,
                     )
@@ -1627,6 +1648,7 @@ def create_app() -> Sanic:
             response_data = {
                 "success": result.success,
                 "agent": agent_name,
+                "run_id": run_id,  # Include run_id so client can fetch tool calls
                 "correlation_id": result.correlation_id,
                 "duration_seconds": result.duration_seconds,
             }
@@ -1838,6 +1860,9 @@ def create_app() -> Sanic:
 
                 # Initialize trace_hooks before try block so it's available in exception handlers
                 trace_hooks = None
+
+                # Register run for graceful shutdown tracking
+                register_in_flight_run(run_id)
 
                 try:
                     # Send agent_started event
@@ -2168,6 +2193,9 @@ def create_app() -> Sanic:
                     )
 
                 finally:
+                    # Unregister from graceful shutdown tracking
+                    unregister_in_flight_run(run_id)
+
                     # Clean up stream registry
                     EventStreamRegistry.close_stream(stream_id)
                     set_current_stream_id(None)
