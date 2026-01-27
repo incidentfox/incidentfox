@@ -157,6 +157,156 @@ class MaintenanceResponse(BaseModel):
     tasks_created: int
 
 
+# ==================== /api/v1 Compatibility Models ====================
+# These models match the old knowledge_base/api_server.py interface
+
+class V1SearchRequest(BaseModel):
+    """v1 API search request (backward compatible)."""
+    query: str = Field(..., description="Search query")
+    tree: Optional[str] = Field(None, description="Tree name")
+    top_k: int = Field(5, description="Number of results")
+    include_summaries: bool = Field(True, description="Include parent summaries")
+
+
+class V1SearchResult(BaseModel):
+    """v1 API search result."""
+    text: str
+    score: float
+    layer: int
+    node_id: Optional[str] = None
+    is_summary: bool = False
+
+
+class V1SearchResponse(BaseModel):
+    """v1 API search response."""
+    query: str
+    tree: str
+    results: List[V1SearchResult]
+    total_nodes_searched: int
+
+
+class V1AnswerRequest(BaseModel):
+    """v1 API answer request."""
+    question: str = Field(..., description="Question to answer")
+    tree: Optional[str] = Field(None, description="Tree name")
+    top_k: int = Field(5, description="Context chunks to use")
+
+
+class V1AnswerResponse(BaseModel):
+    """v1 API answer response."""
+    question: str
+    answer: str
+    tree: str
+    context_chunks: List[str]
+    confidence: Optional[float] = None
+
+
+class V1IncidentSearchRequest(BaseModel):
+    """v1 API incident search request."""
+    symptoms: str = Field(..., description="Incident symptoms")
+    affected_service: str = Field("", description="Affected service name")
+    include_runbooks: bool = Field(True, description="Include runbooks")
+    include_past_incidents: bool = Field(True, description="Include past incidents")
+    top_k: int = Field(5, description="Number of results")
+
+
+class V1IncidentSearchResponse(BaseModel):
+    """v1 API incident search response."""
+    ok: bool
+    symptoms: str
+    affected_service: str
+    runbooks: List[Dict[str, Any]]
+    past_incidents: List[Dict[str, Any]]
+    service_context: List[Dict[str, Any]]
+
+
+class V1GraphQueryRequest(BaseModel):
+    """v1 API graph query request."""
+    entity_name: str = Field(..., description="Entity to query")
+    query_type: str = Field("dependencies", description="Query type")
+    max_hops: int = Field(2, description="Max traversal hops")
+
+
+class V1GraphQueryResponse(BaseModel):
+    """v1 API graph query response."""
+    ok: bool
+    entity: str
+    query_type: str
+    dependencies: Optional[List[str]] = None
+    dependents: Optional[List[str]] = None
+    owner: Optional[Dict[str, Any]] = None
+    runbooks: Optional[List[Dict[str, Any]]] = None
+    incidents: Optional[List[Dict[str, Any]]] = None
+    blast_radius: Optional[Dict[str, Any]] = None
+    affected_services: Optional[List[str]] = None
+    hint: Optional[str] = None
+
+
+class V1TeachRequest(BaseModel):
+    """v1 API teach request."""
+    content: str = Field(..., description="Knowledge to teach")
+    knowledge_type: str = Field("procedural", description="Type of knowledge")
+    source: str = Field("agent_learning", description="Source")
+    confidence: float = Field(0.7, description="Confidence score")
+    related_entities: List[str] = Field(default_factory=list, description="Related services")
+    learned_from: str = Field("agent_investigation", description="Learning context")
+    task_context: str = Field("", description="Task context")
+
+
+class V1TeachResponse(BaseModel):
+    """v1 API teach response."""
+    status: str
+    action: Optional[str] = None
+    node_id: Optional[int] = None
+    message: Optional[str] = None
+
+
+class V1SimilarIncidentsRequest(BaseModel):
+    """v1 API similar incidents request."""
+    symptoms: str = Field(..., description="Current symptoms")
+    service: str = Field("", description="Service filter")
+    limit: int = Field(5, description="Max results")
+
+
+class V1SimilarIncident(BaseModel):
+    """A similar past incident."""
+    incident_id: Optional[str] = None
+    date: Optional[str] = None
+    similarity: float = 0.0
+    symptoms: str = ""
+    root_cause: str = ""
+    resolution: str = ""
+    services_affected: List[str] = []
+
+
+class V1SimilarIncidentsResponse(BaseModel):
+    """v1 API similar incidents response."""
+    ok: bool
+    query_symptoms: str
+    similar_incidents: List[V1SimilarIncident]
+    total_found: int
+    hint: Optional[str] = None
+
+
+class V1AddDocumentsRequest(BaseModel):
+    """v1 API add documents request."""
+    content: str = Field(..., description="Content to add")
+    tree: Optional[str] = Field(None, description="Tree name")
+    similarity_threshold: float = Field(0.25, description="Cluster threshold")
+    auto_rebuild_upper: bool = Field(True, description="Rebuild upper layers")
+    save: bool = Field(True, description="Save tree to disk")
+
+
+class V1AddDocumentsResponse(BaseModel):
+    """v1 API add documents response."""
+    tree: str
+    new_leaves: int
+    updated_clusters: int
+    created_clusters: int
+    total_nodes_after: int
+    message: str
+
+
 # ==================== API Server ====================
 
 
@@ -650,6 +800,447 @@ class UltimateRAGServer:
                 raise HTTPException(503, "Server not initialized")
 
             return [gap.to_dict() for gap in self.maintenance.get_gaps()]
+
+        # ==================== /api/v1 Compatibility Routes ====================
+        # These routes provide backward compatibility with the old knowledge_base API
+
+        @app.get("/api/v1/trees", tags=["v1-compat"])
+        async def v1_list_trees():
+            """List available knowledge trees (v1 compatible)."""
+            trees = list(self.forest.trees.keys()) if self.forest else []
+            return {
+                "trees": trees,
+                "default": trees[0] if trees else "main",
+                "loaded": trees,
+            }
+
+        @app.post("/api/v1/search", response_model=V1SearchResponse, tags=["v1-compat"])
+        async def v1_search(request: V1SearchRequest):
+            """Search the knowledge base (v1 compatible)."""
+            if not self.retriever:
+                raise HTTPException(503, "Server not initialized")
+
+            tree_name = request.tree or "main"
+
+            try:
+                result = await self.retriever.retrieve(
+                    query=request.query,
+                    top_k=request.top_k,
+                )
+
+                results = []
+                for i, chunk in enumerate(result.chunks):
+                    results.append(V1SearchResult(
+                        text=chunk.text[:2000],
+                        score=chunk.score,
+                        layer=chunk.metadata.get("layer", 0),
+                        node_id=str(chunk.metadata.get("node_id", i)),
+                        is_summary=chunk.metadata.get("layer", 0) > 0,
+                    ))
+
+                return V1SearchResponse(
+                    query=request.query,
+                    tree=tree_name,
+                    results=results,
+                    total_nodes_searched=result.total_candidates,
+                )
+
+            except Exception as e:
+                logger.error(f"v1 search failed: {e}")
+                raise HTTPException(500, str(e))
+
+        @app.post("/api/v1/answer", response_model=V1AnswerResponse, tags=["v1-compat"])
+        async def v1_answer(request: V1AnswerRequest):
+            """Answer a question (v1 compatible)."""
+            if not self.retriever:
+                raise HTTPException(503, "Server not initialized")
+
+            tree_name = request.tree or "main"
+
+            try:
+                result = await self.retriever.retrieve(
+                    query=request.question,
+                    top_k=request.top_k,
+                )
+
+                # Build context from retrieved chunks
+                context_chunks = [chunk.text[:500] for chunk in result.chunks]
+                context = "\n\n".join(context_chunks)
+
+                # Generate answer (simplified - real implementation would use LLM)
+                answer = f"Based on the knowledge base:\n\n{context[:1500]}"
+
+                return V1AnswerResponse(
+                    question=request.question,
+                    answer=answer,
+                    tree=tree_name,
+                    context_chunks=context_chunks,
+                    confidence=0.8 if result.chunks else 0.3,
+                )
+
+            except Exception as e:
+                logger.error(f"v1 answer failed: {e}")
+                raise HTTPException(500, str(e))
+
+        @app.post("/api/v1/incident-search", response_model=V1IncidentSearchResponse, tags=["v1-compat"])
+        async def v1_incident_search(request: V1IncidentSearchRequest):
+            """
+            Search with incident awareness (v1 compatible).
+
+            This is the primary endpoint for incident investigation tools.
+            """
+            if not self.retriever:
+                raise HTTPException(503, "Server not initialized")
+
+            try:
+                services = [request.affected_service] if request.affected_service else None
+
+                result = await self.retriever.retrieve_for_incident(
+                    symptoms=request.symptoms,
+                    affected_services=services,
+                    top_k=request.top_k,
+                )
+
+                # Categorize results
+                runbooks = []
+                past_incidents = []
+                service_context = []
+
+                for chunk in result.chunks:
+                    metadata = chunk.metadata
+                    category = metadata.get("category", "general")
+
+                    if category == "runbook" and request.include_runbooks:
+                        runbooks.append({
+                            "title": metadata.get("title", ""),
+                            "text": chunk.text[:500],
+                            "relevance": chunk.score,
+                            "runbook_id": metadata.get("runbook_id"),
+                        })
+                    elif category == "incident" and request.include_past_incidents:
+                        past_incidents.append({
+                            "incident_id": metadata.get("incident_id"),
+                            "summary": chunk.text[:500],
+                            "resolution": metadata.get("resolution", ""),
+                            "relevance": chunk.score,
+                        })
+                    else:
+                        service_context.append({
+                            "text": chunk.text[:500],
+                            "relevance": chunk.score,
+                        })
+
+                return V1IncidentSearchResponse(
+                    ok=True,
+                    symptoms=request.symptoms,
+                    affected_service=request.affected_service,
+                    runbooks=runbooks,
+                    past_incidents=past_incidents,
+                    service_context=service_context,
+                )
+
+            except Exception as e:
+                logger.error(f"v1 incident search failed: {e}")
+                return V1IncidentSearchResponse(
+                    ok=False,
+                    symptoms=request.symptoms,
+                    affected_service=request.affected_service,
+                    runbooks=[],
+                    past_incidents=[],
+                    service_context=[{"text": f"Error: {e}", "relevance": 0}],
+                )
+
+        @app.post("/api/v1/graph/query", response_model=V1GraphQueryResponse, tags=["v1-compat"])
+        async def v1_graph_query(request: V1GraphQueryRequest):
+            """Query service graph (v1 compatible)."""
+            if not self.graph:
+                raise HTTPException(503, "Server not initialized")
+
+            try:
+                result = V1GraphQueryResponse(
+                    ok=True,
+                    entity=request.entity_name,
+                    query_type=request.query_type,
+                )
+
+                # Find entity by name
+                entity = None
+                for e in self.graph.entities.values():
+                    if e.name.lower() == request.entity_name.lower():
+                        entity = e
+                        break
+
+                if not entity:
+                    result.hint = f"Entity '{request.entity_name}' not found in knowledge graph"
+                    return result
+
+                # Get relationships based on query type
+                relationships = self.graph.get_relationships_for_entity(entity.entity_id)
+
+                if request.query_type == "dependencies":
+                    deps = [r.target_id for r in relationships if r.relationship_type.value == "depends_on"]
+                    result.dependencies = deps
+                    result.hint = "Services this entity depends on"
+
+                elif request.query_type == "dependents":
+                    # Reverse lookup - find entities that depend on this one
+                    deps = []
+                    for rel in self.graph.relationships.values():
+                        if rel.target_id == entity.entity_id and rel.relationship_type.value == "depends_on":
+                            deps.append(rel.source_id)
+                    result.dependents = deps
+                    result.hint = "Services that depend on this entity"
+
+                elif request.query_type == "owner":
+                    for r in relationships:
+                        if r.relationship_type.value == "owned_by":
+                            owner_entity = self.graph.get_entity(r.target_id)
+                            if owner_entity:
+                                result.owner = {
+                                    "team": owner_entity.name,
+                                    "entity_id": owner_entity.entity_id,
+                                }
+                                break
+
+                elif request.query_type == "runbooks":
+                    rbs = []
+                    for r in relationships:
+                        if r.relationship_type.value == "has_runbook":
+                            rbs.append({
+                                "runbook_id": r.target_id,
+                                "properties": r.properties,
+                            })
+                    result.runbooks = rbs
+
+                elif request.query_type == "incidents":
+                    incs = []
+                    for r in relationships:
+                        if r.relationship_type.value == "had_incident":
+                            incs.append({
+                                "incident_id": r.target_id,
+                                "properties": r.properties,
+                            })
+                    result.incidents = incs
+
+                elif request.query_type == "blast_radius":
+                    # Traverse dependents recursively
+                    affected = set()
+                    to_visit = [entity.entity_id]
+                    visited = set()
+
+                    while to_visit and len(visited) < request.max_hops * 10:
+                        current = to_visit.pop(0)
+                        if current in visited:
+                            continue
+                        visited.add(current)
+
+                        for rel in self.graph.relationships.values():
+                            if rel.target_id == current and rel.relationship_type.value == "depends_on":
+                                affected.add(rel.source_id)
+                                if len(visited) < request.max_hops:
+                                    to_visit.append(rel.source_id)
+
+                    result.affected_services = list(affected)
+                    result.blast_radius = {
+                        "direct_dependents": len([a for a in affected]),
+                        "total_affected": len(affected),
+                    }
+                    result.hint = f"Services affected if {request.entity_name} fails"
+
+                return result
+
+            except Exception as e:
+                logger.error(f"v1 graph query failed: {e}")
+                return V1GraphQueryResponse(
+                    ok=False,
+                    entity=request.entity_name,
+                    query_type=request.query_type,
+                    hint=f"Error: {e}",
+                )
+
+        @app.post("/api/v1/teach", response_model=V1TeachResponse, tags=["v1-compat"])
+        async def v1_teach(request: V1TeachRequest):
+            """Teach new knowledge (v1 compatible)."""
+            if not self.teaching:
+                raise HTTPException(503, "Server not initialized")
+
+            try:
+                from ..core.types import KnowledgeType
+
+                # Map knowledge type
+                type_map = {
+                    "procedural": KnowledgeType.PROCEDURAL,
+                    "factual": KnowledgeType.FACTUAL,
+                    "temporal": KnowledgeType.TEMPORAL,
+                    "relational": KnowledgeType.RELATIONAL,
+                }
+                knowledge_type = type_map.get(request.knowledge_type, KnowledgeType.PROCEDURAL)
+
+                result = await self.teaching.teach(
+                    knowledge=request.content,
+                    knowledge_type=knowledge_type,
+                    source=request.source,
+                    entity_ids=request.related_entities,
+                    importance=request.confidence,
+                )
+
+                # Map status to v1 format
+                status = result.status.value
+                message = result.message
+
+                if status == "added":
+                    message = "New knowledge successfully added to the knowledge base."
+                elif status == "updated":
+                    message = "Knowledge merged with existing similar content."
+                elif status == "duplicate":
+                    message = "This knowledge already exists in the knowledge base."
+                elif status == "pending_review":
+                    message = "Knowledge queued for human review before adding."
+                elif status == "contradiction":
+                    message = "This may contradict existing knowledge. Queued for review."
+
+                return V1TeachResponse(
+                    status=status,
+                    action=status,
+                    node_id=result.node_id,
+                    message=message,
+                )
+
+            except Exception as e:
+                logger.error(f"v1 teach failed: {e}")
+                raise HTTPException(500, str(e))
+
+        @app.post("/api/v1/similar-incidents", response_model=V1SimilarIncidentsResponse, tags=["v1-compat"])
+        async def v1_similar_incidents(request: V1SimilarIncidentsRequest):
+            """
+            Find similar past incidents (v1 compatible).
+
+            This searches for past incidents with similar symptoms.
+            """
+            if not self.retriever:
+                raise HTTPException(503, "Server not initialized")
+
+            try:
+                # Build query for incident similarity
+                query = request.symptoms
+                if request.service:
+                    query = f"{request.service}: {query}"
+
+                # Use incident-aware retrieval with filter for incidents only
+                result = await self.retriever.retrieve(
+                    query=query,
+                    top_k=request.limit * 2,  # Get more, filter down
+                    filters={"category": "incident"},
+                )
+
+                similar = []
+                for chunk in result.chunks:
+                    if len(similar) >= request.limit:
+                        break
+
+                    metadata = chunk.metadata
+                    # Only include if it looks like an incident
+                    if metadata.get("category") == "incident" or "incident" in chunk.text.lower():
+                        similar.append(V1SimilarIncident(
+                            incident_id=metadata.get("incident_id"),
+                            date=metadata.get("date"),
+                            similarity=chunk.score,
+                            symptoms=metadata.get("symptoms", chunk.text[:200]),
+                            root_cause=metadata.get("root_cause", ""),
+                            resolution=metadata.get("resolution", ""),
+                            services_affected=metadata.get("services_affected", []),
+                        ))
+
+                hint = None
+                if not similar:
+                    hint = "No similar past incidents found. This may be a new issue type."
+
+                return V1SimilarIncidentsResponse(
+                    ok=True,
+                    query_symptoms=request.symptoms,
+                    similar_incidents=similar,
+                    total_found=len(similar),
+                    hint=hint,
+                )
+
+            except Exception as e:
+                logger.error(f"v1 similar incidents failed: {e}")
+                return V1SimilarIncidentsResponse(
+                    ok=False,
+                    query_symptoms=request.symptoms,
+                    similar_incidents=[],
+                    total_found=0,
+                    hint=f"Error: {e}",
+                )
+
+        @app.post("/api/v1/retrieve", tags=["v1-compat"])
+        async def v1_retrieve(query: str, tree: Optional[str] = None, top_k: int = 10):
+            """Retrieve chunks without generating answer (v1 compatible)."""
+            if not self.retriever:
+                raise HTTPException(503, "Server not initialized")
+
+            try:
+                result = await self.retriever.retrieve(
+                    query=query,
+                    top_k=top_k,
+                )
+
+                chunks = []
+                for chunk in result.chunks:
+                    chunks.append({
+                        "text": chunk.text,
+                        "score": chunk.score,
+                        "layer": chunk.metadata.get("layer", 0),
+                        "is_summary": chunk.metadata.get("layer", 0) > 0,
+                        "source_url": chunk.metadata.get("source"),
+                    })
+
+                return {
+                    "query": query,
+                    "tree": tree or "main",
+                    "chunks": chunks,
+                }
+
+            except Exception as e:
+                logger.error(f"v1 retrieve failed: {e}")
+                raise HTTPException(500, str(e))
+
+        @app.post("/api/v1/tree/documents", response_model=V1AddDocumentsResponse, tags=["v1-compat"])
+        async def v1_add_documents(request: V1AddDocumentsRequest, background_tasks: BackgroundTasks):
+            """Add documents to tree (v1 compatible)."""
+            if not self.processor or not self.teaching:
+                raise HTTPException(503, "Server not initialized")
+
+            tree_name = request.tree or "main"
+
+            try:
+                # Process the content
+                result = self.processor.process_content(
+                    content=request.content,
+                    source_path="api_upload",
+                )
+
+                # Add chunks via teaching
+                chunks_added = 0
+                for chunk in result.chunks:
+                    background_tasks.add_task(
+                        self._add_chunk_to_tree,
+                        chunk,
+                    )
+                    chunks_added += 1
+
+                return V1AddDocumentsResponse(
+                    tree=tree_name,
+                    new_leaves=chunks_added,
+                    updated_clusters=0,
+                    created_clusters=0,
+                    total_nodes_after=chunks_added,
+                    message=f"Successfully queued {chunks_added} chunks for addition",
+                )
+
+            except Exception as e:
+                logger.error(f"v1 add documents failed: {e}")
+                raise HTTPException(500, str(e))
 
     def _get_content_type(self, type_str: Optional[str]):
         """Convert string to ContentType."""

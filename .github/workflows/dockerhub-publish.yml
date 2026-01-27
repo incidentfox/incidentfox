@@ -19,6 +19,7 @@ on:
         options:
           - all
           - agent
+          - ai-pipeline
           - config-service
           - raptor
           - web-ui
@@ -40,6 +41,10 @@ jobs:
             context: ./agent
             dockerfile: ./agent/Dockerfile
             image: incidentfox/agent
+          - service: ai-pipeline
+            context: ./ai_pipeline
+            dockerfile: ./ai_pipeline/Dockerfile
+            image: incidentfox/ai-pipeline
           - service: config-service
             context: ./config_service
             dockerfile: ./config_service/Dockerfile
