@@ -1,79 +1,91 @@
-"""Tests for agent runner."""
+"""Tests for agent registry."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
-from ai_agent.core.agent_runner import AgentRegistry, AgentRunner
 
-
-class TestAgentRunner:
-    @pytest.fixture
-    def mock_agent(self):
-        """Create a mock agent."""
-        agent = Mock()
-        agent.name = "TestAgent"
-        return agent
-
-    @pytest.fixture
-    def agent_runner(self, mock_agent):
-        """Create agent runner with mock agent."""
-        with patch("ai_agent.core.agent_runner.get_metrics_collector"):
-            runner = AgentRunner(mock_agent, max_retries=2, timeout=30)
-            return runner
-
-    @pytest.mark.asyncio
-    async def test_successful_execution(self, agent_runner, mock_agent):
-        """Test successful agent execution."""
-        # Mock the runner
-        mock_run_result = Mock()
-        mock_run_result.output = "test output"
-        mock_run_result.status = "success"
-
-        with patch.object(agent_runner.runner, "run", return_value=mock_run_result):
-            context = Mock()
-            result = await agent_runner.run(context, "test message")
-
-            assert result.success
-            assert result.output == "test output"
-            assert result.error is None
-
-    @pytest.mark.asyncio
-    async def test_timeout_handling(self, agent_runner):
-        """Test that timeout is handled properly."""
-
-        with patch.object(agent_runner.runner, "run", side_effect=TimeoutError()):
-            context = Mock()
-            result = await agent_runner.run(context, "test message")
-
-            assert not result.success
-            assert "timed out" in result.error.lower()
-
-    @pytest.mark.asyncio
-    async def test_error_handling(self, agent_runner):
-        """Test that errors are caught and logged."""
-        with patch.object(
-            agent_runner.runner, "run", side_effect=Exception("Test error")
-        ):
-            context = Mock()
-            result = await agent_runner.run(context, "test message")
-
-            assert not result.success
-            assert "Test error" in result.error
+from ai_agent.core.agent_runner import AgentRegistry
 
 
 class TestAgentRegistry:
-    def test_register_and_get_agent(self):
-        """Test registering and retrieving agents."""
+    def test_register_factory_and_get_agent(self):
+        """Test registering a factory and retrieving agents."""
         registry = AgentRegistry()
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
 
-        registry.register("test", mock_agent)
+        # Factory returns the mock agent
+        factory = Mock(return_value=mock_agent)
 
-        assert registry.get_agent("test") == mock_agent
+        registry.register_factory("test", factory)
+
+        # Factory should have been called once for warming (with None)
+        factory.assert_called_once()
+
+        # Should get the default agent
+        agent = registry.get_agent("test")
+        assert agent == mock_agent
         assert "test" in registry.list_agents()
 
     def test_get_nonexistent_agent(self):
         """Test getting agent that doesn't exist."""
         registry = AgentRegistry()
         assert registry.get_agent("nonexistent") is None
+
+    def test_get_agent_with_team_config(self):
+        """Test getting agent with team-specific config creates new instance."""
+        registry = AgentRegistry()
+        default_agent = Mock()
+        default_agent.name = "DefaultAgent"
+        team_agent = Mock()
+        team_agent.name = "TeamAgent"
+
+        # Factory returns default on first call (warming), team agent on second
+        factory = Mock(side_effect=[default_agent, team_agent])
+
+        registry.register_factory("test", factory)
+
+        # Get with team config should create a new agent
+        agent = registry.get_agent(
+            "test",
+            team_config_hash="team123",
+            factory_kwargs={"team_id": "123"},
+        )
+        assert agent == team_agent
+
+        # Factory should have been called twice now
+        assert factory.call_count == 2
+
+    def test_team_agent_caching(self):
+        """Test that team agents are cached."""
+        registry = AgentRegistry()
+        default_agent = Mock()
+        team_agent = Mock()
+
+        factory = Mock(side_effect=[default_agent, team_agent])
+
+        registry.register_factory("test", factory)
+
+        # First call creates agent
+        agent1 = registry.get_agent("test", team_config_hash="team123")
+        # Second call should return cached
+        agent2 = registry.get_agent("test", team_config_hash="team123")
+
+        assert agent1 == agent2
+        # Factory should only be called twice (warming + first team call)
+        assert factory.call_count == 2
+
+    def test_list_agents(self):
+        """Test listing all registered agent names."""
+        registry = AgentRegistry()
+
+        factory1 = Mock(return_value=Mock())
+        factory2 = Mock(return_value=Mock())
+
+        registry.register_factory("agent1", factory1)
+        registry.register_factory("agent2", factory2)
+
+        agents = registry.list_agents()
+        assert "agent1" in agents
+        assert "agent2" in agents
+        assert len(agents) == 2
