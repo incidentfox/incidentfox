@@ -2076,9 +2076,7 @@ def create_app() -> Sanic:
 
                     # Use trace data for tool_calls_count if hooks captured more
                     # (hooks capture args/results, SSE just counts)
-                    final_tool_count = max(
-                        tool_calls_count, len(trace_data.tool_calls)
-                    )
+                    final_tool_count = max(tool_calls_count, len(trace_data.tool_calls))
 
                     # Record agent run completion
                     output_summary = ""
