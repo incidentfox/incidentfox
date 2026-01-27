@@ -1477,6 +1477,9 @@ def create_app() -> Sanic:
                 "notifications.default_slack_channel_id in team config to enable Slack output.",
             )
 
+            # Generate run_id for tracking (will be passed to AgentRunner via metadata)
+            run_id = str(uuid.uuid4())
+
             # Set team execution context for integration access
             from .core.execution_context import (
                 clear_execution_context,
@@ -1549,10 +1552,12 @@ def create_app() -> Sanic:
                             metadata=context_data.get("metadata", {}),
                         )
 
-                        # Create execution context
+                        # Create execution context with run_id in metadata
+                        # AgentRunner.run() will use this run_id for tracing
+                        exec_metadata = {**context_data.get("metadata", {}), "run_id": run_id}
                         exec_context = ExecutionContext(
                             correlation_id=request.ctx.correlation_id,
-                            metadata=context_data.get("metadata", {}),
+                            metadata=exec_metadata,
                             timeout=timeout,
                             max_turns=max_turns if isinstance(max_turns, int) else None,
                         )
@@ -1581,10 +1586,12 @@ def create_app() -> Sanic:
                         metadata=context_data.get("metadata", {}),
                     )
 
-                    # Create execution context
+                    # Create execution context with run_id in metadata
+                    # AgentRunner.run() will use this run_id for tracing
+                    exec_metadata = {**context_data.get("metadata", {}), "run_id": run_id}
                     exec_context = ExecutionContext(
                         correlation_id=request.ctx.correlation_id,
-                        metadata=context_data.get("metadata", {}),
+                        metadata=exec_metadata,
                         timeout=timeout,
                         max_turns=max_turns if isinstance(max_turns, int) else None,
                     )
@@ -1627,6 +1634,7 @@ def create_app() -> Sanic:
             response_data = {
                 "success": result.success,
                 "agent": agent_name,
+                "run_id": run_id,  # Include run_id so client can fetch tool calls
                 "correlation_id": result.correlation_id,
                 "duration_seconds": result.duration_seconds,
             }
