@@ -246,13 +246,38 @@ async def _run_agent_with_mcp(
                 )
             else:
                 # Non-streaming mode with MCP
-                return await Runner.run(
+                # CRITICAL: Log before/after Runner.run for debugging stuck agents
+                import time as time_mod
+
+                logger.info(
+                    "planner_mcp_runner_run_calling",
+                    agent=agent_name,
+                    max_turns=max_turns,
+                    mcp_count=len(entered_servers) if entered_servers else 0,
+                    has_hooks=hooks is not None,
+                    message="About to call Runner.run() with MCP - if agent hangs, investigate hooks",
+                )
+                start = time_mod.time()
+                result = await Runner.run(
                     agent,
                     query,
                     max_turns=max_turns,
                     mcp_servers=entered_servers if entered_servers else None,
                     hooks=hooks,
                 )
+                elapsed = int((time_mod.time() - start) * 1000)
+                final_output = getattr(result, "final_output", None)
+                output_str = str(final_output) if final_output else ""
+                logger.info(
+                    "planner_mcp_runner_run_returned",
+                    agent=agent_name,
+                    has_result=result is not None,
+                    has_output=final_output is not None,
+                    output_length=len(output_str),
+                    is_empty_output=not output_str.strip(),
+                    elapsed_ms=elapsed,
+                )
+                return result
     else:
         # No MCP servers configured for this agent
         if parent_stream_id and EventStreamRegistry.stream_exists(parent_stream_id):
@@ -262,7 +287,32 @@ async def _run_agent_with_mcp(
             )
         else:
             # Non-streaming mode - original behavior
-            return await Runner.run(agent, query, max_turns=max_turns, hooks=hooks)
+            # CRITICAL: Log before/after Runner.run for debugging stuck agents
+            import time as time_mod
+
+            logger.info(
+                "planner_runner_run_calling",
+                agent=agent_name,
+                max_turns=max_turns,
+                has_hooks=hooks is not None,
+                hooks_type=type(hooks).__name__ if hooks else None,
+                message="About to call Runner.run() - if agent hangs, investigate hooks",
+            )
+            start = time_mod.time()
+            result = await Runner.run(agent, query, max_turns=max_turns, hooks=hooks)
+            elapsed = int((time_mod.time() - start) * 1000)
+            final_output = getattr(result, "final_output", None)
+            output_str = str(final_output) if final_output else ""
+            logger.info(
+                "planner_runner_run_returned",
+                agent=agent_name,
+                has_result=result is not None,
+                has_output=final_output is not None,
+                output_length=len(output_str),
+                is_empty_output=not output_str.strip(),
+                elapsed_ms=elapsed,
+            )
+            return result
 
 
 async def _run_agent_streamed(
@@ -289,6 +339,15 @@ async def _run_agent_streamed(
         mcp_servers: Optional list of MCP servers for this agent
         hooks: Optional RunHooks for progress updates (e.g., SlackUpdateHooks)
     """
+    import time as time_module
+
+    stream_start_time = time_module.time()
+    event_count = 0
+    tool_call_count = 0
+    tool_output_count = 0
+    message_output_count = 0
+    reasoning_item_count = 0
+
     # Push this agent onto the stack for nesting context
     EventStreamRegistry.push_agent(stream_id, agent_name)
 
@@ -303,6 +362,14 @@ async def _run_agent_streamed(
         },
     )
 
+    logger.info(
+        "planner_subagent_starting",
+        agent=agent_name,
+        stream_id=stream_id[:16] if stream_id else None,
+        max_turns=max_turns,
+        has_mcp_servers=bool(mcp_servers),
+    )
+
     tool_sequence = 0
 
     try:
@@ -315,78 +382,192 @@ async def _run_agent_streamed(
             result = Runner.run_streamed(agent, query, max_turns=max_turns, hooks=hooks)
 
         async for event in result.stream_events():
+            now = time_module.time()
+            event_count += 1
+            event_type_name = type(event).__name__
+
             if isinstance(event, RunItemStreamEvent):
                 item = event.item
+                item_type = getattr(item, "type", "unknown")
 
                 # Handle tool call events
-                if hasattr(item, "type"):
-                    if item.type == "tool_call_item":
-                        tool_sequence += 1
-                        # Tool name is in raw_item.name or item.name
-                        raw_item = getattr(item, "raw_item", None)
-                        tool_name = getattr(raw_item, "name", None) or getattr(
-                            item, "name", "unknown"
-                        )
-                        tool_input = ""
-                        if raw_item and hasattr(raw_item, "arguments"):
-                            tool_input = raw_item.arguments
+                if item_type == "tool_call_item":
+                    tool_sequence += 1
+                    tool_call_count += 1
+                    # Tool name is in raw_item.name or item.name
+                    raw_item = getattr(item, "raw_item", None)
+                    tool_name = getattr(raw_item, "name", None) or getattr(
+                        item, "name", "unknown"
+                    )
 
-                        # Try to parse input preview
-                        input_preview = ""
-                        if tool_input:
-                            try:
-                                import json as json_mod
+                    logger.info(
+                        "planner_subagent_tool_call",
+                        agent=agent_name,
+                        tool_name=tool_name,
+                        tool_sequence=tool_sequence,
+                        elapsed_ms=int((now - stream_start_time) * 1000),
+                    )
 
-                                parsed = json_mod.loads(tool_input)
-                                if isinstance(parsed, dict):
-                                    pairs = [
-                                        f"{k}={repr(v)[:30]}"
-                                        for k, v in list(parsed.items())[:2]
-                                    ]
-                                    input_preview = ", ".join(pairs)
-                            except Exception:
-                                input_preview = str(tool_input)[:50]
+                    tool_input = ""
+                    if raw_item and hasattr(raw_item, "arguments"):
+                        tool_input = raw_item.arguments
 
-                        EventStreamRegistry.emit_event(
-                            stream_id=stream_id,
-                            event_type="tool_started",
-                            agent_name=agent_name,
-                            data={
-                                "tool": tool_name,
-                                "sequence": tool_sequence,
-                                "input_preview": input_preview,
-                            },
-                        )
+                    # Try to parse input preview
+                    input_preview = ""
+                    if tool_input:
+                        try:
+                            import json as json_mod
 
-                    elif item.type == "tool_call_output_item":
-                        output_preview = ""
-                        output = getattr(item, "output", None)
-                        if output:
-                            if isinstance(output, str):
-                                # Use 500 chars to capture full config_required JSON
-                                output_preview = output[:500]
+                            parsed = json_mod.loads(tool_input)
+                            if isinstance(parsed, dict):
+                                pairs = [
+                                    f"{k}={repr(v)[:30]}"
+                                    for k, v in list(parsed.items())[:2]
+                                ]
+                                input_preview = ", ".join(pairs)
+                        except Exception:
+                            input_preview = str(tool_input)[:50]
+
+                    EventStreamRegistry.emit_event(
+                        stream_id=stream_id,
+                        event_type="tool_started",
+                        agent_name=agent_name,
+                        data={
+                            "tool": tool_name,
+                            "sequence": tool_sequence,
+                            "input_preview": input_preview,
+                        },
+                    )
+
+                elif item_type == "tool_call_output_item":
+                    tool_output_count += 1
+                    output_preview = ""
+                    output = getattr(item, "output", None)
+                    if output:
+                        if isinstance(output, str):
+                            # Use 500 chars to capture full config_required JSON
+                            output_preview = output[:500]
+                        else:
+                            output_preview = str(output)[:500]
+
+                    logger.info(
+                        "planner_subagent_tool_output",
+                        agent=agent_name,
+                        tool_output_count=tool_output_count,
+                        output_length=len(str(output)) if output else 0,
+                        elapsed_ms=int((now - stream_start_time) * 1000),
+                    )
+
+                    EventStreamRegistry.emit_event(
+                        stream_id=stream_id,
+                        event_type="tool_completed",
+                        agent_name=agent_name,
+                        data={
+                            "sequence": tool_sequence,
+                            "output_preview": output_preview,
+                        },
+                    )
+
+                elif item_type == "message_output_item":
+                    message_output_count += 1
+                    raw_item = getattr(item, "raw_item", None)
+                    content_preview = ""
+                    if raw_item and hasattr(raw_item, "content"):
+                        content = raw_item.content
+                        if content and len(content) > 0:
+                            first_content = content[0]
+                            if hasattr(first_content, "text"):
+                                content_preview = first_content.text[:100]
+
+                    logger.info(
+                        "planner_subagent_message_output",
+                        agent=agent_name,
+                        message_count=message_output_count,
+                        content_preview=content_preview,
+                        elapsed_ms=int((now - stream_start_time) * 1000),
+                    )
+
+                elif item_type == "reasoning_item":
+                    # CRITICAL: Capture o1 model reasoning events
+                    reasoning_item_count += 1
+                    raw_item = getattr(item, "raw_item", None)
+                    reasoning_preview = ""
+                    reasoning_empty = False
+
+                    if raw_item:
+                        if hasattr(raw_item, "summary"):
+                            summary = raw_item.summary
+                            if summary and len(summary) > 0:
+                                if hasattr(summary[0], "text"):
+                                    reasoning_preview = summary[0].text[:200]
                             else:
-                                output_preview = str(output)[:500]
+                                reasoning_empty = True
+                                reasoning_preview = "<empty summary>"
+                        else:
+                            reasoning_preview = "<no summary attribute>"
 
-                        EventStreamRegistry.emit_event(
-                            stream_id=stream_id,
-                            event_type="tool_completed",
-                            agent_name=agent_name,
-                            data={
-                                "sequence": tool_sequence,
-                                "output_preview": output_preview,
-                            },
+                    logger.info(
+                        "planner_subagent_reasoning_item",
+                        agent=agent_name,
+                        reasoning_count=reasoning_item_count,
+                        reasoning_preview=reasoning_preview,
+                        reasoning_empty=reasoning_empty,
+                        elapsed_ms=int((now - stream_start_time) * 1000),
+                    )
+
+                    if reasoning_empty:
+                        logger.warning(
+                            "planner_subagent_empty_reasoning",
+                            agent=agent_name,
+                            message="Empty reasoning item - agent may be stuck",
+                            event_count=event_count,
                         )
 
         # After streaming completes, result.final_output is available
-        # Emit subagent completed event
+        elapsed_total = time_module.time() - stream_start_time
         output = result.final_output
+        output_str = str(output) if output else ""
+        is_empty_output = not output_str.strip() or output is None
+
         output_preview = ""
         if output:
             if isinstance(output, str):
                 output_preview = output[:200]
             else:
                 output_preview = str(output)[:200]
+
+        logger.info(
+            "planner_subagent_stream_complete",
+            agent=agent_name,
+            event_count=event_count,
+            tool_call_count=tool_call_count,
+            tool_output_count=tool_output_count,
+            message_output_count=message_output_count,
+            reasoning_item_count=reasoning_item_count,
+            has_output=output is not None,
+            is_empty_output=is_empty_output,
+            output_length=len(output_str),
+            elapsed_ms=int(elapsed_total * 1000),
+        )
+
+        # CRITICAL WARNING: Agent completed but produced no useful output
+        if is_empty_output and tool_call_count == 0:
+            logger.error(
+                "planner_subagent_stuck_no_work",
+                agent=agent_name,
+                message="Subagent completed with NO tool calls and NO output - likely stuck",
+                event_count=event_count,
+                reasoning_item_count=reasoning_item_count,
+                elapsed_ms=int(elapsed_total * 1000),
+            )
+        elif is_empty_output and tool_call_count > 0:
+            logger.warning(
+                "planner_subagent_empty_output_after_tools",
+                agent=agent_name,
+                message="Subagent completed with tool calls but empty output",
+                tool_call_count=tool_call_count,
+                elapsed_ms=int(elapsed_total * 1000),
+            )
 
         EventStreamRegistry.emit_event(
             stream_id=stream_id,
@@ -398,6 +579,16 @@ async def _run_agent_streamed(
         return result
 
     except Exception as e:
+        elapsed_total = time_module.time() - stream_start_time
+        logger.error(
+            "planner_subagent_error",
+            agent=agent_name,
+            error=str(e),
+            error_type=type(e).__name__,
+            event_count=event_count,
+            tool_call_count=tool_call_count,
+            elapsed_ms=int(elapsed_total * 1000),
+        )
         EventStreamRegistry.emit_event(
             stream_id=stream_id,
             event_type="subagent_completed",

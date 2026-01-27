@@ -484,8 +484,9 @@ class SlackUpdateHooks(RunHooks):
         tool: Tool,
     ) -> None:
         """Called when a tool is about to run."""
+        hook_start = time.time()
+        tool_name = getattr(tool, "name", str(tool))
         try:
-            tool_name = getattr(tool, "name", str(tool))
 
             # Auto-detect category from tool's module
             category = get_category_from_tool(tool)
@@ -518,10 +519,30 @@ class SlackUpdateHooks(RunHooks):
             if should_update:
                 await self._schedule_update()
 
-            logger.debug("slack_hook_tool_start", tool=tool_name, category=category)
+            hook_duration = int((time.time() - hook_start) * 1000)
+            logger.debug(
+                "slack_hook_tool_start",
+                tool=tool_name,
+                category=category,
+                duration_ms=hook_duration,
+            )
+            # Warn if hook took too long
+            if hook_duration > 500:
+                logger.warning(
+                    "slack_hook_tool_start_slow",
+                    tool=tool_name,
+                    duration_ms=hook_duration,
+                )
 
         except Exception as e:
-            logger.warning("slack_hook_error", error=str(e), hook="on_tool_start")
+            hook_duration = int((time.time() - hook_start) * 1000)
+            logger.warning(
+                "slack_hook_error",
+                error=str(e),
+                hook="on_tool_start",
+                tool=tool_name,
+                duration_ms=hook_duration,
+            )
 
     async def on_tool_end(
         self,
@@ -531,8 +552,9 @@ class SlackUpdateHooks(RunHooks):
         result: str,
     ) -> None:
         """Called when a tool finishes."""
+        hook_start = time.time()
+        tool_name = getattr(tool, "name", str(tool))
         try:
-            tool_name = getattr(tool, "name", str(tool))
 
             # Thread-safe state update
             with self.state._lock:
@@ -570,17 +592,34 @@ class SlackUpdateHooks(RunHooks):
                     category
                 ] += f"\n\n**{tool_name}:**\n{result[:1000]}"
 
+            await self._schedule_update()
+
+            hook_duration = int((time.time() - hook_start) * 1000)
             logger.debug(
                 "slack_hook_tool_end",
                 tool=tool_name,
                 category=category,
-                duration=duration,
+                tool_duration=duration,
+                hook_duration_ms=hook_duration,
             )
-
-            await self._schedule_update()
+            # Warn if hook took too long
+            if hook_duration > 500:
+                logger.warning(
+                    "slack_hook_tool_end_slow",
+                    tool=tool_name,
+                    hook_duration_ms=hook_duration,
+                    message="SlackUpdateHooks.on_tool_end took >500ms - may delay agent",
+                )
 
         except Exception as e:
-            logger.warning("slack_hook_error", error=str(e), hook="on_tool_end")
+            hook_duration = int((time.time() - hook_start) * 1000)
+            logger.warning(
+                "slack_hook_error",
+                error=str(e),
+                hook="on_tool_end",
+                tool=tool_name,
+                hook_duration_ms=hook_duration,
+            )
 
     def _infer_category_from_name(self, tool_name: str) -> str | None:
         """Infer category from tool name patterns when module detection fails."""
@@ -728,12 +767,39 @@ class SlackUpdateHooks(RunHooks):
                 phases=active_phases,
             )
 
+            # CRITICAL: This Slack API call can hang on network issues
+            # Add timing to detect if this is causing stuck agents
+            slack_call_start = time.time()
+            logger.info(
+                "slack_hook_api_call_starting",
+                channel=channel_id,
+                message_ts=message_ts,
+                message="About to call slack_client.chat_update - if this hangs, check network/rate limits",
+            )
+
             await self.slack_client.chat_update(
                 channel=channel_id,
                 ts=message_ts,
                 text="Investigation in progress...",
                 blocks=blocks,
             )
+
+            slack_call_duration = int((time.time() - slack_call_start) * 1000)
+            logger.info(
+                "slack_hook_api_call_completed",
+                channel=channel_id,
+                message_ts=message_ts,
+                duration_ms=slack_call_duration,
+            )
+
+            # Warn if Slack call was slow
+            if slack_call_duration > 2000:  # > 2 seconds
+                logger.warning(
+                    "slack_hook_api_call_slow",
+                    channel=channel_id,
+                    duration_ms=slack_call_duration,
+                    message="Slack API call took >2s - may cause timing issues",
+                )
 
             # Update timestamp (thread-safe)
             with self.state._lock:
@@ -742,7 +808,12 @@ class SlackUpdateHooks(RunHooks):
             logger.debug("slack_update_sent", phases=phase_status_snapshot)
 
         except Exception as e:
-            logger.error("slack_update_failed", error=str(e))
+            logger.error(
+                "slack_update_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+                channel=channel_id if "channel_id" in dir() else "unknown",
+            )
 
     async def finalize(
         self,
