@@ -711,9 +711,12 @@ class CoralogixBackend(LogBackend):
         **kwargs,
     ) -> dict[str, Any]:
         """Search Coralogix by pattern."""
-        query = f"source logs | filter $d.logRecord.body contains '{pattern}' | limit {max_results}"
+        # Use ~ regex operator for pattern matching (DataPrime syntax)
+        # Escape single quotes in pattern to prevent query injection
+        escaped_pattern = pattern.replace("'", "\\'")
+        query = f"source logs | filter $d.logRecord.body:string ~ '{escaped_pattern}' | limit {max_results}"
         if service:
-            query = f"source logs | filter $l.subsystemname == '{service}' | filter $d.logRecord.body contains '{pattern}' | limit {max_results}"
+            query = f"source logs | filter $l.subsystemname == '{service}' | filter $d.logRecord.body:string ~ '{escaped_pattern}' | limit {max_results}"
 
         results = self._query(query, start_time, end_time, limit=max_results)
 
