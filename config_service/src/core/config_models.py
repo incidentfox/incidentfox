@@ -153,19 +153,25 @@ class KnowledgeIngestionSourceConfig(BaseModel):
     """
 
     # Web sources (Confluence, Google Docs, etc.)
-    confluence_enabled: bool = Field(default=False, description="Ingest from Confluence")
+    confluence_enabled: bool = Field(
+        default=False, description="Ingest from Confluence"
+    )
     confluence_spaces: List[str] = Field(
         default_factory=list,
         description="Confluence space keys to ingest (empty = all accessible)",
     )
-    google_docs_enabled: bool = Field(default=False, description="Ingest from Google Docs")
+    google_docs_enabled: bool = Field(
+        default=False, description="Ingest from Google Docs"
+    )
     google_docs_folders: List[str] = Field(
         default_factory=list,
         description="Google Drive folder IDs to ingest",
     )
 
     # Grafana dashboards and alerts
-    grafana_enabled: bool = Field(default=False, description="Ingest Grafana dashboards")
+    grafana_enabled: bool = Field(
+        default=False, description="Ingest Grafana dashboards"
+    )
     grafana_folders: List[str] = Field(
         default_factory=list,
         description="Grafana folder UIDs to ingest (empty = all)",

@@ -135,7 +135,9 @@ async def run_maintenance(org_id: str, team_node_id: str) -> int:
         return 0
 
     except Exception as e:
-        _log("maintenance_failed", org_id=org_id, team_node_id=team_node_id, error=str(e))
+        _log(
+            "maintenance_failed", org_id=org_id, team_node_id=team_node_id, error=str(e)
+        )
         return 1
 
 

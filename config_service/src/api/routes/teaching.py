@@ -331,9 +331,7 @@ async def review_teaching(
         )
 
         # Update the existing node in background
-        background_tasks.add_task(
-            merge_teaching, teaching.id, body.merge_with_node_id
-        )
+        background_tasks.add_task(merge_teaching, teaching.id, body.merge_with_node_id)
 
     db.refresh(teaching)
     return _to_response(teaching)
@@ -480,9 +478,9 @@ def merge_teaching(teaching_id: str, merge_with_node_id: int):
                         "content": merged_content,
                         "metadata": {
                             **existing_node.get("metadata", {}),
-                            "merged_teaching_ids": existing_node.get("metadata", {}).get(
-                                "merged_teaching_ids", []
-                            )
+                            "merged_teaching_ids": existing_node.get(
+                                "metadata", {}
+                            ).get("merged_teaching_ids", [])
                             + [teaching.id],
                             "last_merged_at": datetime.now(timezone.utc).isoformat(),
                         },

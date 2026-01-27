@@ -59,7 +59,11 @@ class MaintenanceTask:
             self._raptor_client = httpx.AsyncClient(base_url=raptor_url, timeout=120.0)
 
         self._initialized = True
-        _log("maintenance_task_initialized", org_id=self.org_id, team_node_id=self.team_node_id)
+        _log(
+            "maintenance_task_initialized",
+            org_id=self.org_id,
+            team_node_id=self.team_node_id,
+        )
 
     async def run(self) -> Dict[str, Any]:
         """Run the maintenance task."""
@@ -84,7 +88,9 @@ class MaintenanceTask:
         if self.maintenance_config.get("rebalance_enabled", True):
             try:
                 rebalance_result = await self._run_rebalance()
-                results["operations"].append({"operation": "rebalance", **rebalance_result})
+                results["operations"].append(
+                    {"operation": "rebalance", **rebalance_result}
+                )
             except Exception as e:
                 _log("rebalance_operation_failed", error=str(e))
                 results["errors"].append({"operation": "rebalance", "error": str(e)})
@@ -92,10 +98,14 @@ class MaintenanceTask:
         if self.maintenance_config.get("gap_detection_enabled", True):
             try:
                 gap_result = await self._run_gap_detection()
-                results["operations"].append({"operation": "gap_detection", **gap_result})
+                results["operations"].append(
+                    {"operation": "gap_detection", **gap_result}
+                )
             except Exception as e:
                 _log("gap_detection_failed", error=str(e))
-                results["errors"].append({"operation": "gap_detection", "error": str(e)})
+                results["errors"].append(
+                    {"operation": "gap_detection", "error": str(e)}
+                )
 
         # Always run health check
         try:

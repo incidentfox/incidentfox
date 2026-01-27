@@ -68,7 +68,11 @@ class TeachingProcessorTask:
             self._raptor_client = httpx.AsyncClient(base_url=raptor_url, timeout=60.0)
 
         self._initialized = True
-        _log("teaching_task_initialized", org_id=self.org_id, team_node_id=self.team_node_id)
+        _log(
+            "teaching_task_initialized",
+            org_id=self.org_id,
+            team_node_id=self.team_node_id,
+        )
 
     async def run(self) -> Dict[str, Any]:
         """Run the teaching processor task."""
@@ -122,11 +126,17 @@ class TeachingProcessorTask:
                         results["contradictions_found"] += 1
 
                 except Exception as e:
-                    _log("teaching_processing_failed", teaching_id=teaching.get("id"), error=str(e))
-                    results["errors"].append({
-                        "teaching_id": teaching.get("id"),
-                        "error": str(e),
-                    })
+                    _log(
+                        "teaching_processing_failed",
+                        teaching_id=teaching.get("id"),
+                        error=str(e),
+                    )
+                    results["errors"].append(
+                        {
+                            "teaching_id": teaching.get("id"),
+                            "error": str(e),
+                        }
+                    )
 
         except Exception as e:
             _log("teaching_task_failed", error=str(e))
@@ -179,9 +189,8 @@ class TeachingProcessorTask:
         )
 
         # Decide on auto-approval
-        should_auto_approve = (
-            confidence >= auto_approve_threshold
-            and not (is_contradiction and require_review_for_contradictions)
+        should_auto_approve = confidence >= auto_approve_threshold and not (
+            is_contradiction and require_review_for_contradictions
         )
 
         if should_auto_approve:
@@ -228,7 +237,9 @@ class TeachingProcessorTask:
             # This is a simplified heuristic - real implementation would use LLM
             is_potential_contradiction = (
                 similarity_score > 0.7
-                and self._detect_contradiction_heuristic(content, top_result.get("content", ""))
+                and self._detect_contradiction_heuristic(
+                    content, top_result.get("content", "")
+                )
             )
 
             return {
@@ -241,10 +252,20 @@ class TeachingProcessorTask:
             _log("similarity_check_failed", error=str(e))
             return {}
 
-    def _detect_contradiction_heuristic(self, new_content: str, existing_content: str) -> bool:
+    def _detect_contradiction_heuristic(
+        self, new_content: str, existing_content: str
+    ) -> bool:
         """Simple heuristic to detect potential contradictions."""
         # Look for negation patterns that might indicate contradiction
-        negation_words = ["not", "never", "don't", "doesn't", "shouldn't", "cannot", "won't"]
+        negation_words = [
+            "not",
+            "never",
+            "don't",
+            "doesn't",
+            "shouldn't",
+            "cannot",
+            "won't",
+        ]
         new_lower = new_content.lower()
         existing_lower = existing_content.lower()
 
@@ -272,7 +293,11 @@ class TeachingProcessorTask:
                 },
             )
         except Exception as e:
-            _log("update_teaching_similarity_failed", teaching_id=teaching_id, error=str(e))
+            _log(
+                "update_teaching_similarity_failed",
+                teaching_id=teaching_id,
+                error=str(e),
+            )
 
     async def _ingest_teaching(self, teaching: Dict[str, Any]) -> Dict[str, Any]:
         """Send approved teaching to knowledge base."""
@@ -317,7 +342,11 @@ class TeachingProcessorTask:
         try:
             payload = {
                 "status": status,
-                "applied_at": datetime.utcnow().isoformat() if status in ("auto_approved", "approved") else None,
+                "applied_at": (
+                    datetime.utcnow().isoformat()
+                    if status in ("auto_approved", "approved")
+                    else None
+                ),
             }
             if created_node_id:
                 payload["created_node_id"] = created_node_id
