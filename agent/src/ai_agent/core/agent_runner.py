@@ -1,7 +1,10 @@
 """
-Agent execution framework with retry logic, timeouts, and error handling.
+Agent registry and execution tracking infrastructure.
 
-This module provides the core agent execution infrastructure.
+This module provides:
+- In-flight run tracking for graceful shutdown
+- Agent run recording to config service
+- Agent factory registry with caching
 """
 
 import asyncio
@@ -11,28 +14,12 @@ import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Generic, TypeVar
 
-# Tracing disabled - using OpenAI's native tracing UI
 import httpx
-from agents import Agent, Runner, RunResult
-from tenacity import (
-    RetryError,
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from agents import Agent
 
-from .config import get_config
-from .errors import TimeoutError
-from .logging import get_correlation_id, get_logger, set_correlation_id
-from .metrics import get_metrics_collector
-from .trace_recorder import (
-    TraceRecorderHooks,
-    record_trace,
-)
+from .logging import get_correlation_id, get_logger
 
 logger = get_logger(__name__)
 
@@ -439,383 +426,68 @@ class AgentResult(Generic[T]):
     metadata: dict[str, Any]
 
 
-class AgentRunner(Generic[T]):
-    """
-    Production-ready agent runner with retry logic and error handling.
-
-    Features:
-    - Automatic retries with exponential backoff
-    - Timeout handling
-    - Metrics collection
-    - Structured logging
-    - Error recovery
-    """
-
-    def __init__(
-        self,
-        agent: Agent[T],
-        max_retries: int = 3,
-        timeout: int | None = None,
-    ):
-        """
-        Initialize agent runner.
-
-        Args:
-            agent: The OpenAI agent to run
-            max_retries: Maximum number of retry attempts
-            timeout: Execution timeout in seconds
-        """
-        self.agent = agent
-        self.max_retries = max_retries
-        self.timeout = timeout or get_config().agent_timeout
-        self.runner = Runner()  # Runner doesn't take arguments
-        self.metrics = get_metrics_collector()
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ConnectionError, TimeoutError)),
-        reraise=True,
-    )
-    async def run(
-        self,
-        context: T,
-        user_message: str,
-        execution_context: ExecutionContext | None = None,
-    ) -> AgentResult[Any]:
-        """
-        Run the agent with proper error handling and metrics.
-
-        Args:
-            context: Agent context
-            user_message: User message or task
-            execution_context: Optional execution context
-
-        Returns:
-            AgentResult with execution details
-        """
-        exec_ctx = execution_context or ExecutionContext()
-        set_correlation_id(exec_ctx.correlation_id)
-
-        agent_name = self.agent.name or "unknown"
-        start_time = datetime.utcnow()
-
-        # Generate unique run ID for tracking
-        import uuid
-
-        run_id = exec_ctx.metadata.get("run_id") or str(uuid.uuid4())[:8]
-        trigger_source = exec_ctx.metadata.get("trigger_source", "api")
-        trigger_message = user_message[:500] if user_message else ""
-
-        logger.info(
-            "agent_execution_started",
-            agent_name=agent_name,
-            message_preview=user_message[:100],
-            correlation_id=exec_ctx.correlation_id,
-            run_id=run_id,
-        )
-
-        # Register run as in-flight for graceful shutdown tracking
-        register_in_flight_run(run_id)
-
-        # Record run start (fire and forget - OK if this fails, run just won't be tracked)
-        _track_background_task(
-            _record_agent_run_start(
-                run_id=run_id,
-                agent_name=agent_name,
-                correlation_id=exec_ctx.correlation_id,
-                trigger_source=trigger_source,
-                trigger_message=trigger_message,
-                org_id=exec_ctx.metadata.get("org_id", ""),
-                team_node_id=exec_ctx.metadata.get("team_node_id", ""),
-            ),
-            task_name="record_agent_run_start",
-        )
-
-        # Create trace recorder hooks to capture tool calls
-        trace_hooks = TraceRecorderHooks(
-            run_id=run_id,
-            agent_name=agent_name,
-        )
-
-        try:
-            # Execute with timeout
-            run_result = await asyncio.wait_for(
-                # OpenAI Agents SDK Runner expects (agent, input, context=...).
-                # Use positional args for maximum compatibility across Runner versions.
-                self.runner.run(
-                    self.agent,
-                    user_message,
-                    context=context,
-                    max_turns=(exec_ctx.max_turns or 200),
-                    hooks=trace_hooks,
-                ),
-                timeout=exec_ctx.timeout or self.timeout,
-            )
-
-            duration = (datetime.utcnow() - start_time).total_seconds()
-
-            # Extract token usage if available
-            token_usage = self._extract_token_usage(run_result)
-
-            # Record metrics
-            self.metrics.record_agent_request(
-                agent_name=agent_name,
-                duration=duration,
-                status="success",
-                token_usage=token_usage,
-            )
-
-            logger.info(
-                "agent_execution_completed",
-                agent_name=agent_name,
-                duration_seconds=round(duration, 3),
-                runner_status=getattr(run_result, "status", None),
-                correlation_id=exec_ctx.correlation_id,
-            )
-
-            output = getattr(run_result, "output", None)
-            if output is None:
-                output = getattr(run_result, "final_output", None)
-
-            # Get trace data for tool calls count
-            trace_data = trace_hooks.get_trace_data()
-
-            # Record run completion SYNCHRONOUSLY to ensure it's recorded
-            # before returning (prevents orphaned "running" status)
-            await _record_agent_run_complete_sync(
-                run_id=run_id,
-                status="completed",
-                duration_seconds=duration,
-                output_summary=str(output)[:1000] if output else "",
-                tool_calls_count=len(trace_data.tool_calls),
-            )
-
-            # Record detailed tool calls (can be async - not critical for status)
-            _track_background_task(
-                record_trace(run_id, trace_data),
-                task_name="record_trace",
-            )
-
-            # Unregister from in-flight tracking
-            unregister_in_flight_run(run_id)
-
-            return AgentResult(
-                success=True,
-                output=output,
-                error=None,
-                duration_seconds=duration,
-                token_usage=token_usage,
-                correlation_id=exec_ctx.correlation_id,
-                metadata=exec_ctx.metadata,
-            )
-
-        except builtins.TimeoutError:
-            duration = (datetime.utcnow() - start_time).total_seconds()
-
-            self.metrics.record_agent_request(
-                agent_name=agent_name,
-                duration=duration,
-                status="timeout",
-            )
-            self.metrics.record_error("TimeoutError", agent_name)
-
-            error_msg = f"Agent execution timed out after {self.timeout}s"
-            logger.error(
-                "agent_execution_timeout",
-                agent_name=agent_name,
-                timeout_seconds=self.timeout,
-                duration_seconds=round(duration, 3),
-                correlation_id=exec_ctx.correlation_id,
-                run_id=run_id,
-            )
-
-            # Record timeout SYNCHRONOUSLY
-            await _record_agent_run_complete_sync(
-                run_id=run_id,
-                status="timeout",
-                duration_seconds=duration,
-                error_message=error_msg,
-            )
-
-            # Unregister from in-flight tracking
-            unregister_in_flight_run(run_id)
-
-            return AgentResult(
-                success=False,
-                output=None,
-                error=error_msg,
-                duration_seconds=duration,
-                token_usage=None,
-                correlation_id=exec_ctx.correlation_id,
-                metadata=exec_ctx.metadata,
-            )
-
-        except RetryError as e:
-            duration = (datetime.utcnow() - start_time).total_seconds()
-
-            self.metrics.record_agent_request(
-                agent_name=agent_name,
-                duration=duration,
-                status="retry_exhausted",
-            )
-            self.metrics.record_error("RetryError", agent_name)
-
-            error_msg = (
-                f"Agent execution failed after {self.max_retries} retries: {str(e)}"
-            )
-            logger.error(
-                "agent_execution_retry_exhausted",
-                agent_name=agent_name,
-                error=str(e),
-                duration_seconds=round(duration, 3),
-                correlation_id=exec_ctx.correlation_id,
-                run_id=run_id,
-                exc_info=True,
-            )
-
-            # Record failure SYNCHRONOUSLY
-            await _record_agent_run_complete_sync(
-                run_id=run_id,
-                status="failed",
-                duration_seconds=duration,
-                error_message=error_msg[:500],
-            )
-
-            # Unregister from in-flight tracking
-            unregister_in_flight_run(run_id)
-
-            return AgentResult(
-                success=False,
-                output=None,
-                error=error_msg,
-                duration_seconds=duration,
-                token_usage=None,
-                correlation_id=exec_ctx.correlation_id,
-                metadata=exec_ctx.metadata,
-            )
-
-        except Exception as e:
-            duration = (datetime.utcnow() - start_time).total_seconds()
-
-            self.metrics.record_agent_request(
-                agent_name=agent_name,
-                duration=duration,
-                status="error",
-            )
-            self.metrics.record_error(type(e).__name__, agent_name)
-
-            error_msg = str(e)
-            logger.error(
-                "agent_execution_failed",
-                agent_name=agent_name,
-                error=error_msg,
-                error_type=type(e).__name__,
-                duration_seconds=round(duration, 3),
-                correlation_id=exec_ctx.correlation_id,
-                run_id=run_id,
-                exc_info=True,
-            )
-
-            # Record failure SYNCHRONOUSLY
-            await _record_agent_run_complete_sync(
-                run_id=run_id,
-                status="failed",
-                duration_seconds=duration,
-                error_message=error_msg[:500],
-            )
-
-            # Unregister from in-flight tracking
-            unregister_in_flight_run(run_id)
-
-            return AgentResult(
-                success=False,
-                output=None,
-                error=error_msg,
-                duration_seconds=duration,
-                token_usage=None,
-                correlation_id=exec_ctx.correlation_id,
-                metadata=exec_ctx.metadata,
-            )
-
-    def _extract_token_usage(self, run_result: RunResult) -> dict | None:
-        """Extract token usage from run result."""
-        # This depends on the OpenAI Agents SDK implementation
-        # Adapt based on actual response structure
-        if hasattr(run_result, "usage"):
-            return {
-                "model": getattr(run_result, "model", "unknown"),
-                "prompt_tokens": getattr(run_result.usage, "prompt_tokens", 0),
-                "completion_tokens": getattr(run_result.usage, "completion_tokens", 0),
-                "total_tokens": getattr(run_result.usage, "total_tokens", 0),
-            }
-        return None
-
-
 class AgentRegistry:
-    """Registry for managing agent factories and per-team runners."""
+    """Registry for managing agent factories and cached agents."""
 
     def __init__(self):
-        self._factories: dict[str, tuple[Callable[..., Agent], int]] = {}
-        self._default_runners: dict[str, AgentRunner] = {}
-        # Cache runners by (agent_name + team_config hash). Keep bounded to avoid unbounded growth.
-        self._team_runners: OrderedDict[str, AgentRunner] = OrderedDict()
-        self._team_runner_cache_max = 128
+        self._factories: dict[str, Callable[..., Agent]] = {}
+        self._default_agents: dict[str, Agent] = {}
+        # Cache agents by (agent_name + team_config hash). Keep bounded to avoid unbounded growth.
+        self._team_agents: OrderedDict[str, Agent] = OrderedDict()
+        self._team_agent_cache_max = 128
 
     def register_factory(
         self, name: str, factory: Callable[..., Agent], max_retries: int = 3
     ) -> None:
-        """Register an agent factory."""
-        self._factories[name] = (factory, max_retries)
-        # Warm a default runner (no team overrides) for health/readiness.
+        """Register an agent factory.
+
+        Note: max_retries parameter is kept for backwards compatibility but is no longer used.
+        Retry logic is now handled by _run_agent_with_retry() in api_server.py.
+        """
+        self._factories[name] = factory
+        # Warm a default agent (no team overrides) for health/readiness.
         try:
             agent = factory(None)  # type: ignore[arg-type]
         except TypeError:
             agent = factory()
-        self._default_runners[name] = AgentRunner(agent, max_retries=max_retries)
+        self._default_agents[name] = agent
         logger.info("agent_factory_registered", agent_name=name)
 
-    def get_agent(self, name: str) -> Agent | None:
-        """Get an agent by name."""
-        runner = self._default_runners.get(name)
-        return runner.agent if runner else None
-
-    def get_runner(
+    def get_agent(
         self,
         name: str,
         *,
         team_config_hash: str | None = None,
         factory_kwargs: dict | None = None,
-    ) -> AgentRunner | None:
+    ) -> Agent | None:
         """
-        Get an agent runner.
+        Get an agent by name.
 
-        - If no team_config_hash is provided, returns the default runner.
-        - If team_config_hash is provided, returns a cached runner for that team, creating it if needed.
+        - If no team_config_hash is provided, returns the default cached agent.
+        - If team_config_hash is provided, returns a cached agent for that team, creating it if needed.
         """
         if name not in self._factories:
             return None
 
         if not team_config_hash:
-            return self._default_runners.get(name)
+            return self._default_agents.get(name)
 
         cache_key = f"{name}:{team_config_hash}"
-        existing = self._team_runners.get(cache_key)
+        existing = self._team_agents.get(cache_key)
         if existing:
-            self._team_runners.move_to_end(cache_key)
+            self._team_agents.move_to_end(cache_key)
             return existing
 
-        factory, max_retries = self._factories[name]
+        factory = self._factories[name]
         kwargs = factory_kwargs or {}
         agent = factory(**kwargs)
-        runner = AgentRunner(agent, max_retries=max_retries)
 
-        self._team_runners[cache_key] = runner
-        self._team_runners.move_to_end(cache_key)
-        while len(self._team_runners) > self._team_runner_cache_max:
-            self._team_runners.popitem(last=False)
+        self._team_agents[cache_key] = agent
+        self._team_agents.move_to_end(cache_key)
+        while len(self._team_agents) > self._team_agent_cache_max:
+            self._team_agents.popitem(last=False)
 
-        return runner
+        return agent
 
     def list_agents(self) -> list[str]:
         """List all registered agent names."""

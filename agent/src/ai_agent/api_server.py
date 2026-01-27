@@ -27,7 +27,6 @@ from tenacity import (
 )
 
 from .core.agent_runner import (
-    AgentRunner,
     _record_agent_run_complete,
     _record_agent_run_start,
     get_agent_registry,
@@ -765,14 +764,14 @@ def create_app() -> Sanic:
                     # Never fail agent execution due to KB enrichment
                     pass
 
-        runner = registry.get_runner(
+        cached_agent = registry.get_agent(
             agent_name,
             team_config_hash=team_config_hash,
             factory_kwargs={"team_config": team_config} if team_config else None,
         )
 
         # If agent not found in registry, try creating it dynamically from team config
-        if not runner and team_config:
+        if not cached_agent and team_config:
             try:
                 from .agents.registry import create_generic_agent_from_config
 
@@ -781,21 +780,15 @@ def create_app() -> Sanic:
 
                 if agent_config and agent_config.enabled:
                     # Create agent dynamically
-                    agent = create_generic_agent_from_config(
+                    cached_agent = create_generic_agent_from_config(
                         agent_name, team_config=team_config
                     )
-
-                    # Get max_retries from config
-                    max_retries = agent_config.max_retries or 3
-
-                    # Create runner
-                    runner = AgentRunner(agent, max_retries=max_retries)
 
                     logger.info(
                         "dynamic_agent_created",
                         agent_name=agent_name,
                         team_config_hash=team_config_hash,
-                        runner_is_none=runner is None,
+                        agent_is_none=cached_agent is None,
                     )
                 else:
                     logger.warning(
@@ -812,9 +805,9 @@ def create_app() -> Sanic:
                     exc_info=True,
                 )
 
-        if not runner:
+        if not cached_agent:
             logger.error(
-                "runner_is_none_returning_404",
+                "agent_not_found_returning_404",
                 agent_name=agent_name,
                 team_config_hash=team_config_hash,
                 had_team_config=team_config is not None,
@@ -828,9 +821,9 @@ def create_app() -> Sanic:
             )
 
         logger.info(
-            "runner_found_proceeding",
+            "agent_found_proceeding",
             agent_name=agent_name,
-            runner_type=type(runner).__name__,
+            agent_type=type(cached_agent).__name__,
         )
 
         try:
@@ -951,8 +944,8 @@ def create_app() -> Sanic:
                     post_to_destinations,
                 )
 
-                # Get the raw agent from the runner
-                base_agent = runner.agent
+                # Get the base agent from registry
+                base_agent = cached_agent
 
                 display_name = agent_name.replace("_", " ").title()
 
@@ -1601,7 +1594,7 @@ def create_app() -> Sanic:
                 if stack and mcp_servers:
                     async with stack:
                         # Get base agent properties
-                        base_agent = runner.agent
+                        base_agent = cached_agent
 
                         # Create fresh agent with MCP servers
                         from agents import Agent, Runner
@@ -1670,7 +1663,7 @@ def create_app() -> Sanic:
                     result = await asyncio.wait_for(
                         _run_agent_with_retry(
                             sdk_runner,
-                            runner.agent,  # Use cached agent from registry
+                            cached_agent,  # Use cached agent from registry
                             parsed_message,
                             max_turns=max_turns or 100,
                             hooks=composite_hooks,
@@ -1847,7 +1840,7 @@ def create_app() -> Sanic:
                     # Continue without team config - use default agent
 
         # Get the agent
-        runner = registry.get_runner(
+        cached_agent = registry.get_agent(
             agent_name,
             team_config_hash=(
                 str(hash(team_config.model_dump_json())) if team_config else None
@@ -1855,7 +1848,7 @@ def create_app() -> Sanic:
             factory_kwargs={"team_config": team_config} if team_config else None,
         )
 
-        if not runner:
+        if not cached_agent:
             return response.json(
                 {
                     "error": f"Agent '{agent_name}' not found",
@@ -2006,7 +1999,7 @@ def create_app() -> Sanic:
 
                     # Use OpenAI Agents SDK streaming
                     sdk_runner = Runner()
-                    base_agent = runner.agent
+                    base_agent = cached_agent
 
                     # Parse message for multimodal content (embedded images)
                     # Converts <image src="data:..."/> to OpenAI's format
