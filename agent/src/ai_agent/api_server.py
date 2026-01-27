@@ -35,6 +35,7 @@ from .core.config import get_config
 from .core.logging import get_correlation_id, get_logger, set_correlation_id
 from .core.metrics import get_metrics_collector
 from .core.slack_hooks import SlackUpdateHooks, SlackUpdateState
+from .core.trace_recorder import create_composite_hooks, record_trace
 from .integrations.slack_ui import build_investigation_dashboard
 
 logger = get_logger(__name__)
@@ -1045,6 +1046,9 @@ def create_app() -> Sanic:
                     correlation_id=request.ctx.correlation_id,
                 )
 
+                # Initialize trace_hooks before try block so it's available in exception handlers
+                trace_hooks = None
+
                 try:
                     # Build session ID and look up/create OpenAI conversation_id
                     session_id = _build_session_id(context_data)
@@ -1075,6 +1079,17 @@ def create_app() -> Sanic:
                                 conversation_id=conversation_id,
                                 agent_name=agent_name,
                             )
+
+                    # Create composite hooks: TraceRecorderHooks + SlackUpdateHooks
+                    # This ensures tool calls are always recorded for the run trace UI
+                    if slack_hooks:
+                        trace_hooks, composite_hooks = create_composite_hooks(
+                            run_id, agent_name, slack_hooks
+                        )
+                    else:
+                        trace_hooks, composite_hooks = create_composite_hooks(
+                            run_id, agent_name
+                        )
 
                     # If we have MCP servers, create agent with them
                     # Otherwise use the cached agent
@@ -1135,7 +1150,7 @@ def create_app() -> Sanic:
                                     parsed_message,
                                     conversation_id=conversation_id,  # Pass conversation_id directly
                                     max_turns=max_turns or 100,
-                                    hooks=slack_hooks,  # Progressive Slack updates
+                                    hooks=composite_hooks,  # TraceRecorder + Slack updates
                                 ),
                                 timeout=timeout or 600,
                             )
@@ -1198,7 +1213,7 @@ def create_app() -> Sanic:
                                 parsed_message,
                                 conversation_id=conversation_id,  # Pass conversation_id directly
                                 max_turns=max_turns or 100,
-                                hooks=slack_hooks,  # Progressive Slack updates
+                                hooks=composite_hooks,  # TraceRecorder + Slack updates
                             ),
                             timeout=timeout or 600,
                         )
@@ -1306,6 +1321,13 @@ def create_app() -> Sanic:
                             )
                         )
 
+                    # Get trace data and record tool calls
+                    trace_data = trace_hooks.get_trace_data()
+                    tool_calls_count = len(trace_data.tool_calls)
+
+                    # Record trace (fire and forget - non-critical path)
+                    asyncio.create_task(record_trace(run_id, trace_data))
+
                     # Record agent run completion
                     output_summary = ""
                     if isinstance(output, dict) and "summary" in output:
@@ -1318,7 +1340,7 @@ def create_app() -> Sanic:
                             status="completed",
                             duration_seconds=duration,
                             output_summary=output_summary,
-                            tool_calls_count=0,  # Non-streaming doesn't track tool calls
+                            tool_calls_count=tool_calls_count,
                         )
                     )
 
@@ -1359,6 +1381,13 @@ def create_app() -> Sanic:
                         message_ids=message_ids,
                     )
 
+                    # Get trace data and record even on timeout (if hooks were initialized)
+                    tool_calls_count = 0
+                    if trace_hooks:
+                        trace_data = trace_hooks.get_trace_data()
+                        asyncio.create_task(record_trace(run_id, trace_data))
+                        tool_calls_count = len(trace_data.tool_calls)
+
                     # Record timeout
                     asyncio.create_task(
                         _record_agent_run_complete(
@@ -1366,7 +1395,7 @@ def create_app() -> Sanic:
                             status="timeout",
                             duration_seconds=duration,
                             error_message=error_msg,
-                            tool_calls_count=0,
+                            tool_calls_count=tool_calls_count,
                         )
                     )
 
@@ -1404,6 +1433,13 @@ def create_app() -> Sanic:
                         message_ids=message_ids,
                     )
 
+                    # Get trace data and record even on failure (if hooks were initialized)
+                    tool_calls_count = 0
+                    if trace_hooks:
+                        trace_data = trace_hooks.get_trace_data()
+                        asyncio.create_task(record_trace(run_id, trace_data))
+                        tool_calls_count = len(trace_data.tool_calls)
+
                     # Record failure
                     asyncio.create_task(
                         _record_agent_run_complete(
@@ -1411,7 +1447,7 @@ def create_app() -> Sanic:
                             status="failed",
                             duration_seconds=duration,
                             error_message=error_msg[:500],
-                            tool_calls_count=0,
+                            tool_calls_count=tool_calls_count,
                         )
                     )
 
@@ -1800,6 +1836,9 @@ def create_app() -> Sanic:
                     )
                 )
 
+                # Initialize trace_hooks before try block so it's available in exception handlers
+                trace_hooks = None
+
                 try:
                     # Send agent_started event
                     await response_stream.write(
@@ -1839,6 +1878,13 @@ def create_app() -> Sanic:
                         parsed_message, max_length=100
                     )
 
+                    # Create composite hooks for trace recording during streaming
+                    # (Slack hooks not used in streaming mode - SSE provides real-time updates)
+                    trace_hooks, composite_hooks = create_composite_hooks(
+                        run_id=run_id,
+                        agent_name=agent_name,
+                    )
+
                     logger.info(
                         "starting_streamed_agent_execution",
                         agent_name=agent_name,
@@ -1851,19 +1897,18 @@ def create_app() -> Sanic:
                     )
 
                     # Run with streaming - pass previous_response_id for chaining
+                    run_kwargs = {
+                        "max_turns": max_turns,
+                        "hooks": composite_hooks,
+                    }
                     if current_response_id:
-                        result = sdk_runner.run_streamed(
-                            base_agent,
-                            parsed_message,
-                            max_turns=max_turns,
-                            previous_response_id=current_response_id,
-                        )
-                    else:
-                        result = sdk_runner.run_streamed(
-                            base_agent,
-                            parsed_message,
-                            max_turns=max_turns,
-                        )
+                        run_kwargs["previous_response_id"] = current_response_id
+
+                    result = sdk_runner.run_streamed(
+                        base_agent,
+                        parsed_message,
+                        **run_kwargs,
+                    )
 
                     # Helper to drain sub-agent events
                     async def drain_subagent_events():
@@ -2025,6 +2070,14 @@ def create_app() -> Sanic:
                         correlation_id=correlation_id,
                     )
 
+                    # Get trace data from hooks and record tool calls
+                    trace_data = trace_hooks.get_trace_data()
+                    asyncio.create_task(record_trace(run_id, trace_data))
+
+                    # Use trace data for tool_calls_count if hooks captured more
+                    # (hooks capture args/results, SSE just counts)
+                    final_tool_count = max(tool_calls_count, len(trace_data.tool_calls))
+
                     # Record agent run completion
                     output_summary = ""
                     if isinstance(final_output, dict) and "summary" in final_output:
@@ -2037,7 +2090,7 @@ def create_app() -> Sanic:
                             status="completed",
                             duration_seconds=duration,
                             output_summary=output_summary,
-                            tool_calls_count=tool_calls_count,
+                            tool_calls_count=final_tool_count,
                         )
                     )
 
@@ -2056,6 +2109,13 @@ def create_app() -> Sanic:
                             },
                         )
                     )
+                    # Record trace data even on timeout (if hooks were initialized)
+                    trace_tool_count = 0
+                    if trace_hooks:
+                        trace_data = trace_hooks.get_trace_data()
+                        asyncio.create_task(record_trace(run_id, trace_data))
+                        trace_tool_count = len(trace_data.tool_calls)
+
                     # Record timeout
                     asyncio.create_task(
                         _record_agent_run_complete(
@@ -2063,7 +2123,7 @@ def create_app() -> Sanic:
                             status="timeout",
                             duration_seconds=duration,
                             error_message=f"Agent timed out after {timeout}s",
-                            tool_calls_count=tool_calls_count,
+                            tool_calls_count=max(tool_calls_count, trace_tool_count),
                         )
                     )
 
@@ -2089,6 +2149,13 @@ def create_app() -> Sanic:
                             },
                         )
                     )
+                    # Record trace data even on failure (if hooks were initialized)
+                    trace_tool_count = 0
+                    if trace_hooks:
+                        trace_data = trace_hooks.get_trace_data()
+                        asyncio.create_task(record_trace(run_id, trace_data))
+                        trace_tool_count = len(trace_data.tool_calls)
+
                     # Record failure
                     asyncio.create_task(
                         _record_agent_run_complete(
@@ -2096,7 +2163,7 @@ def create_app() -> Sanic:
                             status="failed",
                             duration_seconds=duration,
                             error_message=str(e)[:500],
-                            tool_calls_count=tool_calls_count,
+                            tool_calls_count=max(tool_calls_count, trace_tool_count),
                         )
                     )
 
