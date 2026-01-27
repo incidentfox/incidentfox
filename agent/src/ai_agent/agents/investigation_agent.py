@@ -437,7 +437,10 @@ async def _run_agent_streamed(
                     completed_tool = None
                     tool_duration_ms = None
                     for seq, info in list(pending_tools.items()):
-                        if info.get("call_id") == output_call_id or seq == tool_sequence:
+                        if (
+                            info.get("call_id") == output_call_id
+                            or seq == tool_sequence
+                        ):
                             completed_tool = info
                             tool_duration_ms = int((now - info["started_at"]) * 1000)
                             del pending_tools[seq]
@@ -453,7 +456,9 @@ async def _run_agent_streamed(
                     logger.info(
                         "streamed_agent_tool_output",
                         agent=agent_name,
-                        tool_name=completed_tool["name"] if completed_tool else "unknown",
+                        tool_name=(
+                            completed_tool["name"] if completed_tool else "unknown"
+                        ),
                         tool_call_id=output_call_id,
                         tool_output_count=tool_output_count,
                         tool_sequence=tool_sequence,

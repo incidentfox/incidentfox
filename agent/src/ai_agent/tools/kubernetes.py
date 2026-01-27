@@ -185,11 +185,13 @@ def get_pod_logs(
             pod_name=pod_name,
             namespace=namespace,
         )
-        return json.dumps({
-            "error": f"Unexpected error: {type(e).__name__}: {e}",
-            "pod": pod_name,
-            "namespace": namespace,
-        })
+        return json.dumps(
+            {
+                "error": f"Unexpected error: {type(e).__name__}: {e}",
+                "pod": pod_name,
+                "namespace": namespace,
+            }
+        )
 
 
 @function_tool(strict_mode=False)
@@ -297,11 +299,13 @@ def describe_pod(pod_name: str, namespace: str = "default") -> str:
             pod_name=pod_name,
             namespace=namespace,
         )
-        return json.dumps({
-            "error": f"Unexpected error: {type(e).__name__}: {e}",
-            "pod": pod_name,
-            "namespace": namespace,
-        })
+        return json.dumps(
+            {
+                "error": f"Unexpected error: {type(e).__name__}: {e}",
+                "pod": pod_name,
+                "namespace": namespace,
+            }
+        )
 
 
 @function_tool(strict_mode=False)
@@ -381,10 +385,12 @@ def list_pods(
             traceback=tb_str,
             namespace=namespace,
         )
-        return json.dumps({
-            "error": f"Unexpected error: {type(e).__name__}: {e}",
-            "namespace": namespace,
-        })
+        return json.dumps(
+            {
+                "error": f"Unexpected error: {type(e).__name__}: {e}",
+                "namespace": namespace,
+            }
+        )
 
 
 @function_tool(strict_mode=False)
@@ -443,9 +449,11 @@ def list_namespaces() -> str:
             error_type=type(e).__name__,
             traceback=tb_str,
         )
-        return json.dumps({
-            "error": f"Unexpected error: {type(e).__name__}: {e}",
-        })
+        return json.dumps(
+            {
+                "error": f"Unexpected error: {type(e).__name__}: {e}",
+            }
+        )
 
 
 @function_tool(strict_mode=False)
@@ -525,11 +533,13 @@ def get_pod_events(pod_name: str, namespace: str = "default") -> str:
             pod_name=pod_name,
             namespace=namespace,
         )
-        return json.dumps({
-            "error": f"Unexpected error: {type(e).__name__}: {e}",
-            "pod": pod_name,
-            "namespace": namespace,
-        })
+        return json.dumps(
+            {
+                "error": f"Unexpected error: {type(e).__name__}: {e}",
+                "pod": pod_name,
+                "namespace": namespace,
+            }
+        )
 
 
 @function_tool(strict_mode=False)
@@ -618,11 +628,13 @@ def describe_deployment(deployment_name: str, namespace: str = "default") -> str
             deployment_name=deployment_name,
             namespace=namespace,
         )
-        return json.dumps({
-            "error": f"Unexpected error: {type(e).__name__}: {e}",
-            "deployment": deployment_name,
-            "namespace": namespace,
-        })
+        return json.dumps(
+            {
+                "error": f"Unexpected error: {type(e).__name__}: {e}",
+                "deployment": deployment_name,
+                "namespace": namespace,
+            }
+        )
 
 
 @function_tool(strict_mode=False)
@@ -723,11 +735,13 @@ def get_deployment_history(deployment_name: str, namespace: str = "default") -> 
             deployment_name=deployment_name,
             namespace=namespace,
         )
-        return json.dumps({
-            "error": f"Unexpected error: {type(e).__name__}: {e}",
-            "deployment": deployment_name,
-            "namespace": namespace,
-        })
+        return json.dumps(
+            {
+                "error": f"Unexpected error: {type(e).__name__}: {e}",
+                "deployment": deployment_name,
+                "namespace": namespace,
+            }
+        )
 
 
 @function_tool(strict_mode=False)
@@ -833,11 +847,13 @@ def describe_service(service_name: str, namespace: str = "default") -> str:
             service_name=service_name,
             namespace=namespace,
         )
-        return json.dumps({
-            "error": f"Unexpected error: {type(e).__name__}: {e}",
-            "service": service_name,
-            "namespace": namespace,
-        })
+        return json.dumps(
+            {
+                "error": f"Unexpected error: {type(e).__name__}: {e}",
+                "service": service_name,
+                "namespace": namespace,
+            }
+        )
 
 
 @function_tool(strict_mode=False)
@@ -1066,8 +1082,10 @@ def get_pod_resources(pod_name: str, namespace: str = "default") -> str:
             pod_name=pod_name,
             namespace=namespace,
         )
-        return json.dumps({
-            "error": f"Unexpected error: {type(e).__name__}: {e}",
-            "pod": pod_name,
-            "namespace": namespace,
-        })
+        return json.dumps(
+            {
+                "error": f"Unexpected error: {type(e).__name__}: {e}",
+                "pod": pod_name,
+                "namespace": namespace,
+            }
+        )
