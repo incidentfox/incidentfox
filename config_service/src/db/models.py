@@ -297,6 +297,95 @@ class KnowledgeDocument(Base):
     )
 
 
+class PendingKnowledgeTeaching(Base):
+    """
+    Pending knowledge teachings from agents awaiting review.
+
+    When an agent learns something during an investigation, it can "teach"
+    the knowledge base. Depending on confidence and team settings, teachings
+    may be auto-approved or queued for human review.
+
+    Lifecycle:
+    1. Agent calls teach_knowledge_base() tool
+    2. Teaching is created with status="pending" (or "auto_approved" if high confidence)
+    3. Human reviews and approves/rejects
+    4. On approval, knowledge is added to the RAPTOR tree
+    """
+
+    __tablename__ = "pending_knowledge_teachings"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    org_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    team_node_id: Mapped[str] = mapped_column(String(128), nullable=False)
+
+    # The knowledge being taught
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    knowledge_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="procedural"
+    )  # procedural, factual, temporal, relational
+
+    # Metadata about the teaching
+    source: Mapped[str] = mapped_column(
+        String(128), nullable=False, server_default="agent_learning"
+    )
+    confidence: Mapped[float] = mapped_column(nullable=False, server_default="0.7")
+    related_services: Mapped[Optional[list]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+
+    # Context from the investigation
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    agent_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    task_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    incident_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    # Similarity analysis (did we find similar existing knowledge?)
+    similar_node_id: Mapped[Optional[int]] = mapped_column(nullable=True)
+    similarity_score: Mapped[Optional[float]] = mapped_column(nullable=True)
+    is_potential_contradiction: Mapped[bool] = mapped_column(
+        nullable=False, server_default="false"
+    )
+    contradiction_details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Lifecycle
+    proposed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    proposed_by: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True
+    )  # agent or user who initiated
+
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="pending"
+    )  # pending, auto_approved, approved, rejected, merged
+
+    # Review
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reviewed_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    review_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Result after approval
+    created_node_id: Mapped[Optional[int]] = mapped_column(nullable=True)
+    merged_with_node_id: Mapped[Optional[int]] = mapped_column(nullable=True)
+    applied_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "team_node_id"],
+            ["org_nodes.org_id", "org_nodes.node_id"],
+            name="fk_pending_knowledge_teachings_team_node",
+            ondelete="CASCADE",
+        ),
+        Index("ix_pending_knowledge_teachings_org_team", "org_id", "team_node_id"),
+        Index("ix_pending_knowledge_teachings_status", "status"),
+        Index("ix_pending_knowledge_teachings_proposed_at", "proposed_at"),
+    )
+
+
 # =============================================================================
 # Enterprise Security Models
 # =============================================================================

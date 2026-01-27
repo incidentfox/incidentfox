@@ -14,6 +14,7 @@ on:
         options:
           - all
           - agent
+          - ai-pipeline
           - config-service
           - orchestrator
           - web-ui
@@ -38,12 +39,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [agent, config-service, orchestrator, web-ui]
+        service: [agent, ai-pipeline, config-service, orchestrator, web-ui]
         include:
           - service: agent
             context: ./agent
             dockerfile: ./agent/Dockerfile
             image: incidentfox-agent
+          - service: ai-pipeline
+            context: ./ai_pipeline
+            dockerfile: ./ai_pipeline/Dockerfile
+            image: incidentfox-ai-pipeline
           - service: config-service
             context: ./config_service
             dockerfile: ./config_service/Dockerfile
@@ -197,12 +202,15 @@ jobs:
       - name: Rollout restart deployments
         run: |
           # Force pods to pull new images
+          # Note: ai-pipeline is a CronJob, not a Deployment, so skip rollout restart
           if [ "${{ github.event.inputs.services }}" = "all" ]; then
             kubectl rollout restart deployment/incidentfox-agent \
               deployment/incidentfox-config-service \
               deployment/incidentfox-orchestrator \
               deployment/incidentfox-web-ui \
               -n ${{ env.HELM_NAMESPACE }}
+          elif [ "${{ github.event.inputs.services }}" = "ai-pipeline" ]; then
+            echo "ai-pipeline is a CronJob - no rollout restart needed"
           else
             kubectl rollout restart deployment/incidentfox-${{ github.event.inputs.services }} \
               -n ${{ env.HELM_NAMESPACE }}
@@ -215,6 +223,8 @@ jobs:
             kubectl rollout status deployment/incidentfox-config-service -n ${{ env.HELM_NAMESPACE }} --timeout=10m
             kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=10m
             kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=10m
+          elif [ "${{ github.event.inputs.services }}" = "ai-pipeline" ]; then
+            echo "ai-pipeline is a CronJob - no rollout status needed"
           else
             kubectl rollout status deployment/incidentfox-${{ github.event.inputs.services }} -n ${{ env.HELM_NAMESPACE }} --timeout=10m
           fi
