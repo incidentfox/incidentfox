@@ -582,11 +582,9 @@ export default function AgentSettingsPage() {
               tools: editingAgent.tools,
               disable_default_tools: editingAgent.disable_default_tools,
               enable_extra_tools: editingAgent.enable_extra_tools,
-              // Don't send sub_agents when using new disable/enable pattern to avoid conflicts
-              // sub_agents: editingAgent.sub_agents,
-              disable_default_sub_agents: editingAgent.disable_default_sub_agents,
-              enable_extra_sub_agents: editingAgent.enable_extra_sub_agents,
-              mcps: editingAgent.mcps,  // NEW: Save MCP assignments
+              // Use canonical sub_agents dict format: {agent_id: boolean}
+              sub_agents: editingAgent.sub_agents,
+              mcps: editingAgent.mcps,
               max_turns: editingAgent.max_turns,
               handoff_strategy: editingAgent.handoff_strategy,
             },
@@ -1623,51 +1621,33 @@ export default function AgentSettingsPage() {
 
                   <div className="space-y-3">
                     {(() => {
-                      // Compute effective sub-agents - Extract enabled from dict format
-                      const defaultSubAgents = Object.entries(editingAgent.sub_agents || {})
+                      // Canonical format: sub_agents dict with {agent_id: boolean}
+                      // Enabled sub-agents are those with value === true
+                      const enabledSubAgents = Object.entries(editingAgent.sub_agents || {})
                         .filter(([_, enabled]) => enabled)
                         .map(([id, _]) => id);
-                      const disabledSubAgents = editingAgent.disable_default_sub_agents || [];
-                      const extraSubAgents = editingAgent.enable_extra_sub_agents || [];
-
-                      // Effective = default - disabled + extra
-                      const effectiveSubAgents = [
-                        ...defaultSubAgents.filter(id => !disabledSubAgents.includes(id)),
-                        ...extraSubAgents
-                      ];
-                      // Dedupe
-                      const uniqueEffective = Array.from(new Set(effectiveSubAgents));
 
                       return (
                         <>
-                          {/* Current sub-agents (effective) */}
-                          {uniqueEffective.length > 0 && (
+                          {/* Current sub-agents (enabled) */}
+                          {enabledSubAgents.length > 0 && (
                             <div className="flex flex-wrap gap-2">
-                              {uniqueEffective.map((subId) => {
+                              {enabledSubAgents.map((subId) => {
                                 const sub = agents[subId];
                                 const remoteSub = remoteAgents.find(r => r.id === subId);
                                 const isRemote = !!remoteSub;
-                                const isDefault = defaultSubAgents.includes(subId);
-                                const isExtra = extraSubAgents.includes(subId);
 
                                 return (
                                   <button
                                     key={subId}
                                     onClick={() => {
-                                      // When removing a sub-agent:
-                                      // - If it's from default (not disabled), add to disabled list
-                                      // - If it's from extra, remove from extra list
-                                      const newDisabled = isDefault && !disabledSubAgents.includes(subId)
-                                        ? [...disabledSubAgents, subId]
-                                        : disabledSubAgents;
-                                      const newExtra = isExtra
-                                        ? extraSubAgents.filter(id => id !== subId)
-                                        : extraSubAgents;
-
+                                      // When removing a sub-agent, set sub_agents.{id}: false (canonical format)
                                       setEditingAgent({
                                         ...editingAgent,
-                                        disable_default_sub_agents: newDisabled,
-                                        enable_extra_sub_agents: newExtra,
+                                        sub_agents: {
+                                          ...editingAgent.sub_agents,
+                                          [subId]: false,
+                                        },
                                       });
                                     }}
                                     className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors group bg-gray-600 text-white hover:bg-gray-500"
@@ -1690,7 +1670,7 @@ export default function AgentSettingsPage() {
                           {(() => {
                             const allAgentIds = [...Object.keys(agents), ...remoteAgents.map(r => r.id)];
                             const availableAgents = allAgentIds.filter(
-                              id => id !== editingAgent.id && !uniqueEffective.includes(id)
+                              id => id !== editingAgent.id && !enabledSubAgents.includes(id)
                             );
 
                             if (availableAgents.length === 0) return null;
@@ -1703,27 +1683,20 @@ export default function AgentSettingsPage() {
                                     const agent = agents[agentId];
                                     const remoteAgent = remoteAgents.find(r => r.id === agentId);
                                     const isRemote = !!remoteAgent;
-                                    const isDisabled = disabledSubAgents.includes(agentId);
 
                                     return (
                                       <button
                                         key={agentId}
                                         onClick={() => {
-                                          // When adding a sub-agent:
-                                          // - If it's in default and disabled, remove from disabled list
-                                          // - Otherwise, add to extra list
-                                          if (defaultSubAgents.includes(agentId) && isDisabled) {
-                                            setEditingAgent({
-                                              ...editingAgent,
-                                              disable_default_sub_agents: disabledSubAgents.filter(id => id !== agentId),
-                                            });
-                                          } else {
-                                            setEditingAgent({
-                                              ...editingAgent,
-                                              enable_extra_sub_agents: [...extraSubAgents, agentId],
-                                              handoff_strategy: editingAgent.handoff_strategy || 'agent_as_tool',
-                                            });
-                                          }
+                                          // When adding a sub-agent, set sub_agents.{id}: true (canonical format)
+                                          setEditingAgent({
+                                            ...editingAgent,
+                                            sub_agents: {
+                                              ...editingAgent.sub_agents,
+                                              [agentId]: true,
+                                            },
+                                            handoff_strategy: editingAgent.handoff_strategy || 'agent_as_tool',
+                                          });
                                         }}
                                         className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-400 hover:text-gray-500 dark:hover:text-gray-300 transition-colors"
                                         title={isRemote ? `Remote A2A Agent: ${remoteAgent?.url}` : undefined}
