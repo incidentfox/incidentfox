@@ -485,6 +485,8 @@ class CompositeHooks(RunHooks):
     and forwarding all lifecycle events to each one.
 
     Thread-safe: Each child hook manages its own thread safety.
+
+    DIAGNOSTIC: All hook executions are timed to detect hanging hooks.
     """
 
     def __init__(self, *hooks: RunHooks):
@@ -495,24 +497,63 @@ class CompositeHooks(RunHooks):
             hooks: RunHooks instances to compose
         """
         self._hooks: list[RunHooks] = [h for h in hooks if h is not None]
+        logger.info(
+            "composite_hooks_initialized",
+            hook_count=len(self._hooks),
+            hook_types=[type(h).__name__ for h in self._hooks],
+        )
 
     async def on_agent_start(
         self,
         context: RunContextWrapper,
         agent: Agent,
     ) -> None:
-        """Forward agent start to all hooks."""
-        for hook in self._hooks:
+        """Forward agent start to all hooks with timing."""
+        import time
+
+        agent_name = getattr(agent, "name", "unknown")
+        event_start = time.time()
+        logger.info(
+            "composite_hook_event_start",
+            event="on_agent_start",
+            agent=agent_name,
+            hook_count=len(self._hooks),
+        )
+
+        for i, hook in enumerate(self._hooks):
+            hook_name = type(hook).__name__
+            hook_start = time.time()
             try:
                 if hasattr(hook, "on_agent_start"):
+                    logger.debug(
+                        "composite_hook_calling",
+                        event="on_agent_start",
+                        hook=hook_name,
+                        hook_index=i,
+                    )
                     await hook.on_agent_start(context, agent)
+                    logger.debug(
+                        "composite_hook_returned",
+                        event="on_agent_start",
+                        hook=hook_name,
+                        hook_index=i,
+                        duration_ms=int((time.time() - hook_start) * 1000),
+                    )
             except Exception as e:
                 logger.warning(
                     "composite_hook_error",
-                    hook=type(hook).__name__,
+                    hook=hook_name,
                     event="on_agent_start",
                     error=str(e),
+                    duration_ms=int((time.time() - hook_start) * 1000),
                 )
+
+        logger.info(
+            "composite_hook_event_complete",
+            event="on_agent_start",
+            agent=agent_name,
+            total_duration_ms=int((time.time() - event_start) * 1000),
+        )
 
     async def on_agent_end(
         self,
@@ -520,18 +561,54 @@ class CompositeHooks(RunHooks):
         agent: Agent,
         output: str,
     ) -> None:
-        """Forward agent end to all hooks."""
-        for hook in self._hooks:
+        """Forward agent end to all hooks with timing."""
+        import time
+
+        agent_name = getattr(agent, "name", "unknown")
+        event_start = time.time()
+        output_preview = str(output)[:100] if output else "<None>"
+        logger.info(
+            "composite_hook_event_start",
+            event="on_agent_end",
+            agent=agent_name,
+            hook_count=len(self._hooks),
+            output_preview=output_preview,
+        )
+
+        for i, hook in enumerate(self._hooks):
+            hook_name = type(hook).__name__
+            hook_start = time.time()
             try:
                 if hasattr(hook, "on_agent_end"):
+                    logger.debug(
+                        "composite_hook_calling",
+                        event="on_agent_end",
+                        hook=hook_name,
+                        hook_index=i,
+                    )
                     await hook.on_agent_end(context, agent, output)
+                    logger.debug(
+                        "composite_hook_returned",
+                        event="on_agent_end",
+                        hook=hook_name,
+                        hook_index=i,
+                        duration_ms=int((time.time() - hook_start) * 1000),
+                    )
             except Exception as e:
                 logger.warning(
                     "composite_hook_error",
-                    hook=type(hook).__name__,
+                    hook=hook_name,
                     event="on_agent_end",
                     error=str(e),
+                    duration_ms=int((time.time() - hook_start) * 1000),
                 )
+
+        logger.info(
+            "composite_hook_event_complete",
+            event="on_agent_end",
+            agent=agent_name,
+            total_duration_ms=int((time.time() - event_start) * 1000),
+        )
 
     async def on_tool_start(
         self,
@@ -539,16 +616,36 @@ class CompositeHooks(RunHooks):
         agent: Agent,
         tool: Tool,
     ) -> None:
-        """Forward tool start to all hooks."""
-        for hook in self._hooks:
+        """Forward tool start to all hooks with timing."""
+        import time
+
+        tool_name = getattr(tool, "name", str(tool))
+        agent_name = getattr(agent, "name", "unknown")
+        event_start = time.time()
+
+        for i, hook in enumerate(self._hooks):
+            hook_name = type(hook).__name__
+            hook_start = time.time()
             try:
                 await hook.on_tool_start(context, agent, tool)
+                duration_ms = int((time.time() - hook_start) * 1000)
+                # Only log if hook took significant time (>100ms)
+                if duration_ms > 100:
+                    logger.warning(
+                        "composite_hook_slow",
+                        event="on_tool_start",
+                        hook=hook_name,
+                        tool=tool_name,
+                        duration_ms=duration_ms,
+                    )
             except Exception as e:
                 logger.warning(
                     "composite_hook_error",
-                    hook=type(hook).__name__,
+                    hook=hook_name,
                     event="on_tool_start",
+                    tool=tool_name,
                     error=str(e),
+                    duration_ms=int((time.time() - hook_start) * 1000),
                 )
 
     async def on_tool_end(
@@ -558,16 +655,36 @@ class CompositeHooks(RunHooks):
         tool: Tool,
         result: str,
     ) -> None:
-        """Forward tool end to all hooks."""
-        for hook in self._hooks:
+        """Forward tool end to all hooks with timing."""
+        import time
+
+        tool_name = getattr(tool, "name", str(tool))
+        agent_name = getattr(agent, "name", "unknown")
+        event_start = time.time()
+
+        for i, hook in enumerate(self._hooks):
+            hook_name = type(hook).__name__
+            hook_start = time.time()
             try:
                 await hook.on_tool_end(context, agent, tool, result)
+                duration_ms = int((time.time() - hook_start) * 1000)
+                # Only log if hook took significant time (>100ms)
+                if duration_ms > 100:
+                    logger.warning(
+                        "composite_hook_slow",
+                        event="on_tool_end",
+                        hook=hook_name,
+                        tool=tool_name,
+                        duration_ms=duration_ms,
+                    )
             except Exception as e:
                 logger.warning(
                     "composite_hook_error",
-                    hook=type(hook).__name__,
+                    hook=hook_name,
                     event="on_tool_end",
+                    tool=tool_name,
                     error=str(e),
+                    duration_ms=int((time.time() - hook_start) * 1000),
                 )
 
     async def on_handoff(
@@ -576,17 +693,49 @@ class CompositeHooks(RunHooks):
         from_agent: Agent,
         to_agent: Agent,
     ) -> None:
-        """Forward handoff to all hooks."""
-        for hook in self._hooks:
+        """Forward handoff to all hooks with timing."""
+        import time
+
+        from_name = getattr(from_agent, "name", "unknown")
+        to_name = getattr(to_agent, "name", "unknown")
+        event_start = time.time()
+        logger.info(
+            "composite_hook_event_start",
+            event="on_handoff",
+            from_agent=from_name,
+            to_agent=to_name,
+            hook_count=len(self._hooks),
+        )
+
+        for i, hook in enumerate(self._hooks):
+            hook_name = type(hook).__name__
+            hook_start = time.time()
             try:
                 await hook.on_handoff(context, from_agent, to_agent)
+                duration_ms = int((time.time() - hook_start) * 1000)
+                if duration_ms > 100:
+                    logger.warning(
+                        "composite_hook_slow",
+                        event="on_handoff",
+                        hook=hook_name,
+                        duration_ms=duration_ms,
+                    )
             except Exception as e:
                 logger.warning(
                     "composite_hook_error",
-                    hook=type(hook).__name__,
+                    hook=hook_name,
                     event="on_handoff",
                     error=str(e),
+                    duration_ms=int((time.time() - hook_start) * 1000),
                 )
+
+        logger.info(
+            "composite_hook_event_complete",
+            event="on_handoff",
+            from_agent=from_name,
+            to_agent=to_name,
+            total_duration_ms=int((time.time() - event_start) * 1000),
+        )
 
 
 def create_composite_hooks(

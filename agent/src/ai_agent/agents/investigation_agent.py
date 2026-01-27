@@ -189,13 +189,60 @@ def _run_agent_in_thread(
                     )
                 else:
                     # Non-streaming mode with hooks
+                    # CRITICAL: This path has less visibility than streaming mode
+                    # We rely on hooks for lifecycle events, but add extra logging
                     logger.info(
                         "subagent_starting_non_streamed",
                         agent=agent_name,
+                        max_turns=max_turns,
+                        has_hooks=hooks is not None,
+                        hooks_type=type(hooks).__name__ if hooks else None,
+                        query_preview=query[:100] if query else "",
                     )
+
+                    # Log immediately before Runner.run() - if we hang, this is the last log
+                    logger.info(
+                        "subagent_runner_run_calling",
+                        agent=agent_name,
+                        message="About to call Runner.run() - if agent hangs, investigate hooks",
+                        elapsed_ms=int((time_module.time() - start_time) * 1000),
+                    )
+
                     result = new_loop.run_until_complete(
                         Runner.run(agent, query, max_turns=max_turns, hooks=hooks)
                     )
+
+                    # Log immediately after Runner.run() returns
+                    logger.info(
+                        "subagent_runner_run_returned",
+                        agent=agent_name,
+                        has_result=result is not None,
+                        result_type=type(result).__name__ if result else None,
+                        elapsed_ms=int((time_module.time() - start_time) * 1000),
+                    )
+
+                    # Analyze the result for debugging
+                    if result:
+                        final_output = getattr(result, "final_output", None)
+                        output_str = str(final_output) if final_output else ""
+                        is_empty = not output_str.strip() or final_output is None
+
+                        logger.info(
+                            "subagent_non_streamed_output_analysis",
+                            agent=agent_name,
+                            has_final_output=final_output is not None,
+                            output_length=len(output_str),
+                            is_empty_output=is_empty,
+                            output_preview=output_str[:200] if output_str else "<empty>",
+                            elapsed_ms=int((time_module.time() - start_time) * 1000),
+                        )
+
+                        if is_empty:
+                            logger.warning(
+                                "subagent_non_streamed_empty_output",
+                                agent=agent_name,
+                                message="Non-streamed agent completed with empty output",
+                            )
                 logger.info(
                     "subagent_run_complete",
                     agent=agent_name,

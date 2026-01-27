@@ -246,13 +246,38 @@ async def _run_agent_with_mcp(
                 )
             else:
                 # Non-streaming mode with MCP
-                return await Runner.run(
+                # CRITICAL: Log before/after Runner.run for debugging stuck agents
+                import time as time_mod
+
+                logger.info(
+                    "planner_mcp_runner_run_calling",
+                    agent=agent_name,
+                    max_turns=max_turns,
+                    mcp_count=len(entered_servers) if entered_servers else 0,
+                    has_hooks=hooks is not None,
+                    message="About to call Runner.run() with MCP - if agent hangs, investigate hooks",
+                )
+                start = time_mod.time()
+                result = await Runner.run(
                     agent,
                     query,
                     max_turns=max_turns,
                     mcp_servers=entered_servers if entered_servers else None,
                     hooks=hooks,
                 )
+                elapsed = int((time_mod.time() - start) * 1000)
+                final_output = getattr(result, "final_output", None)
+                output_str = str(final_output) if final_output else ""
+                logger.info(
+                    "planner_mcp_runner_run_returned",
+                    agent=agent_name,
+                    has_result=result is not None,
+                    has_output=final_output is not None,
+                    output_length=len(output_str),
+                    is_empty_output=not output_str.strip(),
+                    elapsed_ms=elapsed,
+                )
+                return result
     else:
         # No MCP servers configured for this agent
         if parent_stream_id and EventStreamRegistry.stream_exists(parent_stream_id):
@@ -262,7 +287,32 @@ async def _run_agent_with_mcp(
             )
         else:
             # Non-streaming mode - original behavior
-            return await Runner.run(agent, query, max_turns=max_turns, hooks=hooks)
+            # CRITICAL: Log before/after Runner.run for debugging stuck agents
+            import time as time_mod
+
+            logger.info(
+                "planner_runner_run_calling",
+                agent=agent_name,
+                max_turns=max_turns,
+                has_hooks=hooks is not None,
+                hooks_type=type(hooks).__name__ if hooks else None,
+                message="About to call Runner.run() - if agent hangs, investigate hooks",
+            )
+            start = time_mod.time()
+            result = await Runner.run(agent, query, max_turns=max_turns, hooks=hooks)
+            elapsed = int((time_mod.time() - start) * 1000)
+            final_output = getattr(result, "final_output", None)
+            output_str = str(final_output) if final_output else ""
+            logger.info(
+                "planner_runner_run_returned",
+                agent=agent_name,
+                has_result=result is not None,
+                has_output=final_output is not None,
+                output_length=len(output_str),
+                is_empty_output=not output_str.strip(),
+                elapsed_ms=elapsed,
+            )
+            return result
 
 
 async def _run_agent_streamed(
