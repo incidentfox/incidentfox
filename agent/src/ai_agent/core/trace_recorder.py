@@ -515,7 +515,7 @@ class CompositeHooks(RunHooks):
         event_start = time.time()
         logger.info(
             "composite_hook_event_start",
-            event="on_agent_start",
+            hook_event="on_agent_start",
             agent=agent_name,
             hook_count=len(self._hooks),
         )
@@ -527,14 +527,14 @@ class CompositeHooks(RunHooks):
                 if hasattr(hook, "on_agent_start"):
                     logger.debug(
                         "composite_hook_calling",
-                        event="on_agent_start",
+                        hook_event="on_agent_start",
                         hook=hook_name,
                         hook_index=i,
                     )
                     await hook.on_agent_start(context, agent)
                     logger.debug(
                         "composite_hook_returned",
-                        event="on_agent_start",
+                        hook_event="on_agent_start",
                         hook=hook_name,
                         hook_index=i,
                         duration_ms=int((time.time() - hook_start) * 1000),
@@ -543,14 +543,14 @@ class CompositeHooks(RunHooks):
                 logger.warning(
                     "composite_hook_error",
                     hook=hook_name,
-                    event="on_agent_start",
+                    hook_event="on_agent_start",
                     error=str(e),
                     duration_ms=int((time.time() - hook_start) * 1000),
                 )
 
         logger.info(
             "composite_hook_event_complete",
-            event="on_agent_start",
+            hook_event="on_agent_start",
             agent=agent_name,
             total_duration_ms=int((time.time() - event_start) * 1000),
         )
@@ -569,7 +569,7 @@ class CompositeHooks(RunHooks):
         output_preview = str(output)[:100] if output else "<None>"
         logger.info(
             "composite_hook_event_start",
-            event="on_agent_end",
+            hook_event="on_agent_end",
             agent=agent_name,
             hook_count=len(self._hooks),
             output_preview=output_preview,
@@ -582,14 +582,14 @@ class CompositeHooks(RunHooks):
                 if hasattr(hook, "on_agent_end"):
                     logger.debug(
                         "composite_hook_calling",
-                        event="on_agent_end",
+                        hook_event="on_agent_end",
                         hook=hook_name,
                         hook_index=i,
                     )
                     await hook.on_agent_end(context, agent, output)
                     logger.debug(
                         "composite_hook_returned",
-                        event="on_agent_end",
+                        hook_event="on_agent_end",
                         hook=hook_name,
                         hook_index=i,
                         duration_ms=int((time.time() - hook_start) * 1000),
@@ -598,14 +598,14 @@ class CompositeHooks(RunHooks):
                 logger.warning(
                     "composite_hook_error",
                     hook=hook_name,
-                    event="on_agent_end",
+                    hook_event="on_agent_end",
                     error=str(e),
                     duration_ms=int((time.time() - hook_start) * 1000),
                 )
 
         logger.info(
             "composite_hook_event_complete",
-            event="on_agent_end",
+            hook_event="on_agent_end",
             agent=agent_name,
             total_duration_ms=int((time.time() - event_start) * 1000),
         )
@@ -633,7 +633,7 @@ class CompositeHooks(RunHooks):
                 if duration_ms > 100:
                     logger.warning(
                         "composite_hook_slow",
-                        event="on_tool_start",
+                        hook_event="on_tool_start",
                         hook=hook_name,
                         tool=tool_name,
                         duration_ms=duration_ms,
@@ -642,7 +642,7 @@ class CompositeHooks(RunHooks):
                 logger.warning(
                     "composite_hook_error",
                     hook=hook_name,
-                    event="on_tool_start",
+                    hook_event="on_tool_start",
                     tool=tool_name,
                     error=str(e),
                     duration_ms=int((time.time() - hook_start) * 1000),
@@ -672,7 +672,7 @@ class CompositeHooks(RunHooks):
                 if duration_ms > 100:
                     logger.warning(
                         "composite_hook_slow",
-                        event="on_tool_end",
+                        hook_event="on_tool_end",
                         hook=hook_name,
                         tool=tool_name,
                         duration_ms=duration_ms,
@@ -681,7 +681,7 @@ class CompositeHooks(RunHooks):
                 logger.warning(
                     "composite_hook_error",
                     hook=hook_name,
-                    event="on_tool_end",
+                    hook_event="on_tool_end",
                     tool=tool_name,
                     error=str(e),
                     duration_ms=int((time.time() - hook_start) * 1000),
@@ -701,7 +701,7 @@ class CompositeHooks(RunHooks):
         event_start = time.time()
         logger.info(
             "composite_hook_event_start",
-            event="on_handoff",
+            hook_event="on_handoff",
             from_agent=from_name,
             to_agent=to_name,
             hook_count=len(self._hooks),
@@ -716,7 +716,7 @@ class CompositeHooks(RunHooks):
                 if duration_ms > 100:
                     logger.warning(
                         "composite_hook_slow",
-                        event="on_handoff",
+                        hook_event="on_handoff",
                         hook=hook_name,
                         duration_ms=duration_ms,
                     )
@@ -724,14 +724,14 @@ class CompositeHooks(RunHooks):
                 logger.warning(
                     "composite_hook_error",
                     hook=hook_name,
-                    event="on_handoff",
+                    hook_event="on_handoff",
                     error=str(e),
                     duration_ms=int((time.time() - hook_start) * 1000),
                 )
 
         logger.info(
             "composite_hook_event_complete",
-            event="on_handoff",
+            hook_event="on_handoff",
             from_agent=from_name,
             to_agent=to_name,
             total_duration_ms=int((time.time() - event_start) * 1000),
