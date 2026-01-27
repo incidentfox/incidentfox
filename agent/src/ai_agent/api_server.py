@@ -29,6 +29,8 @@ from .core.agent_runner import (
     get_agent_registry,
     get_in_flight_runs,
     mark_shutdown_in_progress,
+    register_in_flight_run,
+    unregister_in_flight_run,
 )
 from .core.auth import AuthError, authenticate_request
 from .core.config import get_config
@@ -1049,6 +1051,9 @@ def create_app() -> Sanic:
                 # Initialize trace_hooks before try block so it's available in exception handlers
                 trace_hooks = None
 
+                # Register run for graceful shutdown tracking
+                register_in_flight_run(run_id)
+
                 try:
                     # Build session ID and look up/create OpenAI conversation_id
                     session_id = _build_session_id(context_data)
@@ -1462,6 +1467,9 @@ def create_app() -> Sanic:
                         status=200,
                     )
                 finally:
+                    # Unregister from graceful shutdown tracking
+                    unregister_in_flight_run(run_id)
+
                     # Always clear execution context after agent run
                     if auth_identity and team_config:
                         clear_execution_context()
@@ -1853,6 +1861,9 @@ def create_app() -> Sanic:
                 # Initialize trace_hooks before try block so it's available in exception handlers
                 trace_hooks = None
 
+                # Register run for graceful shutdown tracking
+                register_in_flight_run(run_id)
+
                 try:
                     # Send agent_started event
                     await response_stream.write(
@@ -2182,6 +2193,9 @@ def create_app() -> Sanic:
                     )
 
                 finally:
+                    # Unregister from graceful shutdown tracking
+                    unregister_in_flight_run(run_id)
+
                     # Clean up stream registry
                     EventStreamRegistry.close_stream(stream_id)
                     set_current_stream_id(None)
