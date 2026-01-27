@@ -33,195 +33,195 @@ CATEGORY_DISPLAY: dict[str, dict[str, str]] = {
     # Infrastructure
     "kubernetes": {
         "label": "Kubernetes: Pod health & events",
-        "icon": "☸️",
+        "icon": "",
         "action_id": "view_kubernetes",
     },
     "aws_tools": {
         "label": "AWS: CloudWatch & resources",
-        "icon": "☁️",
+        "icon": "",
         "action_id": "view_aws",
     },
     "azure_tools": {
         "label": "Azure: Cloud resources",
-        "icon": "🔷",
+        "icon": "",
         "action_id": "view_azure",
     },
     "gcp_tools": {
         "label": "GCP: Cloud resources",
-        "icon": "🌐",
+        "icon": "",
         "action_id": "view_gcp",
     },
     "docker_tools": {
         "label": "Docker: Container status",
-        "icon": "🐳",
+        "icon": "",
         "action_id": "view_docker",
     },
     # Databases
     "postgres_tools": {
         "label": "PostgreSQL: Database queries",
-        "icon": "🐘",
+        "icon": "",
         "action_id": "view_postgres",
     },
     "snowflake_tools": {
         "label": "Snowflake: Data warehouse",
-        "icon": "❄️",
+        "icon": "",
         "action_id": "view_snowflake",
     },
     "bigquery_tools": {
         "label": "BigQuery: Data analysis",
-        "icon": "📊",
+        "icon": "",
         "action_id": "view_bigquery",
     },
     "elasticsearch_tools": {
         "label": "Elasticsearch: Search & logs",
-        "icon": "🔍",
+        "icon": "",
         "action_id": "view_elasticsearch",
     },
     # Observability
     "coralogix_tools": {
         "label": "Coralogix: Logs & metrics",
-        "icon": "📈",
+        "icon": "",
         "action_id": "view_coralogix",
     },
     "datadog_tools": {
         "label": "Datadog: APM & metrics",
-        "icon": "🐕",
+        "icon": "",
         "action_id": "view_datadog",
     },
     "grafana_tools": {
         "label": "Grafana: Dashboards & alerts",
-        "icon": "📉",
+        "icon": "",
         "action_id": "view_grafana",
     },
     "newrelic_tools": {
         "label": "New Relic: APM & traces",
-        "icon": "🔮",
+        "icon": "",
         "action_id": "view_newrelic",
     },
     "splunk_tools": {
         "label": "Splunk: Log analysis",
-        "icon": "📋",
+        "icon": "",
         "action_id": "view_splunk",
     },
     "sentry_tools": {
         "label": "Sentry: Error tracking",
-        "icon": "🐛",
+        "icon": "",
         "action_id": "view_sentry",
     },
     "log_analysis_tools": {
         "label": "Log Analysis: Patterns & anomalies",
-        "icon": "📜",
+        "icon": "",
         "action_id": "view_logs",
     },
     # Collaboration & Ticketing
     "slack_tools": {
         "label": "Slack: Message search",
-        "icon": "💬",
+        "icon": "",
         "action_id": "view_slack",
     },
     "github_tools": {
         "label": "GitHub: Code & PRs",
-        "icon": "🐙",
+        "icon": "",
         "action_id": "view_github",
     },
     "github_app_tools": {
         "label": "GitHub: Code & PRs",
-        "icon": "🐙",
+        "icon": "",
         "action_id": "view_github",
     },
     "gitlab_tools": {
         "label": "GitLab: Code & pipelines",
-        "icon": "🦊",
+        "icon": "",
         "action_id": "view_gitlab",
     },
     "jira_tools": {
         "label": "Jira: Issue tracking",
-        "icon": "📝",
+        "icon": "",
         "action_id": "view_jira",
     },
     "linear_tools": {
         "label": "Linear: Issue tracking",
-        "icon": "📐",
+        "icon": "",
         "action_id": "view_linear",
     },
     "pagerduty_tools": {
         "label": "PagerDuty: Incidents & alerts",
-        "icon": "🚨",
+        "icon": "",
         "action_id": "view_pagerduty",
     },
     "confluence_tools": {
         "label": "Confluence: Documentation",
-        "icon": "📚",
+        "icon": "",
         "action_id": "view_confluence",
     },
     "notion_tools": {
         "label": "Notion: Documentation",
-        "icon": "📓",
+        "icon": "",
         "action_id": "view_notion",
     },
     # CI/CD
     "ci_tools": {
         "label": "CI/CD: Pipeline status",
-        "icon": "🔄",
+        "icon": "",
         "action_id": "view_ci",
     },
     "codepipeline_tools": {
         "label": "CodePipeline: AWS CI/CD",
-        "icon": "🔧",
+        "icon": "",
         "action_id": "view_codepipeline",
     },
     # Analysis
     "anomaly_tools": {
         "label": "Anomaly Detection: Statistical analysis",
-        "icon": "📊",
+        "icon": "",
         "action_id": "view_anomaly",
     },
     "dependency_tools": {
         "label": "Dependencies: Service graph",
-        "icon": "🔗",
+        "icon": "",
         "action_id": "view_dependencies",
     },
     "remediation_tools": {
         "label": "Remediation: Actions & rollbacks",
-        "icon": "🛠️",
+        "icon": "",
         "action_id": "view_remediation",
     },
     # Git
     "git_tools": {
         "label": "Git: Repository history",
-        "icon": "📂",
+        "icon": "",
         "action_id": "view_git",
     },
     # Other
     "knowledge_base_tools": {
         "label": "Knowledge Base: Documentation",
-        "icon": "🧠",
+        "icon": "",
         "action_id": "view_kb",
     },
     "coding_tools": {
         "label": "Code Analysis: Files & search",
-        "icon": "💻",
+        "icon": "",
         "action_id": "view_code",
     },
     "sourcegraph_tools": {
         "label": "Sourcegraph: Code search",
-        "icon": "🔎",
+        "icon": "",
         "action_id": "view_sourcegraph",
     },
     "meeting_tools": {
         "label": "Meetings: Transcripts & notes",
-        "icon": "🎤",
+        "icon": "",
         "action_id": "view_meetings",
     },
     "msteams_tools": {
         "label": "MS Teams: Messages",
-        "icon": "👥",
+        "icon": "",
         "action_id": "view_msteams",
     },
     # Special: root cause analysis (added at the end)
     "root_cause_analysis": {
         "label": "Root cause analysis",
-        "icon": "🎯",
+        "icon": "",
         "action_id": "view_rca",
     },
 }
@@ -229,43 +229,140 @@ CATEGORY_DISPLAY: dict[str, dict[str, str]] = {
 # Default display for unknown categories
 DEFAULT_CATEGORY_DISPLAY = {
     "label": "Analysis",
-    "icon": "🔍",
+    "icon": "",
     "action_id": "view_analysis",
 }
+
+
+def _extract_category_from_module(module: str) -> str | None:
+    """Extract category from a module path like 'ai_agent.tools.kubernetes'."""
+    if not module:
+        return None
+    parts = module.split(".")
+    if "tools" in parts:
+        idx = parts.index("tools")
+        if idx + 1 < len(parts):
+            return parts[idx + 1]
+    return None
+
+
+def _extract_original_function_from_closure(tool: Tool):
+    """
+    Extract the original function from a FunctionTool's closure chain.
+
+    OpenAI Agents SDK's FunctionTool stores the original function in a nested
+    closure structure:
+        tool.on_invoke_tool
+            -> __closure__[0] = _on_invoke_tool_impl
+                -> __closure__[1] = original_function
+
+    Returns:
+        The original function if found, None otherwise.
+    """
+    try:
+        on_invoke = getattr(tool, "on_invoke_tool", None)
+        if on_invoke is None or not hasattr(on_invoke, "__closure__"):
+            return None
+
+        closure = on_invoke.__closure__
+        if not closure or len(closure) < 1:
+            return None
+
+        # Get _on_invoke_tool_impl from first closure cell
+        impl = closure[0].cell_contents
+        if not hasattr(impl, "__closure__") or not impl.__closure__:
+            return None
+
+        impl_closure = impl.__closure__
+        if len(impl_closure) < 2:
+            return None
+
+        # Get original function from second closure cell of impl
+        original_fn = impl_closure[1].cell_contents
+        if callable(original_fn):
+            return original_fn
+
+        return None
+    except (IndexError, ValueError, AttributeError):
+        return None
 
 
 def get_category_from_tool(tool: Tool) -> str | None:
     """
     Extract category from a tool's module path.
 
+    For FunctionTool from OpenAI Agents SDK, extracts the original function
+    from the closure chain to get its __module__.
+
     Examples:
         ai_agent.tools.kubernetes.list_pods -> "kubernetes"
         ai_agent.tools.aws_tools.get_cloudwatch_logs -> "aws_tools"
-        ai_agent.tools.postgres_tools.execute_query -> "postgres_tools"
+        ai_agent.tools.log_analysis_tools.get_log_statistics -> "log_analysis_tools"
 
     Returns:
         Category string or None if not determinable
     """
     try:
-        # Try to get the module from the tool's function
-        func = getattr(tool, "fn", None) or getattr(tool, "func", None)
-        if func is None:
-            return None
+        tool_name = getattr(tool, "name", str(tool))
+        tool_type = type(tool).__name__
+        module = None
 
-        module = getattr(func, "__module__", None)
+        # Method 1: Extract original function from FunctionTool closure chain
+        # This is the primary method for tools created with @function_tool
+        original_fn = _extract_original_function_from_closure(tool)
+        if original_fn:
+            module = getattr(original_fn, "__module__", None)
+
+        # Method 2: Try direct function attributes (for other Tool types)
+        if not module or "tools" not in module:
+            for attr_name in ("fn", "func", "_fn", "function"):
+                attr = getattr(tool, attr_name, None)
+                if attr is not None and callable(attr):
+                    attr_module = getattr(attr, "__module__", None)
+                    if attr_module and "tools" in attr_module:
+                        module = attr_module
+                        break
+
+        # Method 3: Check tool instance's own __module__
+        if not module or "tools" not in module:
+            tool_module = getattr(tool, "__module__", None)
+            if tool_module and "tools" in tool_module:
+                module = tool_module
+
         if not module:
+            logger.debug(
+                "get_category_no_module",
+                tool=tool_name,
+                tool_type=tool_type,
+                has_original_fn=original_fn is not None,
+            )
             return None
 
-        # Extract the tool module name from the path
-        # e.g., "ai_agent.tools.kubernetes" -> "kubernetes"
-        parts = module.split(".")
-        if "tools" in parts:
-            idx = parts.index("tools")
-            if idx + 1 < len(parts):
-                return parts[idx + 1]
+        # Extract category from module path
+        category = _extract_category_from_module(module)
 
+        if category:
+            logger.debug(
+                "get_category_from_module",
+                tool=tool_name,
+                module=module,
+                category=category,
+            )
+            return category
+
+        logger.debug(
+            "get_category_no_tools_in_path",
+            tool=tool_name,
+            module=module,
+        )
         return None
-    except Exception:
+
+    except Exception as e:
+        logger.debug(
+            "get_category_exception",
+            tool=getattr(tool, "name", str(tool)),
+            error=str(e),
+        )
         return None
 
 
