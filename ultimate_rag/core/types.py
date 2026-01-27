@@ -5,11 +5,11 @@ This module defines the fundamental types used throughout the system,
 including knowledge classification and importance scoring.
 """
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, List, Optional, Any
-import math
+from typing import Any, Dict, List, Optional
 
 
 class KnowledgeType(str, Enum):
@@ -356,7 +356,9 @@ class ImportanceScore:
         return {
             "explicit_priority": self.explicit_priority,
             "access_count": self.access_count,
-            "last_accessed": self.last_accessed.isoformat() if self.last_accessed else None,
+            "last_accessed": (
+                self.last_accessed.isoformat() if self.last_accessed else None
+            ),
             "citation_count": self.citation_count,
             "authority_score": self.authority_score,
             "criticality_score": self.criticality_score,
@@ -367,14 +369,21 @@ class ImportanceScore:
             "task_failure_count": self.task_failure_count,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
-            "last_validated": self.last_validated.isoformat() if self.last_validated else None,
-            "source_last_checked": self.source_last_checked.isoformat() if self.source_last_checked else None,
+            "last_validated": (
+                self.last_validated.isoformat() if self.last_validated else None
+            ),
+            "source_last_checked": (
+                self.source_last_checked.isoformat()
+                if self.source_last_checked
+                else None
+            ),
             "contextual_boosts": self.contextual_boosts,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ImportanceScore":
         """Deserialize from dictionary."""
+
         def parse_dt(s):
             return datetime.fromisoformat(s) if s else None
 

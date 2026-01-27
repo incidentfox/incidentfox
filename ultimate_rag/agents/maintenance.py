@@ -8,15 +8,15 @@ Proactively maintains the knowledge base:
 - Suggests improvements
 """
 
+import asyncio
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, List, Optional, Any, TYPE_CHECKING
-import logging
-import asyncio
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from ..core.node import KnowledgeTree, KnowledgeNode, TreeForest
+    from ..core.node import KnowledgeNode, KnowledgeTree, TreeForest
     from ..graph.graph import KnowledgeGraph
     from .observations import ObservationCollector
 
@@ -111,7 +111,9 @@ class MaintenanceTask:
             "target_entities": self.target_entities,
             "created_at": self.created_at.isoformat(),
             "status": self.status,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "completed_at": (
+                self.completed_at.isoformat() if self.completed_at else None
+            ),
             "result": self.result,
         }
 
@@ -273,7 +275,20 @@ class MaintenanceAgent:
             # Extract key words
             words = set(obs.query.lower().split())
             # Remove common words
-            stop_words = {"how", "do", "i", "the", "a", "an", "to", "for", "in", "is", "what", "why"}
+            stop_words = {
+                "how",
+                "do",
+                "i",
+                "the",
+                "a",
+                "an",
+                "to",
+                "for",
+                "in",
+                "is",
+                "what",
+                "why",
+            }
             key_words = words - stop_words
 
             # Find or create cluster
@@ -319,10 +334,12 @@ class MaintenanceAgent:
             for obs in quality_issues:
                 if obs.contradicting_nodes and len(obs.contradicting_nodes) >= 2:
                     import uuid
+
                     contradiction = Contradiction(
                         contradiction_id=str(uuid.uuid4()),
                         node_ids=obs.contradicting_nodes,
-                        description=obs.contradiction_description or "Reported by agent",
+                        description=obs.contradiction_description
+                        or "Reported by agent",
                         field=None,
                         detected_at=datetime.utcnow(),
                         severity="medium",
@@ -494,7 +511,9 @@ class MaintenanceAgent:
             "contradiction_count": len(self._contradictions),
             "pending_tasks": len([t for t in self._tasks if t.status == "pending"]),
             "completed_tasks": len(self._completed_tasks),
-            "last_maintenance_run": self._last_run.isoformat() if self._last_run else None,
+            "last_maintenance_run": (
+                self._last_run.isoformat() if self._last_run else None
+            ),
             "maintenance_runs": self._run_count,
         }
 

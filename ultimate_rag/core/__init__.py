@@ -4,21 +4,21 @@ Ultimate RAG Core Module
 The core data structures and types for the ultimate enterprise knowledge base.
 """
 
-from .types import (
-    KnowledgeType,
-    ImportanceScore,
-    ImportanceWeights,
-    DEFAULT_IMPORTANCE_WEIGHTS,
+from .metadata import (
+    NodeMetadata,
+    SourceInfo,
+    ValidationStatus,
 )
 from .node import (
     KnowledgeNode,
     KnowledgeTree,
     TreeForest,
 )
-from .metadata import (
-    NodeMetadata,
-    SourceInfo,
-    ValidationStatus,
+from .types import (
+    DEFAULT_IMPORTANCE_WEIGHTS,
+    ImportanceScore,
+    ImportanceWeights,
+    KnowledgeType,
 )
 
 __all__ = [

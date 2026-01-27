@@ -7,20 +7,20 @@ Provides the learning loop between AI agents and the knowledge base:
 - Maintenance agent (proactive KB upkeep)
 """
 
+from .maintenance import (
+    Contradiction,
+    KnowledgeGap,
+    MaintenanceAgent,
+    MaintenanceTask,
+)
 from .observations import (
-    ObservationType,
     AgentObservation,
     ObservationCollector,
+    ObservationType,
 )
 from .teaching import (
-    TeachResult,
     TeachingInterface,
-)
-from .maintenance import (
-    KnowledgeGap,
-    Contradiction,
-    MaintenanceTask,
-    MaintenanceAgent,
+    TeachResult,
 )
 
 __all__ = [

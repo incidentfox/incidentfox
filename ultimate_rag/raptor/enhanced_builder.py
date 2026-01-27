@@ -8,20 +8,23 @@ Adds to standard RAPTOR tree building:
 - Quality validation
 """
 
+import hashlib
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Callable, TYPE_CHECKING
-import hashlib
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
 
 if TYPE_CHECKING:
-    from knowledge_base.raptor.cluster_tree_builder import ClusterTreeBuilder, ClusterTreeConfig
+    from knowledge_base.raptor.cluster_tree_builder import (
+        ClusterTreeBuilder,
+        ClusterTreeConfig,
+    )
 
-from ..core.node import KnowledgeNode, KnowledgeTree
-from ..core.types import KnowledgeType, ImportanceScore
 from ..core.metadata import NodeMetadata, SourceInfo, ValidationStatus
-from ..graph.graph import KnowledgeGraph
+from ..core.node import KnowledgeNode, KnowledgeTree
+from ..core.types import ImportanceScore, KnowledgeType
 from ..graph.entities import Entity, EntityType
+from ..graph.graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
 
@@ -199,17 +202,25 @@ class EnhancedTreeBuilder:
         # Higher layers (summaries) are often more factual/contextual
         if layer > 0:
             # Check for procedural summaries
-            if any(kw in text_lower for kw in ["steps", "procedure", "process", "workflow"]):
+            if any(
+                kw in text_lower for kw in ["steps", "procedure", "process", "workflow"]
+            ):
                 return KnowledgeType.PROCEDURAL
 
             # Check for relational summaries
-            if any(kw in text_lower for kw in ["architecture", "system", "components", "services"]):
+            if any(
+                kw in text_lower
+                for kw in ["architecture", "system", "components", "services"]
+            ):
                 return KnowledgeType.RELATIONAL
 
             return KnowledgeType.CONTEXTUAL
 
         # Leaf-level type inference
-        if any(kw in text_lower for kw in ["step 1", "first,", "then,", "how to", "procedure"]):
+        if any(
+            kw in text_lower
+            for kw in ["step 1", "first,", "then,", "how to", "procedure"]
+        ):
             return KnowledgeType.PROCEDURAL
 
         if any(kw in text_lower for kw in ["depends on", "calls", "owns", "manages"]):
@@ -237,7 +248,11 @@ class EnhancedTreeBuilder:
         base = 0.5
 
         # Layer boost (higher layers are more important)
-        layer_boost = self.config.layer_importance_boost * (layer / max_layer) if max_layer > 0 else 0
+        layer_boost = (
+            self.config.layer_importance_boost * (layer / max_layer)
+            if max_layer > 0
+            else 0
+        )
 
         # Content-based signals
         text_length = len(node.text)
@@ -282,24 +297,25 @@ class EnhancedTreeBuilder:
 
         # Look for service-like patterns
         import re
-        service_pattern = r'\b([a-z]+-service|[a-z]+-api)\b'
+
+        service_pattern = r"\b([a-z]+-service|[a-z]+-api)\b"
         for match in re.finditer(service_pattern, text.lower()):
             service_name = match.group(1)
             entity = self.graph.get_or_create_entity(
                 entity_type=EntityType.SERVICE,
                 name=service_name,
-                description=f"Service mentioned in document",
+                description="Service mentioned in document",
             )
             entities.append(entity)
 
         # Look for team patterns
-        team_pattern = r'\b(team [a-z]+|[a-z]+ team)\b'
+        team_pattern = r"\b(team [a-z]+|[a-z]+ team)\b"
         for match in re.finditer(team_pattern, text.lower()):
             team_name = match.group(1)
             entity = self.graph.get_or_create_entity(
                 entity_type=EntityType.TEAM,
                 name=team_name,
-                description=f"Team mentioned in document",
+                description="Team mentioned in document",
             )
             entities.append(entity)
 
@@ -327,25 +343,25 @@ class EnhancedTreeBuilder:
         if not node.metadata:
             node.metadata = NodeMetadata()
 
-        if 'source_url' in metadata:
+        if "source_url" in metadata:
             node.metadata.source = SourceInfo(
-                source_type=metadata.get('source_type', 'document'),
-                source_id=metadata.get('doc_id', ''),
-                url=metadata.get('source_url'),
-                title=metadata.get('title', ''),
+                source_type=metadata.get("source_type", "document"),
+                source_id=metadata.get("doc_id", ""),
+                url=metadata.get("source_url"),
+                title=metadata.get("title", ""),
             )
 
-        if 'tags' in metadata:
-            node.metadata.tags = metadata['tags']
+        if "tags" in metadata:
+            node.metadata.tags = metadata["tags"]
 
-        if 'domain' in metadata:
-            node.metadata.domain = metadata['domain']
+        if "domain" in metadata:
+            node.metadata.domain = metadata["domain"]
 
-        if 'subject' in metadata:
-            node.metadata.subject = metadata['subject']
+        if "subject" in metadata:
+            node.metadata.subject = metadata["subject"]
 
-        if 'owner' in metadata:
-            node.metadata.owner = metadata['owner']
+        if "owner" in metadata:
+            node.metadata.owner = metadata["owner"]
 
     def _build_graph_from_tree(self, tree: KnowledgeTree) -> None:
         """Build knowledge graph relationships from tree structure."""
@@ -366,9 +382,10 @@ class EnhancedTreeBuilder:
             if len(node.entity_ids) > 1:
                 entity_list = list(node.entity_ids)
                 for i, eid1 in enumerate(entity_list):
-                    for eid2 in entity_list[i + 1:]:
+                    for eid2 in entity_list[i + 1 :]:
                         # Create RELATED_TO relationship for co-occurring entities
-                        from ..graph.relationships import RelationshipType, Relationship
+                        from ..graph.relationships import Relationship, RelationshipType
+
                         rel = Relationship.create(
                             RelationshipType.RELATED_TO,
                             eid1,
@@ -423,7 +440,10 @@ def create_enhanced_builder(
         EnhancedTreeBuilder ready to use
     """
     # Import RAPTOR components
-    from knowledge_base.raptor.cluster_tree_builder import ClusterTreeBuilder, ClusterTreeConfig
+    from knowledge_base.raptor.cluster_tree_builder import (
+        ClusterTreeBuilder,
+        ClusterTreeConfig,
+    )
 
     # Create RAPTOR config
     raptor_config = ClusterTreeConfig(

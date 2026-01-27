@@ -8,7 +8,7 @@ services, people, teams, runbooks, incidents, etc.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Any, Set
+from typing import Any, Dict, List, Optional, Set
 
 
 class EntityType(str, Enum):
@@ -111,6 +111,7 @@ class Entity:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Entity":
         """Deserialize from dictionary."""
+
         def parse_dt(s):
             return datetime.fromisoformat(s) if s else datetime.utcnow()
 
@@ -162,18 +163,20 @@ class Service(Entity):
 
     def to_dict(self) -> Dict[str, Any]:
         base = super().to_dict()
-        base.update({
-            "tier": self.tier,
-            "team_id": self.team_id,
-            "repo_url": self.repo_url,
-            "health_endpoint": self.health_endpoint,
-            "documentation_url": self.documentation_url,
-            "language": self.language,
-            "framework": self.framework,
-            "runtime": self.runtime,
-            "slo_availability": self.slo_availability,
-            "slo_latency_p99_ms": self.slo_latency_p99_ms,
-        })
+        base.update(
+            {
+                "tier": self.tier,
+                "team_id": self.team_id,
+                "repo_url": self.repo_url,
+                "health_endpoint": self.health_endpoint,
+                "documentation_url": self.documentation_url,
+                "language": self.language,
+                "framework": self.framework,
+                "runtime": self.runtime,
+                "slo_availability": self.slo_availability,
+                "slo_latency_p99_ms": self.slo_latency_p99_ms,
+            }
+        )
         return base
 
 
@@ -195,7 +198,9 @@ class Person(Entity):
 
     # Expertise
     expertise_areas: List[str] = field(default_factory=list)
-    expertise_level: Dict[str, str] = field(default_factory=dict)  # area -> junior/senior/principal
+    expertise_level: Dict[str, str] = field(
+        default_factory=dict
+    )  # area -> junior/senior/principal
 
     # Availability
     timezone: Optional[str] = None
@@ -211,18 +216,20 @@ class Person(Entity):
 
     def to_dict(self) -> Dict[str, Any]:
         base = super().to_dict()
-        base.update({
-            "email": self.email,
-            "slack_handle": self.slack_handle,
-            "phone": self.phone,
-            "team_id": self.team_id,
-            "role": self.role,
-            "manager_id": self.manager_id,
-            "expertise_areas": self.expertise_areas,
-            "expertise_level": self.expertise_level,
-            "timezone": self.timezone,
-            "is_oncall": self.is_oncall,
-        })
+        base.update(
+            {
+                "email": self.email,
+                "slack_handle": self.slack_handle,
+                "phone": self.phone,
+                "team_id": self.team_id,
+                "role": self.role,
+                "manager_id": self.manager_id,
+                "expertise_areas": self.expertise_areas,
+                "expertise_level": self.expertise_level,
+                "timezone": self.timezone,
+                "is_oncall": self.is_oncall,
+            }
+        )
         return base
 
 
@@ -253,16 +260,18 @@ class Team(Entity):
 
     def to_dict(self) -> Dict[str, Any]:
         base = super().to_dict()
-        base.update({
-            "slack_channel": self.slack_channel,
-            "email_list": self.email_list,
-            "oncall_schedule_id": self.oncall_schedule_id,
-            "escalation_policy_id": self.escalation_policy_id,
-            "pagerduty_service_id": self.pagerduty_service_id,
-            "member_ids": self.member_ids,
-            "lead_id": self.lead_id,
-            "service_ids": self.service_ids,
-        })
+        base.update(
+            {
+                "slack_channel": self.slack_channel,
+                "email_list": self.email_list,
+                "oncall_schedule_id": self.oncall_schedule_id,
+                "escalation_policy_id": self.escalation_policy_id,
+                "pagerduty_service_id": self.pagerduty_service_id,
+                "member_ids": self.member_ids,
+                "lead_id": self.lead_id,
+                "service_ids": self.service_ids,
+            }
+        )
         return base
 
 
@@ -279,7 +288,9 @@ class Runbook(Entity):
     # Applicability
     applies_to_services: List[str] = field(default_factory=list)
     applies_to_alerts: List[str] = field(default_factory=list)
-    symptoms: List[str] = field(default_factory=list)  # What symptoms trigger this runbook
+    symptoms: List[str] = field(
+        default_factory=list
+    )  # What symptoms trigger this runbook
 
     # Quality
     last_used: Optional[datetime] = None
@@ -324,18 +335,20 @@ class Runbook(Entity):
 
     def to_dict(self) -> Dict[str, Any]:
         base = super().to_dict()
-        base.update({
-            "title": self.title,
-            "summary": self.summary,
-            "applies_to_services": self.applies_to_services,
-            "applies_to_alerts": self.applies_to_alerts,
-            "symptoms": self.symptoms,
-            "last_used": self.last_used.isoformat() if self.last_used else None,
-            "success_count": self.success_count,
-            "failure_count": self.failure_count,
-            "author_id": self.author_id,
-            "reviewer_ids": self.reviewer_ids,
-        })
+        base.update(
+            {
+                "title": self.title,
+                "summary": self.summary,
+                "applies_to_services": self.applies_to_services,
+                "applies_to_alerts": self.applies_to_alerts,
+                "symptoms": self.symptoms,
+                "last_used": self.last_used.isoformat() if self.last_used else None,
+                "success_count": self.success_count,
+                "failure_count": self.failure_count,
+                "author_id": self.author_id,
+                "reviewer_ids": self.reviewer_ids,
+            }
+        )
         return base
 
 
@@ -374,20 +387,24 @@ class Incident(Entity):
 
     def to_dict(self) -> Dict[str, Any]:
         base = super().to_dict()
-        base.update({
-            "severity": self.severity,
-            "status": self.status,
-            "services_affected": self.services_affected,
-            "started_at": self.started_at.isoformat() if self.started_at else None,
-            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
-            "duration_minutes": self.duration_minutes,
-            "root_cause": self.root_cause,
-            "resolution": self.resolution,
-            "runbooks_used": self.runbooks_used,
-            "postmortem_node_id": self.postmortem_node_id,
-            "lessons_learned": self.lessons_learned,
-            "action_items": self.action_items,
-        })
+        base.update(
+            {
+                "severity": self.severity,
+                "status": self.status,
+                "services_affected": self.services_affected,
+                "started_at": self.started_at.isoformat() if self.started_at else None,
+                "resolved_at": (
+                    self.resolved_at.isoformat() if self.resolved_at else None
+                ),
+                "duration_minutes": self.duration_minutes,
+                "root_cause": self.root_cause,
+                "resolution": self.resolution,
+                "runbooks_used": self.runbooks_used,
+                "postmortem_node_id": self.postmortem_node_id,
+                "lessons_learned": self.lessons_learned,
+                "action_items": self.action_items,
+            }
+        )
         return base
 
 
@@ -415,15 +432,19 @@ class Document(Entity):
 
     def to_dict(self) -> Dict[str, Any]:
         base = super().to_dict()
-        base.update({
-            "title": self.title,
-            "doc_type": self.doc_type,
-            "url": self.url,
-            "primary_node_id": self.primary_node_id,
-            "word_count": self.word_count,
-            "last_reviewed": self.last_reviewed.isoformat() if self.last_reviewed else None,
-            "reviewer_id": self.reviewer_id,
-        })
+        base.update(
+            {
+                "title": self.title,
+                "doc_type": self.doc_type,
+                "url": self.url,
+                "primary_node_id": self.primary_node_id,
+                "word_count": self.word_count,
+                "last_reviewed": (
+                    self.last_reviewed.isoformat() if self.last_reviewed else None
+                ),
+                "reviewer_id": self.reviewer_id,
+            }
+        )
         return base
 
 
@@ -450,14 +471,16 @@ class Technology(Entity):
 
     def to_dict(self) -> Dict[str, Any]:
         base = super().to_dict()
-        base.update({
-            "category": self.category,
-            "version": self.version,
-            "vendor": self.vendor,
-            "license": self.license,
-            "used_by_services": self.used_by_services,
-            "expert_ids": self.expert_ids,
-        })
+        base.update(
+            {
+                "category": self.category,
+                "version": self.version,
+                "vendor": self.vendor,
+                "license": self.license,
+                "used_by_services": self.used_by_services,
+                "expert_ids": self.expert_ids,
+            }
+        )
         return base
 
 
@@ -485,13 +508,15 @@ class AlertRule(Entity):
 
     def to_dict(self) -> Dict[str, Any]:
         base = super().to_dict()
-        base.update({
-            "query": self.query,
-            "threshold": self.threshold,
-            "severity": self.severity,
-            "services": self.services,
-            "environments": self.environments,
-            "runbook_id": self.runbook_id,
-            "auto_link_runbook": self.auto_link_runbook,
-        })
+        base.update(
+            {
+                "query": self.query,
+                "threshold": self.threshold,
+                "severity": self.severity,
+                "services": self.services,
+                "environments": self.environments,
+                "runbook_id": self.runbook_id,
+                "auto_link_runbook": self.auto_link_runbook,
+            }
+        )
         return base

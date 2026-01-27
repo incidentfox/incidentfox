@@ -8,35 +8,35 @@ Combines multiple strategies and rerankers for optimal retrieval:
 4. Records observations for learning
 """
 
+import asyncio
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Any, Set, TYPE_CHECKING
-import logging
-import asyncio
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
+from .reranker import (
+    EnsembleReranker,
+    ImportanceReranker,
+    RerankConfig,
+    Reranker,
+)
 from .strategies import (
-    RetrievalStrategy,
-    MultiQueryStrategy,
-    HyDEStrategy,
     AdaptiveDepthStrategy,
     HybridGraphTreeStrategy,
+    HyDEStrategy,
     IncidentAwareStrategy,
-    RetrievedChunk,
+    MultiQueryStrategy,
     QueryAnalysis,
     QueryIntent,
-)
-from .reranker import (
-    Reranker,
-    ImportanceReranker,
-    EnsembleReranker,
-    RerankConfig,
+    RetrievalStrategy,
+    RetrievedChunk,
 )
 
 if TYPE_CHECKING:
+    from ..agents.observations import ObservationCollector
     from ..core.node import KnowledgeNode, TreeForest
     from ..graph.graph import KnowledgeGraph
-    from ..agents.observations import ObservationCollector
 
 logger = logging.getLogger(__name__)
 
@@ -198,9 +198,13 @@ class UltimateRetriever:
 
         # 3. Execute retrieval
         if self.config.parallel_strategies and len(selected_strategies) > 1:
-            all_chunks = await self._parallel_retrieve(query, selected_strategies, top_k * 2)
+            all_chunks = await self._parallel_retrieve(
+                query, selected_strategies, top_k * 2
+            )
         else:
-            all_chunks = await self._sequential_retrieve(query, selected_strategies, top_k * 2)
+            all_chunks = await self._sequential_retrieve(
+                query, selected_strategies, top_k * 2
+            )
 
         # 4. Apply filters
         if filters:
@@ -217,11 +221,9 @@ class UltimateRetriever:
                 forest=self.forest,
             )
         else:
-            reranked = sorted(
-                all_chunks,
-                key=lambda c: c.combined_score,
-                reverse=True
-            )[:top_k]
+            reranked = sorted(all_chunks, key=lambda c: c.combined_score, reverse=True)[
+                :top_k
+            ]
 
         # 6. Calculate timing
         end_time = datetime.utcnow()
@@ -268,11 +270,13 @@ class UltimateRetriever:
 
         elif mode == RetrievalMode.THOROUGH:
             # Use all strategies
-            strategies.extend([
-                self._strategies["multi_query"],
-                self._strategies["hyde"],
-                self._strategies["hybrid"],
-            ])
+            strategies.extend(
+                [
+                    self._strategies["multi_query"],
+                    self._strategies["hyde"],
+                    self._strategies["hybrid"],
+                ]
+            )
 
         else:  # STANDARD
             # Select based on query intent
@@ -304,7 +308,7 @@ class UltimateRetriever:
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*tasks, return_exceptions=True),
-                timeout=self.config.timeout_seconds
+                timeout=self.config.timeout_seconds,
             )
         except asyncio.TimeoutError:
             logger.warning("Retrieval timeout, using partial results")
@@ -358,8 +362,7 @@ class UltimateRetriever:
         if "source" in filters:
             target_source = filters["source"]
             filtered = [
-                c for c in filtered
-                if c.metadata.get("source") == target_source
+                c for c in filtered if c.metadata.get("source") == target_source
             ]
 
         # Filter by tree level
@@ -488,7 +491,8 @@ class UltimateRetriever:
         """Get retriever statistics."""
         avg_time = (
             self._total_retrieval_time / self._query_count
-            if self._query_count > 0 else 0
+            if self._query_count > 0
+            else 0
         )
 
         return {

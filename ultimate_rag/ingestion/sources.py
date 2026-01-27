@@ -9,13 +9,13 @@ Defines how to fetch content from various sources:
 - APIs
 """
 
+import hashlib
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Union
-import hashlib
 
 from .processor import ContentType
 
@@ -148,7 +148,7 @@ class FileSource(ContentSource):
 
     def _file_to_document(self, file_path: Path) -> SourceDocument:
         """Convert a file to SourceDocument."""
-        content = file_path.read_text(encoding='utf-8')
+        content = file_path.read_text(encoding="utf-8")
         stat = file_path.stat()
 
         # Detect content type
@@ -159,7 +159,11 @@ class FileSource(ContentSource):
             content=content,
             content_type=content_type,
             source_name=self.name,
-            path=str(file_path.relative_to(self.path) if self.path.is_dir() else file_path.name),
+            path=str(
+                file_path.relative_to(self.path)
+                if self.path.is_dir()
+                else file_path.name
+            ),
             title=file_path.stem,
             created_at=datetime.fromtimestamp(stat.st_ctime),
             updated_at=datetime.fromtimestamp(stat.st_mtime),
@@ -173,14 +177,14 @@ class FileSource(ContentSource):
         """Detect content type from file."""
         suffix = file_path.suffix.lower()
         mapping = {
-            '.md': ContentType.MARKDOWN,
-            '.markdown': ContentType.MARKDOWN,
-            '.html': ContentType.HTML,
-            '.htm': ContentType.HTML,
-            '.txt': ContentType.TEXT,
-            '.py': ContentType.CODE,
-            '.js': ContentType.CODE,
-            '.ts': ContentType.CODE,
+            ".md": ContentType.MARKDOWN,
+            ".markdown": ContentType.MARKDOWN,
+            ".html": ContentType.HTML,
+            ".htm": ContentType.HTML,
+            ".txt": ContentType.TEXT,
+            ".py": ContentType.CODE,
+            ".js": ContentType.CODE,
+            ".ts": ContentType.CODE,
         }
         return mapping.get(suffix, ContentType.TEXT)
 
@@ -189,6 +193,7 @@ class FileSource(ContentSource):
         path_str = str(file_path)
         for pattern in self.exclude_patterns:
             import fnmatch
+
             if fnmatch.fnmatch(path_str, pattern):
                 return True
         return False
@@ -228,8 +233,8 @@ class GitRepoSource(ContentSource):
         if self._file_source:
             for doc in self._file_source.fetch_all():
                 # Add git-specific metadata
-                doc.metadata['git_repo'] = self.repo_url
-                doc.metadata['git_branch'] = self.branch
+                doc.metadata["git_repo"] = self.repo_url
+                doc.metadata["git_branch"] = self.branch
                 yield doc
 
     def fetch_updated(
@@ -244,8 +249,8 @@ class GitRepoSource(ContentSource):
 
         if self._file_source:
             for doc in self._file_source.fetch_updated(since):
-                doc.metadata['git_repo'] = self.repo_url
-                doc.metadata['git_branch'] = self.branch
+                doc.metadata["git_repo"] = self.repo_url
+                doc.metadata["git_branch"] = self.branch
                 yield doc
 
     def _ensure_repo(self) -> None:
@@ -266,8 +271,9 @@ class GitRepoSource(ContentSource):
 
         try:
             import subprocess
+
             subprocess.run(
-                ['git', 'pull', 'origin', self.branch],
+                ["git", "pull", "origin", self.branch],
                 cwd=self.local_path,
                 capture_output=True,
             )
@@ -324,18 +330,18 @@ class ConfluenceSource(ContentSource):
     def _page_to_document(self, page: Dict[str, Any]) -> SourceDocument:
         """Convert Confluence page to SourceDocument."""
         return SourceDocument(
-            source_id=page.get('id', ''),
-            content=page.get('body', {}).get('storage', {}).get('value', ''),
+            source_id=page.get("id", ""),
+            content=page.get("body", {}).get("storage", {}).get("value", ""),
             content_type=ContentType.HTML,
             source_name=self.name,
-            path=page.get('_links', {}).get('webui', ''),
-            title=page.get('title'),
-            author=page.get('version', {}).get('by', {}).get('displayName'),
-            updated_at=datetime.fromisoformat(page.get('version', {}).get('when', '')),
+            path=page.get("_links", {}).get("webui", ""),
+            title=page.get("title"),
+            author=page.get("version", {}).get("by", {}).get("displayName"),
+            updated_at=datetime.fromisoformat(page.get("version", {}).get("when", "")),
             metadata={
-                'space_key': self.space_key,
-                'page_id': page.get('id'),
-                'version': page.get('version', {}).get('number'),
+                "space_key": self.space_key,
+                "page_id": page.get("id"),
+                "version": page.get("version", {}).get("number"),
             },
         )
 
@@ -395,20 +401,20 @@ class SlackSource(ContentSource):
         # Combine messages into a coherent document
         text_parts = []
         for msg in messages:
-            user = msg.get('user', 'unknown')
-            text = msg.get('text', '')
+            user = msg.get("user", "unknown")
+            text = msg.get("text", "")
             text_parts.append(f"[{user}]: {text}")
 
         return SourceDocument(
             source_id=f"slack_{channel}_{messages[0].get('ts', '')}",
-            content='\n'.join(text_parts),
+            content="\n".join(text_parts),
             content_type=ContentType.SLACK_THREAD,
             source_name=self.name,
             path=f"#{channel}",
             title=f"Slack thread in #{channel}",
             metadata={
-                'channel': channel,
-                'message_count': len(messages),
+                "channel": channel,
+                "message_count": len(messages),
             },
         )
 
@@ -435,7 +441,7 @@ class APIDocSource(ContentSource):
             return
 
         # Convert each endpoint to a document
-        paths = spec.get('paths', {})
+        paths = spec.get("paths", {})
         for path, methods in paths.items():
             for method, details in methods.items():
                 if isinstance(details, dict):
@@ -457,6 +463,7 @@ class APIDocSource(ContentSource):
                 content = self.spec_path.read_text()
             elif self.spec_url:
                 import urllib.request
+
                 with urllib.request.urlopen(self.spec_url) as response:
                     content = response.read().decode()
             else:
@@ -468,6 +475,7 @@ class APIDocSource(ContentSource):
             except json.JSONDecodeError:
                 try:
                     import yaml
+
                     return yaml.safe_load(content)
                 except Exception:
                     return None
@@ -487,13 +495,13 @@ class APIDocSource(ContentSource):
         text_parts = [
             f"# {method.upper()} {path}",
             "",
-            details.get('summary', ''),
+            details.get("summary", ""),
             "",
-            details.get('description', ''),
+            details.get("description", ""),
         ]
 
         # Add parameters
-        params = details.get('parameters', [])
+        params = details.get("parameters", [])
         if params:
             text_parts.append("\n## Parameters\n")
             for param in params:
@@ -503,7 +511,7 @@ class APIDocSource(ContentSource):
                 )
 
         # Add responses
-        responses = details.get('responses', {})
+        responses = details.get("responses", {})
         if responses:
             text_parts.append("\n## Responses\n")
             for code, resp in responses.items():
@@ -511,15 +519,15 @@ class APIDocSource(ContentSource):
 
         return SourceDocument(
             source_id=f"api_{method}_{path}",
-            content='\n'.join(text_parts),
+            content="\n".join(text_parts),
             content_type=ContentType.API_DOC,
             source_name=self.name,
             path=path,
             title=f"{method.upper()} {path}",
             metadata={
-                'method': method,
-                'path': path,
-                'tags': details.get('tags', []),
-                'api_title': spec.get('info', {}).get('title'),
+                "method": method,
+                "path": path,
+                "tags": details.get("tags", []),
+                "api_title": spec.get("info", {}).get("title"),
             },
         )

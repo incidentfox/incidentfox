@@ -9,8 +9,8 @@ Provides integration with the existing RAPTOR implementation:
 
 from .bridge import (
     RaptorBridge,
-    import_raptor_tree,
     export_to_raptor,
+    import_raptor_tree,
 )
 from .enhanced_builder import (
     EnhancedTreeBuilder,

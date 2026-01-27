@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from agents import function_tool
 
@@ -25,7 +25,11 @@ logger = get_logger(__name__)
 # Configuration
 RAPTOR_URL = os.getenv("RAPTOR_URL", "http://localhost:8000")
 DEFAULT_TREE = os.getenv("RAPTOR_DEFAULT_TREE", "k8s")
-ULTIMATE_RAG_ENABLED = os.getenv("ULTIMATE_RAG_ENABLED", "false").lower() in ("true", "1", "yes")
+ULTIMATE_RAG_ENABLED = os.getenv("ULTIMATE_RAG_ENABLED", "false").lower() in (
+    "true",
+    "1",
+    "yes",
+)
 
 
 def _get_raptor_client():
@@ -368,24 +372,32 @@ def search_for_incident(
             for item in data.get("results", []):
                 category = item.get("category", "general")
                 if category == "runbook" and include_runbooks:
-                    result["runbooks"].append({
-                        "title": item.get("title", ""),
-                        "text": item.get("text", "")[:500],
-                        "relevance": item.get("score", 0),
-                        "runbook_id": item.get("metadata", {}).get("runbook_id"),
-                    })
+                    result["runbooks"].append(
+                        {
+                            "title": item.get("title", ""),
+                            "text": item.get("text", "")[:500],
+                            "relevance": item.get("score", 0),
+                            "runbook_id": item.get("metadata", {}).get("runbook_id"),
+                        }
+                    )
                 elif category == "incident" and include_past_incidents:
-                    result["past_incidents"].append({
-                        "incident_id": item.get("metadata", {}).get("incident_id"),
-                        "summary": item.get("text", "")[:500],
-                        "resolution": item.get("metadata", {}).get("resolution", ""),
-                        "relevance": item.get("score", 0),
-                    })
+                    result["past_incidents"].append(
+                        {
+                            "incident_id": item.get("metadata", {}).get("incident_id"),
+                            "summary": item.get("text", "")[:500],
+                            "resolution": item.get("metadata", {}).get(
+                                "resolution", ""
+                            ),
+                            "relevance": item.get("score", 0),
+                        }
+                    )
                 else:
-                    result["service_context"].append({
-                        "text": item.get("text", "")[:500],
-                        "relevance": item.get("score", 0),
-                    })
+                    result["service_context"].append(
+                        {
+                            "text": item.get("text", "")[:500],
+                            "relevance": item.get("score", 0),
+                        }
+                    )
 
             logger.info(
                 "incident_search",
@@ -489,11 +501,13 @@ def query_service_graph(
 
     except Exception as e:
         logger.error("graph_query_failed", error=str(e))
-        return json.dumps({
-            "ok": False,
-            "error": str(e),
-            "hint": "Knowledge graph may not be available. Try search_knowledge_base instead.",
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Knowledge graph may not be available. Try search_knowledge_base instead.",
+            }
+        )
 
 
 @function_tool
@@ -545,11 +559,13 @@ def teach_knowledge_base(
     # Validate content
     content = content.strip()
     if len(content) < 50:
-        return json.dumps({
-            "ok": False,
-            "error": "Content too short. Please provide detailed, specific knowledge (at least 50 characters).",
-            "hint": "Include: what the problem was, how to identify it, and how to fix it.",
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "Content too short. Please provide detailed, specific knowledge (at least 50 characters).",
+                "hint": "Include: what the problem was, how to identify it, and how to fix it.",
+            }
+        )
 
     if knowledge_type not in ["procedural", "factual", "temporal", "relational"]:
         knowledge_type = "procedural"
@@ -583,16 +599,22 @@ def teach_knowledge_base(
             # Add helpful message based on status
             status = data.get("status", "")
             if status == "created":
-                result["message"] = "New knowledge successfully added to the knowledge base."
+                result["message"] = (
+                    "New knowledge successfully added to the knowledge base."
+                )
             elif status == "merged":
                 result["message"] = "Knowledge merged with existing similar content."
             elif status == "duplicate":
-                result["message"] = "This knowledge already exists in the knowledge base."
+                result["message"] = (
+                    "This knowledge already exists in the knowledge base."
+                )
             elif status == "pending_review":
                 result["message"] = "Knowledge queued for human review before adding."
                 result["needs_review"] = True
             elif status == "contradiction":
-                result["message"] = "This may contradict existing knowledge. Queued for review."
+                result["message"] = (
+                    "This may contradict existing knowledge. Queued for review."
+                )
                 result["needs_review"] = True
 
             logger.info(
@@ -606,11 +628,13 @@ def teach_knowledge_base(
 
     except Exception as e:
         logger.error("teaching_failed", error=str(e))
-        return json.dumps({
-            "ok": False,
-            "error": str(e),
-            "hint": "Teaching service may not be available. The knowledge was not saved.",
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Teaching service may not be available. The knowledge was not saved.",
+            }
+        )
 
 
 @function_tool
@@ -655,15 +679,17 @@ def find_similar_past_incidents(
 
             incidents = []
             for inc in data.get("incidents", []):
-                incidents.append({
-                    "incident_id": inc.get("incident_id"),
-                    "date": inc.get("date"),
-                    "similarity": inc.get("similarity", 0),
-                    "symptoms": inc.get("symptoms", ""),
-                    "root_cause": inc.get("root_cause", ""),
-                    "resolution": inc.get("resolution", ""),
-                    "services_affected": inc.get("services_affected", []),
-                })
+                incidents.append(
+                    {
+                        "incident_id": inc.get("incident_id"),
+                        "date": inc.get("date"),
+                        "similarity": inc.get("similarity", 0),
+                        "symptoms": inc.get("symptoms", ""),
+                        "root_cause": inc.get("root_cause", ""),
+                        "resolution": inc.get("resolution", ""),
+                        "services_affected": inc.get("services_affected", []),
+                    }
+                )
 
             result = {
                 "ok": True,
@@ -673,7 +699,9 @@ def find_similar_past_incidents(
             }
 
             if not incidents:
-                result["hint"] = "No similar past incidents found. This may be a new issue type."
+                result["hint"] = (
+                    "No similar past incidents found. This may be a new issue type."
+                )
 
             logger.info(
                 "similar_incidents_search",
@@ -685,8 +713,10 @@ def find_similar_past_incidents(
 
     except Exception as e:
         logger.error("similar_incidents_failed", error=str(e))
-        return json.dumps({
-            "ok": False,
-            "error": str(e),
-            "hint": "Could not search past incidents. Try search_knowledge_base with 'incidents' tree.",
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Could not search past incidents. Try search_knowledge_base with 'incidents' tree.",
+            }
+        )

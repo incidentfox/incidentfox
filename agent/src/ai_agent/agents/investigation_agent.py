@@ -30,12 +30,11 @@ import threading
 from typing import Any
 
 from agents import Agent, Runner, function_tool
-
-from ..core.agent_builder import create_model_settings
 from agents.exceptions import MaxTurnsExceeded
 from agents.stream_events import RunItemStreamEvent
 from pydantic import BaseModel, Field
 
+from ..core.agent_builder import create_model_settings
 from ..core.config import get_config
 from ..core.config_utils import get_agent_sub_agents
 from ..core.execution_context import get_execution_context, propagate_context_to_thread
@@ -711,26 +710,32 @@ def _load_investigation_direct_tools():
     tools = [think, llm_call, web_search, ask_human]
 
     # Knowledge Base tools (RAPTOR) - for runbook lookup, past incident search, and teaching
-    raptor_enabled = os.getenv("RAPTOR_ENABLED", "false").lower() in ("true", "1", "yes")
+    raptor_enabled = os.getenv("RAPTOR_ENABLED", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
     if raptor_enabled:
         try:
             from ..tools.knowledge_base_tools import (
-                search_knowledge_base,
                 ask_knowledge_base,
-                search_for_incident,
-                query_service_graph,
-                teach_knowledge_base,
                 find_similar_past_incidents,
+                query_service_graph,
+                search_for_incident,
+                search_knowledge_base,
+                teach_knowledge_base,
             )
 
-            tools.extend([
-                search_for_incident,  # Primary: incident-aware search for runbooks
-                find_similar_past_incidents,  # Find past incidents with similar symptoms
-                query_service_graph,  # Service dependency queries
-                teach_knowledge_base,  # Teach KB after successful investigations
-                search_knowledge_base,  # General KB search
-                ask_knowledge_base,  # Direct Q&A from KB
-            ])
+            tools.extend(
+                [
+                    search_for_incident,  # Primary: incident-aware search for runbooks
+                    find_similar_past_incidents,  # Find past incidents with similar symptoms
+                    query_service_graph,  # Service dependency queries
+                    teach_knowledge_base,  # Teach KB after successful investigations
+                    search_knowledge_base,  # General KB search
+                    ask_knowledge_base,  # Direct Q&A from KB
+                ]
+            )
             logger.info("investigation_kb_tools_loaded", count=6)
         except ImportError as e:
             logger.debug("investigation_kb_tools_skipped", reason=str(e))

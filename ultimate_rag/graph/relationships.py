@@ -8,7 +8,7 @@ DEPENDS_ON, OWNS, DOCUMENTED_BY, etc.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 
 class RelationshipType(str, Enum):
@@ -164,7 +164,9 @@ class Relationship:
             RelationshipType.DOCUMENTS: RelationshipType.RELATED_TO,
         }
 
-        inverse_type = inverse_types.get(self.relationship_type, RelationshipType.RELATED_TO)
+        inverse_type = inverse_types.get(
+            self.relationship_type, RelationshipType.RELATED_TO
+        )
 
         return Relationship(
             relationship_id=f"{self.relationship_id}_inverse",
@@ -181,6 +183,7 @@ class Relationship:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary."""
+
         def dt_to_str(dt):
             return dt.isoformat() if dt else None
 
@@ -202,12 +205,15 @@ class Relationship:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Relationship":
         """Deserialize from dictionary."""
+
         def parse_dt(s):
             return datetime.fromisoformat(s) if s else None
 
         return cls(
             relationship_id=data.get("relationship_id", ""),
-            relationship_type=RelationshipType(data.get("relationship_type", "related_to")),
+            relationship_type=RelationshipType(
+                data.get("relationship_type", "related_to")
+            ),
             source_id=data.get("source_id", ""),
             target_id=data.get("target_id", ""),
             properties=data.get("properties", {}),
@@ -241,6 +247,7 @@ class Relationship:
             New Relationship instance
         """
         import uuid
+
         return cls(
             relationship_id=str(uuid.uuid4()),
             relationship_type=rel_type,

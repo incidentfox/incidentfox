@@ -5,12 +5,12 @@ Captures feedback from agents working with the knowledge base,
 enabling the learning loop that improves knowledge over time.
 """
 
+import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Any
-import logging
-import uuid
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,9 @@ class AgentObservation:
         """Deserialize from dictionary."""
         return cls(
             observation_id=data.get("observation_id", str(uuid.uuid4())),
-            observation_type=ObservationType(data.get("observation_type", "query_success")),
+            observation_type=ObservationType(
+                data.get("observation_type", "query_success")
+            ),
             query=data.get("query", ""),
             task_id=data.get("task_id"),
             agent_id=data.get("agent_id"),
@@ -180,7 +182,11 @@ class AgentObservation:
             retrieved_nodes=data.get("retrieved_nodes", []),
             retrieved_entities=data.get("retrieved_entities", []),
             trees_searched=data.get("trees_searched", []),
-            timestamp=datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else datetime.utcnow(),
+            timestamp=(
+                datetime.fromisoformat(data["timestamp"])
+                if data.get("timestamp")
+                else datetime.utcnow()
+            ),
             retrieval_latency_ms=data.get("retrieval_latency_ms"),
             success_score=data.get("success_score", 0.5),
             relevance_score=data.get("relevance_score", 0.5),
@@ -380,7 +386,11 @@ class ObservationCollector:
         **kwargs,
     ) -> AgentObservation:
         """Record runbook usage outcome."""
-        obs_type = ObservationType.RUNBOOK_SUCCESS if success else ObservationType.RUNBOOK_FAILURE
+        obs_type = (
+            ObservationType.RUNBOOK_SUCCESS
+            if success
+            else ObservationType.RUNBOOK_FAILURE
+        )
         obs = AgentObservation(
             observation_type=obs_type,
             retrieved_nodes=[runbook_node_id],
@@ -398,10 +408,7 @@ class ObservationCollector:
     def get_observations_for_node(self, node_id: int) -> List[AgentObservation]:
         """Get all observations involving a specific node."""
         obs_ids = self._by_node.get(node_id, [])
-        return [
-            obs for obs in self._observations
-            if obs.observation_id in obs_ids
-        ]
+        return [obs for obs in self._observations if obs.observation_id in obs_ids]
 
     def get_node_success_rate(self, node_id: int) -> float:
         """Calculate success rate for a specific node."""
@@ -420,10 +427,12 @@ class ObservationCollector:
         """Get recent query failures."""
         cutoff = datetime.utcnow()
         from datetime import timedelta
+
         cutoff = cutoff - timedelta(days=days)
 
         failures = [
-            obs for obs in self._observations
+            obs
+            for obs in self._observations
             if obs.indicates_gap() and obs.timestamp > cutoff
         ]
 
@@ -438,10 +447,12 @@ class ObservationCollector:
         """Get recent quality issue observations."""
         cutoff = datetime.utcnow()
         from datetime import timedelta
+
         cutoff = cutoff - timedelta(days=days)
 
         return [
-            obs for obs in self._observations
+            obs
+            for obs in self._observations
             if obs.indicates_quality_issue() and obs.timestamp > cutoff
         ]
 
@@ -470,7 +481,9 @@ class ObservationCollector:
         avg_success = sum(success_scores) / len(success_scores)
 
         gaps = [obs for obs in self._observations if obs.indicates_gap()]
-        quality_issues = [obs for obs in self._observations if obs.indicates_quality_issue()]
+        quality_issues = [
+            obs for obs in self._observations if obs.indicates_quality_issue()
+        ]
 
         return {
             "total_observations": total,

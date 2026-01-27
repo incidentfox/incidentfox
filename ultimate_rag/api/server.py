@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -23,12 +23,15 @@ logger = logging.getLogger(__name__)
 
 # ==================== Request/Response Models ====================
 
+
 class QueryRequest(BaseModel):
     """Request for knowledge retrieval."""
 
     query: str = Field(..., description="The query to search for")
     top_k: int = Field(10, ge=1, le=50, description="Number of results")
-    mode: Optional[str] = Field(None, description="Retrieval mode: standard, fast, thorough, incident")
+    mode: Optional[str] = Field(
+        None, description="Retrieval mode: standard, fast, thorough, incident"
+    )
     filters: Optional[Dict[str, Any]] = Field(None, description="Optional filters")
     include_graph: bool = Field(True, description="Include graph context")
 
@@ -82,7 +85,9 @@ class TeachRequest(BaseModel):
     knowledge_type: Optional[str] = Field(None, description="Type of knowledge")
     source: Optional[str] = Field(None, description="Source of the knowledge")
     entities: Optional[List[str]] = Field(None, description="Related entities")
-    importance: Optional[float] = Field(None, ge=0, le=1, description="Importance score")
+    importance: Optional[float] = Field(
+        None, ge=0, le=1, description="Importance score"
+    )
 
 
 class TeachResponse(BaseModel):
@@ -154,6 +159,7 @@ class MaintenanceResponse(BaseModel):
 
 # ==================== API Server ====================
 
+
 class UltimateRAGServer:
     """
     Main server class that manages all components.
@@ -185,13 +191,13 @@ class UltimateRAGServer:
         config: Optional[Dict[str, Any]] = None,
     ):
         """Initialize all components."""
-        from ..core.node import TreeForest
-        from ..graph.graph import KnowledgeGraph
-        from ..retrieval.retriever import UltimateRetriever, RetrievalConfig
-        from ..ingestion.processor import DocumentProcessor, ProcessingConfig
+        from ..agents.maintenance import MaintenanceAgent
         from ..agents.observations import ObservationCollector
         from ..agents.teaching import TeachingInterface
-        from ..agents.maintenance import MaintenanceAgent
+        from ..core.node import TreeForest
+        from ..graph.graph import KnowledgeGraph
+        from ..ingestion.processor import DocumentProcessor, ProcessingConfig
+        from ..retrieval.retriever import RetrievalConfig, UltimateRetriever
 
         logger.info("Initializing Ultimate RAG server...")
 
@@ -201,6 +207,7 @@ class UltimateRAGServer:
         # Load existing tree if provided
         if tree_path:
             from ..raptor.bridge import import_raptor_tree
+
             try:
                 tree = import_raptor_tree(tree_path)
                 self.forest.add_tree("main", tree)
@@ -509,34 +516,43 @@ class UltimateRAGServer:
                 # Get specific entity and neighborhood
                 entity = self.graph.get_entity(request.entity_id)
                 if entity:
-                    entities.append(GraphEntity(
-                        entity_id=entity.entity_id,
-                        entity_type=entity.entity_type.value,
-                        name=entity.name,
-                        description=entity.description,
-                        properties=entity.properties,
-                    ))
+                    entities.append(
+                        GraphEntity(
+                            entity_id=entity.entity_id,
+                            entity_type=entity.entity_type.value,
+                            name=entity.name,
+                            description=entity.description,
+                            properties=entity.properties,
+                        )
+                    )
 
                     # Get relationships
-                    for rel in self.graph.get_relationships_for_entity(request.entity_id):
-                        relationships.append(GraphRelationship(
-                            source_id=rel.source_id,
-                            target_id=rel.target_id,
-                            relationship_type=rel.relationship_type.value,
-                            properties=rel.properties,
-                        ))
+                    for rel in self.graph.get_relationships_for_entity(
+                        request.entity_id
+                    ):
+                        relationships.append(
+                            GraphRelationship(
+                                source_id=rel.source_id,
+                                target_id=rel.target_id,
+                                relationship_type=rel.relationship_type.value,
+                                properties=rel.properties,
+                            )
+                        )
 
             elif request.entity_type:
                 # Get all entities of type
                 from ..graph.entities import EntityType
+
                 entity_type = EntityType(request.entity_type)
                 for entity in self.graph.get_entities_by_type(entity_type):
-                    entities.append(GraphEntity(
-                        entity_id=entity.entity_id,
-                        entity_type=entity.entity_type.value,
-                        name=entity.name,
-                        description=entity.description,
-                    ))
+                    entities.append(
+                        GraphEntity(
+                            entity_id=entity.entity_id,
+                            entity_type=entity.entity_type.value,
+                            name=entity.name,
+                            description=entity.description,
+                        )
+                    )
 
             return GraphQueryResponse(
                 entities=entities,
@@ -599,7 +615,9 @@ class UltimateRAGServer:
                 stats=stats,
             )
 
-        @app.post("/maintenance/run", response_model=MaintenanceResponse, tags=["Admin"])
+        @app.post(
+            "/maintenance/run", response_model=MaintenanceResponse, tags=["Admin"]
+        )
         async def run_maintenance():
             """Run a maintenance cycle."""
             if not self.maintenance:
@@ -639,6 +657,7 @@ class UltimateRAGServer:
             return None
 
         from ..ingestion.processor import ContentType
+
         try:
             return ContentType(type_str)
         except ValueError:

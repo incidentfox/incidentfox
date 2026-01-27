@@ -9,7 +9,7 @@ Provides FastAPI server for:
 - Admin and maintenance
 """
 
-from .server import create_app, UltimateRAGServer
+from .server import UltimateRAGServer, create_app
 
 __all__ = [
     "create_app",

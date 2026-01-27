@@ -7,7 +7,7 @@ Tracks provenance, validation status, and source information.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 
 class ValidationStatus(str, Enum):
@@ -58,7 +58,9 @@ class SourceInfo:
             return False
         if not self.last_synced_at:
             return True
-        hours_since_sync = (datetime.utcnow() - self.last_synced_at).total_seconds() / 3600
+        hours_since_sync = (
+            datetime.utcnow() - self.last_synced_at
+        ).total_seconds() / 3600
         return hours_since_sync > self.sync_interval_hours
 
     def to_dict(self) -> Dict[str, Any]:
@@ -72,10 +74,16 @@ class SourceInfo:
             "organization": self.organization,
             "repository": self.repository,
             "file_path": self.file_path,
-            "source_created_at": self.source_created_at.isoformat() if self.source_created_at else None,
-            "source_updated_at": self.source_updated_at.isoformat() if self.source_updated_at else None,
+            "source_created_at": (
+                self.source_created_at.isoformat() if self.source_created_at else None
+            ),
+            "source_updated_at": (
+                self.source_updated_at.isoformat() if self.source_updated_at else None
+            ),
             "ingested_at": self.ingested_at.isoformat(),
-            "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
+            "last_synced_at": (
+                self.last_synced_at.isoformat() if self.last_synced_at else None
+            ),
             "auto_sync": self.auto_sync,
             "sync_interval_hours": self.sync_interval_hours,
             "content_hash": self.content_hash,
@@ -84,6 +92,7 @@ class SourceInfo:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SourceInfo":
         """Deserialize from dictionary."""
+
         def parse_dt(s):
             return datetime.fromisoformat(s) if s else None
 
@@ -219,6 +228,7 @@ class NodeMetadata:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary."""
+
         def dt_to_str(dt):
             return dt.isoformat() if dt else None
 
@@ -259,6 +269,7 @@ class NodeMetadata:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "NodeMetadata":
         """Deserialize from dictionary."""
+
         def parse_dt(s):
             return datetime.fromisoformat(s) if s else None
 
@@ -271,7 +282,9 @@ class NodeMetadata:
             topics=data.get("topics", []),
             source=SourceInfo.from_dict(data["source"]) if data.get("source") else None,
             sources=[SourceInfo.from_dict(s) for s in data.get("sources", [])],
-            validation_status=ValidationStatus(data.get("validation_status", "provisional")),
+            validation_status=ValidationStatus(
+                data.get("validation_status", "provisional")
+            ),
             validated_by=data.get("validated_by"),
             validated_at=parse_dt(data.get("validated_at")),
             review_notes=data.get("review_notes"),

@@ -10,15 +10,16 @@ import logging
 import pickle
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
 
 if TYPE_CHECKING:
     # Import RAPTOR types for type hints only
-    from knowledge_base.raptor.tree_structures import Node as RaptorNode, Tree as RaptorTree
+    from knowledge_base.raptor.tree_structures import Node as RaptorNode
+    from knowledge_base.raptor.tree_structures import Tree as RaptorTree
 
-from ..core.node import KnowledgeNode, KnowledgeTree, TreeForest
-from ..core.types import KnowledgeType, ImportanceScore
 from ..core.metadata import NodeMetadata, SourceInfo, ValidationStatus
+from ..core.node import KnowledgeNode, KnowledgeTree, TreeForest
+from ..core.types import ImportanceScore, KnowledgeType
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,7 @@ class RaptorBridge:
             knowledge_type=knowledge_type,
             importance=importance,
             metadata=metadata,
-            keywords=raptor_node.keywords if hasattr(raptor_node, 'keywords') else [],
+            keywords=raptor_node.keywords if hasattr(raptor_node, "keywords") else [],
         )
 
         return knowledge_node
@@ -187,23 +188,45 @@ class RaptorBridge:
         text_lower = text.lower()
 
         # Check for procedural content
-        if any(kw in text_lower for kw in ["step 1", "first,", "then,", "how to", "procedure", "instructions"]):
+        if any(
+            kw in text_lower
+            for kw in [
+                "step 1",
+                "first,",
+                "then,",
+                "how to",
+                "procedure",
+                "instructions",
+            ]
+        ):
             return KnowledgeType.PROCEDURAL
 
         # Check for relational content
-        if any(kw in text_lower for kw in ["depends on", "connected to", "owns", "manages", "part of"]):
+        if any(
+            kw in text_lower
+            for kw in ["depends on", "connected to", "owns", "manages", "part of"]
+        ):
             return KnowledgeType.RELATIONAL
 
         # Check for temporal content
-        if any(kw in text_lower for kw in ["on january", "in 2023", "last week", "yesterday", "when"]):
+        if any(
+            kw in text_lower
+            for kw in ["on january", "in 2023", "last week", "yesterday", "when"]
+        ):
             return KnowledgeType.TEMPORAL
 
         # Check for policy content
-        if any(kw in text_lower for kw in ["must", "required", "policy", "compliance", "rule", "should not"]):
+        if any(
+            kw in text_lower
+            for kw in ["must", "required", "policy", "compliance", "rule", "should not"]
+        ):
             return KnowledgeType.POLICY
 
         # Check for contextual content
-        if any(kw in text_lower for kw in ["in production", "during peak", "when traffic", "context"]):
+        if any(
+            kw in text_lower
+            for kw in ["in production", "during peak", "when traffic", "context"]
+        ):
             return KnowledgeType.CONTEXTUAL
 
         # Default to factual
@@ -211,35 +234,37 @@ class RaptorBridge:
 
     def _extract_metadata(self, raptor_node: "RaptorNode") -> Optional[NodeMetadata]:
         """Extract metadata from RAPTOR node."""
-        raptor_meta = getattr(raptor_node, 'metadata', {}) or {}
+        raptor_meta = getattr(raptor_node, "metadata", {}) or {}
 
         if not raptor_meta:
             return None
 
         # Extract source info
         source_info = None
-        source_url = raptor_meta.get('source_url') or getattr(raptor_node, 'original_content_ref', None)
+        source_url = raptor_meta.get("source_url") or getattr(
+            raptor_node, "original_content_ref", None
+        )
         if source_url:
             source_info = SourceInfo(
                 source_type="document",
-                source_id=raptor_meta.get('doc_id', ''),
+                source_id=raptor_meta.get("doc_id", ""),
                 url=source_url,
-                title=raptor_meta.get('rel_path', ''),
+                title=raptor_meta.get("rel_path", ""),
             )
 
         # Create metadata
         metadata = NodeMetadata(
             source=source_info,
             validation_status=ValidationStatus.PROVISIONAL,
-            tags=raptor_meta.get('tags', []),
-            domain=raptor_meta.get('domain'),
-            subject=raptor_meta.get('subject'),
+            tags=raptor_meta.get("tags", []),
+            domain=raptor_meta.get("domain"),
+            subject=raptor_meta.get("subject"),
         )
 
         # Extract citations if present
-        citations = raptor_meta.get('citations', [])
+        citations = raptor_meta.get("citations", [])
         if citations:
-            metadata.related_urls = [c.get('ref') for c in citations if c.get('ref')]
+            metadata.related_urls = [c.get("ref") for c in citations if c.get("ref")]
 
         return metadata
 
@@ -253,7 +278,8 @@ class RaptorBridge:
         Useful for using RAPTOR's retrieval or updating an existing tree.
         """
         # Import RAPTOR types
-        from knowledge_base.raptor.tree_structures import Node as RaptorNode, Tree as RaptorTree
+        from knowledge_base.raptor.tree_structures import Node as RaptorNode
+        from knowledge_base.raptor.tree_structures import Tree as RaptorTree
 
         all_nodes = {}
         layer_to_nodes = {}
@@ -291,16 +317,16 @@ class RaptorBridge:
 
         if node.metadata:
             if node.metadata.source:
-                metadata['source_url'] = node.metadata.source.url
-                metadata['doc_id'] = node.metadata.source.source_id
+                metadata["source_url"] = node.metadata.source.url
+                metadata["doc_id"] = node.metadata.source.source_id
 
-            metadata['domain'] = node.metadata.domain
-            metadata['subject'] = node.metadata.subject
-            metadata['tags'] = node.metadata.tags
+            metadata["domain"] = node.metadata.domain
+            metadata["subject"] = node.metadata.subject
+            metadata["tags"] = node.metadata.tags
 
         # Add knowledge type info
-        metadata['knowledge_type'] = node.knowledge_type.value
-        metadata['importance'] = node.get_importance()
+        metadata["knowledge_type"] = node.knowledge_type.value
+        metadata["importance"] = node.get_importance()
 
         return metadata
 
@@ -333,7 +359,7 @@ def import_raptor_tree(
 
     if isinstance(source, (str, Path)):
         # Load from pickle
-        with open(source, 'rb') as f:
+        with open(source, "rb") as f:
             raptor_tree = pickle.load(f)
     else:
         raptor_tree = source
@@ -359,7 +385,7 @@ def export_to_raptor(
     raptor_tree = bridge.export_tree(knowledge_tree)
 
     if output_path:
-        with open(output_path, 'wb') as f:
+        with open(output_path, "wb") as f:
             pickle.dump(raptor_tree, f)
         logger.info(f"Exported tree to {output_path}")
 
@@ -386,7 +412,7 @@ def import_forest_from_directory(
 
     for pkl_file in directory.glob(pattern):
         try:
-            with open(pkl_file, 'rb') as f:
+            with open(pkl_file, "rb") as f:
                 raptor_tree = pickle.load(f)
 
             tree_name = pkl_file.stem

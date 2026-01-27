@@ -12,7 +12,7 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from ..graph.entities import Entity, EntityType
@@ -65,36 +65,36 @@ class PatternEntityExtractor(EntityExtractor):
         # Define patterns for different entity types
         self.patterns = {
             "service": [
-                r'\b([a-z]+-service)\b',
-                r'\b([a-z]+-api)\b',
-                r'\b([a-z]+-worker)\b',
-                r'\b([a-z]+-db)\b',
+                r"\b([a-z]+-service)\b",
+                r"\b([a-z]+-api)\b",
+                r"\b([a-z]+-worker)\b",
+                r"\b([a-z]+-db)\b",
             ],
             "team": [
-                r'\b(team [a-z]+)\b',
-                r'\b([a-z]+ team)\b',
-                r'\b(platform team)\b',
-                r'\b(sre team)\b',
+                r"\b(team [a-z]+)\b",
+                r"\b([a-z]+ team)\b",
+                r"\b(platform team)\b",
+                r"\b(sre team)\b",
             ],
             "person": [
-                r'\b([A-Z][a-z]+ [A-Z][a-z]+)\b',  # Full names
-                r'@(\w+)\b',  # Mentions
+                r"\b([A-Z][a-z]+ [A-Z][a-z]+)\b",  # Full names
+                r"@(\w+)\b",  # Mentions
             ],
             "technology": [
-                r'\b(kubernetes|k8s)\b',
-                r'\b(docker)\b',
-                r'\b(aws|gcp|azure)\b',
-                r'\b(postgres(?:ql)?|mysql|mongodb)\b',
-                r'\b(redis|memcached)\b',
-                r'\b(kafka|rabbitmq)\b',
-                r'\b(elasticsearch|opensearch)\b',
+                r"\b(kubernetes|k8s)\b",
+                r"\b(docker)\b",
+                r"\b(aws|gcp|azure)\b",
+                r"\b(postgres(?:ql)?|mysql|mongodb)\b",
+                r"\b(redis|memcached)\b",
+                r"\b(kafka|rabbitmq)\b",
+                r"\b(elasticsearch|opensearch)\b",
             ],
             "endpoint": [
-                r'(?:GET|POST|PUT|DELETE|PATCH)\s+(/[\w/{}]+)',
-                r'https?://[\w./-]+',
+                r"(?:GET|POST|PUT|DELETE|PATCH)\s+(/[\w/{}]+)",
+                r"https?://[\w./-]+",
             ],
             "metric": [
-                r'\b(\w+_(?:count|total|duration|rate|latency|errors?))\b',
+                r"\b(\w+_(?:count|total|duration|rate|latency|errors?))\b",
             ],
         }
 
@@ -105,7 +105,9 @@ class PatternEntityExtractor(EntityExtractor):
 
         for entity_type, patterns in self.patterns.items():
             for pattern in patterns:
-                flags = re.IGNORECASE if entity_type in ["technology", "endpoint"] else 0
+                flags = (
+                    re.IGNORECASE if entity_type in ["technology", "endpoint"] else 0
+                )
 
                 for match in re.finditer(pattern, text if flags else text_lower, flags):
                     name = match.group(1) if match.lastindex else match.group(0)
@@ -192,30 +194,30 @@ class PatternRelationshipExtractor(RelationshipExtractor):
         # Format: (pattern, source_group, target_group, relationship_type)
         self.patterns = [
             # Dependency patterns
-            (r'(\S+)\s+depends\s+on\s+(\S+)', 1, 2, 'depends_on'),
-            (r'(\S+)\s+requires\s+(\S+)', 1, 2, 'depends_on'),
-            (r'(\S+)\s+needs\s+(\S+)', 1, 2, 'depends_on'),
-
+            (r"(\S+)\s+depends\s+on\s+(\S+)", 1, 2, "depends_on"),
+            (r"(\S+)\s+requires\s+(\S+)", 1, 2, "depends_on"),
+            (r"(\S+)\s+needs\s+(\S+)", 1, 2, "depends_on"),
             # Communication patterns
-            (r'(\S+)\s+calls\s+(\S+)', 1, 2, 'calls'),
-            (r'(\S+)\s+sends\s+(?:to|messages?)\s+(\S+)', 1, 2, 'calls'),
-            (r'(\S+)\s+connects\s+to\s+(\S+)', 1, 2, 'calls'),
-
+            (r"(\S+)\s+calls\s+(\S+)", 1, 2, "calls"),
+            (r"(\S+)\s+sends\s+(?:to|messages?)\s+(\S+)", 1, 2, "calls"),
+            (r"(\S+)\s+connects\s+to\s+(\S+)", 1, 2, "calls"),
             # Ownership patterns
-            (r'(\S+)\s+(?:owns|manages|maintains)\s+(\S+)', 1, 2, 'owns'),
-            (r'(\S+)\s+is\s+(?:owned|managed|maintained)\s+by\s+(\S+)', 2, 1, 'owns'),
-
+            (r"(\S+)\s+(?:owns|manages|maintains)\s+(\S+)", 1, 2, "owns"),
+            (r"(\S+)\s+is\s+(?:owned|managed|maintained)\s+by\s+(\S+)", 2, 1, "owns"),
             # Team membership
-            (r'(\S+)\s+(?:is\s+)?(?:on|in|part\s+of)\s+(\S+\s+team)', 1, 2, 'member_of'),
-            (r'(\S+)\s+leads?\s+(\S+)', 1, 2, 'leads'),
-
+            (
+                r"(\S+)\s+(?:is\s+)?(?:on|in|part\s+of)\s+(\S+\s+team)",
+                1,
+                2,
+                "member_of",
+            ),
+            (r"(\S+)\s+leads?\s+(\S+)", 1, 2, "leads"),
             # Documentation
-            (r'(\S+)\s+documents?\s+(\S+)', 1, 2, 'documents'),
-            (r'(\S+)\s+describes?\s+(\S+)', 1, 2, 'documents'),
-
+            (r"(\S+)\s+documents?\s+(\S+)", 1, 2, "documents"),
+            (r"(\S+)\s+describes?\s+(\S+)", 1, 2, "documents"),
             # Technology usage
-            (r'(\S+)\s+uses\s+(\S+)', 1, 2, 'uses'),
-            (r'(\S+)\s+(?:runs|is\s+built)\s+(?:on|with)\s+(\S+)', 1, 2, 'uses'),
+            (r"(\S+)\s+uses\s+(\S+)", 1, 2, "uses"),
+            (r"(\S+)\s+(?:runs|is\s+built)\s+(?:on|with)\s+(\S+)", 1, 2, "uses"),
         ]
 
     def extract(
@@ -271,28 +273,75 @@ class MetadataExtractor:
     def __init__(self):
         # Document type indicators
         self.type_indicators = {
-            'runbook': ['runbook', 'playbook', 'procedure', 'step 1', 'step 2', 'how to'],
-            'incident_report': ['incident', 'postmortem', 'root cause', 'timeline', 'impact'],
-            'architecture': ['architecture', 'design doc', 'system design', 'components', 'diagram'],
-            'api_doc': ['endpoint', 'request', 'response', 'api', 'rest', 'graphql'],
-            'onboarding': ['getting started', 'setup', 'installation', 'quickstart'],
-            'policy': ['policy', 'compliance', 'must', 'required', 'prohibited'],
+            "runbook": [
+                "runbook",
+                "playbook",
+                "procedure",
+                "step 1",
+                "step 2",
+                "how to",
+            ],
+            "incident_report": [
+                "incident",
+                "postmortem",
+                "root cause",
+                "timeline",
+                "impact",
+            ],
+            "architecture": [
+                "architecture",
+                "design doc",
+                "system design",
+                "components",
+                "diagram",
+            ],
+            "api_doc": ["endpoint", "request", "response", "api", "rest", "graphql"],
+            "onboarding": ["getting started", "setup", "installation", "quickstart"],
+            "policy": ["policy", "compliance", "must", "required", "prohibited"],
         }
 
         # Domain indicators
         self.domain_indicators = {
-            'payments': ['payment', 'transaction', 'billing', 'invoice', 'stripe', 'checkout'],
-            'auth': ['authentication', 'authorization', 'oauth', 'jwt', 'login', 'password'],
-            'infrastructure': ['kubernetes', 'docker', 'aws', 'terraform', 'deployment', 'cluster'],
-            'data': ['database', 'postgres', 'mysql', 'redis', 'cache', 'migration'],
-            'observability': ['monitoring', 'logging', 'metrics', 'tracing', 'alerts', 'dashboard'],
+            "payments": [
+                "payment",
+                "transaction",
+                "billing",
+                "invoice",
+                "stripe",
+                "checkout",
+            ],
+            "auth": [
+                "authentication",
+                "authorization",
+                "oauth",
+                "jwt",
+                "login",
+                "password",
+            ],
+            "infrastructure": [
+                "kubernetes",
+                "docker",
+                "aws",
+                "terraform",
+                "deployment",
+                "cluster",
+            ],
+            "data": ["database", "postgres", "mysql", "redis", "cache", "migration"],
+            "observability": [
+                "monitoring",
+                "logging",
+                "metrics",
+                "tracing",
+                "alerts",
+                "dashboard",
+            ],
         }
 
         # Audience indicators
         self.audience_indicators = {
-            'developer': ['code', 'api', 'sdk', 'library', 'function', 'class'],
-            'ops': ['deploy', 'rollback', 'scale', 'incident', 'alert', 'oncall'],
-            'manager': ['summary', 'overview', 'business', 'stakeholder', 'timeline'],
+            "developer": ["code", "api", "sdk", "library", "function", "class"],
+            "ops": ["deploy", "rollback", "scale", "incident", "alert", "oncall"],
+            "manager": ["summary", "overview", "business", "stakeholder", "timeline"],
         }
 
     def extract(self, text: str) -> Dict[str, Any]:
@@ -304,30 +353,30 @@ class MetadataExtractor:
         # Detect document type
         doc_type = self._detect_category(text_lower, self.type_indicators)
         if doc_type:
-            metadata['document_type'] = doc_type
+            metadata["document_type"] = doc_type
 
         # Detect domain
         domain = self._detect_category(text_lower, self.domain_indicators)
         if domain:
-            metadata['domain'] = domain
+            metadata["domain"] = domain
 
         # Detect audience
         audience = self._detect_category(text_lower, self.audience_indicators)
         if audience:
-            metadata['audience'] = audience
+            metadata["audience"] = audience
 
         # Extract dates mentioned
         dates = self._extract_dates(text)
         if dates:
-            metadata['dates_mentioned'] = dates
+            metadata["dates_mentioned"] = dates
 
         # Detect urgency/priority
         urgency = self._detect_urgency(text_lower)
         if urgency:
-            metadata['urgency'] = urgency
+            metadata["urgency"] = urgency
 
         # Detect completeness
-        metadata['completeness'] = self._assess_completeness(text, doc_type)
+        metadata["completeness"] = self._assess_completeness(text, doc_type)
 
         return metadata
 
@@ -353,23 +402,26 @@ class MetadataExtractor:
         dates = []
 
         # ISO dates
-        iso_pattern = r'\d{4}-\d{2}-\d{2}'
+        iso_pattern = r"\d{4}-\d{2}-\d{2}"
         dates.extend(re.findall(iso_pattern, text))
 
         # Written dates
-        written_pattern = r'(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}'
+        written_pattern = r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}"
         dates.extend(re.findall(written_pattern, text, re.IGNORECASE))
 
         return dates[:5]  # Return up to 5 dates
 
     def _detect_urgency(self, text: str) -> Optional[str]:
         """Detect urgency level."""
-        if any(kw in text for kw in ['critical', 'urgent', 'immediately', 'asap', 'emergency']):
-            return 'critical'
-        elif any(kw in text for kw in ['important', 'priority', 'soon']):
-            return 'high'
-        elif any(kw in text for kw in ['when possible', 'low priority']):
-            return 'low'
+        if any(
+            kw in text
+            for kw in ["critical", "urgent", "immediately", "asap", "emergency"]
+        ):
+            return "critical"
+        elif any(kw in text for kw in ["important", "priority", "soon"]):
+            return "high"
+        elif any(kw in text for kw in ["when possible", "low priority"]):
+            return "low"
         return None
 
     def _assess_completeness(
@@ -381,19 +433,22 @@ class MetadataExtractor:
         score = 1.0
 
         # Check for TODO/placeholder indicators
-        if any(marker in text.lower() for marker in ['todo', 'tbd', 'placeholder', '[insert']):
+        if any(
+            marker in text.lower()
+            for marker in ["todo", "tbd", "placeholder", "[insert"]
+        ):
             score -= 0.3
 
         # Check for expected sections based on document type
-        if doc_type == 'runbook':
-            expected = ['prerequisites', 'steps', 'verification']
+        if doc_type == "runbook":
+            expected = ["prerequisites", "steps", "verification"]
             found = sum(1 for exp in expected if exp in text.lower())
-            score *= (found / len(expected))
+            score *= found / len(expected)
 
-        elif doc_type == 'incident_report':
-            expected = ['summary', 'timeline', 'root cause', 'action items']
+        elif doc_type == "incident_report":
+            expected = ["summary", "timeline", "root cause", "action items"]
             found = sum(1 for exp in expected if exp in text.lower())
-            score *= (found / len(expected))
+            score *= found / len(expected)
 
         return max(0.1, score)
 
@@ -410,7 +465,9 @@ class CombinedExtractor:
         metadata_extractor: Optional[MetadataExtractor] = None,
     ):
         self.entity_extractor = entity_extractor or PatternEntityExtractor()
-        self.relationship_extractor = relationship_extractor or PatternRelationshipExtractor()
+        self.relationship_extractor = (
+            relationship_extractor or PatternRelationshipExtractor()
+        )
         self.metadata_extractor = metadata_extractor or MetadataExtractor()
 
     def extract_all(
@@ -428,22 +485,22 @@ class CombinedExtractor:
         metadata = self.metadata_extractor.extract(text)
 
         return {
-            'entities': [
+            "entities": [
                 {
-                    'name': e.name,
-                    'type': e.entity_type,
-                    'confidence': e.confidence,
+                    "name": e.name,
+                    "type": e.entity_type,
+                    "confidence": e.confidence,
                 }
                 for e in entities
             ],
-            'relationships': [
+            "relationships": [
                 {
-                    'source': r.source_entity,
-                    'target': r.target_entity,
-                    'type': r.relationship_type,
-                    'confidence': r.confidence,
+                    "source": r.source_entity,
+                    "target": r.target_entity,
+                    "type": r.relationship_type,
+                    "confidence": r.confidence,
                 }
                 for r in relationships
             ],
-            'metadata': metadata,
+            "metadata": metadata,
         }
