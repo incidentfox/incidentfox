@@ -238,7 +238,9 @@ class TraceRecorderHooks(RunHooks):
 
                 if record:
                     record.ended_at = datetime.now(UTC)
-                    record.tool_output = str(result)[:5000] if result is not None else None
+                    record.tool_output = (
+                        str(result)[:5000] if result is not None else None
+                    )
                     record.status = "success"
 
                     # Calculate duration
@@ -263,7 +265,9 @@ class TraceRecorderHooks(RunHooks):
                         agent_name=self.current_agent,
                         parent_agent=self.parent_agent,
                         tool_input=None,
-                        tool_output=(str(result)[:5000] if result is not None else None),
+                        tool_output=(
+                            str(result)[:5000] if result is not None else None
+                        ),
                         started_at=datetime.now(UTC),
                         duration_ms=0,
                         status="success",
@@ -354,7 +358,9 @@ class TraceRecorderHooks(RunHooks):
                     agent=agent_name,
                     tool_calls_made=len(self.trace.tool_calls),
                     last_tool=(
-                        self.trace.tool_calls[-1].tool_name if self.trace.tool_calls else None
+                        self.trace.tool_calls[-1].tool_name
+                        if self.trace.tool_calls
+                        else None
                     ),
                 )
 
