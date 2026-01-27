@@ -890,5 +890,6 @@ def create_planner_agent(
             verbosity=verbosity,
         ),
         tools=all_tools,
-        output_type=InvestigationSummary,
+        # Removed output_type=InvestigationSummary to allow flexible XML-based output format
+        # defined in system prompt. This enables hot-reloadable output schema via config.
     )

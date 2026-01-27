@@ -246,5 +246,6 @@ Be specific in recommendations:
             verbosity=verbosity,
         ),
         tools=tools,
-        output_type=AWSAnalysis,
+        # Removed output_type=AWSAnalysis to allow flexible XML-based output format
+        # defined in system prompt. This enables hot-reloadable output schema via config.
     )

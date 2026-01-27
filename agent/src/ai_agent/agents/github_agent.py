@@ -539,5 +539,6 @@ def create_github_agent(
             verbosity=verbosity,
         ),
         tools=tools,
-        output_type=GitHubAnalysis,
+        # Removed output_type=GitHubAnalysis to allow flexible XML-based output format
+        # defined in system prompt. This enables hot-reloadable output schema via config.
     )

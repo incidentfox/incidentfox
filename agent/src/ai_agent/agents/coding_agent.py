@@ -303,5 +303,6 @@ When providing fixes:
             verbosity=verbosity,
         ),
         tools=tools,
-        output_type=CodingAnalysis,
+        # Removed output_type=CodingAnalysis to allow flexible XML-based output format
+        # defined in system prompt. This enables hot-reloadable output schema via config.
     )
