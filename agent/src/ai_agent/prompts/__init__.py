@@ -21,6 +21,7 @@ from .layers import (
     SUBAGENT_RESPONSE_GUIDANCE,  # Alias for SUBAGENT_GUIDANCE
     SYNTHESIS_GUIDANCE,
     TOOL_CALL_LIMITS_TEMPLATE,
+    TRANSPARENCY_AND_AUDITABILITY,
     # Builder functions - role-based prompts
     apply_role_based_prompt,
     # Builder functions - shared sections
@@ -61,6 +62,7 @@ __all__ = [
     "CONTEXT_RECEIVING_GUIDANCE",  # Deprecated: use SUBAGENT_GUIDANCE
     "EVIDENCE_FORMAT_GUIDANCE",
     "SYNTHESIS_GUIDANCE",
+    "TRANSPARENCY_AND_AUDITABILITY",
     # Integration-specific error definitions
     "KUBERNETES_ERRORS",
     "AWS_ERRORS",

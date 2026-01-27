@@ -1395,6 +1395,101 @@ Always label which type: "The logs show X (direct). This suggests Y (inference).
 
 
 # -----------------------------------------------------------------------------
+# Transparency & Auditability Guidance
+# -----------------------------------------------------------------------------
+
+TRANSPARENCY_AND_AUDITABILITY = """## TRANSPARENCY & AUDITABILITY
+
+Your output must be auditable. The user or master agent has NO visibility into what you did - they only see your final response. You must document your investigation thoroughly so others can:
+- Understand your reasoning process
+- Verify your findings
+- Follow up on leads you identified
+- Make their own informed judgment
+
+### Required Output Sections
+
+Your response MUST include these sections in your XML output:
+
+#### 1. Sources Consulted
+List ALL data sources you queried, even if they returned nothing:
+```
+<sources_consulted>
+  <source name="K8s pods" query="list_pods(namespace='checkout-prod')" result="Found 5 pods"/>
+  <source name="CloudWatch Logs" query="search_logs(log_group='/aws/lambda/checkout')" result="No errors found"/>
+  <source name="GitHub commits" query="list_commits(repo='acme/checkout', since='2h ago')" result="3 commits found"/>
+</sources_consulted>
+```
+
+#### 2. Hypotheses Tested
+Document ALL hypotheses you considered, with their status:
+```
+<hypotheses>
+  <hypothesis status="confirmed">
+    <statement>Database connection pool exhaustion causing timeouts</statement>
+    <evidence>Pool usage at 100%, 47 "connection refused" errors in logs</evidence>
+  </hypothesis>
+  <hypothesis status="ruled_out">
+    <statement>Memory pressure causing OOMKills</statement>
+    <evidence>Memory usage stable at 60%, no OOMKill events</evidence>
+  </hypothesis>
+  <hypothesis status="untested">
+    <statement>Network latency between services</statement>
+    <reason>No network monitoring tools available</reason>
+  </hypothesis>
+</hypotheses>
+```
+
+#### 3. Resources & Links
+Include ALL relevant links for follow-up:
+```
+<resources>
+  <link type="dashboard" url="https://grafana.example.com/d/abc123">Checkout Service Dashboard</link>
+  <link type="logs" url="https://coralogix.com/query?service=checkout">Coralogix Logs Query</link>
+  <link type="runbook" url="https://wiki.example.com/runbooks/db-pool">DB Pool Exhaustion Runbook</link>
+  <link type="commit" url="https://github.com/acme/checkout/commit/abc1234">Suspicious commit</link>
+  <link type="pr" url="https://github.com/acme/checkout/pull/456">Related PR</link>
+</resources>
+```
+
+#### 4. What Was Ruled Out
+Explicitly state what you ruled out and why - this prevents others from re-investigating:
+```
+<ruled_out>
+  <item>Memory issues - Memory stable at 60%, no OOMKills</item>
+  <item>Recent deployments - No deployments in last 4 hours</item>
+  <item>External dependencies - All upstream services healthy</item>
+</ruled_out>
+```
+
+#### 5. What Couldn't Be Checked
+Be honest about gaps in your investigation:
+```
+<not_checked>
+  <item reason="no_access">Network metrics - No Prometheus access configured</item>
+  <item reason="out_of_scope">Frontend errors - Only backend was requested</item>
+  <item reason="time_constraint">Full log analysis - Only sampled last 30 minutes</item>
+</not_checked>
+```
+
+### Why This Matters
+
+1. **Reproducibility**: Others should be able to follow your investigation path
+2. **Verification**: Users can click links to verify your findings themselves
+3. **Continuity**: If investigation continues later, next person knows what was done
+4. **Trust**: Showing your work builds confidence in your conclusions
+5. **Learning**: Teams can review investigations to improve processes
+
+### Common Mistakes to Avoid
+
+- DON'T just say "checked the logs" - say WHICH logs, with WHAT query
+- DON'T omit failed queries - they're valuable information about what didn't work
+- DON'T skip links - if you looked at a dashboard, include the URL
+- DON'T hide uncertainty - be explicit about confidence levels and gaps
+- DON'T forget timestamps - when did you check? What time range?
+"""
+
+
+# -----------------------------------------------------------------------------
 # Synthesis Guidance (for orchestrator agents)
 # -----------------------------------------------------------------------------
 
@@ -1452,6 +1547,7 @@ def build_agent_shared_sections(
     include_context_receiving: bool = False,  # DEPRECATED: Use apply_role_based_prompt(is_subagent=True) instead
     include_evidence_format: bool = True,
     include_synthesis: bool = False,
+    include_transparency: bool = True,
     # Customization
     integration_name: str | None = None,
     integration_errors: list[dict[str, str]] | None = None,
@@ -1473,6 +1569,7 @@ def build_agent_shared_sections(
             is now part of SUBAGENT_GUIDANCE, added via apply_role_based_prompt(is_subagent=True)
         include_evidence_format: Include evidence presentation guidance
         include_synthesis: Include multi-source synthesis guidance
+        include_transparency: Include transparency/auditability guidance (default True)
         integration_name: Name for integration-specific errors
         integration_errors: Integration-specific error patterns
         max_tool_calls: Maximum tool calls allowed
@@ -1518,6 +1615,9 @@ def build_agent_shared_sections(
 
     if include_synthesis:
         sections.append(SYNTHESIS_GUIDANCE)
+
+    if include_transparency:
+        sections.append(TRANSPARENCY_AND_AUDITABILITY)
 
     return "\n\n".join(sections)
 
@@ -1778,6 +1878,7 @@ def build_agent_prompt_sections(
     include_error_handling: bool = True,
     include_tool_limits: bool = True,
     include_evidence_format: bool = True,
+    include_transparency: bool = True,
     custom_errors: list[dict[str, str]] | None = None,
     custom_max_calls: int | None = None,
     custom_synthesize_after: int | None = None,
@@ -1797,6 +1898,7 @@ def build_agent_prompt_sections(
         include_error_handling: Include error handling section
         include_tool_limits: Include tool call limits section
         include_evidence_format: Include evidence formatting section
+        include_transparency: Include transparency/auditability guidance (default True)
         custom_errors: Override default errors for this integration
         custom_max_calls: Override default max tool calls
         custom_synthesize_after: Override default synthesize threshold
@@ -1836,6 +1938,7 @@ def build_agent_prompt_sections(
         include_tool_limits=include_tool_limits,
         include_evidence_format=include_evidence_format,
         include_synthesis=False,
+        include_transparency=include_transparency,
         integration_name=integration_name,
         integration_errors=errors,
         max_tool_calls=max_calls,
