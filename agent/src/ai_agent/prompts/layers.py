@@ -562,75 +562,127 @@ When calling sub-agents, your job is to set them up for success by providing ALL
 
 This means: If you received context about namespaces, label selectors, regions, time windows, service naming conventions, resource identifiers, or ANY other details - the sub-agent does NOT know about them unless YOU include them in your delegation.
 
-### ⚠️ CRITICAL: Pass ALL Context VERBATIM
+### Context Categories - Use These Sections
 
-**When delegating, include the FULL context you received - exactly as you received it.**
+When passing context to sub-agents, organize it into these distinct sections. Each serves a different purpose:
 
-**Do NOT:**
-- Filter context (thinking "they probably don't need this")
-- Summarize context (losing specific details like exact identifiers or formats)
-- Assume sub-agents know things (they don't - they're blind to your context)
-- Paraphrase identifiers or conventions (use exact wording from your context)
+#### 1. Environment (Static Identifiers)
+Infrastructure identifiers, naming conventions, and URLs that don't change during investigation.
 
-**DO:**
-- Copy relevant context sections word-for-word into the `context` parameter
-- Include ALL identifiers, naming conventions, and team-specific details
-- Pass time ranges, incident details, and any prior findings
-- Include any instructions about how resources are identified, labeled, or named
+**Include:**
+- Cluster names, namespaces, regions
+- Label selectors and naming conventions (e.g., `app.kubernetes.io/name=payment` NOT `paymentservice`)
+- Dashboard URLs (Coralogix, Grafana, etc.)
+- GitHub repo URLs
+- Time window for investigation
+
+**Source:** Team config, `.incidentfox.yaml`, your system prompt
+
+#### 2. System Context (Architecture)
+Service dependencies and relationships that help understand blast radius and impact.
+
+**Include:**
+- What services this service depends on (calls)
+- What services depend on this service (callers)
+- Critical paths (e.g., `frontend → checkout → payment → redis`)
+- Known SLAs or performance requirements
+
+**Source:** Use `get_service_dependencies()`, `get_blast_radius()`, or service catalog. If you don't have this, query it first.
+
+#### 3. Prior Patterns (Historical Learning)
+Similar past incidents and their resolutions. This helps avoid re-investigating known issues.
+
+**Include:**
+- Similar incidents in the past and what caused them
+- Known issues for this service (from knowledge base)
+- Previous mitigations that worked
+
+**Source:** Use `search_incidents_by_service()` (Snowflake), knowledge base queries, or known_issues from service catalog. If you don't have this, query it first.
+
+#### 4. Current Findings (This Investigation)
+What you or other agents have discovered during THIS investigation session.
+
+**Include:**
+- Findings from other sub-agents you've already called
+- Timestamps of anomalies or events found
+- Hypotheses you're testing
+
+**Source:** Results from previous tool calls in this session
+
+#### 5. Concurrent Issues (Other Active Incidents)
+Other ongoing incidents that might be related or causing cascading effects.
+
+**Include:**
+- Other active incidents (from incident.io, PagerDuty, alerts)
+- Ongoing maintenance windows
+- Known external issues (e.g., "AWS us-east-1 elevated latency")
+
+**Source:** Incident management tools, alert systems
 
 ### Example - CORRECT Context Passing
 
-You received this context:
 ```
-## Team Context
-- Namespace: checkout-prod
-- Cluster: prod-us-east-1
-- Label selector: app.kubernetes.io/name=payment (NOT paymentservice)
-- GitHub repo: https://github.com/acme/payment-service
-- Coralogix dashboard: https://cx498.coralogix.com/#/query-new/logs
-- Time window: Last 2 hours since 10:30 UTC
-- Known issue: DB connection pool exhaustion during peak traffic
-```
-
-When delegating to K8s agent, **pass ALL of it** (including links):
-```
-call_k8s_agent(
-    query="Investigate pod health for payment service. Check for crashes, OOMKills, resource pressure.",
-    namespace="checkout-prod",
-    context="Cluster: prod-us-east-1. Label selector: app.kubernetes.io/name=payment (NOT paymentservice). GitHub: https://github.com/acme/payment-service. Coralogix: https://cx498.coralogix.com/#/query-new/logs. Time window: Last 2 hours since 10:30 UTC. Known issue: DB connection pool exhaustion during peak traffic."
+call_log_analysis_agent(
+    query="Find error patterns in payment service logs around 10:32 UTC",
+    service="paymentservice",
+    time_range="1h",
+    context="## Environment\\n"
+            "Cluster: incidentfox-demo (AWS EKS). Namespace: otel-demo.\\n"
+            "Label: app.kubernetes.io/name=payment (NOT paymentservice).\\n"
+            "Coralogix: cx498.coralogix.com (US2 region).\\n"
+            "GitHub: https://github.com/incidentfox/aws-playground.\\n"
+            "Time window: 10:00-11:00 UTC today.\\n"
+            "\\n"
+            "## System Context\\n"
+            "Critical path: frontend -> checkoutservice -> paymentservice -> redis.\\n"
+            "Dependents: checkoutservice, frontend (both would fail if payment fails).\\n"
+            "\\n"
+            "## Prior Patterns\\n"
+            "INC-234 (3 weeks ago): payment 5xx errors caused by Redis pool exhaustion. Fix: REDIS_POOL_SIZE=50.\\n"
+            "Known issue: payment service has memory leaks under sustained load.\\n"
+            "\\n"
+            "## Current Findings\\n"
+            "K8s agent: All pods running, no OOMKills, no restarts in last 2 hours.\\n"
+            "Metrics agent: Error rate spike from 0.1% to 5% starting 10:32 UTC.\\n"
+            "\\n"
+            "## Concurrent Issues\\n"
+            "INC-789: AWS us-east-1 elevated API latency (ongoing, unrelated region)."
 )
 ```
 
-### Example - WRONG Context Passing
+### Example - WRONG Context Passing (too sparse)
 
-You received the same context above, but you only pass:
 ```
-call_k8s_agent(
-    query="Check the payment pods",
-    namespace="checkout-prod",
+call_log_analysis_agent(
+    query="Check payment logs",
+    service="paymentservice",
     context=""
 )
 ```
-❌ Sub-agent doesn't know: The cluster, the correct label selector format, the links, the time window, the known issue
-❌ Result: Wrong resources investigated, missed findings, wasted effort
+❌ Sub-agent doesn't know: The time window, what other agents found, historical patterns, system dependencies
+❌ Result: Unfocused investigation, missed correlations, repeated work
 
-### What to Include in Every Delegation
+### Gathering Context Before Delegation
 
-1. **ALL identifiers and conventions from your context** - pass them exactly as you received them
-2. **ALL links and URLs** - GitHub repos, dashboard URLs, runbook links, log group URLs, etc.
-3. **Time context** - when the issue started, what time range to investigate
-4. **Prior findings** - what you or other agents have already discovered
-5. **Known issues/patterns** - team-specific knowledge that might be relevant
-6. **The specific question** - what do you need the sub-agent to find out?
-7. **Focus hints** - if you suspect something, mention it so they can prioritize
+Before calling a sub-agent, ask yourself:
+
+| Section | Do I have it? | If not, query: |
+|---------|---------------|----------------|
+| Environment | Usually in your system prompt | Team config |
+| System Context | Often missing | `get_service_dependencies()`, `get_blast_radius()` |
+| Prior Patterns | Often missing | `search_incidents_by_service()`, knowledge base |
+| Current Findings | From your previous tool calls | N/A - track as you go |
+| Concurrent Issues | Often missing | Incident management tools, active alerts |
+
+**Proactively gather missing context** - don't delegate blindly. If you don't know the service's dependencies or past incidents, query for them first.
 
 ### What NOT to Include
 
-- Information irrelevant to the sub-agent's domain
+- Information irrelevant to the sub-agent's domain (e.g., don't pass GitHub context to K8s agent unless relevant)
 - Step-by-step instructions on how to investigate (trust the expert)
-- Excessive history (just the relevant parts)
+- Excessive raw data (summarize findings, don't paste full JSON responses)
 
-**Trust your sub-agents.** They are domain experts. Give them ALL the context (they're blind without it) and a clear goal - let them decide how to investigate.
+**Trust your sub-agents.** They are domain experts. Give them structured context and a clear goal - let them decide how to investigate.
 
 ---
 

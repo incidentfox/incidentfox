@@ -845,7 +845,10 @@ def _create_subagent_tools(team_config=None):
             Args:
                 query: What to investigate in GitHub (natural language)
                 repository: Optional specific repository to focus on
-                context: Prior findings from other agents to inform the search
+                context: Structured context with sections:
+                    ## Environment - Repo URLs, time window
+                    ## Prior Patterns - Similar past incidents from this repo
+                    ## Current Findings - What other agents found (e.g., "error spike at 10:32")
 
             Returns:
                 JSON with recent_changes, related_prs, related_issues, recommendations
@@ -857,7 +860,7 @@ def _create_subagent_tools(team_config=None):
                 if repository:
                     parts.append(f"\n\nRepository: {repository}")
                 if context:
-                    parts.append(f"\n\n## Prior Findings\n{context}")
+                    parts.append(f"\n\n{context}")
                 full_query = "".join(parts)
                 result = _run_agent_in_thread(github_agent, full_query, max_turns=10)
                 # Check if result is a partial work summary (dict with status="incomplete")
@@ -897,7 +900,11 @@ def _create_subagent_tools(team_config=None):
             Args:
                 query: What to investigate in Kubernetes (natural language)
                 namespace: Target Kubernetes namespace
-                context: Prior findings from other agents
+                context: Structured context with sections:
+                    ## Environment - Cluster name, label selectors, naming conventions
+                    ## System Context - Service dependencies, critical paths
+                    ## Prior Patterns - Past K8s issues for this service (OOMs, scaling, etc.)
+                    ## Current Findings - What other agents found (e.g., "log errors at 10:32")
 
             Returns:
                 JSON with pod_status, issues_found, recommendations
@@ -907,7 +914,7 @@ def _create_subagent_tools(team_config=None):
                 logger.info("calling_k8s_agent", query=query[:100], namespace=namespace)
                 parts = [query, f"\n\nTarget namespace: {namespace}"]
                 if context:
-                    parts.append(f"\n\n## Prior Findings\n{context}")
+                    parts.append(f"\n\n{context}")
                 full_query = "".join(parts)
                 result = _run_agent_in_thread(k8s_agent, full_query, max_turns=15)
                 # Check if result is a partial work summary (dict with status="incomplete")
@@ -947,7 +954,11 @@ def _create_subagent_tools(team_config=None):
             Args:
                 query: What to investigate in AWS (natural language)
                 region: AWS region (default: us-east-1)
-                context: Prior findings from other agents
+                context: Structured context with sections:
+                    ## Environment - AWS account, regions, resource identifiers
+                    ## System Context - Service dependencies on AWS resources
+                    ## Prior Patterns - Past AWS issues (scaling, capacity, etc.)
+                    ## Current Findings - What other agents found
 
             Returns:
                 JSON with resource_status, issues_found, recommendations
@@ -957,7 +968,7 @@ def _create_subagent_tools(team_config=None):
                 logger.info("calling_aws_agent", query=query[:100], region=region)
                 parts = [query, f"\n\nAWS Region: {region}"]
                 if context:
-                    parts.append(f"\n\n## Prior Findings\n{context}")
+                    parts.append(f"\n\n{context}")
                 full_query = "".join(parts)
                 result = _run_agent_in_thread(aws_agent, full_query)
                 # Check if result is a partial work summary (dict with status="incomplete")
@@ -996,7 +1007,11 @@ def _create_subagent_tools(team_config=None):
             Args:
                 query: What to analyze in metrics (natural language)
                 time_range: Time range to analyze (e.g., "1h", "24h", "7d")
-                context: Prior findings from other agents
+                context: Structured context with sections:
+                    ## Environment - Metric sources (Datadog, Prometheus), service names
+                    ## System Context - Relevant SLOs/SLAs, baseline expectations
+                    ## Prior Patterns - Past performance issues and their causes
+                    ## Current Findings - What other agents found (e.g., "K8s OOMKill at 10:30")
 
             Returns:
                 JSON with anomalies_found, correlations, recommendations
@@ -1008,7 +1023,7 @@ def _create_subagent_tools(team_config=None):
                 )
                 parts = [query, f"\n\nTime range: {time_range}"]
                 if context:
-                    parts.append(f"\n\n## Prior Findings\n{context}")
+                    parts.append(f"\n\n{context}")
                 full_query = "".join(parts)
                 result = _run_agent_in_thread(metrics_agent, full_query)
                 # Check if result is a partial work summary (dict with status="incomplete")
@@ -1048,7 +1063,12 @@ def _create_subagent_tools(team_config=None):
                 query: What to investigate in logs (natural language)
                 service: Service name to focus on (optional)
                 time_range: Time range to analyze (e.g., "15m", "1h", "24h")
-                context: Prior findings from other agents
+                context: Structured context with sections:
+                    ## Environment - Log source (Coralogix/Datadog), service naming conventions
+                    ## System Context - Service dependencies, what calls this service
+                    ## Prior Patterns - Past log patterns for this service, known error signatures
+                    ## Current Findings - What other agents found (e.g., "metrics spike at 10:32")
+                    ## Concurrent Issues - Other active incidents that might cause log noise
 
             Returns:
                 JSON with error_patterns, timeline, root_causes, recommendations
@@ -1063,7 +1083,7 @@ def _create_subagent_tools(team_config=None):
                     parts.append(f"\n\nService: {service}")
                 parts.append(f"\nTime Range: {time_range}")
                 if context:
-                    parts.append(f"\n\n## Prior Findings\n{context}")
+                    parts.append(f"\n\n{context}")
                 full_query = "".join(parts)
                 result = _run_agent_in_thread(
                     log_analysis_agent, full_query, max_turns=15
@@ -1251,9 +1271,15 @@ teach_knowledge_base(
 ## DELEGATION PRINCIPLES
 
 1. **Start focused** - Don't call all agents at once. Start with the most relevant based on symptoms.
-2. **Pass ALL context verbatim** - Sub-agents are BLIND to your context. Include ALL identifiers, conventions, time windows, and team-specific details in the `context` parameter. Copy context word-for-word, don't filter or summarize.
+2. **Pass structured context** - Sub-agents are BLIND to your context. Use these sections in the `context` parameter:
+   - `## Environment` - Cluster, namespace, regions, service identifiers, URLs
+   - `## System Context` - Service dependencies, critical paths, blast radius
+   - `## Prior Patterns` - Similar past incidents for this service (query Snowflake if unknown)
+   - `## Current Findings` - What other agents found in this investigation
+   - `## Concurrent Issues` - Other active incidents that might be related
 3. **Iterate** - If one agent finds something interesting, follow up with related agents.
 4. **Synthesize** - Your job is to combine findings into a coherent narrative with root cause.
+5. **Gather context proactively** - If you don't know system dependencies or past incidents, query for them first.
 
 ## BEHAVIORAL PRINCIPLES
 
