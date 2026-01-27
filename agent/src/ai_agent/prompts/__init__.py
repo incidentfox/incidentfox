@@ -1,7 +1,7 @@
 """Prompt building utilities for AI SRE agents."""
 
 from .layers import (
-    # Static prompt layers
+    # Tool-specific prompt guidance
     ASK_HUMAN_TOOL_PROMPT,
     # Integration-specific error definitions
     AWS_ERRORS,
@@ -14,9 +14,6 @@ from .layers import (
     INTEGRATION_ERRORS_REGISTRY,
     INTEGRATION_TOOL_LIMITS,
     KUBERNETES_ERRORS,
-    LAYER_1_CORE_IDENTITY,
-    LAYER_3_BEHAVIORAL_FOUNDATION,
-    LAYER_7_OUTPUT_AND_RULES,
     LOGS_ERRORS,
     METRICS_ERRORS,
     SUBAGENT_GUIDANCE,  # Consolidated subagent guidance (context receiving + output format)
@@ -24,7 +21,7 @@ from .layers import (
     SUBAGENT_RESPONSE_GUIDANCE,  # Alias for SUBAGENT_GUIDANCE
     SYNTHESIS_GUIDANCE,
     TOOL_CALL_LIMITS_TEMPLATE,
-    # Builder functions - planner layers
+    # Builder functions - role-based prompts
     apply_role_based_prompt,
     # Builder functions - shared sections
     build_agent_prompt_sections,
@@ -50,12 +47,9 @@ __all__ = [
     # Planner prompt
     "build_planner_system_prompt",
     "PLANNER_SYSTEM_PROMPT",
-    # User context builder (for user/task message - replaces runtime metadata in system prompt)
+    # User context builder (for user/task message)
     "build_user_context",
-    # Static layers (deprecated - prefer inline prompts per agent)
-    "LAYER_1_CORE_IDENTITY",
-    "LAYER_3_BEHAVIORAL_FOUNDATION",
-    "LAYER_7_OUTPUT_AND_RULES",
+    # Role-based and delegation guidance
     "SUBAGENT_RESPONSE_GUIDANCE",
     "DELEGATION_GUIDANCE",
     "ASK_HUMAN_TOOL_PROMPT",
