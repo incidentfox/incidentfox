@@ -234,22 +234,6 @@ DEFAULT_CATEGORY_DISPLAY = {
 }
 
 
-def _unwrap_function(func):
-    """Unwrap decorator wrappers and functools.partial to get the original function."""
-    original = func
-    # Unwrap up to 10 layers to prevent infinite loops
-    for _ in range(10):
-        # functools.wraps sets __wrapped__
-        if hasattr(original, "__wrapped__"):
-            original = original.__wrapped__
-        # functools.partial stores the function in .func
-        elif hasattr(original, "func") and callable(getattr(original, "func", None)):
-            original = original.func
-        else:
-            break
-    return original
-
-
 def _extract_category_from_module(module: str) -> str | None:
     """Extract category from a module path like 'ai_agent.tools.kubernetes'."""
     if not module:
@@ -262,19 +246,58 @@ def _extract_category_from_module(module: str) -> str | None:
     return None
 
 
+def _extract_original_function_from_closure(tool: Tool):
+    """
+    Extract the original function from a FunctionTool's closure chain.
+
+    OpenAI Agents SDK's FunctionTool stores the original function in a nested
+    closure structure:
+        tool.on_invoke_tool
+            -> __closure__[0] = _on_invoke_tool_impl
+                -> __closure__[1] = original_function
+
+    Returns:
+        The original function if found, None otherwise.
+    """
+    try:
+        on_invoke = getattr(tool, "on_invoke_tool", None)
+        if on_invoke is None or not hasattr(on_invoke, "__closure__"):
+            return None
+
+        closure = on_invoke.__closure__
+        if not closure or len(closure) < 1:
+            return None
+
+        # Get _on_invoke_tool_impl from first closure cell
+        impl = closure[0].cell_contents
+        if not hasattr(impl, "__closure__") or not impl.__closure__:
+            return None
+
+        impl_closure = impl.__closure__
+        if len(impl_closure) < 2:
+            return None
+
+        # Get original function from second closure cell of impl
+        original_fn = impl_closure[1].cell_contents
+        if callable(original_fn):
+            return original_fn
+
+        return None
+    except (IndexError, ValueError, AttributeError):
+        return None
+
+
 def get_category_from_tool(tool: Tool) -> str | None:
     """
     Extract category from a tool's module path.
 
-    Tries multiple methods to find the underlying function's module:
-    1. Check common function attributes (fn, func, _fn, on_invoke_tool)
-    2. Unwrap any decorator wrappers (__wrapped__, functools.partial)
-    3. Fall back to the tool class's own __module__
+    For FunctionTool from OpenAI Agents SDK, extracts the original function
+    from the closure chain to get its __module__.
 
     Examples:
         ai_agent.tools.kubernetes.list_pods -> "kubernetes"
         ai_agent.tools.aws_tools.get_cloudwatch_logs -> "aws_tools"
-        ai_agent.tools.postgres_tools.execute_query -> "postgres_tools"
+        ai_agent.tools.log_analysis_tools.get_log_statistics -> "log_analysis_tools"
 
     Returns:
         Category string or None if not determinable
@@ -282,44 +305,36 @@ def get_category_from_tool(tool: Tool) -> str | None:
     try:
         tool_name = getattr(tool, "name", str(tool))
         tool_type = type(tool).__name__
-
-        # Method 1: Try to get the function from various attribute names
-        # Different Tool implementations use different attribute names
-        func = None
         module = None
-        tried_attrs = []
 
-        for attr_name in ("fn", "func", "_fn", "on_invoke_tool", "function"):
-            attr = getattr(tool, attr_name, None)
-            tried_attrs.append(attr_name)
-            if attr is not None and callable(attr):
-                func = attr
-                # Unwrap any decorators/partials to get the original function
-                original = _unwrap_function(func)
-                module = getattr(original, "__module__", None)
-                if module and "tools" in module:
-                    # Found a valid module path
-                    break
+        # Method 1: Extract original function from FunctionTool closure chain
+        # This is the primary method for tools created with @function_tool
+        original_fn = _extract_original_function_from_closure(tool)
+        if original_fn:
+            module = getattr(original_fn, "__module__", None)
 
-        # Method 2: If function didn't have our tools module, check tool's own module
+        # Method 2: Try direct function attributes (for other Tool types)
+        if not module or "tools" not in module:
+            for attr_name in ("fn", "func", "_fn", "function"):
+                attr = getattr(tool, attr_name, None)
+                if attr is not None and callable(attr):
+                    attr_module = getattr(attr, "__module__", None)
+                    if attr_module and "tools" in attr_module:
+                        module = attr_module
+                        break
+
+        # Method 3: Check tool instance's own __module__
         if not module or "tools" not in module:
             tool_module = getattr(tool, "__module__", None)
             if tool_module and "tools" in tool_module:
                 module = tool_module
-
-        # Method 3: Check the tool class's module
-        if not module or "tools" not in module:
-            class_module = getattr(type(tool), "__module__", None)
-            if class_module and "tools" in class_module:
-                module = class_module
 
         if not module:
             logger.debug(
                 "get_category_no_module",
                 tool=tool_name,
                 tool_type=tool_type,
-                tried_attrs=tried_attrs,
-                has_func=func is not None,
+                has_original_fn=original_fn is not None,
             )
             return None
 
