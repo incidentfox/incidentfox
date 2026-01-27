@@ -13,6 +13,7 @@ from src.api.routes.metrics import router as metrics_router
 from src.api.routes.remediation import router as remediation_router
 from src.api.routes.security import router as security_router
 from src.api.routes.sso import router as sso_router
+from src.api.routes.teaching import router as teaching_router
 from src.api.routes.team import router as team_router
 from src.api.routes.templates import router as templates_router
 from src.api.routes.tool_metadata import router as tool_metadata_router
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(sso_router)
     app.include_router(team_router)
     app.include_router(remediation_router)
+    app.include_router(teaching_router)
     app.include_router(config_v2_router)
     app.include_router(internal_router)
     app.include_router(templates_router)
