@@ -19,11 +19,15 @@ from typing import Any
 from sanic import Sanic, response
 from sanic.request import Request
 from sanic.response import JSONResponse
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
-from .agents.base import TaskContext
 from .core.agent_runner import (
     AgentRunner,
-    ExecutionContext,
     _record_agent_run_complete,
     _record_agent_run_start,
     get_agent_registry,
@@ -41,6 +45,60 @@ from .core.trace_recorder import create_composite_hooks, record_trace
 from .integrations.slack_ui import build_investigation_dashboard
 
 logger = get_logger(__name__)
+
+
+# Retry decorator for transient OpenAI API errors
+_runner_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
+    reraise=True,
+)
+
+
+async def _run_agent_with_retry(
+    runner,
+    agent,
+    message,
+    *,
+    max_turns: int = 100,
+    hooks=None,
+    previous_response_id: str | None = None,
+    conversation_id: str | None = None,
+):
+    """
+    Run agent with retry logic for transient errors.
+
+    Retries up to 3 times with exponential backoff on:
+    - ConnectionError: Network issues
+    - TimeoutError: Request timeouts
+    - OSError: Low-level I/O errors
+
+    Args:
+        runner: SDK Runner instance
+        agent: Agent to run
+        message: User message
+        max_turns: Maximum conversation turns
+        hooks: Optional RunHooks (e.g., CompositeHooks)
+        previous_response_id: For conversation chaining
+        conversation_id: For multi-turn conversations (OpenAI responses API)
+
+    Returns:
+        RunResult from the SDK
+    """
+
+    @_runner_retry
+    async def _run():
+        kwargs = {"max_turns": max_turns}
+        if hooks:
+            kwargs["hooks"] = hooks
+        if previous_response_id:
+            kwargs["previous_response_id"] = previous_response_id
+        if conversation_id:
+            kwargs["conversation_id"] = conversation_id
+        return await runner.run(agent, message, **kwargs)
+
+    return await _run()
 
 
 def _build_session_id(context_data: dict) -> str | None:
@@ -1150,10 +1208,11 @@ def create_app() -> Sanic:
                             )
 
                             agent_result = await asyncio.wait_for(
-                                agent_runner.run(
+                                _run_agent_with_retry(
+                                    agent_runner,
                                     agent_with_mcp,
                                     parsed_message,
-                                    conversation_id=conversation_id,  # Pass conversation_id directly
+                                    conversation_id=conversation_id,
                                     max_turns=max_turns or 100,
                                     hooks=composite_hooks,  # TraceRecorder + Slack updates
                                 ),
@@ -1213,10 +1272,11 @@ def create_app() -> Sanic:
                         )
 
                         agent_result = await asyncio.wait_for(
-                            agent_runner.run(
+                            _run_agent_with_retry(
+                                agent_runner,
                                 base_agent,
                                 parsed_message,
-                                conversation_id=conversation_id,  # Pass conversation_id directly
+                                conversation_id=conversation_id,
                                 max_turns=max_turns or 100,
                                 hooks=composite_hooks,  # TraceRecorder + Slack updates
                             ),
@@ -1485,8 +1545,24 @@ def create_app() -> Sanic:
                 "notifications.default_slack_channel_id in team config to enable Slack output.",
             )
 
-            # Generate run_id for tracking (will be passed to AgentRunner via metadata)
+            # Generate run_id for tracking
             run_id = str(uuid.uuid4())
+
+            # Record agent run start (fire and forget)
+            asyncio.create_task(
+                _record_agent_run_start(
+                    run_id=run_id,
+                    agent_name=agent_name,
+                    correlation_id=request.ctx.correlation_id,
+                    trigger_source="api",
+                    trigger_message=message[:500] if message else "",
+                    org_id=auth_identity.org_id if auth_identity else None,
+                    team_node_id=auth_identity.team_node_id if auth_identity else None,
+                )
+            )
+
+            # Register run for graceful shutdown tracking
+            register_in_flight_run(run_id)
 
             # Set team execution context for integration access
             from .core.execution_context import (
@@ -1510,16 +1586,25 @@ def create_app() -> Sanic:
                 team_config, agent_name
             )
 
+            # Initialize trace_hooks before try block so it's available in finally/exception handlers
+            trace_hooks = None
+            start_time = time.time()
+
             try:
-                # If we have MCP servers, create a fresh AgentRunner with the agent
-                # Otherwise use the cached runner
+                # Create composite hooks for tracing (no Slack hooks for direct return path)
+                trace_hooks, composite_hooks = create_composite_hooks(
+                    run_id, agent_name
+                )
+
+                # If we have MCP servers, create agent with them
+                # Otherwise use the cached agent
                 if stack and mcp_servers:
                     async with stack:
                         # Get base agent properties
                         base_agent = runner.agent
 
                         # Create fresh agent with MCP servers
-                        from agents import Agent
+                        from agents import Agent, Runner
 
                         agent_with_mcp = Agent(
                             name=base_agent.name,
@@ -1547,33 +1632,9 @@ def create_app() -> Sanic:
                             mcp_count=len(mcp_servers),
                         )
 
-                        # Create fresh AgentRunner with the MCP-enabled agent
-                        mcp_runner = AgentRunner(
-                            agent_with_mcp, max_retries=runner.max_retries
-                        )
+                        # Run agent with SDK Runner
+                        sdk_runner = Runner()
 
-                        # Create context
-                        task_context = TaskContext(
-                            request_id=request.ctx.correlation_id,
-                            task_description=message,
-                            user_id=context_data.get("user_id"),
-                            metadata=context_data.get("metadata", {}),
-                        )
-
-                        # Create execution context with run_id in metadata
-                        # AgentRunner.run() will use this run_id for tracing
-                        exec_metadata = {
-                            **context_data.get("metadata", {}),
-                            "run_id": run_id,
-                        }
-                        exec_context = ExecutionContext(
-                            correlation_id=request.ctx.correlation_id,
-                            metadata=exec_metadata,
-                            timeout=timeout,
-                            max_turns=max_turns if isinstance(max_turns, int) else None,
-                        )
-
-                        # Run agent
                         logger.info(
                             "running_agent_with_mcp",
                             agent_name=agent_name,
@@ -1582,35 +1643,22 @@ def create_app() -> Sanic:
                             is_multimodal=is_multimodal,
                         )
 
-                        result = await mcp_runner.run(
-                            context=task_context,
-                            user_message=parsed_message,
-                            execution_context=exec_context,
+                        result = await asyncio.wait_for(
+                            _run_agent_with_retry(
+                                sdk_runner,
+                                agent_with_mcp,
+                                parsed_message,
+                                max_turns=max_turns or 100,
+                                hooks=composite_hooks,
+                            ),
+                            timeout=timeout or 600,
                         )
                 else:
-                    # No MCP servers, use cached runner
-                    # Create context
-                    task_context = TaskContext(
-                        request_id=request.ctx.correlation_id,
-                        task_description=message,
-                        user_id=context_data.get("user_id"),
-                        metadata=context_data.get("metadata", {}),
-                    )
+                    # No MCP servers, use cached agent
+                    from agents import Runner
 
-                    # Create execution context with run_id in metadata
-                    # AgentRunner.run() will use this run_id for tracing
-                    exec_metadata = {
-                        **context_data.get("metadata", {}),
-                        "run_id": run_id,
-                    }
-                    exec_context = ExecutionContext(
-                        correlation_id=request.ctx.correlation_id,
-                        metadata=exec_metadata,
-                        timeout=timeout,
-                        max_turns=max_turns if isinstance(max_turns, int) else None,
-                    )
+                    sdk_runner = Runner()
 
-                    # Run agent
                     logger.info(
                         "running_agent",
                         agent_name=agent_name,
@@ -1619,12 +1667,41 @@ def create_app() -> Sanic:
                         is_multimodal=is_multimodal,
                     )
 
-                    result = await runner.run(
-                        context=task_context,
-                        user_message=parsed_message,
-                        execution_context=exec_context,
+                    result = await asyncio.wait_for(
+                        _run_agent_with_retry(
+                            sdk_runner,
+                            runner.agent,  # Use cached agent from registry
+                            parsed_message,
+                            max_turns=max_turns or 100,
+                            hooks=composite_hooks,
+                        ),
+                        timeout=timeout or 600,
                     )
+
+                # Calculate duration
+                duration = time.time() - start_time
+
+                # Record trace data
+                if trace_hooks:
+                    trace_data = trace_hooks.get_trace_data()
+                    asyncio.create_task(record_trace(run_id, trace_data))
+                    tool_calls_count = len(trace_data.tool_calls)
+                else:
+                    tool_calls_count = 0
+
+                # Record successful completion
+                asyncio.create_task(
+                    _record_agent_run_complete(
+                        run_id=run_id,
+                        status="completed",
+                        duration_seconds=duration,
+                        tool_calls_count=tool_calls_count,
+                    )
+                )
             finally:
+                # Unregister from graceful shutdown tracking
+                unregister_in_flight_run(run_id)
+
                 # Always clear execution context after agent run
                 if auth_identity and team_config:
                     clear_execution_context()
@@ -1644,28 +1721,24 @@ def create_app() -> Sanic:
                     return _jsonable(model_dump())
                 return str(v)
 
-            # Format response
+            # Format response using SDK RunResult fields
             response_data = {
-                "success": result.success,
+                "success": True,
                 "agent": agent_name,
                 "run_id": run_id,  # Include run_id so client can fetch tool calls
-                "correlation_id": result.correlation_id,
-                "duration_seconds": result.duration_seconds,
+                "correlation_id": request.ctx.correlation_id,
+                "duration_seconds": duration,
+                "output": _jsonable(result.final_output),
             }
-
-            if result.success:
-                response_data["output"] = _jsonable(result.output)
-                response_data["token_usage"] = _jsonable(result.token_usage)
-            else:
-                response_data["error"] = result.error
 
             # Always return 200 for successfully-processed requests.
             # The `success` field indicates the logical outcome.
-            # This prevents clients from treating handled failures (e.g. MaxTurnsExceeded)
-            # as server errors.
             return response.json(response_data, status=200)
 
         except Exception as e:
+            # Calculate duration for failure case
+            error_duration = time.time() - start_time if "start_time" in locals() else 0
+
             logger.error(
                 "agent_execution_failed",
                 agent_name=agent_name,
@@ -1674,13 +1747,52 @@ def create_app() -> Sanic:
                 exc_info=True,
             )
 
+            # Record trace data if available
+            if "trace_hooks" in locals() and trace_hooks:
+                trace_data = trace_hooks.get_trace_data()
+                asyncio.create_task(record_trace(run_id, trace_data))
+                tool_calls_count = len(trace_data.tool_calls)
+            else:
+                tool_calls_count = 0
+
+            # Record failure and unregister from graceful shutdown tracking
+            if "run_id" in locals():
+                asyncio.create_task(
+                    _record_agent_run_complete(
+                        run_id=run_id,
+                        status="failed",
+                        duration_seconds=error_duration,
+                        error_message=str(e)[:500],
+                        tool_calls_count=tool_calls_count,
+                    )
+                )
+                # Unregister if we registered earlier (handles case where exception
+                # occurred before the inner try block started)
+                unregister_in_flight_run(run_id)
+
+            # Clear execution context if it was set
+            if (
+                "auth_identity" in locals()
+                and auth_identity
+                and "team_config" in locals()
+                and team_config
+            ):
+                try:
+                    from .core.execution_context import clear_execution_context
+
+                    clear_execution_context()
+                except Exception:
+                    pass  # Best effort cleanup
+
             return response.json(
                 {
+                    "success": False,
                     "error": str(e),
                     "agent": agent_name,
+                    "run_id": run_id if "run_id" in locals() else None,
                     "correlation_id": request.ctx.correlation_id,
                 },
-                status=500,
+                status=200,  # Return 200 so client can parse the error
             )
 
     # Run agent with SSE streaming
