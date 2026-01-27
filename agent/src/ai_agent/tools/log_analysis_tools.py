@@ -599,6 +599,44 @@ class CoralogixBackend(LogBackend):
 
             return results
 
+    def _extract_body(self, record: dict) -> str:
+        """
+        Extract log body from Coralogix OTEL record.
+
+        Coralogix logs can have the body in different locations depending on the format:
+        - Direct 'body' field (rare, when flattened)
+        - Nested 'logRecord.body' (standard OTEL structure)
+        - 'logRecord.body.stringValue' (OTEL with typed body)
+        """
+        # Try direct body field first
+        body = record.get("body")
+        if body and isinstance(body, str) and body.strip():
+            return body
+
+        # Try OTEL nested structure: logRecord.body
+        log_record = record.get("logRecord", {})
+        if isinstance(log_record, dict):
+            nested_body = log_record.get("body")
+            if nested_body:
+                # Body could be a string or a dict with stringValue
+                if isinstance(nested_body, str):
+                    return nested_body
+                elif isinstance(nested_body, dict):
+                    return nested_body.get("stringValue", str(nested_body))
+
+        # Fallback: try to find body in any nested structure
+        # (some configurations may have different paths)
+        for key in ["logRecord", "log", "record", "data"]:
+            if key in record and isinstance(record[key], dict):
+                sub_body = record[key].get("body")
+                if sub_body:
+                    if isinstance(sub_body, str):
+                        return sub_body
+                    elif isinstance(sub_body, dict):
+                        return sub_body.get("stringValue", str(sub_body))
+
+        return ""
+
     def get_statistics(
         self, service: str | None, start_time: datetime, end_time: datetime, **kwargs
     ) -> dict[str, Any]:
@@ -643,7 +681,7 @@ class CoralogixBackend(LogBackend):
 
         pattern_results = self._query(pattern_query, start_time, end_time, limit=10)
         top_patterns = [
-            {"pattern": r.get("body", "")[:100], "count": r.get("cnt", 0)}
+            {"pattern": self._extract_body(r)[:100], "count": r.get("cnt", 0)}
             for r in pattern_results
         ]
 
@@ -688,7 +726,7 @@ class CoralogixBackend(LogBackend):
                     "timestamp": r.get("timestamp", ""),
                     "service": r.get("subsystemname", ""),
                     "level": r.get("severity", ""),
-                    "message": str(r.get("body", ""))[:500],
+                    "message": self._extract_body(r)[:500],
                     "trace_id": r.get("traceId"),
                 }
             )
@@ -727,7 +765,7 @@ class CoralogixBackend(LogBackend):
                     "timestamp": r.get("timestamp", ""),
                     "service": r.get("subsystemname", ""),
                     "level": r.get("severity", ""),
-                    "message": str(r.get("body", ""))[:500],
+                    "message": self._extract_body(r)[:500],
                 }
             )
 
@@ -764,7 +802,7 @@ class CoralogixBackend(LogBackend):
                     "timestamp": r.get("timestamp", ""),
                     "service": r.get("subsystemname", ""),
                     "level": r.get("severity", ""),
-                    "message": str(r.get("body", ""))[:300],
+                    "message": self._extract_body(r)[:300],
                 }
             )
 
