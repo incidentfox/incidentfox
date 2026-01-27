@@ -19,6 +19,7 @@ from typing import Any, Generic, TypeVar
 import httpx
 from agents import Agent
 
+from .health_server import update_heartbeat
 from .logging import get_correlation_id, get_logger
 
 logger = get_logger(__name__)
@@ -51,7 +52,13 @@ def unregister_in_flight_run(run_id: str) -> None:
     """Unregister a run from in-flight tracking."""
     with _in_flight_lock:
         _in_flight_runs.discard(run_id)
-        logger.debug("run_unregistered_in_flight", run_id=run_id)
+        remaining_runs = len(_in_flight_runs)
+        logger.debug(
+            "run_unregistered_in_flight", run_id=run_id, remaining_runs=remaining_runs
+        )
+    # Update heartbeat to idle if no more runs in flight
+    if remaining_runs == 0:
+        update_heartbeat(status="idle", operation="run_complete", run_id=run_id)
 
 
 def get_in_flight_runs() -> list[str]:
