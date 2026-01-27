@@ -23,6 +23,7 @@ httpx = "^0.28.0"
 urllib3 = "^2.6.3"
 pyasn1 = "^0.6.2"
 sanic = "^24.6.0"
+python-multipart = "^0.0.22"
 
 # AWS
 boto3 = "^1.35.0"
