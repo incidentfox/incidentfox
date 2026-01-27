@@ -1,6 +1,8 @@
 """Kubernetes tools for pod inspection and debugging."""
 
 import json
+import time
+import traceback
 from pathlib import Path
 
 from agents import function_tool
@@ -12,6 +14,10 @@ from ..core.config import get_config
 from ..core.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Default timeout for K8s API calls in seconds
+# This prevents tools from hanging indefinitely on slow/unresponsive clusters
+K8S_API_TIMEOUT = 15
 
 
 class K8sConfigError(Exception):
@@ -130,19 +136,31 @@ def get_pod_logs(
         Pod logs as JSON string
     """
     try:
+        start_time = time.time()
+        logger.info(
+            "k8s_tool_start",
+            tool="get_pod_logs",
+            pod_name=pod_name,
+            namespace=namespace,
+        )
+
         core_v1, _ = _get_k8s_client()
         logs = core_v1.read_namespaced_pod_log(
             name=pod_name,
             namespace=namespace,
             container=container,
             tail_lines=tail_lines,
+            _request_timeout=K8S_API_TIMEOUT,
         )
 
+        elapsed = time.time() - start_time
         logger.info(
-            "retrieved_pod_logs",
+            "k8s_tool_complete",
+            tool="get_pod_logs",
             pod_name=pod_name,
             namespace=namespace,
-            lines=tail_lines,
+            elapsed_ms=int(elapsed * 1000),
+            log_length=len(logs) if logs else 0,
         )
         return json.dumps({"pod": pod_name, "namespace": namespace, "logs": logs})
 
@@ -155,6 +173,23 @@ def get_pod_logs(
     except ApiException as e:
         logger.error("failed_to_get_pod_logs", error=str(e), pod=pod_name)
         return json.dumps({"error": str(e), "pod": pod_name, "namespace": namespace})
+
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(
+            "k8s_tool_unexpected_error",
+            tool="get_pod_logs",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=tb_str,
+            pod_name=pod_name,
+            namespace=namespace,
+        )
+        return json.dumps({
+            "error": f"Unexpected error: {type(e).__name__}: {e}",
+            "pod": pod_name,
+            "namespace": namespace,
+        })
 
 
 @function_tool(strict_mode=False)
@@ -170,8 +205,20 @@ def describe_pod(pod_name: str, namespace: str = "default") -> str:
         Pod details as JSON string
     """
     try:
+        start_time = time.time()
+        logger.info(
+            "k8s_tool_start",
+            tool="describe_pod",
+            pod_name=pod_name,
+            namespace=namespace,
+        )
+
         core_v1, _ = _get_k8s_client()
-        pod = core_v1.read_namespaced_pod(name=pod_name, namespace=namespace)
+        pod = core_v1.read_namespaced_pod(
+            name=pod_name,
+            namespace=namespace,
+            _request_timeout=K8S_API_TIMEOUT,
+        )
 
         def _extract_resources(container):
             """Extract resource requests and limits from a container spec."""
@@ -217,6 +264,16 @@ def describe_pod(pod_name: str, namespace: str = "default") -> str:
                 for cond in (pod.status.conditions or [])
             ],
         }
+
+        elapsed = time.time() - start_time
+        logger.info(
+            "k8s_tool_complete",
+            tool="describe_pod",
+            pod_name=pod_name,
+            namespace=namespace,
+            elapsed_ms=int(elapsed * 1000),
+            status=pod.status.phase,
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
@@ -228,6 +285,23 @@ def describe_pod(pod_name: str, namespace: str = "default") -> str:
     except ApiException as e:
         logger.error("failed_to_describe_pod", error=str(e), pod=pod_name)
         return json.dumps({"error": str(e), "pod": pod_name, "namespace": namespace})
+
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(
+            "k8s_tool_unexpected_error",
+            tool="describe_pod",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=tb_str,
+            pod_name=pod_name,
+            namespace=namespace,
+        )
+        return json.dumps({
+            "error": f"Unexpected error: {type(e).__name__}: {e}",
+            "pod": pod_name,
+            "namespace": namespace,
+        })
 
 
 @function_tool(strict_mode=False)
@@ -246,10 +320,19 @@ def list_pods(
         List of pod summaries as JSON string
     """
     try:
+        start_time = time.time()
+        logger.info(
+            "k8s_tool_start",
+            tool="list_pods",
+            namespace=namespace,
+            label_selector=label_selector,
+        )
+
         core_v1, _ = _get_k8s_client()
         pods = core_v1.list_namespaced_pod(
             namespace=namespace,
             label_selector=label_selector,
+            _request_timeout=K8S_API_TIMEOUT,
         )
 
         result = {
@@ -268,6 +351,16 @@ def list_pods(
                 for pod in pods.items
             ],
         }
+
+        elapsed = time.time() - start_time
+        logger.info(
+            "k8s_tool_complete",
+            tool="list_pods",
+            namespace=namespace,
+            label_selector=label_selector,
+            elapsed_ms=int(elapsed * 1000),
+            pod_count=len(pods.items),
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
@@ -277,6 +370,21 @@ def list_pods(
     except ApiException as e:
         logger.error("failed_to_list_pods", error=str(e), namespace=namespace)
         return json.dumps({"error": str(e), "namespace": namespace})
+
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(
+            "k8s_tool_unexpected_error",
+            tool="list_pods",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=tb_str,
+            namespace=namespace,
+        )
+        return json.dumps({
+            "error": f"Unexpected error: {type(e).__name__}: {e}",
+            "namespace": namespace,
+        })
 
 
 @function_tool(strict_mode=False)
@@ -288,8 +396,11 @@ def list_namespaces() -> str:
         List of namespace summaries as JSON string
     """
     try:
+        start_time = time.time()
+        logger.info("k8s_tool_start", tool="list_namespaces")
+
         core_v1, _ = _get_k8s_client()
-        namespaces = core_v1.list_namespace()
+        namespaces = core_v1.list_namespace(_request_timeout=K8S_API_TIMEOUT)
 
         result = {
             "namespace_count": len(namespaces.items),
@@ -303,6 +414,14 @@ def list_namespaces() -> str:
                 for ns in namespaces.items
             ],
         }
+
+        elapsed = time.time() - start_time
+        logger.info(
+            "k8s_tool_complete",
+            tool="list_namespaces",
+            elapsed_ms=int(elapsed * 1000),
+            namespace_count=len(namespaces.items),
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
@@ -314,6 +433,19 @@ def list_namespaces() -> str:
     except ApiException as e:
         logger.error("failed_to_list_namespaces", error=str(e))
         return json.dumps({"error": str(e)})
+
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(
+            "k8s_tool_unexpected_error",
+            tool="list_namespaces",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=tb_str,
+        )
+        return json.dumps({
+            "error": f"Unexpected error: {type(e).__name__}: {e}",
+        })
 
 
 @function_tool(strict_mode=False)
@@ -329,10 +461,19 @@ def get_pod_events(pod_name: str, namespace: str = "default") -> str:
         List of events as JSON string
     """
     try:
+        start_time = time.time()
+        logger.info(
+            "k8s_tool_start",
+            tool="get_pod_events",
+            pod_name=pod_name,
+            namespace=namespace,
+        )
+
         core_v1, _ = _get_k8s_client()
         events = core_v1.list_namespaced_event(
             namespace=namespace,
             field_selector=f"involvedObject.name={pod_name}",
+            _request_timeout=K8S_API_TIMEOUT,
         )
 
         result = {
@@ -351,6 +492,16 @@ def get_pod_events(pod_name: str, namespace: str = "default") -> str:
                 for event in events.items
             ],
         }
+
+        elapsed = time.time() - start_time
+        logger.info(
+            "k8s_tool_complete",
+            tool="get_pod_events",
+            pod_name=pod_name,
+            namespace=namespace,
+            elapsed_ms=int(elapsed * 1000),
+            event_count=len(events.items),
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
@@ -362,6 +513,23 @@ def get_pod_events(pod_name: str, namespace: str = "default") -> str:
     except ApiException as e:
         logger.error("failed_to_get_events", error=str(e), pod=pod_name)
         return json.dumps({"error": str(e), "pod": pod_name, "namespace": namespace})
+
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(
+            "k8s_tool_unexpected_error",
+            tool="get_pod_events",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=tb_str,
+            pod_name=pod_name,
+            namespace=namespace,
+        )
+        return json.dumps({
+            "error": f"Unexpected error: {type(e).__name__}: {e}",
+            "pod": pod_name,
+            "namespace": namespace,
+        })
 
 
 @function_tool(strict_mode=False)
@@ -377,9 +545,19 @@ def describe_deployment(deployment_name: str, namespace: str = "default") -> str
         Deployment details as JSON string
     """
     try:
+        start_time = time.time()
+        logger.info(
+            "k8s_tool_start",
+            tool="describe_deployment",
+            deployment_name=deployment_name,
+            namespace=namespace,
+        )
+
         _, apps_v1 = _get_k8s_client()
         deployment = apps_v1.read_namespaced_deployment(
-            name=deployment_name, namespace=namespace
+            name=deployment_name,
+            namespace=namespace,
+            _request_timeout=K8S_API_TIMEOUT,
         )
 
         result = {
@@ -403,6 +581,16 @@ def describe_deployment(deployment_name: str, namespace: str = "default") -> str
                 for cond in (deployment.status.conditions or [])
             ],
         }
+
+        elapsed = time.time() - start_time
+        logger.info(
+            "k8s_tool_complete",
+            tool="describe_deployment",
+            deployment_name=deployment_name,
+            namespace=namespace,
+            elapsed_ms=int(elapsed * 1000),
+            replicas_ready=deployment.status.ready_replicas or 0,
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
@@ -419,6 +607,23 @@ def describe_deployment(deployment_name: str, namespace: str = "default") -> str
             {"error": str(e), "deployment": deployment_name, "namespace": namespace}
         )
 
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(
+            "k8s_tool_unexpected_error",
+            tool="describe_deployment",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=tb_str,
+            deployment_name=deployment_name,
+            namespace=namespace,
+        )
+        return json.dumps({
+            "error": f"Unexpected error: {type(e).__name__}: {e}",
+            "deployment": deployment_name,
+            "namespace": namespace,
+        })
+
 
 @function_tool(strict_mode=False)
 def get_deployment_history(deployment_name: str, namespace: str = "default") -> str:
@@ -433,17 +638,29 @@ def get_deployment_history(deployment_name: str, namespace: str = "default") -> 
         List of replica sets with revision history as JSON string
     """
     try:
+        start_time = time.time()
+        logger.info(
+            "k8s_tool_start",
+            tool="get_deployment_history",
+            deployment_name=deployment_name,
+            namespace=namespace,
+        )
+
         _, apps_v1 = _get_k8s_client()
 
         # Get replica sets for this deployment
         deployment = apps_v1.read_namespaced_deployment(
-            name=deployment_name, namespace=namespace
+            name=deployment_name,
+            namespace=namespace,
+            _request_timeout=K8S_API_TIMEOUT,
         )
         selector = deployment.spec.selector.match_labels
         label_selector = ",".join([f"{k}={v}" for k, v in selector.items()])
 
         rs_list = apps_v1.list_namespaced_replica_set(
-            namespace=namespace, label_selector=label_selector
+            namespace=namespace,
+            label_selector=label_selector,
+            _request_timeout=K8S_API_TIMEOUT,
         )
 
         history = []
@@ -463,6 +680,16 @@ def get_deployment_history(deployment_name: str, namespace: str = "default") -> 
 
         # Sort by revision
         history.sort(key=lambda x: x["revision"], reverse=True)
+
+        elapsed = time.time() - start_time
+        logger.info(
+            "k8s_tool_complete",
+            tool="get_deployment_history",
+            deployment_name=deployment_name,
+            namespace=namespace,
+            elapsed_ms=int(elapsed * 1000),
+            revision_count=len(history),
+        )
         return json.dumps(
             {"deployment": deployment_name, "namespace": namespace, "history": history}
         )
@@ -485,6 +712,23 @@ def get_deployment_history(deployment_name: str, namespace: str = "default") -> 
             {"error": str(e), "deployment": deployment_name, "namespace": namespace}
         )
 
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(
+            "k8s_tool_unexpected_error",
+            tool="get_deployment_history",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=tb_str,
+            deployment_name=deployment_name,
+            namespace=namespace,
+        )
+        return json.dumps({
+            "error": f"Unexpected error: {type(e).__name__}: {e}",
+            "deployment": deployment_name,
+            "namespace": namespace,
+        })
+
 
 @function_tool(strict_mode=False)
 def describe_service(service_name: str, namespace: str = "default") -> str:
@@ -499,15 +743,27 @@ def describe_service(service_name: str, namespace: str = "default") -> str:
         Service details including endpoints as JSON string
     """
     try:
+        start_time = time.time()
+        logger.info(
+            "k8s_tool_start",
+            tool="describe_service",
+            service_name=service_name,
+            namespace=namespace,
+        )
+
         core_v1, _ = _get_k8s_client()
         service = core_v1.read_namespaced_service(
-            name=service_name, namespace=namespace
+            name=service_name,
+            namespace=namespace,
+            _request_timeout=K8S_API_TIMEOUT,
         )
 
         # Get endpoints
         try:
             endpoints = core_v1.read_namespaced_endpoints(
-                name=service_name, namespace=namespace
+                name=service_name,
+                namespace=namespace,
+                _request_timeout=K8S_API_TIMEOUT,
             )
             endpoint_list = []
             for subset in endpoints.subsets or []:
@@ -542,6 +798,16 @@ def describe_service(service_name: str, namespace: str = "default") -> str:
             "selector": service.spec.selector or {},
             "endpoints": endpoint_list,
         }
+
+        elapsed = time.time() - start_time
+        logger.info(
+            "k8s_tool_complete",
+            tool="describe_service",
+            service_name=service_name,
+            namespace=namespace,
+            elapsed_ms=int(elapsed * 1000),
+            endpoint_count=len(endpoint_list),
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
@@ -555,6 +821,23 @@ def describe_service(service_name: str, namespace: str = "default") -> str:
         return json.dumps(
             {"error": str(e), "service": service_name, "namespace": namespace}
         )
+
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(
+            "k8s_tool_unexpected_error",
+            tool="describe_service",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=tb_str,
+            service_name=service_name,
+            namespace=namespace,
+        )
+        return json.dumps({
+            "error": f"Unexpected error: {type(e).__name__}: {e}",
+            "service": service_name,
+            "namespace": namespace,
+        })
 
 
 @function_tool(strict_mode=False)
@@ -578,6 +861,14 @@ def get_pod_resource_usage(pod_name: str, namespace: str = "default") -> str:
         return _make_config_required_response("get_pod_resource_usage", missing)
 
     try:
+        start_time = time.time()
+        logger.info(
+            "k8s_tool_start",
+            tool="get_pod_resource_usage",
+            pod_name=pod_name,
+            namespace=namespace,
+        )
+
         from kubernetes import client as k8s_client_module
 
         api = k8s_client_module.CustomObjectsApi()
@@ -588,6 +879,7 @@ def get_pod_resource_usage(pod_name: str, namespace: str = "default") -> str:
             namespace=namespace,
             plural="pods",
             name=pod_name,
+            _request_timeout=K8S_API_TIMEOUT,
         )
 
         containers = []
@@ -606,14 +898,33 @@ def get_pod_resource_usage(pod_name: str, namespace: str = "default") -> str:
             "timestamp": metrics.get("timestamp"),
             "containers": containers,
         }
+
+        elapsed = time.time() - start_time
+        logger.info(
+            "k8s_tool_complete",
+            tool="get_pod_resource_usage",
+            pod_name=pod_name,
+            namespace=namespace,
+            elapsed_ms=int(elapsed * 1000),
+            container_count=len(containers),
+        )
         return json.dumps(result)
 
     except Exception as e:
-        logger.error("failed_to_get_resource_usage", error=str(e), pod=pod_name)
+        tb_str = traceback.format_exc()
+        logger.error(
+            "k8s_tool_unexpected_error",
+            tool="get_pod_resource_usage",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=tb_str,
+            pod_name=pod_name,
+            namespace=namespace,
+        )
         # Return graceful error - metrics-server might not be installed
         return json.dumps(
             {
-                "error": "Metrics not available (metrics-server may not be installed)",
+                "error": f"Metrics not available ({type(e).__name__}: {e})",
                 "pod": pod_name,
                 "namespace": namespace,
             }
@@ -636,8 +947,20 @@ def get_pod_resources(pod_name: str, namespace: str = "default") -> str:
         Combined resource allocation and usage as JSON string
     """
     try:
+        start_time = time.time()
+        logger.info(
+            "k8s_tool_start",
+            tool="get_pod_resources",
+            pod_name=pod_name,
+            namespace=namespace,
+        )
+
         core_v1, _ = _get_k8s_client()
-        pod = core_v1.read_namespaced_pod(name=pod_name, namespace=namespace)
+        pod = core_v1.read_namespaced_pod(
+            name=pod_name,
+            namespace=namespace,
+            _request_timeout=K8S_API_TIMEOUT,
+        )
 
         # Get allocation from pod spec
         containers_data = []
@@ -675,6 +998,7 @@ def get_pod_resources(pod_name: str, namespace: str = "default") -> str:
                 namespace=namespace,
                 plural="pods",
                 name=pod_name,
+                _request_timeout=K8S_API_TIMEOUT,
             )
 
             # Map usage to containers
@@ -710,6 +1034,15 @@ def get_pod_resources(pod_name: str, namespace: str = "default") -> str:
                 "Ensure metrics-server is installed in the cluster."
             )
 
+        elapsed = time.time() - start_time
+        logger.info(
+            "k8s_tool_complete",
+            tool="get_pod_resources",
+            pod_name=pod_name,
+            namespace=namespace,
+            elapsed_ms=int(elapsed * 1000),
+            metrics_available=usage_available,
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
@@ -721,3 +1054,20 @@ def get_pod_resources(pod_name: str, namespace: str = "default") -> str:
     except ApiException as e:
         logger.error("failed_to_get_pod_resources", error=str(e), pod=pod_name)
         return json.dumps({"error": str(e), "pod": pod_name, "namespace": namespace})
+
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        logger.error(
+            "k8s_tool_unexpected_error",
+            tool="get_pod_resources",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=tb_str,
+            pod_name=pod_name,
+            namespace=namespace,
+        )
+        return json.dumps({
+            "error": f"Unexpected error: {type(e).__name__}: {e}",
+            "pod": pod_name,
+            "namespace": namespace,
+        })
