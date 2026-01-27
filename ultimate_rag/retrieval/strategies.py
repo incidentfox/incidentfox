@@ -8,18 +8,18 @@ Each strategy provides a different approach to finding relevant knowledge:
 - HybridGraphTreeStrategy: Combines graph traversal with tree search
 """
 
+import asyncio
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Any, Set, Tuple, TYPE_CHECKING
-import logging
-import asyncio
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from ..core.node import KnowledgeNode, KnowledgeTree, TreeForest
-    from ..graph.graph import KnowledgeGraph
     from ..graph.entities import Entity
+    from ..graph.graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,9 @@ class QueryAnalysis:
     entities_mentioned: List[str]
     keywords: List[str]
     time_constraints: Optional[Tuple[datetime, datetime]] = None
-    scope_hints: List[str] = field(default_factory=list)  # e.g., ["payment-service", "production"]
+    scope_hints: List[str] = field(
+        default_factory=list
+    )  # e.g., ["payment-service", "production"]
     urgency: float = 0.5  # 0-1, higher = more urgent (affects retrieval strategy)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -129,25 +131,50 @@ class RetrievalStrategy(ABC):
 
         # Detect intent based on keywords
         intent = QueryIntent.FACTUAL
-        if any(kw in query_lower for kw in ["how to", "how do", "steps to", "procedure"]):
+        if any(
+            kw in query_lower for kw in ["how to", "how do", "steps to", "procedure"]
+        ):
             intent = QueryIntent.PROCEDURAL
-        elif any(kw in query_lower for kw in ["error", "fail", "issue", "debug", "fix", "broken"]):
+        elif any(
+            kw in query_lower
+            for kw in ["error", "fail", "issue", "debug", "fix", "broken"]
+        ):
             intent = QueryIntent.TROUBLESHOOTING
         elif any(kw in query_lower for kw in ["compare", "difference", "vs", "better"]):
             intent = QueryIntent.COMPARATIVE
-        elif any(kw in query_lower for kw in ["who", "owns", "responsible", "team", "contact"]):
+        elif any(
+            kw in query_lower
+            for kw in ["who", "owns", "responsible", "team", "contact"]
+        ):
             intent = QueryIntent.RELATIONAL
         elif any(kw in query_lower for kw in ["when", "last", "history", "changed"]):
             intent = QueryIntent.TEMPORAL
 
         # Extract keywords (simple approach)
-        stop_words = {"how", "do", "i", "the", "a", "an", "to", "for", "in", "is", "what", "why", "where", "when"}
+        stop_words = {
+            "how",
+            "do",
+            "i",
+            "the",
+            "a",
+            "an",
+            "to",
+            "for",
+            "in",
+            "is",
+            "what",
+            "why",
+            "where",
+            "when",
+        }
         words = query_lower.split()
         keywords = [w for w in words if w not in stop_words and len(w) > 2]
 
         # Detect urgency
         urgency = 0.5
-        if any(kw in query_lower for kw in ["urgent", "asap", "critical", "down", "outage"]):
+        if any(
+            kw in query_lower for kw in ["urgent", "asap", "critical", "down", "outage"]
+        ):
             urgency = 0.9
         elif any(kw in query_lower for kw in ["important", "production", "customer"]):
             urgency = 0.7
@@ -206,9 +233,7 @@ class MultiQueryStrategy(RetrievalStrategy):
 
         # Sort by combined score and return top_k
         results = sorted(
-            all_chunks.values(),
-            key=lambda c: c.combined_score,
-            reverse=True
+            all_chunks.values(), key=lambda c: c.combined_score, reverse=True
         )[:top_k]
 
         return results
@@ -237,13 +262,17 @@ class MultiQueryStrategy(RetrievalStrategy):
 
             # Add intent-specific reformulation
             if analysis.intent == QueryIntent.PROCEDURAL:
-                variations.append(f"steps procedure guide {' '.join(analysis.keywords)}")
+                variations.append(
+                    f"steps procedure guide {' '.join(analysis.keywords)}"
+                )
             elif analysis.intent == QueryIntent.TROUBLESHOOTING:
                 variations.append(f"error fix solution {' '.join(analysis.keywords)}")
             elif analysis.intent == QueryIntent.RELATIONAL:
-                variations.append(f"owner team responsible {' '.join(analysis.keywords)}")
+                variations.append(
+                    f"owner team responsible {' '.join(analysis.keywords)}"
+                )
 
-        return variations[:self.num_variations + 1]
+        return variations[: self.num_variations + 1]
 
     async def _search_trees(
         self,
@@ -310,9 +339,7 @@ class HyDEStrategy(RetrievalStrategy):
                 all_chunks[chunk.node_id] = chunk
 
         return sorted(
-            all_chunks.values(),
-            key=lambda c: c.combined_score,
-            reverse=True
+            all_chunks.values(), key=lambda c: c.combined_score, reverse=True
         )[:top_k]
 
     async def _generate_hypotheses(self, query: str) -> List[str]:
@@ -434,11 +461,9 @@ class AdaptiveDepthStrategy(RetrievalStrategy):
                 seen.add(chunk.node_id)
                 unique_chunks.append(chunk)
 
-        return sorted(
-            unique_chunks,
-            key=lambda c: c.combined_score,
-            reverse=True
-        )[:top_k]
+        return sorted(unique_chunks, key=lambda c: c.combined_score, reverse=True)[
+            :top_k
+        ]
 
     def _determine_start_depth(self, analysis: QueryAnalysis) -> int:
         """
@@ -472,21 +497,24 @@ class AdaptiveDepthStrategy(RetrievalStrategy):
         for tree in forest.trees.values():
             # Filter nodes at target depth
             nodes_at_depth = [
-                node for node in tree.all_nodes.values()
+                node
+                for node in tree.all_nodes.values()
                 if node.is_active and self._get_node_depth(node, tree) == depth
             ]
 
             # In production: embed query and compute similarity with filtered nodes
             # For now, return placeholder
             for node in nodes_at_depth[:top_k]:
-                chunks.append(RetrievedChunk(
-                    node_id=node.index,
-                    text=node.text,
-                    score=0.5,  # Would be actual similarity
-                    importance=node.get_importance(),
-                    strategy=self.name,
-                    tree_level=depth,
-                ))
+                chunks.append(
+                    RetrievedChunk(
+                        node_id=node.index,
+                        text=node.text,
+                        score=0.5,  # Would be actual similarity
+                        importance=node.get_importance(),
+                        strategy=self.name,
+                        tree_level=depth,
+                    )
+                )
 
         return chunks
 
@@ -522,8 +550,8 @@ class HybridGraphTreeStrategy(RetrievalStrategy):
     def __init__(
         self,
         graph_weight: float = 0.4,  # Weight for graph-derived results
-        tree_weight: float = 0.6,   # Weight for tree search results
-        expansion_hops: int = 2,     # How many hops to traverse in graph
+        tree_weight: float = 0.6,  # Weight for tree search results
+        expansion_hops: int = 2,  # How many hops to traverse in graph
     ):
         self.graph_weight = graph_weight
         self.tree_weight = tree_weight
@@ -560,9 +588,7 @@ class HybridGraphTreeStrategy(RetrievalStrategy):
 
         # Sort and return
         return sorted(
-            all_chunks.values(),
-            key=lambda c: c.combined_score,
-            reverse=True
+            all_chunks.values(), key=lambda c: c.combined_score, reverse=True
         )[:top_k]
 
     async def _retrieve_via_graph(
@@ -607,14 +633,16 @@ class HybridGraphTreeStrategy(RetrievalStrategy):
                     # Find node in forest
                     node = self._find_node_in_forest(node_id, forest)
                     if node:
-                        chunks.append(RetrievedChunk(
-                            node_id=node_id,
-                            text=node.text,
-                            score=0.8,  # Graph-derived gets high base score
-                            importance=node.get_importance(),
-                            strategy=f"{self.name}_graph",
-                            metadata={"source_entity": entity_id},
-                        ))
+                        chunks.append(
+                            RetrievedChunk(
+                                node_id=node_id,
+                                text=node.text,
+                                score=0.8,  # Graph-derived gets high base score
+                                importance=node.get_importance(),
+                                strategy=f"{self.name}_graph",
+                                metadata={"source_entity": entity_id},
+                            )
+                        )
 
         return chunks[:top_k]
 
@@ -739,11 +767,7 @@ class IncidentAwareStrategy(RetrievalStrategy):
                 seen.add(chunk.node_id)
                 unique.append(chunk)
 
-        return sorted(
-            unique,
-            key=lambda c: c.combined_score,
-            reverse=True
-        )[:top_k]
+        return sorted(unique, key=lambda c: c.combined_score, reverse=True)[:top_k]
 
     async def _find_runbooks(
         self,
@@ -775,17 +799,19 @@ class IncidentAwareStrategy(RetrievalStrategy):
                 for node_id in runbook.raptor_node_ids:
                     node = self._find_node_in_forest(node_id, forest)
                     if node:
-                        chunks.append(RetrievedChunk(
-                            node_id=node_id,
-                            text=node.text,
-                            score=min(1.0, match_score * 0.3),
-                            importance=node.get_importance(),
-                            strategy=f"{self.name}_runbook",
-                            metadata={
-                                "runbook_id": runbook.entity_id,
-                                "runbook_name": runbook.name,
-                            },
-                        ))
+                        chunks.append(
+                            RetrievedChunk(
+                                node_id=node_id,
+                                text=node.text,
+                                score=min(1.0, match_score * 0.3),
+                                importance=node.get_importance(),
+                                strategy=f"{self.name}_runbook",
+                                metadata={
+                                    "runbook_id": runbook.entity_id,
+                                    "runbook_name": runbook.name,
+                                },
+                            )
+                        )
 
         return chunks
 
@@ -818,17 +844,19 @@ class IncidentAwareStrategy(RetrievalStrategy):
                 for node_id in incident.raptor_node_ids:
                     node = self._find_node_in_forest(node_id, forest)
                     if node:
-                        chunks.append(RetrievedChunk(
-                            node_id=node_id,
-                            text=node.text,
-                            score=min(1.0, overlap * 0.2),
-                            importance=node.get_importance(),
-                            strategy=f"{self.name}_incident",
-                            metadata={
-                                "incident_id": incident.entity_id,
-                                "resolution": incident.properties.get("resolution"),
-                            },
-                        ))
+                        chunks.append(
+                            RetrievedChunk(
+                                node_id=node_id,
+                                text=node.text,
+                                score=min(1.0, overlap * 0.2),
+                                importance=node.get_importance(),
+                                strategy=f"{self.name}_incident",
+                                metadata={
+                                    "incident_id": incident.entity_id,
+                                    "resolution": incident.properties.get("resolution"),
+                                },
+                            )
+                        )
 
         return chunks
 

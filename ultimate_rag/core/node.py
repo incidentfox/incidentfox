@@ -5,13 +5,13 @@ Enhanced version of RAPTOR nodes with importance scoring,
 metadata, and knowledge graph integration.
 """
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Set, Any, Sequence
-import hashlib
+from typing import Any, Dict, List, Optional, Sequence, Set
 
-from .types import KnowledgeType, ImportanceScore, ImportanceWeights
 from .metadata import NodeMetadata, SourceInfo, ValidationStatus
+from .types import ImportanceScore, ImportanceWeights, KnowledgeType
 
 
 @dataclass
@@ -152,7 +152,9 @@ class KnowledgeNode:
         if keyword and keyword not in self.keywords:
             self.keywords.append(keyword)
 
-    def matches_keywords(self, query_keywords: List[str], match_all: bool = False) -> bool:
+    def matches_keywords(
+        self, query_keywords: List[str], match_all: bool = False
+    ) -> bool:
         """Check if node matches given keywords."""
         if not query_keywords:
             return True
@@ -195,7 +197,11 @@ class KnowledgeNode:
             embeddings=data.get("embeddings", {}),
             knowledge_type=KnowledgeType(data.get("knowledge_type", "factual")),
             importance=ImportanceScore.from_dict(data.get("importance", {})),
-            metadata=NodeMetadata.from_dict(data["metadata"]) if data.get("metadata") else None,
+            metadata=(
+                NodeMetadata.from_dict(data["metadata"])
+                if data.get("metadata")
+                else None
+            ),
             keywords=data.get("keywords", []),
             source_url=data.get("source_url"),
             tree_id=data.get("tree_id"),
@@ -211,7 +217,9 @@ class KnowledgeNode:
         """
         # Extract metadata from RAPTOR node
         raptor_metadata = getattr(raptor_node, "metadata", {}) or {}
-        source_url = raptor_metadata.get("source_url") or getattr(raptor_node, "original_content_ref", None)
+        source_url = raptor_metadata.get("source_url") or getattr(
+            raptor_node, "original_content_ref", None
+        )
 
         # Create source info
         source_info = None
@@ -243,7 +251,11 @@ class KnowledgeNode:
             embeddings=dict(raptor_node.embeddings) if raptor_node.embeddings else {},
             knowledge_type=KnowledgeType.FACTUAL,
             metadata=metadata,
-            keywords=list(raptor_node.keywords) if getattr(raptor_node, "keywords", None) else [],
+            keywords=(
+                list(raptor_node.keywords)
+                if getattr(raptor_node, "keywords", None)
+                else []
+            ),
             source_url=source_url,
             tree_id=tree_id,
         )
@@ -347,7 +359,8 @@ class KnowledgeTree:
     def get_nodes_needing_validation(self) -> List[KnowledgeNode]:
         """Get nodes that need human validation."""
         return [
-            n for n in self.all_nodes.values()
+            n
+            for n in self.all_nodes.values()
             if n.is_active and n.importance.needs_validation()
         ]
 
@@ -357,10 +370,7 @@ class KnowledgeTree:
         threshold: float = 0.0,
     ) -> List[KnowledgeNode]:
         """Find nodes with same or similar content hash."""
-        return [
-            n for n in self.all_nodes.values()
-            if n.content_hash == content_hash
-        ]
+        return [n for n in self.all_nodes.values() if n.content_hash == content_hash]
 
     def get_stats(self) -> Dict[str, Any]:
         """Get tree statistics."""
@@ -376,7 +386,11 @@ class KnowledgeTree:
             "root_nodes": len(self.root_nodes),
             "num_layers": self.num_layers,
             "layer_counts": {l: len(nodes) for l, nodes in self.layer_to_nodes.items()},
-            "avg_importance": sum(importance_scores) / len(importance_scores) if importance_scores else 0,
+            "avg_importance": (
+                sum(importance_scores) / len(importance_scores)
+                if importance_scores
+                else 0
+            ),
             "stale_nodes": len(self.get_stale_nodes()),
             "needs_validation": len(self.get_nodes_needing_validation()),
             "created_at": self.created_at.isoformat(),
@@ -483,9 +497,7 @@ class KnowledgeTree:
         # Set up layer mapping
         for layer, nodes in raptor_tree.layer_to_nodes.items():
             tree.layer_to_nodes[layer] = [
-                tree.all_nodes[n.index]
-                for n in nodes
-                if n.index in tree.all_nodes
+                tree.all_nodes[n.index] for n in nodes if n.index in tree.all_nodes
             ]
 
         # Detect embedding model from first node

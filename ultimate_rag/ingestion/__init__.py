@@ -10,22 +10,22 @@ Handles processing various content types into the knowledge base:
 - API documentation
 """
 
+from .extractors import (
+    EntityExtractor,
+    MetadataExtractor,
+    RelationshipExtractor,
+)
 from .processor import (
     DocumentProcessor,
-    ProcessingResult,
     ProcessingConfig,
+    ProcessingResult,
 )
 from .sources import (
+    ConfluenceSource,
     ContentSource,
     FileSource,
     GitRepoSource,
-    ConfluenceSource,
     SlackSource,
-)
-from .extractors import (
-    EntityExtractor,
-    RelationshipExtractor,
-    MetadataExtractor,
 )
 
 __all__ = [

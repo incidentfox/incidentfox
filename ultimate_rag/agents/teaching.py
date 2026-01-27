@@ -5,16 +5,16 @@ Allows agents to teach the knowledge base new information
 learned during their work.
 """
 
+import hashlib
+import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Any, TYPE_CHECKING
-import logging
-import uuid
-import hashlib
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from ..core.node import KnowledgeTree, KnowledgeNode
+    from ..core.node import KnowledgeNode, KnowledgeTree
     from ..graph.graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
@@ -185,7 +185,9 @@ class TeachingInterface:
 
                 if similarity_score >= self.similarity_threshold:
                     # Check for contradiction
-                    is_contradiction = await self._check_contradiction(content, similar_node)
+                    is_contradiction = await self._check_contradiction(
+                        content, similar_node
+                    )
 
                     if is_contradiction:
                         self._stats["contradictions"] += 1
@@ -205,7 +207,7 @@ class TeachingInterface:
                             existing_nodes=[similar_node.index],
                             action="Queued for review due to potential contradiction",
                             needs_review=True,
-                            review_reason=f"May contradict existing knowledge",
+                            review_reason="May contradict existing knowledge",
                             confidence=confidence,
                         )
 
@@ -389,8 +391,16 @@ Resolution: {resolution}
         """
         # Simple heuristic: check for negation words near similar content
         negation_indicators = [
-            "not", "don't", "doesn't", "shouldn't", "never",
-            "incorrect", "wrong", "false", "outdated", "deprecated",
+            "not",
+            "don't",
+            "doesn't",
+            "shouldn't",
+            "never",
+            "incorrect",
+            "wrong",
+            "false",
+            "outdated",
+            "deprecated",
         ]
 
         content_lower = content.lower()
@@ -458,9 +468,7 @@ Resolution: {resolution}
 
         self._pending[teaching_id] = pending
 
-        logger.info(
-            f"Queued teaching {teaching_id} for review: {review_reason}"
-        )
+        logger.info(f"Queued teaching {teaching_id} for review: {review_reason}")
 
         return teaching_id
 
@@ -476,9 +484,9 @@ Resolution: {resolution}
     ) -> "KnowledgeNode":
         """Create a new knowledge node."""
         # Import here to avoid circular deps
-        from ..core.node import KnowledgeNode
-        from ..core.types import KnowledgeType, ImportanceScore
         from ..core.metadata import NodeMetadata, SourceInfo, ValidationStatus
+        from ..core.node import KnowledgeNode
+        from ..core.types import ImportanceScore, KnowledgeType
 
         # Generate new index
         max_index = max(self.tree.all_nodes.keys()) if self.tree.all_nodes else -1
@@ -609,9 +617,7 @@ Resolution: {resolution}
         self._stats["rejected"] += 1
         self._stats["pending_review"] -= 1
 
-        logger.info(
-            f"Teaching {teaching_id} rejected by {reviewer}: {reason}"
-        )
+        logger.info(f"Teaching {teaching_id} rejected by {reviewer}: {reason}")
 
         return TeachResult(
             status=TeachStatus.REJECTED,

@@ -40,12 +40,11 @@ import threading
 from typing import Any
 
 from agents import Agent, Runner, function_tool
-
-from ..core.agent_builder import create_model_settings
 from agents.exceptions import MaxTurnsExceeded
 from agents.stream_events import RunItemStreamEvent
 from pydantic import BaseModel, Field
 
+from ..core.agent_builder import create_model_settings
 from ..core.config import get_config
 from ..core.config_utils import get_agent_sub_agents
 from ..core.execution_context import get_execution_context, propagate_context_to_thread

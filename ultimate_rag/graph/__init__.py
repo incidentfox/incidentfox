@@ -6,25 +6,25 @@ to complement RAPTOR's hierarchical tree structure.
 """
 
 from .entities import (
-    EntityType,
-    Entity,
-    Service,
-    Person,
-    Team,
-    Runbook,
-    Incident,
-    Document,
-    Technology,
     AlertRule,
-)
-from .relationships import (
-    RelationshipType,
-    Relationship,
+    Document,
+    Entity,
+    EntityType,
+    Incident,
+    Person,
+    Runbook,
+    Service,
+    Team,
+    Technology,
 )
 from .graph import (
-    KnowledgeGraph,
-    GraphQuery,
     GraphPath,
+    GraphQuery,
+    KnowledgeGraph,
+)
+from .relationships import (
+    Relationship,
+    RelationshipType,
 )
 
 __all__ = [

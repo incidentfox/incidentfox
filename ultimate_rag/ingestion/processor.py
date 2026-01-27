@@ -9,16 +9,16 @@ Handles the full pipeline from raw content to knowledge nodes:
 5. Integration with RAPTOR tree building
 """
 
-import logging
 import hashlib
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
 
 if TYPE_CHECKING:
-    from ..core.node import KnowledgeTree, KnowledgeNode
+    from ..core.node import KnowledgeNode, KnowledgeTree
     from ..graph.graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
@@ -67,9 +67,9 @@ class ProcessingConfig:
 
     # Entity extraction
     extract_entities: bool = True
-    entity_types: List[str] = field(default_factory=lambda: [
-        "service", "person", "team", "technology", "endpoint"
-    ])
+    entity_types: List[str] = field(
+        default_factory=lambda: ["service", "person", "team", "technology", "endpoint"]
+    )
 
     # Relationship extraction
     extract_relationships: bool = True
@@ -101,7 +101,9 @@ class ProcessedChunk:
 
     # Extracted information
     entities: List[str] = field(default_factory=list)
-    relationships: List[Tuple[str, str, str]] = field(default_factory=list)  # (source, rel, target)
+    relationships: List[Tuple[str, str, str]] = field(
+        default_factory=list
+    )  # (source, rel, target)
     keywords: List[str] = field(default_factory=list)
 
     # Metadata
@@ -199,7 +201,7 @@ class DocumentProcessor:
 
         # Read content
         try:
-            content = file_path.read_text(encoding='utf-8')
+            content = file_path.read_text(encoding="utf-8")
         except Exception as e:
             return ProcessingResult(
                 chunks=[],
@@ -289,14 +291,16 @@ class DocumentProcessor:
                 inferred = self._infer_metadata(text, content_type)
                 metadata.update(inferred)
 
-            metadata['source_path'] = source_path
-            metadata['content_type'] = content_type.value
-            metadata['processed_at'] = datetime.utcnow().isoformat()
+            metadata["source_path"] = source_path
+            metadata["content_type"] = content_type.value
+            metadata["processed_at"] = datetime.utcnow().isoformat()
 
             # Compute quality score
             quality = self._compute_quality(text)
             if quality < self.config.min_quality_score:
-                warnings.append(f"Low quality chunk at position {i}: score={quality:.2f}")
+                warnings.append(
+                    f"Low quality chunk at position {i}: score={quality:.2f}"
+                )
                 continue
 
             # Create chunk
@@ -343,7 +347,7 @@ class DocumentProcessor:
         results = []
 
         for file_path in directory.glob(pattern):
-            if file_path.is_file() and not file_path.name.startswith('.'):
+            if file_path.is_file() and not file_path.name.startswith("."):
                 try:
                     result = self.process_file(file_path, content_type)
                     results.append(result)
@@ -359,17 +363,17 @@ class DocumentProcessor:
         suffix = file_path.suffix.lower()
 
         mapping = {
-            '.md': ContentType.MARKDOWN,
-            '.markdown': ContentType.MARKDOWN,
-            '.html': ContentType.HTML,
-            '.htm': ContentType.HTML,
-            '.txt': ContentType.TEXT,
-            '.pdf': ContentType.PDF,
-            '.py': ContentType.CODE,
-            '.js': ContentType.CODE,
-            '.ts': ContentType.CODE,
-            '.go': ContentType.CODE,
-            '.java': ContentType.CODE,
+            ".md": ContentType.MARKDOWN,
+            ".markdown": ContentType.MARKDOWN,
+            ".html": ContentType.HTML,
+            ".htm": ContentType.HTML,
+            ".txt": ContentType.TEXT,
+            ".pdf": ContentType.PDF,
+            ".py": ContentType.CODE,
+            ".js": ContentType.CODE,
+            ".ts": ContentType.CODE,
+            ".go": ContentType.CODE,
+            ".java": ContentType.CODE,
         }
 
         return mapping.get(suffix, ContentType.TEXT)
@@ -404,18 +408,20 @@ class DocumentProcessor:
 
             parser = TextExtractor()
             parser.feed(content)
-            return ' '.join(parser.text_parts)
+            return " ".join(parser.text_parts)
         except Exception:
             # Fallback: simple tag removal
             import re
-            return re.sub(r'<[^>]+>', '', content)
+
+            return re.sub(r"<[^>]+>", "", content)
 
     def _parse_markdown(self, content: str) -> str:
         """Parse markdown, preserving structure hints."""
         # Keep markdown mostly intact for chunking
         # Just normalize whitespace
         import re
-        content = re.sub(r'\n{3,}', '\n\n', content)
+
+        content = re.sub(r"\n{3,}", "\n\n", content)
         return content.strip()
 
     def _parse_runbook(self, content: str) -> str:
@@ -449,20 +455,21 @@ class DocumentProcessor:
     def _chunk_markdown(self, content: str) -> List[Tuple[str, Optional[str]]]:
         """Chunk markdown by sections."""
         import re
+
         chunks = []
         current_section = None
         current_text = []
 
-        lines = content.split('\n')
+        lines = content.split("\n")
 
         for line in lines:
             # Check for headers
-            header_match = re.match(r'^(#{1,6})\s+(.+)$', line)
+            header_match = re.match(r"^(#{1,6})\s+(.+)$", line)
 
             if header_match:
                 # Save previous section
                 if current_text:
-                    text = '\n'.join(current_text).strip()
+                    text = "\n".join(current_text).strip()
                     if text:
                         chunks.extend(self._split_if_needed(text, current_section))
                     current_text = []
@@ -474,7 +481,7 @@ class DocumentProcessor:
 
         # Save final section
         if current_text:
-            text = '\n'.join(current_text).strip()
+            text = "\n".join(current_text).strip()
             if text:
                 chunks.extend(self._split_if_needed(text, current_section))
 
@@ -484,7 +491,7 @@ class DocumentProcessor:
         """Chunk code by logical units (functions, classes)."""
         chunks = []
         # Simple approach: chunk by empty lines with context
-        paragraphs = content.split('\n\n')
+        paragraphs = content.split("\n\n")
 
         current_chunk = []
         current_size = 0
@@ -494,7 +501,7 @@ class DocumentProcessor:
 
             if current_size + para_size > self.config.chunking.target_chunk_size:
                 if current_chunk:
-                    chunks.append(('\n\n'.join(current_chunk), None))
+                    chunks.append(("\n\n".join(current_chunk), None))
                 current_chunk = [para]
                 current_size = para_size
             else:
@@ -502,14 +509,14 @@ class DocumentProcessor:
                 current_size += para_size
 
         if current_chunk:
-            chunks.append(('\n\n'.join(current_chunk), None))
+            chunks.append(("\n\n".join(current_chunk), None))
 
         return chunks
 
     def _chunk_plain_text(self, content: str) -> List[Tuple[str, Optional[str]]]:
         """Chunk plain text by paragraphs."""
         chunks = []
-        paragraphs = content.split('\n\n')
+        paragraphs = content.split("\n\n")
 
         current_chunk = []
         current_size = 0
@@ -523,7 +530,7 @@ class DocumentProcessor:
 
             if current_size + para_size > self.config.chunking.target_chunk_size:
                 if current_chunk:
-                    chunks.append(('\n\n'.join(current_chunk), None))
+                    chunks.append(("\n\n".join(current_chunk), None))
                 current_chunk = [para]
                 current_size = para_size
             else:
@@ -531,7 +538,7 @@ class DocumentProcessor:
                 current_size += para_size
 
         if current_chunk:
-            chunks.append(('\n\n'.join(current_chunk), None))
+            chunks.append(("\n\n".join(current_chunk), None))
 
         return chunks
 
@@ -556,7 +563,7 @@ class DocumentProcessor:
         while i < len(words):
             end = min(i + target, len(words))
             chunk_words = words[i:end]
-            chunk_text = ' '.join(chunk_words)
+            chunk_text = " ".join(chunk_words)
             chunks.append((chunk_text, section))
             i = end - overlap if end < len(words) else end
 
@@ -571,15 +578,24 @@ class DocumentProcessor:
 
         # Service patterns
         import re
-        for match in re.finditer(r'\b([a-z]+-(?:service|api|db|cache))\b', text_lower):
+
+        for match in re.finditer(r"\b([a-z]+-(?:service|api|db|cache))\b", text_lower):
             entities.append(f"service:{match.group(1)}")
 
         # Team patterns
-        for match in re.finditer(r'\b(team [a-z]+|[a-z]+ team)\b', text_lower):
+        for match in re.finditer(r"\b(team [a-z]+|[a-z]+ team)\b", text_lower):
             entities.append(f"team:{match.group(1)}")
 
         # Technology patterns
-        tech_keywords = ['kubernetes', 'docker', 'aws', 'gcp', 'postgres', 'redis', 'kafka']
+        tech_keywords = [
+            "kubernetes",
+            "docker",
+            "aws",
+            "gcp",
+            "postgres",
+            "redis",
+            "kafka",
+        ]
         for tech in tech_keywords:
             if tech in text_lower:
                 entities.append(f"technology:{tech}")
@@ -599,16 +615,18 @@ class DocumentProcessor:
         import re
 
         # "X depends on Y"
-        for match in re.finditer(r'(\S+)\s+depends\s+on\s+(\S+)', text_lower):
-            relationships.append((match.group(1), 'depends_on', match.group(2)))
+        for match in re.finditer(r"(\S+)\s+depends\s+on\s+(\S+)", text_lower):
+            relationships.append((match.group(1), "depends_on", match.group(2)))
 
         # "X calls Y"
-        for match in re.finditer(r'(\S+)\s+calls\s+(\S+)', text_lower):
-            relationships.append((match.group(1), 'calls', match.group(2)))
+        for match in re.finditer(r"(\S+)\s+calls\s+(\S+)", text_lower):
+            relationships.append((match.group(1), "calls", match.group(2)))
 
         # "X owned by Y"
-        for match in re.finditer(r'(\S+)\s+(?:owned|maintained)\s+by\s+(\S+)', text_lower):
-            relationships.append((match.group(2), 'owns', match.group(1)))
+        for match in re.finditer(
+            r"(\S+)\s+(?:owned|maintained)\s+by\s+(\S+)", text_lower
+        ):
+            relationships.append((match.group(2), "owns", match.group(1)))
 
         return relationships
 
@@ -616,13 +634,34 @@ class DocumentProcessor:
         """Extract keywords from text."""
         # Simple TF-based extraction
         import re
-        words = re.findall(r'\b[a-z]{3,}\b', text.lower())
+
+        words = re.findall(r"\b[a-z]{3,}\b", text.lower())
 
         # Remove common stop words
         stop_words = {
-            'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all',
-            'can', 'has', 'had', 'was', 'were', 'will', 'with', 'this',
-            'that', 'from', 'they', 'been', 'have', 'which', 'their',
+            "the",
+            "and",
+            "for",
+            "are",
+            "but",
+            "not",
+            "you",
+            "all",
+            "can",
+            "has",
+            "had",
+            "was",
+            "were",
+            "will",
+            "with",
+            "this",
+            "that",
+            "from",
+            "they",
+            "been",
+            "have",
+            "which",
+            "their",
         }
         words = [w for w in words if w not in stop_words]
 
@@ -646,22 +685,24 @@ class DocumentProcessor:
 
         # Infer domain
         domains = {
-            'incident': ['incident', 'outage', 'alert', 'pagerduty'],
-            'runbook': ['runbook', 'procedure', 'step 1', 'how to'],
-            'architecture': ['architecture', 'design', 'diagram', 'component'],
-            'onboarding': ['onboarding', 'getting started', 'setup', 'install'],
+            "incident": ["incident", "outage", "alert", "pagerduty"],
+            "runbook": ["runbook", "procedure", "step 1", "how to"],
+            "architecture": ["architecture", "design", "diagram", "component"],
+            "onboarding": ["onboarding", "getting started", "setup", "install"],
         }
 
         for domain, keywords in domains.items():
             if any(kw in text_lower for kw in keywords):
-                metadata['domain'] = domain
+                metadata["domain"] = domain
                 break
 
         # Infer urgency
-        if any(kw in text_lower for kw in ['critical', 'urgent', 'immediately', 'asap']):
-            metadata['urgency'] = 'high'
-        elif any(kw in text_lower for kw in ['important', 'priority']):
-            metadata['urgency'] = 'medium'
+        if any(
+            kw in text_lower for kw in ["critical", "urgent", "immediately", "asap"]
+        ):
+            metadata["urgency"] = "high"
+        elif any(kw in text_lower for kw in ["important", "priority"]):
+            metadata["urgency"] = "medium"
 
         return metadata
 
@@ -693,9 +734,9 @@ class DocumentProcessor:
     def get_stats(self) -> Dict[str, Any]:
         """Get processing statistics."""
         return {
-            'total_documents_processed': self._total_processed,
-            'total_chunks_created': self._total_chunks,
-            'unique_content_hashes': len(self._seen_hashes),
+            "total_documents_processed": self._total_processed,
+            "total_chunks_created": self._total_chunks,
+            "unique_content_hashes": len(self._seen_hashes),
         }
 
     def reset_dedup_cache(self) -> None:

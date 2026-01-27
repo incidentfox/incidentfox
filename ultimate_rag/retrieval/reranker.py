@@ -8,11 +8,11 @@ Rerankers improve retrieval quality by:
 - Filtering low-quality results
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, TYPE_CHECKING
-import logging
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from .strategies import RetrievedChunk
 
@@ -110,9 +110,9 @@ class ImportanceReranker(Reranker):
 
             # Compute final score
             final_score = (
-                self.config.similarity_weight * chunk.score +
-                self.config.importance_weight * importance +
-                self.config.freshness_weight * freshness
+                self.config.similarity_weight * chunk.score
+                + self.config.importance_weight * importance
+                + self.config.freshness_weight * freshness
             )
 
             chunk.score = final_score
@@ -230,7 +230,7 @@ class CrossEncoderReranker(Reranker):
         # Score in batches
         scores = []
         for i in range(0, len(pairs), self.batch_size):
-            batch = pairs[i:i + self.batch_size]
+            batch = pairs[i : i + self.batch_size]
             # In production: batch_scores = self.model.predict(batch)
             batch_scores = [0.5] * len(batch)  # Placeholder
             scores.extend(batch_scores)

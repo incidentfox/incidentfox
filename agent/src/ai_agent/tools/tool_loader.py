@@ -542,14 +542,14 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
         try:
             from .knowledge_base_tools import (
                 ask_knowledge_base,
+                find_similar_past_incidents,
                 get_knowledge_context,
                 list_knowledge_trees,
-                search_knowledge_base,
+                query_service_graph,
                 # Enhanced RAG tools (ultimate_rag integration)
                 search_for_incident,
-                query_service_graph,
+                search_knowledge_base,
                 teach_knowledge_base,
-                find_similar_past_incidents,
             )
 
             tools.extend(

@@ -5,10 +5,10 @@ Provides entity and relationship management with graph traversal
 capabilities for hybrid RAPTOR+Graph retrieval.
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Set, Tuple, Callable
-import logging
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from .entities import Entity, EntityType
 from .relationships import Relationship, RelationshipType
@@ -85,7 +85,9 @@ class KnowledgeGraph:
         self._relationships: Dict[str, Relationship] = {}
         self._outgoing: Dict[str, Set[str]] = {}  # entity_id -> relationship_ids
         self._incoming: Dict[str, Set[str]] = {}  # entity_id -> relationship_ids
-        self._by_type: Dict[RelationshipType, Set[str]] = {}  # rel_type -> relationship_ids
+        self._by_type: Dict[RelationshipType, Set[str]] = (
+            {}
+        )  # rel_type -> relationship_ids
 
         # Metadata
         self.created_at = datetime.utcnow()
@@ -158,7 +160,7 @@ class KnowledgeGraph:
             for key, ids in self._entities_by_name.items():
                 if name_key in key:
                     partial_ids |= ids
-            candidates &= (name_ids | partial_ids)
+            candidates &= name_ids | partial_ids
 
         # Get entities
         entities = [self._entities[eid] for eid in candidates if eid in self._entities]
@@ -167,8 +169,7 @@ class KnowledgeGraph:
         if tags:
             tag_set = set(t.lower() for t in tags)
             entities = [
-                e for e in entities
-                if tag_set.issubset(set(t.lower() for t in e.tags))
+                e for e in entities if tag_set.issubset(set(t.lower() for t in e.tags))
             ]
 
         return entities
@@ -250,14 +251,14 @@ class KnowledgeGraph:
             rel_ids |= self._incoming.get(entity_id, set())
 
         relationships = [
-            self._relationships[rid]
-            for rid in rel_ids
-            if rid in self._relationships
+            self._relationships[rid] for rid in rel_ids if rid in self._relationships
         ]
 
         # Filter by type
         if rel_types:
-            relationships = [r for r in relationships if r.relationship_type in rel_types]
+            relationships = [
+                r for r in relationships if r.relationship_type in rel_types
+            ]
 
         # Filter to active only
         relationships = [r for r in relationships if r.is_active]
@@ -355,7 +356,9 @@ class KnowledgeGraph:
                     continue
 
                 # Determine next entity
-                next_id = rel.target_id if rel.source_id == current_id else rel.source_id
+                next_id = (
+                    rel.target_id if rel.source_id == current_id else rel.source_id
+                )
 
                 if next_id not in visited:
                     visited.add(next_id)
@@ -401,11 +404,13 @@ class KnowledgeGraph:
                 return
 
             if current == target:
-                paths.append(GraphPath(
-                    entities=entity_path.copy(),
-                    relationships=rel_path.copy(),
-                    total_distance=len(rel_path),
-                ))
+                paths.append(
+                    GraphPath(
+                        entities=entity_path.copy(),
+                        relationships=rel_path.copy(),
+                        total_distance=len(rel_path),
+                    )
+                )
                 return
 
             relationships = self.get_relationships(
@@ -482,7 +487,9 @@ class KnowledgeGraph:
 
     # ==================== Query Execution ====================
 
-    def execute_query(self, query: GraphQuery) -> List[Tuple[Entity, int, List[Relationship]]]:
+    def execute_query(
+        self, query: GraphQuery
+    ) -> List[Tuple[Entity, int, List[Relationship]]]:
         """
         Execute a graph query.
 
@@ -505,7 +512,9 @@ class KnowledgeGraph:
             traversal = self.traverse(
                 start.entity_id,
                 max_hops=query.max_hops,
-                relationship_types=query.relationship_types if query.relationship_types else None,
+                relationship_types=(
+                    query.relationship_types if query.relationship_types else None
+                ),
                 direction=query.direction,
                 target_types=query.target_types if query.target_types else None,
                 min_confidence=query.min_confidence,
@@ -522,7 +531,7 @@ class KnowledgeGraph:
 
         unique_results.sort(key=lambda x: x[1])
 
-        return unique_results[:query.limit]
+        return unique_results[: query.limit]
 
     # ==================== RAPTOR Integration ====================
 
@@ -544,10 +553,7 @@ class KnowledgeGraph:
 
     def get_entities_for_raptor_node(self, node_id: int) -> List[Entity]:
         """Get all entities that reference a specific RAPTOR node."""
-        return [
-            e for e in self._entities.values()
-            if node_id in e.node_ids
-        ]
+        return [e for e in self._entities.values() if node_id in e.node_ids]
 
     def expand_to_raptor_nodes(
         self,
@@ -620,12 +626,10 @@ class KnowledgeGraph:
             "total_entities": len(self._entities),
             "total_relationships": len(self._relationships),
             "entities_by_type": {
-                etype.value: len(eids)
-                for etype, eids in self._entities_by_type.items()
+                etype.value: len(eids) for etype, eids in self._entities_by_type.items()
             },
             "relationships_by_type": {
-                rtype.value: len(rids)
-                for rtype, rids in self._by_type.items()
+                rtype.value: len(rids) for rtype, rids in self._by_type.items()
             },
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
