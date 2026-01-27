@@ -994,12 +994,44 @@ def _load_investigation_direct_tools():
     These are cross-cutting tools that don't fit into a specific sub-agent,
     like reasoning tools and general utilities.
     """
+    import os
+
     tools = [think, llm_call, web_search, ask_human]
 
-    # Future: Add cross-cutting investigation tools here
+    # Knowledge Base tools (RAPTOR) - for runbook lookup, past incident search, and teaching
+    raptor_enabled = os.getenv("RAPTOR_ENABLED", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    if raptor_enabled:
+        try:
+            from ..tools.knowledge_base_tools import (
+                ask_knowledge_base,
+                find_similar_past_incidents,
+                query_service_graph,
+                search_for_incident,
+                search_knowledge_base,
+                teach_knowledge_base,
+            )
+
+            tools.extend(
+                [
+                    search_for_incident,  # Primary: incident-aware search for runbooks
+                    find_similar_past_incidents,  # Find past incidents with similar symptoms
+                    query_service_graph,  # Service dependency queries
+                    teach_knowledge_base,  # Teach KB after successful investigations
+                    search_knowledge_base,  # General KB search
+                    ask_knowledge_base,  # Direct Q&A from KB
+                ]
+            )
+            logger.info("investigation_kb_tools_loaded", count=6)
+        except ImportError as e:
+            logger.debug("investigation_kb_tools_skipped", reason=str(e))
+
+    # Future: Add additional cross-cutting investigation tools here
     # - get_deployment_timeline
     # - check_config_changes
-    # - read_runbook
     # - correlate_events
 
     return tools
@@ -1031,6 +1063,21 @@ You can delegate investigation tasks to specialized agents:
 
 Note: Available agents depend on configuration. Only call agents that are available to you.
 
+## KNOWLEDGE BASE TOOLS (if enabled)
+
+When RAPTOR knowledge base is enabled, you also have access to:
+
+| Tool | Use For |
+|------|---------|
+| `search_for_incident` | Find runbooks and past incidents matching symptoms (USE FIRST) |
+| `find_similar_past_incidents` | "Have we seen this before?" - find similar past incidents |
+| `query_service_graph` | Service dependencies, ownership, blast radius |
+| `teach_knowledge_base` | Teach KB new knowledge after resolving incidents |
+| `search_knowledge_base` | General search across knowledge base |
+| `ask_knowledge_base` | Direct Q&A from knowledge base |
+
+**Best Practice:** At the START of investigation, call `search_for_incident` with the symptoms to get relevant runbooks and past incident context. This often shortcuts investigation significantly.
+
 ## INVESTIGATION METHODOLOGY
 
 ### Phase 1: Scope the Problem
@@ -1056,6 +1103,28 @@ Always pass context between agents to build on previous findings.
 - Immediate actions to mitigate
 - Follow-up investigation if needed
 - Prevention measures for the future
+
+### Phase 5: Teach the Knowledge Base (if applicable)
+When you identify a root cause with HIGH confidence (>70%), use `teach_knowledge_base` to capture the learning:
+- Document the symptoms → root cause → resolution pattern
+- Include specific details that would help future investigations
+- Only teach if you have genuinely novel or confirmed information
+
+**When to teach:**
+- You identified a previously unknown failure pattern
+- You found a non-obvious root cause
+- You discovered service behavior quirks
+- You confirmed a workaround or fix
+
+**Example teaching:**
+```
+teach_knowledge_base(
+    content="When payment-service pods show OOMKilled, check the Redis connection pool first. The default pool size of 10 is insufficient under load. Fix by setting REDIS_POOL_SIZE=50 in the deployment.",
+    knowledge_type="procedural",
+    related_services="payment-service,redis",
+    context="Learned from investigation of OOM incident"
+)
+```
 
 ## DELEGATION PRINCIPLES
 
