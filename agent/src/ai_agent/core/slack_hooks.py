@@ -247,13 +247,27 @@ def get_category_from_tool(tool: Tool) -> str | None:
         Category string or None if not determinable
     """
     try:
+        tool_name = getattr(tool, "name", str(tool))
+
         # Try to get the module from the tool's function
         func = getattr(tool, "fn", None) or getattr(tool, "func", None)
         if func is None:
+            logger.debug(
+                "get_category_no_func",
+                tool=tool_name,
+                tool_type=type(tool).__name__,
+                has_fn=hasattr(tool, "fn"),
+                has_func=hasattr(tool, "func"),
+            )
             return None
 
         module = getattr(func, "__module__", None)
         if not module:
+            logger.debug(
+                "get_category_no_module",
+                tool=tool_name,
+                func_name=getattr(func, "__name__", str(func)),
+            )
             return None
 
         # Extract the tool module name from the path
@@ -262,10 +276,23 @@ def get_category_from_tool(tool: Tool) -> str | None:
         if "tools" in parts:
             idx = parts.index("tools")
             if idx + 1 < len(parts):
-                return parts[idx + 1]
+                category = parts[idx + 1]
+                logger.debug(
+                    "get_category_from_module",
+                    tool=tool_name,
+                    module=module,
+                    category=category,
+                )
+                return category
 
+        logger.debug(
+            "get_category_no_tools_in_path",
+            tool=tool_name,
+            module=module,
+        )
         return None
-    except Exception:
+    except Exception as e:
+        logger.debug("get_category_exception", error=str(e))
         return None
 
 
@@ -510,6 +537,16 @@ class SlackUpdateHooks(RunHooks):
             ("git_", "git_log", "git_diff"): "git_tools",
             ("sentry",): "sentry_tools",
             ("pagerduty", "pd_"): "pagerduty_tools",
+            # Log analysis tools (fallback for when module detection fails)
+            (
+                "log_statistics",
+                "sample_logs",
+                "logs_by_pattern",
+                "logs_around",
+                "log_anomalies",
+                "log_signatures",
+                "correlate_logs",
+            ): "log_analysis_tools",
         }
 
         for keywords, category in patterns.items():
