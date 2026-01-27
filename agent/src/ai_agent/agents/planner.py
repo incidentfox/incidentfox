@@ -556,7 +556,11 @@ def create_agent_tools(team_config=None):
 
             Args:
                 query: Natural language description of what to investigate
-                context: Prior findings or relevant context
+                context: Structured context with sections:
+                    ## Environment - Cluster, namespace, regions, service identifiers
+                    ## System Context - Service dependencies, critical paths, blast radius
+                    ## Prior Patterns - Similar past incidents for affected services
+                    ## Concurrent Issues - Other active incidents that might be related
                 instructions: Specific guidance (focus areas, priorities)
 
             Returns:
@@ -567,7 +571,7 @@ def create_agent_tools(team_config=None):
                 logger.info("calling_investigation_agent", query=query[:100])
                 parts = [query]
                 if context:
-                    parts.append(f"\n\n## Prior Context\n{context}")
+                    parts.append(f"\n\n{context}")
                 if instructions:
                     parts.append(f"\n\n## Investigation Guidance\n{instructions}")
                 full_query = "".join(parts)
@@ -617,7 +621,10 @@ def create_agent_tools(team_config=None):
             Args:
                 query: What code task to perform
                 file_context: Relevant file paths or code snippets
-                context: Prior investigation findings
+                context: Structured context with sections:
+                    ## Environment - Repo URLs, relevant file paths
+                    ## Prior Patterns - Similar bugs/fixes in the past
+                    ## Current Findings - Investigation findings that inform the fix
                 instructions: Specific guidance for the fix
 
             Returns:
@@ -630,7 +637,7 @@ def create_agent_tools(team_config=None):
                 if file_context:
                     parts.append(f"\n\nFile context: {file_context}")
                 if context:
-                    parts.append(f"\n\n## Prior Findings\n{context}")
+                    parts.append(f"\n\n{context}")
                 if instructions:
                     parts.append(f"\n\n## Coding Guidance\n{instructions}")
                 full_query = "".join(parts)
