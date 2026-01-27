@@ -545,17 +545,28 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
                 get_knowledge_context,
                 list_knowledge_trees,
                 search_knowledge_base,
+                # Enhanced RAG tools (ultimate_rag integration)
+                search_for_incident,
+                query_service_graph,
+                teach_knowledge_base,
+                find_similar_past_incidents,
             )
 
             tools.extend(
                 [
+                    # Basic RAPTOR tools
                     search_knowledge_base,
                     ask_knowledge_base,
                     get_knowledge_context,
                     list_knowledge_trees,
+                    # Enhanced RAG tools for incident investigation
+                    search_for_incident,  # Incident-aware search
+                    query_service_graph,  # Service dependency graph queries
+                    teach_knowledge_base,  # Agents can teach KB new knowledge
+                    find_similar_past_incidents,  # Find similar past incidents
                 ]
             )
-            logger.debug("knowledge_base_tools_loaded", count=4)
+            logger.debug("knowledge_base_tools_loaded", count=8)
         except Exception as e:
             logger.warning("knowledge_base_tools_load_failed", error=str(e))
     elif not raptor_enabled:
