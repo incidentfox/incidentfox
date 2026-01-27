@@ -44,6 +44,9 @@ spec:
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           ports:
             - containerPort: {{ .Values.services.agent.servicePort }}
+              name: http
+            - containerPort: {{ .Values.services.agent.healthServer.port | default 8081 }}
+              name: health
           resources:
 {{ toYaml .Values.services.agent.resources | indent 12 }}
           env:
@@ -51,6 +54,9 @@ spec:
               value: "true"
             - name: CONFIG_BASE_URL
               value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
+            # Dedicated health server port (separate from main Sanic server)
+            - name: HEALTH_SERVER_PORT
+              value: {{ .Values.services.agent.healthServer.port | default 8081 | quote }}
             # Enable K8s tools (agent has in-cluster access via service account)
             - name: K8S_ENABLED
               value: "true"
@@ -91,19 +97,27 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.agentOpenAI.secretName }}
                   key: {{ .Values.externalSecrets.contract.agentOpenAI.apiKeyKey }}
+          # Readiness probe: Uses dedicated health server on separate thread
+          # Returns 503 if heartbeat is stale (agent not making progress)
           readinessProbe:
             httpGet:
-              path: /health
-              port: {{ .Values.services.agent.servicePort }}
-            initialDelaySeconds: 5
-            periodSeconds: 10
+              path: /readyz
+              port: {{ .Values.services.agent.healthServer.port | default 8081 }}
+            initialDelaySeconds: {{ .Values.services.agent.readinessProbe.initialDelaySeconds | default 5 }}
+            periodSeconds: {{ .Values.services.agent.readinessProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.services.agent.readinessProbe.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.services.agent.readinessProbe.failureThreshold | default 3 }}
+          # Liveness probe: Uses dedicated health server on separate thread
+          # Always returns 200 if process is alive (won't be blocked by long operations)
           {{- if .Values.services.agent.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
-              path: {{ .Values.services.agent.livenessProbe.path | quote }}
-              port: {{ .Values.services.agent.servicePort }}
+              path: /livez
+              port: {{ .Values.services.agent.healthServer.port | default 8081 }}
             initialDelaySeconds: {{ .Values.services.agent.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.services.agent.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.services.agent.livenessProbe.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.services.agent.livenessProbe.failureThreshold | default 3 }}
           {{- end }}
 ---
 apiVersion: v1

@@ -37,6 +37,7 @@ from .core.agent_runner import (
 )
 from .core.auth import AuthError, authenticate_request
 from .core.config import get_config
+from .core.health_server import start_health_server, update_heartbeat
 from .core.logging import get_correlation_id, get_logger, set_correlation_id
 from .core.metrics import get_metrics_collector
 from .core.slack_hooks import SlackUpdateHooks, SlackUpdateState
@@ -2755,6 +2756,21 @@ def create_app() -> Sanic:
             },
             status=500,
         )
+
+    # Start dedicated health server for K8s probes
+    # This runs in a separate thread and is always responsive,
+    # even when the main Sanic event loop is blocked by long operations
+    @app.listener("before_server_start")
+    async def start_health_server_listener(app, loop):
+        health_port = int(os.getenv("HEALTH_SERVER_PORT", "8081"))
+        logger.info("starting_dedicated_health_server", port=health_port)
+        start_health_server(port=health_port)
+        update_heartbeat(status="server_starting")
+
+    @app.listener("after_server_start")
+    async def after_server_start_listener(app, loop):
+        update_heartbeat(status="idle")
+        logger.info("main_server_ready_health_server_active")
 
     return app
 

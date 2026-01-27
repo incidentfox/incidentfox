@@ -123,11 +123,18 @@ services:
       limits:
         cpu: "500m"
         memory: "1Gi"
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 5
     livenessProbe:
       enabled: true
       path: /health
       initialDelaySeconds: 10
       periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 5
     pdb:
       enabled: true
       minAvailable: 1
@@ -191,11 +198,24 @@ services:
       limits:
         cpu: "2000m"
         memory: "3Gi"
+    # Dedicated health server runs in separate thread, always responsive
+    # even during long-running agent operations (e.g., OpenAI API calls)
+    healthServer:
+      port: 8081
+    # Readiness probe: checks if heartbeat is recent (agent making progress)
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    # Liveness probe: always returns 200 if process is alive
+    # Uses dedicated health server so it won't be blocked by long operations
     livenessProbe:
       enabled: true
-      path: /health
       initialDelaySeconds: 20
       periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
     pdb:
       enabled: true
       minAvailable: 1
