@@ -2,12 +2,15 @@
 """
 RAPTOR Knowledge Base API Server
 
-Provides REST API endpoints for querying RAPTOR trees.
+Provides REST API endpoints for querying RAPTOR trees with dynamic multi-tenant
+support. Trees are loaded on-demand from S3 with LRU caching for memory efficiency.
 
 Endpoints:
-- GET  /health                    - Health check
+- GET  /health                    - Health check with cache info
+- GET  /api/v1/cache/stats        - Detailed cache statistics
 - GET  /api/v1/trees              - List available trees
 - POST /api/v1/search             - Search across trees
+- POST /api/v1/federated/search   - Search across multiple trees
 - POST /api/v1/answer             - Answer question using RAPTOR
 - POST /api/v1/retrieve           - Retrieve relevant chunks only
 - POST /api/v1/tree/documents     - Incrementally add documents to a tree
@@ -17,14 +20,28 @@ Environment Variables:
 - RAPTOR_DEFAULT_TREE: Default tree to use (default: k8s)
 - OPENAI_API_KEY: Required for QA and embedding models
 - PORT: Server port (default: 8000)
+
+S3 Lazy Loading (for dynamic multi-tenant):
+- S3_LAZY_LOAD_ENABLED: Enable S3 lazy loading (default: true)
+- S3_TREES_BUCKET: S3 bucket for trees (default: raptor-kb-trees-103002841599)
+- S3_TREES_PREFIX: Prefix in bucket (default: trees)
+- AWS_REGION: AWS region (default: us-west-2)
+
+LRU Cache Management:
+- MAX_TREE_CACHE_SIZE_GB: Max total cache size in GB (default: 16)
+- MAX_CACHED_TREES: Max number of trees in memory (default: 5)
 """
 
 import logging
 import os
 import pickle
+import sys
+import threading
+import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -43,8 +60,165 @@ logger = logging.getLogger(__name__)
 TREES_DIR = Path(os.getenv("RAPTOR_TREES_DIR", "./trees"))
 DEFAULT_TREE = os.getenv("RAPTOR_DEFAULT_TREE", "k8s")
 
-# Global tree cache
-_tree_cache: Dict[str, RetrievalAugmentation] = {}
+# S3 Configuration for lazy tree loading
+S3_TREES_BUCKET = os.getenv("S3_TREES_BUCKET", "raptor-kb-trees-103002841599")
+S3_TREES_PREFIX = os.getenv("S3_TREES_PREFIX", "trees")
+S3_ENABLED = os.getenv("S3_LAZY_LOAD_ENABLED", "true").lower() in ("true", "1", "yes")
+AWS_REGION = os.getenv("AWS_REGION", "us-west-2")
+
+# LRU Cache Configuration
+MAX_CACHE_SIZE_GB = float(os.getenv("MAX_TREE_CACHE_SIZE_GB", "16"))
+MAX_CACHED_TREES = int(os.getenv("MAX_CACHED_TREES", "5"))
+
+# Global tree cache with LRU ordering and size tracking
+_tree_cache: OrderedDict[str, RetrievalAugmentation] = OrderedDict()
+_tree_sizes: Dict[str, int] = {}  # tree_name -> size in bytes
+_cache_lock = threading.Lock()
+_download_locks: Dict[str, threading.Lock] = {}  # Prevent concurrent downloads of same tree
+
+
+def _get_download_lock(tree_name: str) -> threading.Lock:
+    """Get or create a lock for downloading a specific tree."""
+    if tree_name not in _download_locks:
+        _download_locks[tree_name] = threading.Lock()
+    return _download_locks[tree_name]
+
+
+def _download_tree_from_s3(tree_name: str) -> Path:
+    """
+    Download a tree from S3 to local storage.
+
+    Args:
+        tree_name: Name of the tree to download
+
+    Returns:
+        Path to the downloaded file
+
+    Raises:
+        FileNotFoundError: If tree doesn't exist in S3
+        RuntimeError: If download fails
+    """
+    if not S3_ENABLED:
+        raise FileNotFoundError(f"S3 lazy loading disabled, tree not found: {tree_name}")
+
+    try:
+        import boto3
+        from botocore.exceptions import ClientError
+    except ImportError:
+        raise RuntimeError("boto3 not installed, cannot download from S3")
+
+    # Ensure trees directory exists
+    TREES_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Construct S3 key - try multiple patterns
+    # Pattern 1: trees/{tree_name}/{tree_name}.pkl
+    # Pattern 2: trees/{tree_name}.pkl
+    s3_keys_to_try = [
+        f"{S3_TREES_PREFIX}/{tree_name}/{tree_name}.pkl",
+        f"{S3_TREES_PREFIX}/{tree_name}.pkl",
+    ]
+
+    local_path = TREES_DIR / f"{tree_name}.pkl"
+
+    # Use a lock to prevent concurrent downloads of the same tree
+    download_lock = _get_download_lock(tree_name)
+    with download_lock:
+        # Check again if file exists (another thread may have downloaded it)
+        if local_path.exists():
+            logger.info(f"Tree already downloaded by another thread: {tree_name}")
+            return local_path
+
+        s3_client = boto3.client("s3", region_name=AWS_REGION)
+
+        for s3_key in s3_keys_to_try:
+            try:
+                logger.info(f"Attempting to download tree from s3://{S3_TREES_BUCKET}/{s3_key}")
+
+                # Get file size first
+                head_response = s3_client.head_object(Bucket=S3_TREES_BUCKET, Key=s3_key)
+                file_size = head_response["ContentLength"]
+                file_size_gb = file_size / (1024**3)
+
+                logger.info(f"Tree {tree_name} size: {file_size_gb:.2f} GB")
+
+                # Download with progress logging
+                temp_path = local_path.with_suffix(".downloading")
+                start_time = time.time()
+
+                s3_client.download_file(S3_TREES_BUCKET, s3_key, str(temp_path))
+
+                # Rename to final path (atomic on most filesystems)
+                temp_path.rename(local_path)
+
+                download_time = time.time() - start_time
+                speed_mbps = (file_size / (1024**2)) / download_time if download_time > 0 else 0
+
+                logger.info(
+                    f"Downloaded tree {tree_name}: {file_size_gb:.2f} GB in {download_time:.1f}s "
+                    f"({speed_mbps:.1f} MB/s)"
+                )
+
+                return local_path
+
+            except ClientError as e:
+                if e.response["Error"]["Code"] == "404":
+                    logger.debug(f"Tree not found at {s3_key}, trying next pattern")
+                    continue
+                raise RuntimeError(f"S3 error downloading {tree_name}: {e}")
+
+        # None of the patterns worked
+        raise FileNotFoundError(
+            f"Tree '{tree_name}' not found in S3 bucket {S3_TREES_BUCKET}. "
+            f"Tried: {s3_keys_to_try}"
+        )
+
+
+def _estimate_tree_memory_size(tree: Tree) -> int:
+    """Estimate memory size of a loaded tree in bytes."""
+    try:
+        return sys.getsizeof(pickle.dumps(tree))
+    except Exception:
+        # Fallback: estimate based on node count
+        # Assume ~10KB per node (embedding + text + metadata)
+        return len(tree.all_nodes) * 10 * 1024
+
+
+def _get_total_cache_size() -> int:
+    """Get total size of cached trees in bytes."""
+    return sum(_tree_sizes.values())
+
+
+def _evict_lru_trees_if_needed(new_tree_size: int) -> None:
+    """
+    Evict least recently used trees if adding new tree would exceed limits.
+
+    Eviction triggers:
+    1. Total cache size would exceed MAX_CACHE_SIZE_GB
+    2. Number of cached trees would exceed MAX_CACHED_TREES
+    """
+    max_cache_bytes = int(MAX_CACHE_SIZE_GB * 1024**3)
+
+    with _cache_lock:
+        # Check tree count limit
+        while len(_tree_cache) >= MAX_CACHED_TREES:
+            if not _tree_cache:
+                break
+            oldest_tree = next(iter(_tree_cache))
+            logger.info(f"Evicting tree {oldest_tree} (max trees limit: {MAX_CACHED_TREES})")
+            del _tree_cache[oldest_tree]
+            _tree_sizes.pop(oldest_tree, None)
+
+        # Check memory limit
+        while _get_total_cache_size() + new_tree_size > max_cache_bytes:
+            if not _tree_cache:
+                break
+            oldest_tree = next(iter(_tree_cache))
+            logger.info(
+                f"Evicting tree {oldest_tree} (memory limit: {MAX_CACHE_SIZE_GB} GB, "
+                f"current: {_get_total_cache_size() / 1024**3:.2f} GB)"
+            )
+            del _tree_cache[oldest_tree]
+            _tree_sizes.pop(oldest_tree, None)
 
 
 def _detect_embedding_info(tree: Tree) -> tuple[str, int]:
@@ -80,39 +254,52 @@ def _get_embedding_model_for_dim(dim: int) -> OpenAIEmbeddingModel:
 
 
 def load_tree(tree_name: str) -> RetrievalAugmentation:
-    """Load a RAPTOR tree from disk, with caching."""
-    if tree_name in _tree_cache:
-        return _tree_cache[tree_name]
+    """
+    Load a RAPTOR tree with caching and lazy S3 loading.
 
-    # Try direct pkl file first: trees/tree_name.pkl
-    tree_path = TREES_DIR / f"{tree_name}.pkl"
-    if not tree_path.exists():
-        # Try as directory with pkl inside: trees/tree_name/tree_name.pkl
-        tree_dir = TREES_DIR / tree_name
-        if tree_dir.is_dir():
-            tree_path = tree_dir / f"{tree_name}.pkl"
-            if not tree_path.exists():
-                # Also try any .pkl file in the directory
-                pkl_files = list(tree_dir.glob("*.pkl"))
-                if pkl_files:
-                    tree_path = pkl_files[0]
-                else:
-                    raise FileNotFoundError(f"No .pkl file found in {tree_dir}")
-        elif not tree_dir.exists():
-            raise FileNotFoundError(f"Tree not found: {tree_name}")
+    Load order:
+    1. Check in-memory cache (LRU)
+    2. Check local disk
+    3. Download from S3 (if enabled)
 
-    logger.info(f"Loading tree: {tree_path}")
+    The cache implements LRU eviction based on:
+    - MAX_CACHED_TREES: Maximum number of trees in memory
+    - MAX_CACHE_SIZE_GB: Maximum total memory usage
+    """
+    # 1. Check cache first (move to end for LRU ordering)
+    with _cache_lock:
+        if tree_name in _tree_cache:
+            # Move to end (most recently used)
+            _tree_cache.move_to_end(tree_name)
+            logger.debug(f"Cache hit for tree: {tree_name}")
+            return _tree_cache[tree_name]
 
-    # Load the tree pickle first to detect the embedding key and dimension
+    # 2. Try to find file locally
+    tree_path = _find_local_tree_path(tree_name)
+
+    # 3. If not found locally, try S3
+    if tree_path is None:
+        logger.info(f"Tree {tree_name} not found locally, attempting S3 download")
+        tree_path = _download_tree_from_s3(tree_name)
+
+    logger.info(f"Loading tree from: {tree_path}")
+
+    # Load the tree pickle
     with open(tree_path, "rb") as f:
         tree = pickle.load(f)
 
+    # Estimate memory size for LRU management
+    tree_size = _estimate_tree_memory_size(tree)
+    logger.info(f"Tree {tree_name} estimated memory: {tree_size / 1024**3:.2f} GB")
+
+    # Evict old trees if needed before adding new one
+    _evict_lru_trees_if_needed(tree_size)
+
+    # Detect embedding configuration
     embedding_key, embedding_dim = _detect_embedding_info(tree)
     logger.info(f"Detected embedding key: {embedding_key}, dimension: {embedding_dim}")
 
     # Create config with the correct embedding key and model
-    # IMPORTANT: Both retriever AND builder must use the same embedding key
-    # to ensure new nodes have embeddings under the same key as existing nodes.
     embedding_model = _get_embedding_model_for_dim(embedding_dim)
     config = RetrievalAugmentationConfig(
         tr_context_embedding_model=embedding_key,
@@ -122,9 +309,44 @@ def load_tree(tree_name: str) -> RetrievalAugmentation:
     )
 
     ra = RetrievalAugmentation(config=config, tree=tree)
-    _tree_cache[tree_name] = ra
-    logger.info(f"Tree loaded: {tree_name}")
+
+    # Add to cache with LRU tracking
+    with _cache_lock:
+        _tree_cache[tree_name] = ra
+        _tree_sizes[tree_name] = tree_size
+
+    logger.info(
+        f"Tree loaded: {tree_name} "
+        f"(cache: {len(_tree_cache)} trees, {_get_total_cache_size() / 1024**3:.2f} GB)"
+    )
     return ra
+
+
+def _find_local_tree_path(tree_name: str) -> Optional[Path]:
+    """
+    Find a tree file on local disk.
+
+    Returns:
+        Path to the tree file, or None if not found
+    """
+    # Try direct pkl file first: trees/tree_name.pkl
+    tree_path = TREES_DIR / f"{tree_name}.pkl"
+    if tree_path.exists():
+        return tree_path
+
+    # Try as directory with pkl inside: trees/tree_name/tree_name.pkl
+    tree_dir = TREES_DIR / tree_name
+    if tree_dir.is_dir():
+        tree_path = tree_dir / f"{tree_name}.pkl"
+        if tree_path.exists():
+            return tree_path
+
+        # Also try any .pkl file in the directory
+        pkl_files = list(tree_dir.glob("*.pkl"))
+        if pkl_files:
+            return pkl_files[0]
+
+    return None
 
 
 def list_available_trees() -> List[str]:
@@ -142,18 +364,33 @@ def list_available_trees() -> List[str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown lifecycle."""
-    # Preload default tree if it exists
-    try:
-        if DEFAULT_TREE and (TREES_DIR / f"{DEFAULT_TREE}.pkl").exists():
+    # Ensure trees directory exists
+    TREES_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Log configuration
+    logger.info(
+        f"Knowledge Base starting: "
+        f"trees_dir={TREES_DIR}, default_tree={DEFAULT_TREE}, "
+        f"s3_enabled={S3_ENABLED}, s3_bucket={S3_TREES_BUCKET}, "
+        f"max_cache_gb={MAX_CACHE_SIZE_GB}, max_trees={MAX_CACHED_TREES}"
+    )
+
+    # Preload default tree (will download from S3 if not local)
+    if DEFAULT_TREE:
+        try:
             load_tree(DEFAULT_TREE)
             logger.info(f"Preloaded default tree: {DEFAULT_TREE}")
-    except Exception as e:
-        logger.warning(f"Could not preload default tree: {e}")
+        except FileNotFoundError as e:
+            logger.warning(f"Default tree not available: {e}")
+        except Exception as e:
+            logger.warning(f"Could not preload default tree: {e}")
 
     yield
 
     # Cleanup
-    _tree_cache.clear()
+    with _cache_lock:
+        _tree_cache.clear()
+        _tree_sizes.clear()
 
 
 app = FastAPI(
@@ -397,11 +634,49 @@ class DeleteTreeRequest(BaseModel):
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
+    with _cache_lock:
+        loaded_trees = list(_tree_cache.keys())
+        cache_size_gb = _get_total_cache_size() / 1024**3
+
     return {
         "status": "healthy",
         "trees_dir": str(TREES_DIR),
-        "trees_loaded": list(_tree_cache.keys()),
+        "trees_loaded": loaded_trees,
+        "cache_size_gb": round(cache_size_gb, 2),
         "available_trees": list_available_trees(),
+        "s3_enabled": S3_ENABLED,
+        "s3_bucket": S3_TREES_BUCKET if S3_ENABLED else None,
+    }
+
+
+@app.get("/api/v1/cache/stats")
+async def get_cache_stats():
+    """
+    Get detailed cache statistics.
+
+    Useful for monitoring memory usage and understanding cache behavior.
+    """
+    with _cache_lock:
+        tree_details = []
+        for tree_name in _tree_cache:
+            size_bytes = _tree_sizes.get(tree_name, 0)
+            tree_details.append({
+                "name": tree_name,
+                "size_gb": round(size_bytes / 1024**3, 3),
+                "size_bytes": size_bytes,
+            })
+
+        total_size = _get_total_cache_size()
+
+    return {
+        "trees_cached": len(tree_details),
+        "max_trees": MAX_CACHED_TREES,
+        "total_size_gb": round(total_size / 1024**3, 3),
+        "max_size_gb": MAX_CACHE_SIZE_GB,
+        "utilization_percent": round((total_size / (MAX_CACHE_SIZE_GB * 1024**3)) * 100, 1),
+        "trees": tree_details,
+        "s3_enabled": S3_ENABLED,
+        "s3_bucket": S3_TREES_BUCKET,
     }
 
 
