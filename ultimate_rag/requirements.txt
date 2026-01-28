@@ -6,6 +6,7 @@ numpy==1.26.3
 scikit-learn
 torch
 transformers==4.48.0
+umap-learn==0.5.5  # Required for RAPTOR tree pickle deserialization
 
 # NLP/Embeddings
 sentence-transformers==2.2.2
