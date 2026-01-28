@@ -66,7 +66,7 @@ class RaptorBridge:
         self._raptor_trees[tree_name] = raptor_tree
 
         # Create KnowledgeTree
-        knowledge_tree = KnowledgeTree(name=tree_name)
+        knowledge_tree = KnowledgeTree(tree_id=tree_name, name=tree_name)
 
         # Track layer info for importance scoring
         max_layer = raptor_tree.num_layers
