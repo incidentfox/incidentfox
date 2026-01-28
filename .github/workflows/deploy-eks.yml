@@ -18,6 +18,7 @@ on:
           - config-service
           - knowledge-base
           - orchestrator
+          - ultimate-rag
           - web-ui
       skip_deploy:
         description: 'Skip Helm deployment (build & push only)'
@@ -40,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [agent, ai-pipeline, config-service, knowledge-base, orchestrator, web-ui]
+        service: [agent, ai-pipeline, config-service, knowledge-base, orchestrator, ultimate-rag, web-ui]
         include:
           - service: agent
             context: ./agent
@@ -62,6 +63,10 @@ jobs:
             context: ./orchestrator
             dockerfile: ./orchestrator/Dockerfile
             image: incidentfox-orchestrator
+          - service: ultimate-rag
+            context: .
+            dockerfile: ./ultimate_rag/Dockerfile
+            image: incidentfox-ultimate-rag
           - service: web-ui
             context: ./web_ui
             dockerfile: ./web_ui/Dockerfile
@@ -208,6 +213,7 @@ jobs:
         run: |
           # Force pods to pull new images
           # Note: ai-pipeline is a CronJob, not a Deployment, so skip rollout restart
+          # Note: ultimate-rag may not be deployed yet (disabled by default)
           if [ "${{ github.event.inputs.services }}" = "all" ]; then
             kubectl rollout restart deployment/incidentfox-agent \
               deployment/incidentfox-config-service \
@@ -215,6 +221,8 @@ jobs:
               deployment/incidentfox-orchestrator \
               deployment/incidentfox-web-ui \
               -n ${{ env.HELM_NAMESPACE }}
+            # Optional: restart ultimate-rag if deployed
+            kubectl rollout restart deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} 2>/dev/null || true
           elif [ "${{ github.event.inputs.services }}" = "ai-pipeline" ]; then
             echo "ai-pipeline is a CronJob - no rollout restart needed"
           else
@@ -230,6 +238,8 @@ jobs:
             kubectl rollout status deployment/incidentfox-knowledge-base -n ${{ env.HELM_NAMESPACE }} --timeout=10m
             kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=10m
             kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=10m
+            # Optional: wait for ultimate-rag if deployed
+            kubectl rollout status deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} --timeout=10m 2>/dev/null || true
           elif [ "${{ github.event.inputs.services }}" = "ai-pipeline" ]; then
             echo "ai-pipeline is a CronJob - no rollout status needed"
           else

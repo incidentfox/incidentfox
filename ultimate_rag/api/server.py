@@ -10,8 +10,10 @@ FastAPI server that exposes all Ultimate RAG capabilities:
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
@@ -19,6 +21,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+# Environment configuration
+RAPTOR_TREES_DIR = os.environ.get("RAPTOR_TREES_DIR", "/app/trees")
+RAPTOR_DEFAULT_TREE = os.environ.get("RAPTOR_DEFAULT_TREE", "mega_ultra_v2")
 
 
 # ==================== Request/Response Models ====================
@@ -85,9 +91,7 @@ class TeachRequest(BaseModel):
     knowledge_type: Optional[str] = Field(None, description="Type of knowledge")
     source: Optional[str] = Field(None, description="Source of the knowledge")
     entities: Optional[List[str]] = Field(None, description="Related entities")
-    importance: Optional[float] = Field(
-        None, ge=0, le=1, description="Importance score"
-    )
+    importance: Optional[float] = Field(None, ge=0, le=1, description="Importance score")
 
 
 class TeachResponse(BaseModel):
@@ -259,9 +263,7 @@ class V1TeachRequest(BaseModel):
     knowledge_type: str = Field("procedural", description="Type of knowledge")
     source: str = Field("agent_learning", description="Source")
     confidence: float = Field(0.7, description="Confidence score")
-    related_entities: List[str] = Field(
-        default_factory=list, description="Related services"
-    )
+    related_entities: List[str] = Field(default_factory=list, description="Related services")
     learned_from: str = Field("agent_investigation", description="Learning context")
     task_context: str = Field("", description="Task context")
 
@@ -354,6 +356,98 @@ class V1TreeStatsResponse(BaseModel):
     layer_counts: Dict[int, int]
 
 
+class V1GraphNode(BaseModel):
+    """Node for tree visualization."""
+
+    id: str
+    label: str
+    layer: int
+    text_preview: str
+    has_children: bool
+    children_count: int
+    source_url: Optional[str] = None
+    is_root: bool = False
+
+
+class V1GraphEdge(BaseModel):
+    """Edge for tree visualization."""
+
+    source: str
+    target: str
+
+
+class V1TreeStructureResponse(BaseModel):
+    """v1 API tree structure response."""
+
+    tree: str
+    nodes: List[V1GraphNode]
+    edges: List[V1GraphEdge]
+    total_nodes: int
+    layers_included: int
+
+
+class V1NodeChildrenResponse(BaseModel):
+    """v1 API node children response."""
+
+    node_id: str
+    children: List[V1GraphNode]
+    edges: List[V1GraphEdge]
+
+
+class V1NodeTextResponse(BaseModel):
+    """v1 API node text response."""
+
+    node_id: str
+    text: str
+    layer: int
+    is_leaf: bool
+    children_count: int
+    source_url: Optional[str] = None
+
+
+class V1SearchNodesRequest(BaseModel):
+    """v1 API search nodes request."""
+
+    query: str = Field(..., description="Search query for node content")
+    tree: Optional[str] = Field(None, description="Tree name")
+    limit: int = Field(50, description="Max nodes to return")
+
+
+class V1SearchNodesResult(BaseModel):
+    """v1 API search nodes result."""
+
+    id: str
+    label: str
+    layer: int
+    text_preview: str
+    score: float
+    source_url: Optional[str] = None
+
+
+class V1SearchNodesResponse(BaseModel):
+    """v1 API search nodes response."""
+
+    tree: str
+    query: str
+    results: List[V1SearchNodesResult]
+    total_results: int
+
+
+class V1AddDocumentsRequest(BaseModel):
+    """v1 API add documents request."""
+
+    content: str = Field(..., description="Content to add")
+    tree: Optional[str] = Field(None, description="Tree name")
+
+
+class V1AddDocumentsResponse(BaseModel):
+    """v1 API add documents response."""
+
+    tree: str
+    message: str
+    chunks_added: int
+
+
 # ==================== API Server ====================
 
 
@@ -385,9 +479,16 @@ class UltimateRAGServer:
     async def initialize(
         self,
         tree_path: Optional[str] = None,
+        trees_dir: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
     ):
-        """Initialize all components."""
+        """Initialize all components.
+
+        Args:
+            tree_path: Path to a single tree pickle file to load
+            trees_dir: Directory containing multiple tree pickle files
+            config: Optional configuration dict
+        """
         from ..agents.maintenance import MaintenanceAgent
         from ..agents.observations import ObservationCollector
         from ..agents.teaching import TeachingInterface
@@ -401,7 +502,28 @@ class UltimateRAGServer:
         # Initialize forest
         self.forest = TreeForest()
 
-        # Load existing tree if provided
+        # Determine trees directory from parameter or environment
+        effective_trees_dir = trees_dir or RAPTOR_TREES_DIR
+
+        # Load trees from directory if it exists and has pickle files
+        trees_path = Path(effective_trees_dir)
+        if trees_path.exists() and trees_path.is_dir():
+            pkl_files = list(trees_path.glob("*.pkl"))
+            if pkl_files:
+                from ..raptor.bridge import import_raptor_tree
+
+                logger.info(f"Loading {len(pkl_files)} trees from {effective_trees_dir}")
+                for pkl_file in pkl_files:
+                    try:
+                        tree_name = pkl_file.stem
+                        tree = import_raptor_tree(str(pkl_file), tree_name=tree_name)
+                        tree.tree_id = tree_name
+                        self.forest.add_tree(tree)
+                        logger.info(f"Loaded tree '{tree_name}' from {pkl_file}")
+                    except Exception as e:
+                        logger.error(f"Failed to load tree from {pkl_file}: {e}")
+
+        # Load single tree if provided (takes precedence for 'main')
         if tree_path:
             from ..raptor.bridge import import_raptor_tree
 
@@ -412,6 +534,8 @@ class UltimateRAGServer:
                 logger.info(f"Loaded tree from {tree_path}")
             except Exception as e:
                 logger.error(f"Failed to load tree: {e}")
+
+        logger.info(f"Forest initialized with {len(self.forest.trees)} trees: {list(self.forest.trees.keys())}")
 
         # Initialize graph
         self.graph = KnowledgeGraph()
@@ -725,9 +849,7 @@ class UltimateRAGServer:
                     )
 
                     # Get relationships
-                    for rel in self.graph.get_relationships_for_entity(
-                        request.entity_id
-                    ):
+                    for rel in self.graph.get_relationships_for_entity(request.entity_id):
                         relationships.append(
                             GraphRelationship(
                                 source_id=rel.source_id,
@@ -813,9 +935,7 @@ class UltimateRAGServer:
                 stats=stats,
             )
 
-        @app.post(
-            "/maintenance/run", response_model=MaintenanceResponse, tags=["Admin"]
-        )
+        @app.post("/maintenance/run", response_model=MaintenanceResponse, tags=["Admin"])
         async def run_maintenance():
             """Run a maintenance cycle."""
             if not self.maintenance:
@@ -862,9 +982,7 @@ class UltimateRAGServer:
                 "loaded": trees,
             }
 
-        @app.post(
-            "/api/v1/trees", response_model=V1CreateTreeResponse, tags=["v1-compat"]
-        )
+        @app.post("/api/v1/trees", response_model=V1CreateTreeResponse, tags=["v1-compat"])
         async def v1_create_tree(request: V1CreateTreeRequest):
             """
             Create a new empty knowledge tree (v1 compatible).
@@ -913,13 +1031,9 @@ class UltimateRAGServer:
 
             except Exception as e:
                 logger.error(f"Error creating tree: {e}")
-                raise HTTPException(
-                    status_code=500, detail=f"Failed to create tree: {e}"
-                )
+                raise HTTPException(status_code=500, detail=f"Failed to create tree: {e}")
 
-        @app.get(
-            "/api/v1/tree/stats", response_model=V1TreeStatsResponse, tags=["v1-compat"]
-        )
+        @app.get("/api/v1/tree/stats", response_model=V1TreeStatsResponse, tags=["v1-compat"])
         async def v1_tree_stats(tree: Optional[str] = None):
             """
             Get statistics about a knowledge tree (v1 compatible).
@@ -966,9 +1080,246 @@ class UltimateRAGServer:
 
             except Exception as e:
                 logger.error(f"Error getting tree stats: {e}")
-                raise HTTPException(
-                    status_code=500, detail=f"Failed to get tree stats: {e}"
+                raise HTTPException(status_code=500, detail=f"Failed to get tree stats: {e}")
+
+        def _node_to_graph_node(node, node_id: int, layer: int) -> V1GraphNode:
+            """Convert a KnowledgeNode to V1GraphNode."""
+            text = getattr(node, "text", "") or ""
+            children = getattr(node, "children", set()) or set()
+            source_url = None
+            if hasattr(node, "metadata") and node.metadata:
+                source_url = node.metadata.get("source_url")
+
+            return V1GraphNode(
+                id=str(node_id),
+                label=text[:100] + "..." if len(text) > 100 else text,
+                layer=layer,
+                text_preview=text[:200] + "..." if len(text) > 200 else text,
+                has_children=len(children) > 0,
+                children_count=len(children),
+                source_url=source_url,
+                is_root=layer > 0 and len(children) > 0,
+            )
+
+        @app.get(
+            "/api/v1/tree/structure",
+            response_model=V1TreeStructureResponse,
+            tags=["v1-compat"],
+        )
+        async def v1_tree_structure(
+            tree: Optional[str] = None,
+            max_layers: int = 3,
+            max_nodes_per_layer: int = 200,
+        ):
+            """Get tree structure for visualization (v1 compatible)."""
+            if not self.forest:
+                raise HTTPException(503, "Server not initialized")
+
+            tree_name = tree or "main"
+            knowledge_tree = self.forest.get_tree(tree_name)
+
+            if not knowledge_tree:
+                raise HTTPException(404, f"Tree '{tree_name}' not found")
+
+            # Handle empty trees
+            if not knowledge_tree.all_nodes:
+                return V1TreeStructureResponse(
+                    tree=tree_name,
+                    nodes=[],
+                    edges=[],
+                    total_nodes=0,
+                    layers_included=0,
                 )
+
+            graph_nodes: List[V1GraphNode] = []
+            graph_edges: List[V1GraphEdge] = []
+            included_node_ids = set()
+
+            max_layer = knowledge_tree.num_layers or 0
+            if knowledge_tree.layer_to_nodes:
+                max_layer = max(knowledge_tree.layer_to_nodes.keys())
+
+            # Build nodes from top layers down
+            layers_included = 0
+            if knowledge_tree.layer_to_nodes:
+                for layer in range(max_layer, max(max_layer - max_layers, -1), -1):
+                    layer_nodes = knowledge_tree.layer_to_nodes.get(layer, [])
+                    if layer_nodes:
+                        layers_included += 1
+
+                    for node in layer_nodes[:max_nodes_per_layer]:
+                        node_id = getattr(node, "index", id(node))
+                        graph_nodes.append(_node_to_graph_node(node, node_id, layer))
+                        included_node_ids.add(node_id)
+
+                        # Add edges to children
+                        children = getattr(node, "children", set()) or set()
+                        for child_ref in children:
+                            if isinstance(child_ref, int):
+                                child_id = child_ref
+                            else:
+                                child_id = getattr(child_ref, "index", id(child_ref))
+
+                            if child_id in included_node_ids:
+                                graph_edges.append(
+                                    V1GraphEdge(source=str(node_id), target=str(child_id))
+                                )
+
+            return V1TreeStructureResponse(
+                tree=tree_name,
+                nodes=graph_nodes,
+                edges=graph_edges,
+                total_nodes=len(knowledge_tree.all_nodes),
+                layers_included=layers_included,
+            )
+
+        @app.get(
+            "/api/v1/tree/nodes/{node_id}/children",
+            response_model=V1NodeChildrenResponse,
+            tags=["v1-compat"],
+        )
+        async def v1_node_children(node_id: str, tree: Optional[str] = None):
+            """Get children of a node (v1 compatible)."""
+            if not self.forest:
+                raise HTTPException(503, "Server not initialized")
+
+            tree_name = tree or "main"
+            knowledge_tree = self.forest.get_tree(tree_name)
+
+            if not knowledge_tree:
+                raise HTTPException(404, f"Tree '{tree_name}' not found")
+
+            node = knowledge_tree.all_nodes.get(int(node_id))
+            if not node:
+                raise HTTPException(404, f"Node '{node_id}' not found")
+
+            children_nodes: List[V1GraphNode] = []
+            edges: List[V1GraphEdge] = []
+
+            children = getattr(node, "children", set()) or set()
+            for child_ref in children:
+                if isinstance(child_ref, int):
+                    child_id = child_ref
+                    child_node = knowledge_tree.all_nodes.get(child_id)
+                else:
+                    child_id = getattr(child_ref, "index", id(child_ref))
+                    child_node = child_ref
+
+                if child_node:
+                    child_layer = getattr(child_node, "layer", 0)
+                    children_nodes.append(_node_to_graph_node(child_node, child_id, child_layer))
+                    edges.append(V1GraphEdge(source=node_id, target=str(child_id)))
+
+            return V1NodeChildrenResponse(node_id=node_id, children=children_nodes, edges=edges)
+
+        @app.get(
+            "/api/v1/tree/nodes/{node_id}/text",
+            response_model=V1NodeTextResponse,
+            tags=["v1-compat"],
+        )
+        async def v1_node_text(node_id: str, tree: Optional[str] = None):
+            """Get full text of a node (v1 compatible)."""
+            if not self.forest:
+                raise HTTPException(503, "Server not initialized")
+
+            tree_name = tree or "main"
+            knowledge_tree = self.forest.get_tree(tree_name)
+
+            if not knowledge_tree:
+                raise HTTPException(404, f"Tree '{tree_name}' not found")
+
+            node = knowledge_tree.all_nodes.get(int(node_id))
+            if not node:
+                raise HTTPException(404, f"Node '{node_id}' not found")
+
+            text = getattr(node, "text", "") or ""
+            layer = getattr(node, "layer", 0)
+            children = getattr(node, "children", set()) or set()
+            source_url = None
+            if hasattr(node, "metadata") and node.metadata:
+                source_url = node.metadata.get("source_url")
+
+            return V1NodeTextResponse(
+                node_id=node_id,
+                text=text,
+                layer=layer,
+                is_leaf=layer == 0,
+                children_count=len(children),
+                source_url=source_url,
+            )
+
+        @app.post(
+            "/api/v1/tree/search-nodes",
+            response_model=V1SearchNodesResponse,
+            tags=["v1-compat"],
+        )
+        async def v1_search_nodes(request: V1SearchNodesRequest):
+            """Search for nodes by content (v1 compatible)."""
+            if not self.forest:
+                raise HTTPException(503, "Server not initialized")
+
+            tree_name = request.tree or "main"
+            knowledge_tree = self.forest.get_tree(tree_name)
+
+            if not knowledge_tree:
+                raise HTTPException(404, f"Tree '{tree_name}' not found")
+
+            # Simple text search through nodes
+            results: List[V1SearchNodesResult] = []
+            query_lower = request.query.lower()
+
+            for node_id, node in knowledge_tree.all_nodes.items():
+                text = getattr(node, "text", "") or ""
+                if query_lower in text.lower():
+                    layer = getattr(node, "layer", 0)
+                    source_url = None
+                    if hasattr(node, "metadata") and node.metadata:
+                        source_url = node.metadata.get("source_url")
+
+                    results.append(
+                        V1SearchNodesResult(
+                            id=str(node_id),
+                            label=text[:100] + "..." if len(text) > 100 else text,
+                            layer=layer,
+                            text_preview=text[:200] + "..." if len(text) > 200 else text,
+                            score=1.0,  # Simple match
+                            source_url=source_url,
+                        )
+                    )
+
+                    if len(results) >= request.limit:
+                        break
+
+            return V1SearchNodesResponse(
+                tree=tree_name,
+                query=request.query,
+                results=results,
+                total_results=len(results),
+            )
+
+        @app.post(
+            "/api/v1/tree/documents",
+            response_model=V1AddDocumentsResponse,
+            tags=["v1-compat"],
+        )
+        async def v1_add_documents(request: V1AddDocumentsRequest):
+            """Add documents to a tree (v1 compatible)."""
+            if not self.forest:
+                raise HTTPException(503, "Server not initialized")
+
+            tree_name = request.tree or "main"
+            knowledge_tree = self.forest.get_tree(tree_name)
+
+            if not knowledge_tree:
+                raise HTTPException(404, f"Tree '{tree_name}' not found")
+
+            # For now, return a stub response - actual document processing
+            # would require the ingestion pipeline
+            return V1AddDocumentsResponse(
+                tree=tree_name,
+                message="Document ingestion via this endpoint is not yet implemented in ultimate_rag. Use the /ingest endpoint instead.",
+                chunks_added=0,
+            )
 
         @app.post("/api/v1/search", response_model=V1SearchResponse, tags=["v1-compat"])
         async def v1_search(request: V1SearchRequest):
@@ -1055,9 +1406,7 @@ class UltimateRAGServer:
                 raise HTTPException(503, "Server not initialized")
 
             try:
-                services = (
-                    [request.affected_service] if request.affected_service else None
-                )
+                services = [request.affected_service] if request.affected_service else None
 
                 result = await self.retriever.retrieve_for_incident(
                     symptoms=request.symptoms,
@@ -1145,15 +1494,11 @@ class UltimateRAGServer:
                         break
 
                 if not entity:
-                    result.hint = (
-                        f"Entity '{request.entity_name}' not found in knowledge graph"
-                    )
+                    result.hint = f"Entity '{request.entity_name}' not found in knowledge graph"
                     return result
 
                 # Get relationships based on query type
-                relationships = self.graph.get_relationships_for_entity(
-                    entity.entity_id
-                )
+                relationships = self.graph.get_relationships_for_entity(entity.entity_id)
 
                 if request.query_type == "dependencies":
                     deps = [
@@ -1266,9 +1611,7 @@ class UltimateRAGServer:
                     "temporal": KnowledgeType.TEMPORAL,
                     "relational": KnowledgeType.RELATIONAL,
                 }
-                knowledge_type = type_map.get(
-                    request.knowledge_type, KnowledgeType.PROCEDURAL
-                )
+                knowledge_type = type_map.get(request.knowledge_type, KnowledgeType.PROCEDURAL)
 
                 result = await self.teaching.teach(
                     knowledge=request.content,
@@ -1291,9 +1634,7 @@ class UltimateRAGServer:
                 elif status == "pending_review":
                     message = "Knowledge queued for human review before adding."
                 elif status == "contradiction":
-                    message = (
-                        "This may contradict existing knowledge. Queued for review."
-                    )
+                    message = "This may contradict existing knowledge. Queued for review."
 
                 return V1TeachResponse(
                     status=status,
@@ -1340,10 +1681,7 @@ class UltimateRAGServer:
 
                     metadata = chunk.metadata
                     # Only include if it looks like an incident
-                    if (
-                        metadata.get("category") == "incident"
-                        or "incident" in chunk.text.lower()
-                    ):
+                    if metadata.get("category") == "incident" or "incident" in chunk.text.lower():
                         similar.append(
                             V1SimilarIncident(
                                 incident_id=metadata.get("incident_id"),
@@ -1358,9 +1696,7 @@ class UltimateRAGServer:
 
                 hint = None
                 if not similar:
-                    hint = (
-                        "No similar past incidents found. This may be a new issue type."
-                    )
+                    hint = "No similar past incidents found. This may be a new issue type."
 
                 return V1SimilarIncidentsResponse(
                     ok=True,
