@@ -400,6 +400,7 @@ class SlackUpdateState:
     channel_id: str
     message_ts: str
     thread_ts: str | None = None
+    run_id: str | None = None  # Agent run ID for fetching tool calls
 
     # Phase status tracking (category -> status)
     phase_status: dict[str, str] = field(default_factory=dict)
@@ -753,6 +754,7 @@ class SlackUpdateHooks(RunHooks):
                 severity = self.state.severity
                 channel_id = self.state.channel_id
                 message_ts = self.state.message_ts
+                run_id = self.state.run_id
 
             # Run callbacks outside the lock to avoid deadlock
             for phase, results in phase_complete_callbacks:
@@ -765,6 +767,7 @@ class SlackUpdateHooks(RunHooks):
                 incident_id=incident_id,
                 severity=severity,
                 phases=active_phases,
+                run_id=run_id,
             )
 
             # CRITICAL: This Slack API call can hang on network issues
@@ -854,6 +857,7 @@ class SlackUpdateHooks(RunHooks):
                 severity = self.state.severity
                 channel_id = self.state.channel_id
                 message_ts = self.state.message_ts
+                run_id = self.state.run_id
 
             # Build final dashboard with dynamic phases (outside lock)
             blocks = build_investigation_dashboard(
@@ -865,6 +869,7 @@ class SlackUpdateHooks(RunHooks):
                 confidence=confidence,
                 show_actions=True,
                 phases=active_phases,
+                run_id=run_id,
             )
 
             await self.slack_client.chat_update(

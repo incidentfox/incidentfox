@@ -166,6 +166,37 @@ class ConfigServiceClient:
             data.get("effective_config", data) if "effective_config" in data else data
         )
 
+    def get_tool_calls(
+        self,
+        *,
+        run_id: str,
+        internal_service_name: str = "orchestrator",
+    ) -> List[Dict[str, Any]]:
+        """
+        Get tool calls for an agent run.
+
+        Args:
+            run_id: Agent run ID
+            internal_service_name: Service name for internal auth
+
+        Returns: List of tool call dicts with keys:
+            - id, run_id, tool_name, tool_input, tool_output,
+            - started_at, duration_ms, status, error_message, sequence_number
+        """
+        url = f"{self.base_url}/api/v1/internal/agent-runs/{run_id}/tool-calls"
+        headers = {"X-Internal-Service": internal_service_name}
+        try:
+            if self._http is not None:
+                r = self._http.get(url, headers=headers)
+            else:
+                with httpx.Client(timeout=10.0) as c:
+                    r = c.get(url, headers=headers)
+            r.raise_for_status()
+            data = r.json()
+            return list(data.get("tool_calls", []))
+        except Exception:
+            return []  # Return empty on error
+
     def store_meeting_data(
         self,
         *,
