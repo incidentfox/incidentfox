@@ -332,14 +332,22 @@ services:
       limits:
         cpu: "2"
         memory: "12Gi"
+    # Startup probe allows long startup time (S3 download + model load)
+    # 30s initial + 30 failures * 10s = up to 5 min 30s startup time
+    startupProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
+    # After startup probe passes, shorter delays for normal operation
     readinessProbe:
-      initialDelaySeconds: 120
+      initialDelaySeconds: 5
       periodSeconds: 10
       timeoutSeconds: 5
     livenessProbe:
       enabled: true
       path: /health
-      initialDelaySeconds: 180
+      initialDelaySeconds: 10
       periodSeconds: 30
       timeoutSeconds: 10
     pdb:
@@ -384,14 +392,22 @@ services:
       limits:
         cpu: "2"
         memory: "12Gi"
+    # Startup probe allows long startup time (S3 download + model load)
+    # 30s initial + 30 failures * 10s = up to 5 min 30s startup time
+    startupProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
+    # After startup probe passes, shorter delays for normal operation
     readinessProbe:
-      initialDelaySeconds: 120
+      initialDelaySeconds: 5
       periodSeconds: 10
       timeoutSeconds: 5
     livenessProbe:
       enabled: true
       path: /health
-      initialDelaySeconds: 180
+      initialDelaySeconds: 10
       periodSeconds: 30
       timeoutSeconds: 10
     pdb:
