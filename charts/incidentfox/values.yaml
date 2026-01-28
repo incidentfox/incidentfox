@@ -324,14 +324,15 @@ services:
       - key: "node.kubernetes.io/disk-pressure"
         operator: "Exists"
         effect: "NoSchedule"
-    # High memory requirements for RAPTOR tree loading
+    # Memory for RAPTOR tree operations
+    # Actual usage ~50-100MB idle, spikes during retrieval with large trees
     resources:
       requests:
         cpu: "250m"
-        memory: "8Gi"
+        memory: "1Gi"
       limits:
         cpu: "2"
-        memory: "12Gi"
+        memory: "4Gi"
     # Startup probe allows long startup time (S3 download + model load)
     # 30s initial + 30 failures * 10s = up to 5 min 30s startup time
     startupProbe:
