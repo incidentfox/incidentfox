@@ -1368,7 +1368,9 @@ def get_active_trees(
     configs = query.all()
 
     # Extract knowledge_tree from each config and group by tree name
-    tree_teams: Dict[str, List[tuple]] = {}  # tree_name -> [(org_id, team_node_id), ...]
+    tree_teams: Dict[str, List[tuple]] = (
+        {}
+    )  # tree_name -> [(org_id, team_node_id), ...]
 
     for config in configs:
         if not config.config_json:
