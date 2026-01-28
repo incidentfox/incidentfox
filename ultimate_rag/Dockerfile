@@ -41,9 +41,10 @@ RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2" "jaraco.context>=6.1.0"
     cp -r $SITE_PKGS/jaraco $SITE_PKGS/setuptools/_vendor/ 2>/dev/null || true && \
     cp -r $SITE_PKGS/jaraco_context-*.dist-info $SITE_PKGS/setuptools/_vendor/ 2>/dev/null || true
 
-# Copy the knowledge_base library (needed for RAPTOR tree compatibility)
-COPY knowledge_base/raptor/ ./knowledge_base/raptor/
-RUN echo "" > ./knowledge_base/__init__.py
+# Copy the RAPTOR library to /app/raptor/ (required for pickle deserialization)
+# The pickle files contain objects like raptor.tree_structures.Node which need
+# the raptor module at the top level for Python to find during unpickling
+COPY knowledge_base/raptor/ ./raptor/
 
 # Copy Ultimate RAG package
 COPY ultimate_rag/agents/ ./ultimate_rag/agents/
