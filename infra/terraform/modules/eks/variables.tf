@@ -80,8 +80,8 @@ variable "memory_intensive_nodegroup_enabled" {
 
 variable "memory_intensive_instance_types" {
   type        = list(string)
-  default     = ["t3.xlarge"]
-  description = "Instance types for memory-intensive nodegroup (16GB RAM)"
+  default     = ["r6i.xlarge"]
+  description = "Instance types for memory-intensive nodegroup (32GB RAM for RAG + rolling updates)"
 }
 
 variable "memory_intensive_disk_size" {
