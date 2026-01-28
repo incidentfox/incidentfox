@@ -1,0 +1,35 @@
+# Ultimate RAG API Server Requirements
+# Based on knowledge_base requirements with additions for advanced features
+
+# Core numeric/ML
+numpy==1.26.3
+scikit-learn
+torch
+transformers==4.48.0
+
+# NLP/Embeddings
+sentence-transformers==2.2.2
+tiktoken==0.5.1
+
+# LLM APIs
+openai>=1.50.0
+anthropic>=0.18.0
+tenacity==8.2.3
+
+# Web framework
+fastapi>=0.110.0
+uvicorn>=0.27.0
+httpx>=0.26.0
+
+# Data validation
+pydantic>=2.5.0
+
+# Security patches
+urllib3>=2.6.3
+aiohttp>=3.13.3
+
+# Progress bars
+tqdm>=4.66.0
+
+# Utilities
+python-dateutil>=2.8.2
