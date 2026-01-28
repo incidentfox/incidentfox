@@ -349,14 +349,67 @@ services:
   # NOTE: Self-Learning CronJobs are created dynamically by the Orchestrator
   # during team provisioning. See orchestrator/src/.../k8s/cronjobs.py
 
+  # Ultimate RAG - Advanced knowledge base with graph queries, teaching, and analytics
+  # This is the next-generation replacement for knowledgeBase
+  ultimateRag:
+    enabled: false  # Enable when ready to migrate from knowledgeBase
+    image: "incidentfox/ultimate-rag:v1.0.0"
+    replicas: 1
+    servicePort: 8000
+    # IRSA role ARN for S3 access (same as knowledgeBase)
+    serviceAccountRoleArn: ""
+    # Default tree to load at startup
+    defaultTree: "mega_ultra_v2"
+    # Volume size for tree storage
+    treesVolumeSizeLimit: "3Gi"
+    # S3 configuration for tree download
+    s3:
+      enabled: false
+      bucket: ""  # e.g., "raptor-kb-trees-123456789012"
+      prefix: "trees/"
+      awsCliImage: "amazon/aws-cli:2.15.0"
+    # Schedule on memory-intensive nodes
+    nodeSelector:
+      workload: memory-intensive
+    # Tolerate disk-pressure during initial tree download
+    tolerations:
+      - key: "node.kubernetes.io/disk-pressure"
+        operator: "Exists"
+        effect: "NoSchedule"
+    # High memory requirements for tree loading
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "8Gi"
+      limits:
+        cpu: "2"
+        memory: "12Gi"
+    readinessProbe:
+      initialDelaySeconds: 120
+      periodSeconds: 10
+      timeoutSeconds: 5
+    livenessProbe:
+      enabled: true
+      path: /health
+      initialDelaySeconds: 180
+      periodSeconds: 30
+      timeoutSeconds: 10
+    pdb:
+      enabled: false
+      minAvailable: 1
+
   webUi:
     enabled: true
     image: "incidentfox/web-ui:v1.0.0"
     replicas: 2
     servicePort: 3000
     # RAPTOR Knowledge Base API URL (for tree explorer, semantic search, Q&A)
-    # If using the incidentfox-knowledge-base service in same namespace:
+    # Use the alias service which auto-routes to whichever RAG is enabled:
+    # raptorApiUrl: "http://incidentfox-rag.incidentfox.svc.cluster.local:8000"
+    #
+    # Or point directly to a specific implementation:
     # raptorApiUrl: "http://incidentfox-knowledge-base.incidentfox.svc.cluster.local:8000"
+    # raptorApiUrl: "http://incidentfox-ultimate-rag.incidentfox.svc.cluster.local:8000"
     raptorApiUrl: ""
     resources:
       requests:

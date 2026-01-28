@@ -150,7 +150,7 @@ services:
     enabled: false
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ai-pipeline-api:latest"
 
-  # RAPTOR Knowledge Base for semantic search
+  # RAPTOR Knowledge Base for semantic search (legacy - kept as fallback)
   knowledgeBase:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-knowledge-base:latest"
@@ -163,12 +163,25 @@ services:
       bucket: "raptor-kb-trees-103002841599"
       prefix: "trees/"
 
+  # Ultimate RAG - Next-gen knowledge base with graph queries, teaching, analytics
+  ultimateRag:
+    enabled: true
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ultimate-rag:latest"
+    replicas: 1
+    # Same IRSA role as knowledgeBase (same S3 bucket access)
+    serviceAccountRoleArn: "arn:aws:iam::103002841599:role/incidentfox-raptor-kb-role"
+    defaultTree: "mega_ultra_v2"
+    s3:
+      enabled: true
+      bucket: "raptor-kb-trees-103002841599"
+      prefix: "trees/"
+
   webUi:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-web-ui:latest"
     cookieSecure: true
-    # RAPTOR Knowledge Base API for tree explorer and semantic search
-    raptorApiUrl: "http://incidentfox-knowledge-base.incidentfox.svc.cluster.local:8000"
+    # Use the alias service - auto-routes to ultimate-rag (takes precedence when both enabled)
+    raptorApiUrl: "http://incidentfox-rag.incidentfox.svc.cluster.local:8000"
     oidc:
       enabled: false
     slack:

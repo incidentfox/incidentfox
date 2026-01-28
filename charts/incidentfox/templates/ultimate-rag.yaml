@@ -1,0 +1,153 @@
+{{- if .Values.services.ultimateRag.enabled }}
+# ServiceAccount with IRSA annotation for S3 access
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: incidentfox-ultimate-rag
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "incidentfox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ultimate-rag
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+    {{- if .Values.services.ultimateRag.serviceAccountRoleArn }}
+    eks.amazonaws.com/role-arn: {{ .Values.services.ultimateRag.serviceAccountRoleArn | quote }}
+    {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: incidentfox-ultimate-rag
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "incidentfox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ultimate-rag
+spec:
+  replicas: {{ .Values.services.ultimateRag.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: incidentfox-ultimate-rag
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: incidentfox-ultimate-rag
+    spec:
+      serviceAccountName: incidentfox-ultimate-rag
+      {{- if .Values.services.ultimateRag.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.services.ultimateRag.nodeSelector | indent 8 }}
+      {{- end }}
+      {{- if .Values.services.ultimateRag.tolerations }}
+      tolerations:
+{{ toYaml .Values.services.ultimateRag.tolerations | indent 8 }}
+      {{- end }}
+      volumes:
+        - name: trees-volume
+          emptyDir:
+            sizeLimit: {{ .Values.services.ultimateRag.treesVolumeSizeLimit | default "3Gi" }}
+      {{- if .Values.services.ultimateRag.s3.enabled }}
+      initContainers:
+        - name: download-trees
+          image: {{ .Values.services.ultimateRag.s3.awsCliImage | default "amazon/aws-cli:2.15.0" }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Downloading tree from S3..."
+              aws s3 cp "s3://{{ .Values.services.ultimateRag.s3.bucket }}/{{ .Values.services.ultimateRag.s3.prefix }}{{ .Values.services.ultimateRag.defaultTree }}/{{ .Values.services.ultimateRag.defaultTree }}.pkl" /trees/{{ .Values.services.ultimateRag.defaultTree }}.pkl
+              echo "Download complete. File size:"
+              ls -lh /trees/
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: trees-volume
+              mountPath: /trees
+      {{- end }}
+      containers:
+        - name: ultimate-rag
+          image: {{ required "services.ultimateRag.image is required" .Values.services.ultimateRag.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command:
+            - /bin/bash
+            - -c
+          args:
+            - |
+              echo "=== Ultimate RAG Server Startup ==="
+              echo "Trees directory contents:"
+              ls -lh /app/trees/
+              echo "=== Starting API Server ==="
+              exec python -m ultimate_rag.api.server
+          ports:
+            - containerPort: {{ .Values.services.ultimateRag.servicePort }}
+          resources:
+{{ toYaml .Values.services.ultimateRag.resources | indent 12 }}
+          env:
+            - name: RAPTOR_TREES_DIR
+              value: /app/trees
+            - name: RAPTOR_DEFAULT_TREE
+              value: {{ .Values.services.ultimateRag.defaultTree | quote }}
+            - name: PORT
+              value: {{ .Values.services.ultimateRag.servicePort | quote }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.agentOpenAI.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.agentOpenAI.apiKeyKey | quote }}
+          volumeMounts:
+            - name: trees-volume
+              mountPath: /app/trees
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.ultimateRag.servicePort }}
+            initialDelaySeconds: {{ .Values.services.ultimateRag.readinessProbe.initialDelaySeconds | default 120 }}
+            periodSeconds: {{ .Values.services.ultimateRag.readinessProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.services.ultimateRag.readinessProbe.timeoutSeconds | default 5 }}
+          {{- if .Values.services.ultimateRag.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.services.ultimateRag.livenessProbe.path | default "/health" }}
+              port: {{ .Values.services.ultimateRag.servicePort }}
+            initialDelaySeconds: {{ .Values.services.ultimateRag.livenessProbe.initialDelaySeconds | default 180 }}
+            periodSeconds: {{ .Values.services.ultimateRag.livenessProbe.periodSeconds | default 30 }}
+            timeoutSeconds: {{ .Values.services.ultimateRag.livenessProbe.timeoutSeconds | default 10 }}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: incidentfox-ultimate-rag
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "incidentfox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ultimate-rag
+spec:
+  selector:
+    app.kubernetes.io/name: incidentfox-ultimate-rag
+  ports:
+    - port: {{ .Values.services.ultimateRag.servicePort }}
+      targetPort: {{ .Values.services.ultimateRag.servicePort }}
+      protocol: TCP
+{{- if .Values.services.ultimateRag.pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: incidentfox-ultimate-rag
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "incidentfox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ultimate-rag
+spec:
+  minAvailable: {{ .Values.services.ultimateRag.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: incidentfox-ultimate-rag
+{{- end }}
+{{- end }}

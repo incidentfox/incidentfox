@@ -1,0 +1,39 @@
+{{- if or .Values.services.knowledgeBase.enabled .Values.services.ultimateRag.enabled }}
+# RAG Service Alias
+# This provides a stable service name that routes to whichever RAG implementation is active.
+# Web UI and other consumers should use this URL:
+#   http://incidentfox-rag.incidentfox.svc.cluster.local:8000
+#
+# To switch implementations, just change which service is enabled in values.yaml.
+# If both are enabled, ultimateRag takes precedence (newer implementation).
+apiVersion: v1
+kind: Service
+metadata:
+  name: incidentfox-rag
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "incidentfox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rag-alias
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+    description: "Alias service that routes to active RAG implementation"
+spec:
+  {{- if .Values.services.ultimateRag.enabled }}
+  # Route to ultimate-rag (takes precedence if both enabled)
+  selector:
+    app.kubernetes.io/name: incidentfox-ultimate-rag
+  ports:
+    - port: 8000
+      targetPort: {{ .Values.services.ultimateRag.servicePort }}
+      protocol: TCP
+  {{- else }}
+  # Route to knowledge-base (fallback)
+  selector:
+    app.kubernetes.io/name: incidentfox-knowledge-base
+  ports:
+    - port: 8000
+      targetPort: {{ .Values.services.knowledgeBase.servicePort }}
+      protocol: TCP
+  {{- end }}
+{{- end }}
