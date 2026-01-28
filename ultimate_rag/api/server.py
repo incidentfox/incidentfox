@@ -917,7 +917,9 @@ class UltimateRAGServer:
                     status_code=500, detail=f"Failed to create tree: {e}"
                 )
 
-        @app.get("/api/v1/tree/stats", response_model=V1TreeStatsResponse, tags=["v1-compat"])
+        @app.get(
+            "/api/v1/tree/stats", response_model=V1TreeStatsResponse, tags=["v1-compat"]
+        )
         async def v1_tree_stats(tree: Optional[str] = None):
             """
             Get statistics about a knowledge tree (v1 compatible).
@@ -964,7 +966,9 @@ class UltimateRAGServer:
 
             except Exception as e:
                 logger.error(f"Error getting tree stats: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to get tree stats: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to get tree stats: {e}"
+                )
 
         @app.post("/api/v1/search", response_model=V1SearchResponse, tags=["v1-compat"])
         async def v1_search(request: V1SearchRequest):
