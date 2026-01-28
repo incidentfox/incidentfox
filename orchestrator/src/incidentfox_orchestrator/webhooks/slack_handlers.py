@@ -380,6 +380,93 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
         await ack()
         await _handle_feedback(body, respond, "negative", integration)
 
+    @app.action(re.compile(r"^view_"))
+    async def handle_view_phase(ack, body, client):
+        """
+        Handle View button clicks for investigation phases.
+
+        These buttons allow users to see detailed results for each phase.
+        Since phase results are not persisted after the agent run, we show
+        an informational modal directing users to the main response.
+        """
+        await ack()
+        action = (body.get("actions") or [{}])[0]
+        action_id = action.get("action_id", "view_unknown")
+        phase_key = action.get("value", "unknown")
+        trigger_id = body.get("trigger_id")
+
+        _log(
+            "slack_view_phase_clicked",
+            action_id=action_id,
+            phase_key=phase_key,
+        )
+
+        # Map phase keys to friendly names
+        phase_labels = {
+            "kubernetes": "Kubernetes",
+            "coralogix_tools": "Coralogix",
+            "aws_tools": "AWS",
+            "datadog_tools": "Datadog",
+            "github_tools": "GitHub",
+            "postgres_tools": "PostgreSQL",
+            "snowflake_tools": "Snowflake",
+            "root_cause_analysis": "Root Cause Analysis",
+        }
+        phase_name = phase_labels.get(phase_key, phase_key.replace("_", " ").title())
+
+        # Open a modal with phase info
+        if trigger_id:
+            try:
+                await client.views_open(
+                    trigger_id=trigger_id,
+                    view={
+                        "type": "modal",
+                        "title": {"type": "plain_text", "text": phase_name[:24]},
+                        "close": {"type": "plain_text", "text": "Close"},
+                        "blocks": [
+                            {
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": f"*{phase_name} Results*",
+                                },
+                            },
+                            {"type": "divider"},
+                            {
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": (
+                                        "The detailed findings for this phase are included "
+                                        "in the investigation summary above.\n\n"
+                                        "Look for the *Sources Consulted* and *Hypotheses* "
+                                        "sections in the main response for specific queries "
+                                        "and evidence from this data source."
+                                    ),
+                                },
+                            },
+                            {
+                                "type": "context",
+                                "elements": [
+                                    {
+                                        "type": "mrkdwn",
+                                        "text": (
+                                            "_Future: Real-time phase details will be "
+                                            "available in a persistent view._"
+                                        ),
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                )
+            except Exception as e:
+                _log(
+                    "slack_view_phase_modal_failed",
+                    action_id=action_id,
+                    error=str(e),
+                )
+
 
 async def _handle_feedback(
     body: dict,

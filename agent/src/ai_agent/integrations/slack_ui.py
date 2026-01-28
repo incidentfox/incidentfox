@@ -213,23 +213,17 @@ def build_action_buttons(
 
     Args:
         actions: List of action dicts with 'label', 'action_id', 'value', 'style' (optional)
+                 If None or empty, returns empty list (no hardcoded defaults).
+
+    Note:
+        Actions should be dynamically determined based on investigation findings.
+        For example, only show "Rollback Deployment" if a recent deployment was
+        identified as a potential cause.
     """
     if not actions:
-        # Default actions
-        actions = [
-            {
-                "label": "🔄 Rollback Deployment",
-                "action_id": "action_rollback",
-                "value": "rollback",
-                "style": "danger",
-            },
-            {
-                "label": "📝 Create Incident Ticket",
-                "action_id": "action_create_ticket",
-                "value": "create_ticket",
-                "style": "primary",
-            },
-        ]
+        # No hardcoded defaults - actions should be contextually relevant
+        # based on investigation findings
+        return []
 
     elements = []
     for action in actions[:5]:  # Max 5 buttons per block
