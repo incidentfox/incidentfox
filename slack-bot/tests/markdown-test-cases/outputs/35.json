@@ -1,0 +1,158 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Summary: The Core `App` Class (`slack_bolt/app/app.py`)*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "This *1,597-line file* is the heart of Bolt for Python. Here's what makes it important:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Key Components:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*1. Initialization (`__init__`, lines 101-388):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 Handles 20+ configuration parameters\n\u2023 Sets up tokens, signing secrets, OAuth flows\n\u2023 Initializes middleware stack automatically\n\u2023 Configures logging, authorization, and thread pools\n\u2023 Supports both single-workspace and multi-workspace apps\n\u2023 Built-in AI Assistant thread context store"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*2. Request Dispatcher (`dispatch()`, lines 540-646):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *The main request handler* - processes all incoming Slack requests\n\u2023 Runs through global middleware chain sequentially\n\u2023 Matches request to registered listeners\n\u2023 Executes listener middleware before calling handlers\n\u2023 Handles errors and unmatched requests\n\u2023 Returns appropriate `BoltResponse`"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*3. Event Listener Registration:*\nThe App exposes decorator methods for all Slack event types:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `@app.event()` - Events API events (line 809)\n\u2023 `@app.message()` - Message events with pattern matching (line 852)\n\u2023 `@app.command()` - Slash commands (line 962)\n\u2023 `@app.action()` - Block Kit actions (line 1080)\n\u2023 `@app.shortcut()` - Shortcuts (line 1003)\n\u2023 `@app.view()` - Modal submissions/closures (line 1185)\n\u2023 `@app.options()` - External select menus (line 1270)\n\u2023 `@app.function()` - Custom workflow functions (line 910)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*4. Middleware System:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `middleware()` / `use()` - Register global middleware (line 661)\n\u2023 `assistant()` - Register AI Assistant middleware (line 704)\n\u2023 `error()` - Global error handler (line 778)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*5. Built-in Development Server (`SlackAppDevelopmentServer`, lines 1474-1597):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 Simple HTTP server using Python's `http.server`\n\u2023 Handles OAuth flow routes (install/callback)\n\u2023 Routes POST requests to `app.dispatch()`\n\u2023 *Not for production* - use adapters instead"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*6. OAuth &amp; Authorization:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 Automatic OAuth flow setup from environment variables\n\u2023 Multi-workspace support via `InstallationStore`\n\u2023 Token verification and rotation\n\u2023 Built-in token revocation listeners"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*7. AI/Assistant Features:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 Thread context management\n\u2023 Special utilities injected into context (`say`, `set_status`, `set_title`, etc.)\n\u2023 Assistant event detection and routing"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Architecture Pattern:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nIncoming Request \u2192 dispatch()\n    \u2193\nGlobal Middleware Chain (SSL check, auth, etc.)\n    \u2193\nListener Matching (find matching event handler)\n    \u2193\nListener Middleware Chain\n    \u2193\nExecute Listener Function(s)\n    \u2193\nReturn BoltResponse\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Why This File is Critical:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Single Entry Point* - All Slack requests flow through `dispatch()`\n\u2023 *Framework Core* - Orchestrates middleware, listeners, and responses\n\u2023 *Developer Interface* - Provides the clean decorator API developers use\n\u2023 *Production Ready* - Thread pool execution, error handling, logging\n\u2023 *Extensible* - Supports custom middleware, matchers, and authorization"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "This is essentially the *\"brain\"* of the framework - everything else (adapters, utilities, context) supports this core dispatching and listening system!"
+      }
+    }
+  ]
+}

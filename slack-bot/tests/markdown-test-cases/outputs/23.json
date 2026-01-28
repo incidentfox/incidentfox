@@ -1,0 +1,333 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Perfect! Here's everything about the *`authorization/`* directory:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Authorization Module Overview*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udcc1 File Structure:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nslack_bolt/authorization/\n\u251c\u2500\u2500 __init__.py                  # Exports AuthorizeResult\n\u251c\u2500\u2500 authorize_result.py          # Result data class\n\u251c\u2500\u2500 authorize_args.py            # Arguments passed to authorize\n\u251c\u2500\u2500 authorize.py                 # Sync authorization implementations\n\u251c\u2500\u2500 async_authorize.py           # Async authorization implementations\n\u2514\u2500\u2500 async_authorize_args.py      # Async arguments\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83c\udfaf Purpose:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Authorization determines *which Slack credentials should be used* when processing an incoming request. This is crucial for:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 Multi-workspace installations (OAuth apps)\n\u2023 Apps with both bot and user tokens\n\u2023 Custom token management logic"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udd11 Key Classes:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*1. `AuthorizeResult` - The Result Object*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "A dictionary-like object containing authorization information:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nclass AuthorizeResult(dict):\n    # Workspace info\n    enterprise_id: Optional[str]    # Org ID (Enterprise Grid) - starts with 'E'\n    team_id: Optional[str]          # Workspace ID - starts with 'T'\n    team: Optional[str]             # Workspace name\n    url: Optional[str]              # Workspace URL\n    \n    # Bot info\n    bot_id: Optional[str]           # Bot ID - starts with 'B'\n    bot_user_id: Optional[str]      # Bot user ID - starts with 'U' or 'W'\n    bot_token: Optional[str]        # Bot token - starts with 'xoxb-'\n    bot_scopes: Optional[Sequence[str]]  # Bot scopes\n    \n    # User info\n    user_id: Optional[str]          # Request user ID\n    user: Optional[str]             # User name\n    user_token: Optional[str]       # User token - starts with 'xoxp-'\n    user_scopes: Optional[Sequence[str]]  # User scopes\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Helper Method:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nAuthorizeResult.from_auth_test_response(\n    bot_token=\"xoxb-***\",\n    auth_test_response=client.auth_test(token=token),\n    user_token=None,  # Optional\n    bot_scopes=[\"chat:write\", \"commands\"],\n    user_scopes=None,\n)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*2. `AuthorizeArgs` - Arguments to Authorize Function*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nclass AuthorizeArgs:\n    context: BoltContext        # Request context\n    logger: Logger             # Logger instance\n    client: WebClient          # Slack API client\n    enterprise_id: Optional[str]  # Org ID\n    team_id: Optional[str]     # Workspace ID\n    user_id: Optional[str]     # User ID\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*3. `Authorize` Implementations:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Three implementations:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`Authorize`* (base class) - Abstract base\n\u2023 *`CallableAuthorize`* - When you provide custom `authorize` function\n\u2023 *`InstallationStoreAuthorize`* - Default when using OAuth (uses InstallationStore)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udcdd Usage Examples:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Custom Authorization Function:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nimport os\nfrom slack_bolt import App\nfrom slack_bolt.authorization import AuthorizeResult\nfrom slack_sdk import WebClient\n\ndef authorize(enterprise_id, team_id, user_id, client: WebClient, logger):\n    logger.info(f\"{enterprise_id},{team_id},{user_id}\")\n    \n    # Your custom logic here\n    # Could fetch from database, environment, etc.\n    token = os.environ[\"MY_TOKEN\"]\n    \n    return AuthorizeResult.from_auth_test_response(\n        auth_test_response=client.auth_test(token=token),\n        bot_token=token,\n    )\n\n# Pass authorize function to App\napp = App(\n    signing_secret=os.environ[\"SLACK_SIGNING_SECRET\"],\n    authorize=authorize  # Custom authorization!\n)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Async Version:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nfrom slack_bolt.async_app import AsyncApp\nfrom slack_sdk.web.async_client import AsyncWebClient\n\nasync def authorize(enterprise_id, team_id, user_id, client: AsyncWebClient, logger):\n    logger.info(f\"{enterprise_id},{team_id},{user_id}\")\n    token = os.environ[\"MY_TOKEN\"]\n    \n    return AuthorizeResult.from_auth_test_response(\n        auth_test_response=await client.auth_test(token=token),\n        bot_token=token,\n    )\n\napp = AsyncApp(\n    signing_secret=os.environ[\"SLACK_SIGNING_SECRET\"],\n    authorize=authorize\n)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udd10 InstallationStoreAuthorize (OAuth Apps):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "When using OAuth, this is used automatically:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Features:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Token Lookup*: Finds tokens from `InstallationStore` based on workspace/user"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Token Rotation*: Supports automatic OAuth token rotation"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Caching*: Optional result caching for performance"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *User Token Resolution*: Two modes:\n\u2003\u2003\u21b3 `\"authed_user\"` (default) - Uses the authenticated user from workspace\n\u2003\u2003\u21b3 `\"actor\"` - Uses the actor user ID (for Slack Connect)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Bot-Only Mode*: Can use only bot tokens (simpler)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Configuration:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nInstallationStoreAuthorize(\n    logger=logger,\n    installation_store=my_store,\n    client_id=\"111.111\",           # For token rotation\n    client_secret=\"***\",           # For token rotation\n    token_rotation_expiration_minutes=120,\n    bot_only=False,                # Use both bot and user tokens\n    cache_enabled=True,            # Cache results\n    user_token_resolution=\"authed_user\"  # or \"actor\"\n)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83c\udfaf How It Works:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Request comes in* from Slack"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Authorization is triggered* with `enterprise_id`, `team_id`, `user_id`"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Authorize function runs*:\n\u2003\u2003\u21b3 Custom function: Your logic runs\n\u2003\u2003\u21b3 InstallationStore: Looks up installation from store"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Returns `AuthorizeResult`* with tokens and metadata"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Bolt uses the tokens* to call Slack APIs (via `client`)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udca1 Common Use Cases:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Single Workspace App*: Just pass `token` to App constructor (no custom authorize needed)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\napp = App(token=\"xoxb-***\", signing_secret=\"***\")\n```\n\u2023 *Multi-Workspace OAuth App*: Use OAuth settings (InstallationStoreAuthorize used automatically)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\napp = App(\n    signing_secret=\"***\",\n    installation_store=my_store,\n    oauth_settings=OAuthSettings(...)\n)\n```\n\u2023 *Custom Token Management*: Provide `authorize` function"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\napp = App(signing_secret=\"***\", authorize=my_authorize_function)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\u26a1 Key Features:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Flexible*: Support any token storage strategy\n\u2023 *User Token Support*: Can use both bot and user tokens\n\u2023 *Token Rotation*: Built-in support for OAuth token refresh\n\u2023 *Enterprise Grid*: Handles org-wide installations\n\u2023 *Slack Connect*: Support for cross-workspace events with actor resolution\n\u2023 *Caching*: Optional performance optimization\n\u2023 *Error Handling*: Gracefully handles invalid/expired tokens"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The authorization system is the backbone of multi-workspace Slack apps! \ud83d\udd10"
+      }
+    }
+  ]
+}

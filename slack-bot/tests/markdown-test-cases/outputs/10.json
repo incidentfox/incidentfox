@@ -1,0 +1,226 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Here's what's in the *`slack_bolt_async`* test directory:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Overview:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Location*: `/workspace/bolt-python/tests/slack_bolt_async/`\n\u2023 *Total Size*: 204 KB\n\u2023 *Python Files*: 35 `.py` files\n\u2023 *Directories*: 12 subdirectories"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Directory Structure &amp; File Counts:*"
+      }
+    },
+    {
+      "type": "table",
+      "rows": [
+        [
+          {
+            "type": "raw_text",
+            "text": "Directory"
+          },
+          {
+            "type": "raw_text",
+            "text": "Files"
+          },
+          {
+            "type": "raw_text",
+            "text": "Purpose"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "context/"
+          },
+          {
+            "type": "raw_text",
+            "text": "8"
+          },
+          {
+            "type": "raw_text",
+            "text": "Context handling tests"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "middleware/"
+          },
+          {
+            "type": "raw_text",
+            "text": "5"
+          },
+          {
+            "type": "raw_text",
+            "text": "Middleware component tests"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "listener/"
+          },
+          {
+            "type": "raw_text",
+            "text": "3"
+          },
+          {
+            "type": "raw_text",
+            "text": "Event listener tests"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "oauth/"
+          },
+          {
+            "type": "raw_text",
+            "text": "3"
+          },
+          {
+            "type": "raw_text",
+            "text": "OAuth flow tests"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "workflows/"
+          },
+          {
+            "type": "raw_text",
+            "text": "3"
+          },
+          {
+            "type": "raw_text",
+            "text": "Workflow tests"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "app/"
+          },
+          {
+            "type": "raw_text",
+            "text": "2"
+          },
+          {
+            "type": "raw_text",
+            "text": "Async app tests"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "authorization/"
+          },
+          {
+            "type": "raw_text",
+            "text": "2"
+          },
+          {
+            "type": "raw_text",
+            "text": "Authorization tests"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "kwargs_injection/"
+          },
+          {
+            "type": "raw_text",
+            "text": "2"
+          },
+          {
+            "type": "raw_text",
+            "text": "Dependency injection tests"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "listener_matcher/"
+          },
+          {
+            "type": "raw_text",
+            "text": "2"
+          },
+          {
+            "type": "raw_text",
+            "text": "Event matching tests"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "logger/"
+          },
+          {
+            "type": "raw_text",
+            "text": "2"
+          },
+          {
+            "type": "raw_text",
+            "text": "Logging tests"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "request/"
+          },
+          {
+            "type": "raw_text",
+            "text": "2"
+          },
+          {
+            "type": "raw_text",
+            "text": "Request handling tests"
+          }
+        ]
+      ]
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Sample Files:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `app/test_server.py` - Async server tests\n\u2023 `middleware/authorization/` - Authorization middleware tests\n\u2023 `middleware/request_verification/` - Request verification tests"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "This test directory mirrors the structure of the main `slack_bolt/` package but focuses specifically on testing the async implementation (`AsyncApp`) and all its async components. The tests ensure that the async version of Bolt works correctly with Python's `asyncio` and async/await patterns."
+      }
+    }
+  ]
+}

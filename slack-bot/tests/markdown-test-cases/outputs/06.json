@@ -1,0 +1,102 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Here's an overview of the files and structure in the bolt-python repository:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Repository Structure:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Root Files:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `README.md` - Documentation (11 KB)\n\u2023 `LICENSE` - License file\n\u2023 `pyproject.toml` - Python project configuration\n\u2023 `setup.cfg` - Setup configuration\n\u2023 `.flake8` - Linting configuration\n\u2023 `codecov.yml` - Code coverage configuration\n\u2023 `MANIFEST.in` - Package manifest"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Main Directories:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`slack_bolt/`* - Core library source code with subdirectories:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 `adapter/` - Framework adapters (Flask, FastAPI, Django, etc.)\n\u2003\u2003\u21b3 `app/` - Main application code\n\u2003\u2003\u21b3 `authorization/` - Authorization handling\n\u2003\u2003\u21b3 `context/` - Context management\n\u2003\u2003\u21b3 `oauth/` - OAuth implementation\n\u2003\u2003\u21b3 `middleware/` - Middleware components\n\u2003\u2003\u21b3 `listener/` - Event listener logic\n\u2003\u2003\u21b3 `request/`, `response/` - HTTP handling\n\u2003\u2003\u21b3 `workflows/` - Workflow functionality\n\u2003\u2003\u21b3 And more..."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`examples/`* - 26 example subdirectories including:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 Framework integrations: `flask/`, `django/`, `fastapi/`, `sanic/`, `starlette/`, `tornado/`, etc.\n\u2003\u2003\u21b3 Cloud platforms: `aws_lambda/`, `aws_chalice/`, `google_cloud_functions/`, `google_app_engine/`, `heroku/`\n\u2003\u2003\u21b3 `docker/` - Docker examples\n\u2003\u2003\u21b3 `assistants/` - AI assistants examples\n\u2003\u2003\u21b3 `getting_started/` - Beginner examples\n\u2003\u2003\u21b3 Various other integration examples"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`tests/`* - Test suites:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 `slack_bolt/` - Synchronous tests\n\u2003\u2003\u21b3 `slack_bolt_async/` - Async tests\n\u2003\u2003\u21b3 `adapter_tests/` &amp; `adapter_tests_async/` - Adapter tests\n\u2003\u2003\u21b3 `scenario_tests/` - Integration tests"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`docs/`* - Documentation in English and Japanese"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`.github/`* - GitHub workflows and issue templates"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The repository contains *1,024 non-git files* organized across these directories, primarily consisting of Python source code, examples, tests, and documentation."
+      }
+    }
+  ]
+}

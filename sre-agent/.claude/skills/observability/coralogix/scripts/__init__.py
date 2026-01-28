@@ -1,0 +1,1 @@
+# Coralogix scripts package

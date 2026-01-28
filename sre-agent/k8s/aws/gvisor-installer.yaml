@@ -1,0 +1,107 @@
+---
+# DaemonSet to install gVisor on all EKS nodes
+# Uses Alpine Linux (readily available) to download and install runsc
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: gvisor-installer
+  namespace: kube-system
+  labels:
+    app: gvisor-installer
+spec:
+  selector:
+    matchLabels:
+      app: gvisor-installer
+  template:
+    metadata:
+      labels:
+        app: gvisor-installer
+    spec:
+      hostPID: true
+      hostNetwork: true
+      initContainers:
+      - name: installer
+        image: alpine:latest
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: host-root
+          mountPath: /host
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          set -ex
+          echo "📦 Installing gVisor..."
+          
+          # Install dependencies
+          apk add --no-cache wget
+          
+          # Detect architecture
+          ARCH=$(uname -m)
+          echo "Architecture: $ARCH"
+          
+          # Download runsc and containerd-shim
+          cd /tmp
+          URL="https://storage.googleapis.com/gvisor/releases/release/latest/${ARCH}"
+          echo "Downloading from: $URL"
+          wget "${URL}/runsc" "${URL}/runsc.sha512"
+          wget "${URL}/containerd-shim-runsc-v1" "${URL}/containerd-shim-runsc-v1.sha512"
+          
+          # Verify checksums
+          sha512sum -c runsc.sha512
+          sha512sum -c containerd-shim-runsc-v1.sha512
+          rm *.sha512
+          
+          # Install runsc and shim
+          chmod a+rx runsc containerd-shim-runsc-v1
+          cp runsc /host/usr/local/bin/runsc
+          cp containerd-shim-runsc-v1 /host/usr/local/bin/containerd-shim-runsc-v1
+          echo "✅ runsc and shim installed"
+          
+          # Configure containerd
+          echo "📝 Configuring containerd..."
+          mkdir -p /host/etc/containerd
+          
+          # Remove any old/wrong gVisor runtime config
+          sed -i '/\[plugins\."io\.containerd\.grpc\.v1\.cri"\.containerd\.runtimes\.runsc\]/,+1d' /host/etc/containerd/config.toml 2>/dev/null || true
+          
+          # Add gVisor runtime config (must match EKS containerd format)
+          if ! grep -q "'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc" /host/etc/containerd/config.toml 2>/dev/null; then
+            echo "Adding gVisor runtime configuration..."
+            cat >> /host/etc/containerd/config.toml <<EOFCONFIG
+          
+          [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc]
+          runtime_type = "io.containerd.runsc.v1"
+          EOFCONFIG
+          else
+            echo "✅ containerd already configured for gVisor"
+          fi
+          
+          # Restart containerd using nsenter
+          echo "♻️  Restarting containerd..."
+          nsenter --target 1 --mount --uts --ipc --net --pid -- systemctl restart containerd || true
+          
+          echo "✅ gVisor installation complete!"
+          
+          # Verify installation
+          if /host/usr/local/bin/runsc --version; then
+            echo "✅ runsc is working!"
+          else
+            echo "⚠️  runsc verification failed"
+            exit 1
+          fi
+      containers:
+      - name: pause
+        image: gcr.io/google-containers/pause:3.2
+        resources:
+          requests:
+            cpu: 10m
+            memory: 10Mi
+      volumes:
+      - name: host-root
+        hostPath:
+          path: /
+          type: Directory
+      tolerations:
+      - operator: Exists
+

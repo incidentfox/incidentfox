@@ -1,0 +1,45 @@
+[project]
+name = "incidentfox-sre-agent"
+version = "0.1.0"
+description = "AI-powered SRE agent for automated incident investigation"
+requires-python = ">=3.11"
+dependencies = [
+    # Core SDK
+    "claude-agent-sdk==0.1.19",  # ClaudeSDKClient with interrupt support
+    "python-dotenv==1.2.1",
+    "fastapi==0.128.0",
+    "uvicorn==0.40.0",
+    "lmnr[claude-agent-sdk]==0.7.32",
+    
+    # Infrastructure integrations
+    "kubernetes>=34.1.0",
+    "boto3>=1.34.0",  # AWS
+    
+    # Monitoring & Observability
+    "datadog-api-client>=2.20.0",
+    "httpx>=0.28.1",
+    "requests>=2.32.5",
+    
+    # VCS & Collaboration
+    "PyGithub>=2.1.0",
+    "slack-sdk>=3.27.0",
+    
+    # Logging & Search
+    "elasticsearch>=8.0.0",
+    
+    # Utilities
+    "pyyaml>=6.0",
+    
+    # Optional dependencies for advanced features
+    "numpy>=1.24.0",  # For anomaly detection
+    "scipy>=1.11.0",  # For statistical analysis
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+only-include = ["agent.py", "events.py", "sandbox_server.py", "server.py", "sandbox_manager.py"]
+

@@ -1,0 +1,116 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Perfect! I've successfully cloned the bolt-python repository and read its README.md file. Here's a summary of what I found:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Bolt for Python - Slack App Framework*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*bolt-python* is a Python framework for building Slack apps quickly using the latest platform features."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Key Features:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Easy Setup* - Requires Python 3.7+ and simple pip installation:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\npip install slack_bolt\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Two App Types*:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 *Synchronous App* - Using the standard `App` class\n\u2003\u2003\u21b3 *Async App* - Using `AsyncApp` with asyncio and AIOHTTP"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Running Options*:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 *HTTP Mode* - Standard webhook-based app with ngrok for local development\n\u2003\u2003\u21b3 *Socket Mode* - No need for public URLs or ngrok, uses WebSocket connections"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Event Listeners* - Methods to handle various Slack events:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 `app.action()` - Block Kit interactions (buttons, menus, etc.)\n\u2003\u2003\u21b3 `app.command()` - Slash commands\n\u2003\u2003\u21b3 `app.event()` - Events API events\n\u2003\u2003\u21b3 `app.message()` - Message events with pattern matching\n\u2003\u2003\u21b3 `app.shortcut()` - Global/message shortcuts\n\u2003\u2003\u21b3 `app.view()` - Modal submissions\n\u2003\u2003\u21b3 `app.function()` - Custom workflow steps\n\u2003\u2003\u21b3 `app.options()` - External select menu options"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Listener Arguments* - Functions receive helpful utilities:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 `ack` - Acknowledge events\n\u2003\u2003\u21b3 `say` - Send messages to channels\n\u2003\u2003\u21b3 `respond` - Respond to interactive events\n\u2003\u2003\u21b3 `client` - Web API client\n\u2003\u2003\u21b3 `body`/`payload` - Event data\n\u2003\u2003\u21b3 `logger` - Built-in logging"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Framework Adapters* - Built-in support for async frameworks like Sanic, FastAPI, and Starlette"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The repository includes extensive examples and comprehensive documentation at https://docs.slack.dev/tools/bolt-python/"
+      }
+    }
+  ]
+}
