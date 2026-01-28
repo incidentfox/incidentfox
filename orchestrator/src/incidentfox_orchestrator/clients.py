@@ -272,6 +272,7 @@ class AgentApiClient:
         slack_context: Optional[
             dict[str, Any]
         ] = None,  # DEPRECATED: use output_destinations
+        trigger_source: Optional[str] = None,  # Source that triggered this run
     ) -> dict[str, Any]:
         base = agent_base_url.rstrip("/") if agent_base_url else self.base_url
         url = f"{base}/agents/{agent_name}/run"
@@ -290,6 +291,8 @@ class AgentApiClient:
         elif slack_context is not None:
             # DEPRECATED: backwards compatibility
             payload["slack_context"] = slack_context
+        if trigger_source is not None:
+            payload["trigger_source"] = trigger_source
         if self._http is not None:
             r = self._http.post(url, headers=headers, json=payload)
         else:

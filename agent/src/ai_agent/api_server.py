@@ -964,17 +964,19 @@ def create_app() -> Sanic:
                 org_id = auth_identity.org_id if auth_identity else ""
                 team_node_id = auth_identity.team_node_id if auth_identity else ""
 
-                # Determine trigger source from output destinations
-                trigger_source = "api"
-                if output_destinations:
-                    dest_types = [d.type for d in output_destinations]
-                    if "slack" in dest_types:
-                        trigger_source = "slack"
-                    elif (
-                        "github_pr_comment" in dest_types
-                        or "github_issue_comment" in dest_types
-                    ):
-                        trigger_source = "github"
+                # Use trigger_source from request if provided, otherwise derive from output destinations
+                trigger_source = data.get("trigger_source")
+                if not trigger_source:
+                    trigger_source = "api"
+                    if output_destinations:
+                        dest_types = [d.type for d in output_destinations]
+                        if "slack" in dest_types:
+                            trigger_source = "slack"
+                        elif (
+                            "github_pr_comment" in dest_types
+                            or "github_issue_comment" in dest_types
+                        ):
+                            trigger_source = "github"
 
                 # Record agent run start (fire and forget)
                 asyncio.create_task(
