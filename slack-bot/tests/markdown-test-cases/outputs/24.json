@@ -1,0 +1,123 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Perfect! I've successfully cloned the bolt-python repository and read its README.md file. Here's a summary of what I found:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Bolt for Python - Overview*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Bolt for Python* is a framework by Slack for building Slack apps quickly using the latest platform features."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Key Features:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Requirements*: Python 3.7+ required"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Installation*:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\npip install slack_bolt\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Two App Types*:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 *Synchronous App* (`App`) - Standard Python\n\u2003\u2003\u21b3 *Async App* (`AsyncApp`) - Uses asyncio and AIOHTTP"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Running Modes*:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 *HTTP Mode*: Requires exposing an endpoint (e.g., via ngrok) and uses `SLACK_SIGNING_SECRET` and `SLACK_BOT_TOKEN`\n\u2003\u2003\u21b3 *Socket Mode*: No public URL needed, uses `SocketModeHandler` with `SLACK_APP_TOKEN` and `SLACK_BOT_TOKEN`"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Event Listeners*: The framework provides decorators/methods for:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 Actions (buttons, select menus, etc.)\n\u2003\u2003\u21b3 Commands (slash commands)\n\u2003\u2003\u21b3 Events (Events API)\n\u2003\u2003\u21b3 Functions (custom workflow steps)\n\u2003\u2003\u21b3 Messages (convenience method for message events)\n\u2003\u2003\u21b3 Options (external data sources)\n\u2003\u2003\u21b3 Shortcuts (global or message shortcuts)\n\u2003\u2003\u21b3 Views (modal submissions)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Listener Arguments*: Functions receive helpful arguments like:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 `body`, `payload` - Event data\n\u2003\u2003\u21b3 `ack` - Acknowledge the event\n\u2003\u2003\u21b3 `say` - Send messages to channels\n\u2003\u2003\u21b3 `respond` - Respond to events with response_url\n\u2003\u2003\u21b3 `client` - Web API client\n\u2003\u2003\u21b3 `logger` - Built-in logger\n\u2003\u2003\u21b3 `complete`/`fail` - For custom workflow steps"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Async Support*: Full async/await support with `AsyncApp` and integration with frameworks like Sanic, FastAPI, and Starlette"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The repository is well-documented and includes examples for various use cases!"
+      }
+    }
+  ]
+}

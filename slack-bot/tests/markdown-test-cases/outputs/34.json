@@ -1,0 +1,112 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Detailed Folder Exploration*\n\n*1. Middleware (`/slack_bolt/middleware/`)*\n\nThe middleware system processes requests before they reach listeners:\n\n*Built-in Middleware Classes:*\n\n\u2023 `SslCheck` - SSL verification\n\u2023 `RequestVerification` - Validates Slack request signatures\n\u2023 `SingleTeamAuthorization` / `MultiTeamsAuthorization` - Auth handling\n\u2023 `IgnoringSelfEvents` - Prevents bot from responding to itself\n\u2023 `UrlVerification` - Handles Slack's URL verification challenge\n\u2023 `AttachingFunctionToken` - Attaches function tokens\n\u2023 `Assistant` - AI assistant middleware\n\n*Middleware Types:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 Sync: `middleware.py`, `custom_middleware.py`\n\u2023 Async: `async_middleware.py`, `async_custom_middleware.py`\n\u2023 Error handling: `middleware_error_handler.py`"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*2. Examples (`/examples/`)*\n\n26+ example directories with working apps:\n\n*Basic Examples:*\n\n\u2023 `app.py` - Simple bot with commands, events, middleware\n\u2023 `async_app.py` - Async version\n\u2023 `events_app.py` - Event handling\n\u2023 `dialogs_app.py` - Legacy dialog handling\n\n*Framework-Specific Examples:*\n\n\u2023 `flask/`, `django/`, `fastapi/`, `sanic/`, `starlette/`\n\u2023 `aws_lambda/`, `aws_chalice/`, `google_cloud_functions/`\n\u2023 `bottle/`, `cherrypy/`, `falcon/`, `pyramid/`, `tornado/`\n\u2023 `asgi/` - Generic ASGI adapter\n\u2023 `docker/` - Dockerized deployments\n\n*Advanced Features:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `assistants/` - AI Assistant apps (4 files)\n\u2003\u2003\u21b3 `app.py` - Thread-based assistant\n\u2003\u2003\u21b3 `interaction_app.py` - Interactive assistant\n\u2003\u2003\u21b3 Both sync and async versions\n\n\u2023 `app_authorize.py` - Custom authorization"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*3. Tests (`/tests/`)*\n\nComprehensive test coverage organized by module:\n\n*Test Structure:*\n\n\u2023 `adapter_tests/` - 15 adapter test suites\n\u2023 `adapter_tests_async/` - Async adapter tests\n\u2023 `scenario_tests/` - Integration/scenario tests\n\u2023 `scenario_tests_async/` - Async scenarios\n\u2023 `slack_bolt/` - Unit tests mirroring source structure\n\u2023 `slack_bolt_async/` - Async unit tests\n\n*Test Utilities:*\n\n\u2023 `mock_web_api_server.py` - Mock Slack API\n\u2023 `mock_asgi_server.py` / `mock_wsgi_server.py` - Mock servers\n\u2023 `utils.py` - Test helpers"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*4. Adapters (`/slack_bolt/adapter/`)*\n\n17 web framework adapters for deployment flexibility:\n\n*Popular Frameworks:*\n\n\u2023 `flask/` - Flask integration (`SlackRequestHandler`)\n\u2023 `fastapi/` - FastAPI integration\n\u2023 `django/` - Django integration\n\u2023 `sanic/` - Sanic async framework\n\u2023 `starlette/` - Starlette ASGI\n\n*Serverless:*\n\n\u2023 `aws_lambda/` - AWS Lambda handler\n\u2023 `google_cloud_functions/` - GCP Functions\n\u2023 `socket_mode/` - WebSocket mode (6 subdirs)\n\n*Other:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `aiohttp/`, `bottle/`, `cherrypy/`, `falcon/`, `pyramid/`, `tornado/`\n\u2023 `asgi/` - Generic ASGI (4 subdirectories)\n\u2023 `wsgi/` - Generic WSGI"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*5. OAuth (`/slack_bolt/oauth/`)*\n\nComplete OAuth implementation:\n\n\u2023 `oauth_flow.py` / `async_oauth_flow.py` - OAuth flow logic\n\u2023 `oauth_settings.py` / `async_oauth_settings.py` - Configuration\n\u2023 `callback_options.py` - OAuth callback handling\n\u2023 `internals.py` - Internal utilities"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*6. AI Assistant Context (`/context/assistant/`)*\n\nAdvanced AI assistant functionality:\n\n\u2023 `assistant_utilities.py` / `async_assistant_utilities.py` - Helper functions\n\u2023 `thread_context/` - Thread context management\n\u2023 `thread_context_store/` - Persistent storage for conversations\n\u2023 `internals.py` - Internal utilities"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*7. Listener System (`/listener/`)*\n\nEvent handling and listener execution:\n\n\u2023 `listener.py` / `async_listener.py` - Core listener logic\n\u2023 `thread_runner.py` / `asyncio_runner.py` - Execution runners\n\u2023 `listener_error_handler.py` - Error handling\n\u2023 `listener_completion_handler.py` - Completion handling\n\u2023 `listener_start_handler.py` - Pre-execution hooks\n\u2023 `builtins.py` - Built-in listeners (e.g., token revocation)"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*8. Documentation (`/docs/`)*\n\nMulti-language documentation:\n\n\u2023 `english/` - English docs with concepts (AI apps, authorization, etc.)\n\u2023 `japanese/` - Japanese translation\n\u2023 `reference/` - API reference\n\u2023 `img/` - Images and diagrams\n\n*Key Concepts Documented:*\n\n\u2023 AI apps, lazy listeners, authorization, token rotation\n\u2023 Message listening, listener middleware, app home\n\u2023 Select menu options, context management"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*9. Core App (`/app/app.py`)*\n\nThe main `App` class (1,597 lines) orchestrates:\n\n\u2023 97 imports including SDK, middleware, listeners, OAuth\n\u2023 Request routing and listener matching\n\u2023 Built-in HTTP server\n\u2023 Thread pool executor for concurrent operations\n\u2023 Assistant/AI integration\n\u2023 Workflow step handling\n\nThis is a *production-grade framework* with extensive testing, documentation, and deployment options!"
+      }
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Great! I've successfully cloned the bolt-python repository and explored several key files. Here's what I found:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Repository Overview: Slack Bolt for Python \ud83d\udd29*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Bolt for Python* is a framework for building Slack apps quickly using the latest Slack platform features."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Files Explored:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *README.md* - Main documentation showing:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 Framework supports Python 3.7+\n\u2003\u2003\u21b3 Provides both synchronous (`App`) and asynchronous (`AsyncApp`) implementations\n\u2003\u2003\u21b3 Supports multiple deployment modes (HTTP webhooks, Socket Mode)\n\u2003\u2003\u21b3 Offers decorators for listening to various Slack events (messages, actions, commands, shortcuts, etc.)\n\u2003\u2003\u21b3 Includes helper functions like `ack`, `say`, `respond`, and `client` for common operations"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *pyproject.toml* - Build configuration:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 Uses setuptools as build backend\n\u2003\u2003\u21b3 Supports Python 3.7 through 3.14\n\u2003\u2003\u21b3 Main dependency: `slack_sdk>=3.38.0,<4`\n\u2003\u2003\u21b3 Configured with Black formatter, pytest, and mypy for type checking\n\u2003\u2003\u21b3 MIT licensed"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *slack_bolt/__init__.py* - Main package exports:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 Exports core classes: `App`, `BoltContext`, `Ack`, `Respond`, `Say`, etc.\n\u2003\u2003\u21b3 Includes *AI Agents &amp; Assistants* features (Assistant, AssistantThreadContext, thread context stores)\n\u2003\u2003\u21b3 Provides context utilities: `SetStatus`, `SetTitle`, `SetSuggestedPrompts`, `SaveThreadContext`"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *slack_bolt/async_app.py* - Async module entry point:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 Exports async versions of all core classes (`AsyncApp`, `AsyncAck`, `AsyncBoltContext`, etc.)\n\u2003\u2003\u21b3 Requires aiohttp for async web framework support\n\u2003\u2003\u21b3 Supports integration with Sanic, FastAPI, Starlette through adapters"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The framework is well-structured with clear separation between sync/async implementations and includes modern features like AI assistant support! \ud83d\ude80"
+      }
+    }
+  ]
+}

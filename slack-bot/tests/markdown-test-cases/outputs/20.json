@@ -1,0 +1,233 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Perfect! Here's everything about the *FastAPI adapter*:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*FastAPI Adapter Overview*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83c\udfaf Key Point: FastAPI uses the Starlette adapter under the hood*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Since FastAPI is built on top of Starlette, the FastAPI adapter simply re-exports the Starlette handlers."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udce6 Two Handler Options:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`SlackRequestHandler`* - For sync Bolt apps (uses regular `App`)\n\u2023 *`AsyncSlackRequestHandler`* - For async Bolt apps (uses `AsyncApp`)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udd27 How It Works:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Core features:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Request/Response Translation*: Converts Starlette Request \u2194 BoltRequest/BoltResponse\n\u2023 *OAuth Support*: Handles GET requests for `/install` and `/oauth_redirect`\n\u2023 *Event Dispatching*: Routes POST requests to Bolt app\n\u2023 *Cookie Support*: Properly handles cookies in responses\n\u2023 *Custom Context Properties*: Can inject additional context data"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udcdd Usage Examples:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*1. Sync App (app.py):*\n```\nfrom slack_bolt import App\nfrom slack_bolt.adapter.fastapi import SlackRequestHandler\nfrom fastapi import FastAPI, Request\n\n# Bolt app (sync)\napp = App()\napp_handler = SlackRequestHandler(app)\n\n@app.event(\"app_mention\")\ndef handle_app_mentions(body, say, logger):\n    logger.info(body)\n    say(\"What's up?\")\n\n# FastAPI app\napi = FastAPI()\n\n@api.post(\"/slack/events\")\nasync def endpoint(req: Request):\n    return await app_handler.handle(req)  # Handler is async even for sync Bolt app!\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*2. Async App (async_app.py) - RECOMMENDED:*\n```\nfrom slack_bolt.async_app import AsyncApp\nfrom slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler\nfrom fastapi import FastAPI, Request\n\n# Bolt app (async)\napp = AsyncApp()\napp_handler = AsyncSlackRequestHandler(app)\n\n@app.event(\"app_mention\")\nasync def handle_app_mentions(body, say, logger):\n    logger.info(body)\n    await say(\"What's up?\")  # Use await with async app\n\n# FastAPI app\napi = FastAPI()\n\n@api.post(\"/slack/events\")\nasync def endpoint(req: Request):\n    return await app_handler.handle(req)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*3. With OAuth (async_oauth_app.py):*\n```\napi = FastAPI()\n\n@api.post(\"/slack/events\")\nasync def endpoint(req: Request):\n    return await app_handler.handle(req)\n\n@api.get(\"/slack/install\")\nasync def install(req: Request):\n    return await app_handler.handle(req)\n\n@api.get(\"/slack/oauth_redirect\")\nasync def oauth_redirect(req: Request):\n    return await app_handler.handle(req)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*4. With Custom Context Properties (async_app_custom_props.py):*\n```\nfrom fastapi import Depends\n\ndef get_foo():\n    yield \"FOO\"\n\n@api.post(\"/slack/events\")\nasync def endpoint(req: Request, foo: str = Depends(get_foo)):\n    # Pass custom properties to handler\n    return await app_handler.handle(req, {\"foo\": foo})\n\n@app.event(\"app_mention\")\nasync def handle_app_mentions(context, say, logger):\n    # Access custom property in context\n    assert context.get(\"foo\") == \"FOO\"\n    await say(\"What's up?\")\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\ude80 Running the App:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\n# Install dependencies\npip install -r requirements.txt\n\n# Set environment variables\nexport SLACK_SIGNING_SECRET=***\nexport SLACK_BOT_TOKEN=xoxb-***\n\n# Run with uvicorn\nuvicorn async_app:api --reload --port 3000 --log-level warning\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\u2728 Key Advantages:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Async-First*: Perfect for high-performance async applications\n\u2023 *FastAPI Features*: Full access to dependency injection, validation, OpenAPI docs\n\u2023 *Custom Context*: Can inject custom properties via `addition_context_properties` parameter\n\u2023 *Type Safety*: Works great with FastAPI's type hints\n\u2023 *Modern*: Uses latest Python async/await patterns"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udcca Comparison: Sync vs Async:*"
+      }
+    },
+    {
+      "type": "table",
+      "rows": [
+        [
+          {
+            "type": "raw_text",
+            "text": "Feature"
+          },
+          {
+            "type": "raw_text",
+            "text": "Sync (SlackRequestHandler)"
+          },
+          {
+            "type": "raw_text",
+            "text": "Async (AsyncSlackRequestHandler)"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Bolt App Type"
+          },
+          {
+            "type": "raw_text",
+            "text": "App"
+          },
+          {
+            "type": "raw_text",
+            "text": "AsyncApp"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Listener Functions"
+          },
+          {
+            "type": "raw_text",
+            "text": "Regular functions"
+          },
+          {
+            "type": "raw_text",
+            "text": "async def functions"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Utility Methods"
+          },
+          {
+            "type": "raw_text",
+            "text": "say(), ack()"
+          },
+          {
+            "type": "raw_text",
+            "text": "await say(), await ack()"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Performance"
+          },
+          {
+            "type": "raw_text",
+            "text": "Good"
+          },
+          {
+            "type": "raw_text",
+            "text": "Excellent (concurrent)"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Use Case"
+          },
+          {
+            "type": "raw_text",
+            "text": "Simple apps"
+          },
+          {
+            "type": "raw_text",
+            "text": "High-traffic apps"
+          }
+        ]
+      ]
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Recommendation:* Use `AsyncSlackRequestHandler` with `AsyncApp` for best performance with FastAPI! \ud83d\ude80"
+      }
+    }
+  ]
+}

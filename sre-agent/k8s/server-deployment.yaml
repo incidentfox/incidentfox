@@ -1,0 +1,132 @@
+---
+# Server Deployment - FastAPI server that orchestrates investigations
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: incidentfox-server
+  namespace: incidentfox-prod
+  labels:
+    app: incidentfox-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: incidentfox-server
+  template:
+    metadata:
+      labels:
+        app: incidentfox-server
+    spec:
+      serviceAccountName: incidentfox-server
+      imagePullSecrets:
+      - name: ecr-registry-secret
+      containers:
+      - name: server
+        image: 103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest
+        imagePullPolicy: Always
+        command: ["python", "/app/server.py"]
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: SANDBOX_IMAGE
+          value: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
+        - name: SANDBOX_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace  # Use same namespace as server
+        - name: USE_GVISOR
+          value: "true"  # Production uses gVisor for enhanced isolation
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: anthropic-api-key
+        - name: LMNR_PROJECT_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: laminar-api-key
+              optional: true
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        readinessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 10
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+---
+# Service for the server - LoadBalancer for external access
+# Works on AWS (creates NLB), GCP, Azure, and on-prem (with MetalLB)
+apiVersion: v1
+kind: Service
+metadata:
+  name: incidentfox-server-svc
+  namespace: incidentfox-prod
+  annotations:
+    # AWS-specific optimizations (optional, ignored on other clouds)
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: incidentfox-server
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+---
+# ServiceAccount with K8s API permissions
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: incidentfox-server
+  namespace: incidentfox-prod
+---
+# Role to manage Sandboxes (same namespace as server)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: incidentfox-server-role
+  namespace: incidentfox-prod
+rules:
+- apiGroups: ["agents.x-k8s.io"]
+  resources: ["sandboxes"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+---
+# RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: incidentfox-server-binding
+  namespace: incidentfox-prod
+subjects:
+- kind: ServiceAccount
+  name: incidentfox-server
+  namespace: incidentfox-prod
+roleRef:
+  kind: Role
+  name: incidentfox-server-role
+  apiGroup: rbac.authorization.k8s.io
