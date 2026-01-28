@@ -1009,6 +1009,50 @@ class UltimateRAGServer:
         # ==================== /api/v1 Compatibility Routes ====================
         # These routes provide backward compatibility with the old knowledge_base API
 
+        @app.get("/api/v1/cache/stats", tags=["v1-compat"])
+        async def v1_cache_stats():
+            """
+            Get cache statistics (v1 compatible).
+
+            Returns information about cached trees. Required by web UI to check
+            if trees are loaded before attempting queries.
+            """
+            trees_info = []
+            total_nodes = 0
+
+            if self.forest:
+                for tree_name, tree in self.forest.trees.items():
+                    node_count = len(tree.all_nodes) if tree.all_nodes else 0
+                    total_nodes += node_count
+                    # Estimate size based on node count (rough approximation)
+                    estimated_size_bytes = node_count * 10000  # ~10KB per node estimate
+                    trees_info.append(
+                        {
+                            "name": tree_name,
+                            "size_gb": round(estimated_size_bytes / 1024**3, 3),
+                            "size_bytes": estimated_size_bytes,
+                            "node_count": node_count,
+                        }
+                    )
+
+            total_size_bytes = sum(t["size_bytes"] for t in trees_info)
+            max_size_gb = 16.0  # Default max cache size
+
+            return {
+                "trees_cached": len(trees_info),
+                "max_trees": 5,
+                "total_size_gb": round(total_size_bytes / 1024**3, 3),
+                "max_size_gb": max_size_gb,
+                "utilization_percent": (
+                    round((total_size_bytes / (max_size_gb * 1024**3)) * 100, 1)
+                    if max_size_gb > 0
+                    else 0
+                ),
+                "trees": trees_info,
+                "s3_enabled": bool(os.environ.get("TREES_S3_BUCKET")),
+                "s3_bucket": os.environ.get("TREES_S3_BUCKET"),
+            }
+
         @app.get("/api/v1/trees", tags=["v1-compat"])
         async def v1_list_trees():
             """List available knowledge trees (v1 compatible)."""
@@ -1348,30 +1392,6 @@ class UltimateRAGServer:
                 query=request.query,
                 results=results,
                 total_results=len(results),
-            )
-
-        @app.post(
-            "/api/v1/tree/documents",
-            response_model=V1AddDocumentsResponse,
-            tags=["v1-compat"],
-        )
-        async def v1_add_documents(request: V1AddDocumentsRequest):
-            """Add documents to a tree (v1 compatible)."""
-            if not self.forest:
-                raise HTTPException(503, "Server not initialized")
-
-            tree_name = request.tree or "main"
-            knowledge_tree = self.forest.get_tree(tree_name)
-
-            if not knowledge_tree:
-                raise HTTPException(404, f"Tree '{tree_name}' not found")
-
-            # For now, return a stub response - actual document processing
-            # would require the ingestion pipeline
-            return V1AddDocumentsResponse(
-                tree=tree_name,
-                message="Document ingestion via this endpoint is not yet implemented in ultimate_rag. Use the /ingest endpoint instead.",
-                chunks_added=0,
             )
 
         @app.post("/api/v1/search", response_model=V1SearchResponse, tags=["v1-compat"])

@@ -15,7 +15,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
 
 if TYPE_CHECKING:
-    from knowledge_base.raptor.cluster_tree_builder import (
+    # Note: raptor module is at /app/raptor/ in the container
+    from raptor.cluster_tree_builder import (
         ClusterTreeBuilder,
         ClusterTreeConfig,
     )
@@ -59,7 +60,7 @@ class EnhancedTreeBuilder:
     Enhanced tree builder that wraps RAPTOR with Ultimate RAG features.
 
     Usage:
-        from knowledge_base.raptor.cluster_tree_builder import ClusterTreeBuilder, ClusterTreeConfig
+        from raptor.cluster_tree_builder import ClusterTreeBuilder, ClusterTreeConfig
 
         # Create standard RAPTOR builder
         raptor_config = ClusterTreeConfig(...)
@@ -440,7 +441,8 @@ def create_enhanced_builder(
         EnhancedTreeBuilder ready to use
     """
     # Import RAPTOR components
-    from knowledge_base.raptor.cluster_tree_builder import (
+    # Note: raptor module is at /app/raptor/ in the container
+    from raptor.cluster_tree_builder import (
         ClusterTreeBuilder,
         ClusterTreeConfig,
     )
