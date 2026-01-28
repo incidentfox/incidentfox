@@ -1,0 +1,109 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Here's what's in the *bolt-python* directory:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Main Structure:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udcc1 Key Directories:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`slack_bolt/`* - Main source code package containing:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 `adapter/` - Adapters for different web frameworks\n\u2003\u2003\u21b3 `app/` - Core app implementation\n\u2003\u2003\u21b3 `async_app.py` - Async version of the app\n\u2003\u2003\u21b3 `authorization/`, `oauth/` - Auth handling\n\u2003\u2003\u21b3 `middleware/`, `listener/` - Event processing\n\u2003\u2003\u21b3 `workflows/` - Workflow step support\n\u2003\u2003\u21b3 `context/`, `request/`, `response/` - Request/response handling"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`examples/`* - Extensive examples (26 subdirectories!) including:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 Framework integrations: `flask`, `fastapi`, `django`, `sanic`, `starlette`, `tornado`, `bottle`, `falcon`, `pyramid`\n\u2003\u2003\u21b3 Cloud platforms: `aws_lambda`, `aws_chalice`, `google_cloud_functions`, `google_cloud_run`, `google_app_engine`, `heroku`\n\u2003\u2003\u21b3 Features: `oauth_app.py`, `socket_mode.py`, `modals_app.py`, `workflow_steps/`, `assistants/`\n\u2003\u2003\u21b3 Example apps showing dialogs, events, messages, etc."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`tests/`* - Comprehensive test suite:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 `slack_bolt/` - Tests for sync version\n\u2003\u2003\u21b3 `slack_bolt_async/` - Tests for async version\n\u2003\u2003\u21b3 `adapter_tests/` - Adapter tests\n\u2003\u2003\u21b3 `scenario_tests/` - End-to-end scenarios\n\u2003\u2003\u21b3 Mock servers for testing"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`docs/`* - Documentation files"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`requirements/`* - Dependency files for different use cases:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2003\u2003\u21b3 `adapter.txt` - Web framework adapters\n\u2003\u2003\u21b3 `async.txt` - Async dependencies\n\u2003\u2003\u21b3 `testing.txt` - Test dependencies"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udcc4 Configuration Files:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `pyproject.toml` - Modern Python project config\n\u2023 `setup.cfg` - Package setup\n\u2023 `.flake8` - Linting config\n\u2023 `codecov.yml` - Code coverage config"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "This is a well-organized, production-ready Python package with extensive examples for virtually every major Python web framework and cloud platform!"
+      }
+    }
+  ]
+}

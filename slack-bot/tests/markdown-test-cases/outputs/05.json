@@ -1,0 +1,11 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The README.md file is *11 KB* (10,592 bytes to be exact, as we saw in the earlier directory listing)."
+      }
+    }
+  ]
+}

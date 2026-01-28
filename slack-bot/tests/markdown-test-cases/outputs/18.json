@@ -1,0 +1,116 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Perfect! Here's a comprehensive overview of the *`adapter/`* directory:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Bolt Python Adapters*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The adapter directory contains *16 different web framework adapters* that allow Bolt apps to run on various Python web frameworks and platforms:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83c\udf10 Web Framework Adapters:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`flask/`* - Flask integration (sync)\n\u2023 *`fastapi/`* - FastAPI integration (async)\n\u2023 *`django/`* - Django integration\n\u2023 *`sanic/`* - Sanic async framework\n\u2023 *`starlette/`* - Starlette async framework\n\u2023 *`tornado/`* - Tornado framework (both sync &amp; async)\n\u2023 *`falcon/`* - Falcon REST framework\n\u2023 *`bottle/`* - Bottle micro-framework\n\u2023 *`pyramid/`* - Pyramid web framework\n\u2023 *`cherrypy/`* - CherryPy framework\n\u2023 *`aiohttp/`* - AIOHTTP async framework"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\u2601\ufe0f Cloud Platform Adapters:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`aws_lambda/`* - AWS Lambda serverless (includes Chalice support)\n\u2003\u2003\u21b3 Handler for Lambda functions\n\u2003\u2003\u21b3 Chalice framework handler\n\u2003\u2003\u21b3 S3-based OAuth flow\n\u2003\u2003\u21b3 Lazy listener runners"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`google_cloud_functions/`* - Google Cloud Functions"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udd0c Protocol Adapters:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`socket_mode/`* - WebSocket-based Socket Mode (no HTTP endpoint needed)\n\u2003\u2003\u21b3 Multiple implementations: `builtin`, `aiohttp`, `websockets`, `websocket_client`\n\u2003\u2003\u21b3 Both sync and async handlers"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`asgi/`* - Generic ASGI adapter (for any ASGI-compatible framework)\n\u2003\u2003\u21b3 Builtin and AIOHTTP implementations"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`wsgi/`* - Generic WSGI adapter (for any WSGI-compatible framework)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udcdd Adapter Structure:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Each adapter typically contains:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `__init__.py` - Exports the handler class\n\u2023 `handler.py` or `async_handler.py` - Main handler implementation\n\u2023 Some have additional support files for OAuth, lazy listeners, etc."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "This comprehensive adapter collection means you can run Bolt apps on *virtually any Python web framework or cloud platform*!"
+      }
+    }
+  ]
+}

@@ -1,0 +1,296 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Here's what's in the *`slack_bolt/`* directory:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Overview:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Total Size*: 1.6 MB\n\u2023 *Python Files*: 228 `.py` files\n\u2023 *Directories*: 16 subdirectories"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Main Files (in root):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `__init__.py` (1.9 KB) - Package initialization\n\u2023 `async_app.py` (3.0 KB) - Async app implementation\n\u2023 `version.py` (95 bytes) - Version info\n\u2023 `py.typed` (0 bytes) - Type hints marker"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Subdirectories &amp; File Counts:*"
+      }
+    },
+    {
+      "type": "table",
+      "rows": [
+        [
+          {
+            "type": "raw_text",
+            "text": "Directory"
+          },
+          {
+            "type": "raw_text",
+            "text": "Files"
+          },
+          {
+            "type": "raw_text",
+            "text": "Purpose"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "adapter/"
+          },
+          {
+            "type": "raw_text",
+            "text": "58"
+          },
+          {
+            "type": "raw_text",
+            "text": "Framework adapters (Flask, Django, FastAPI, Sanic, etc.)"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "context/"
+          },
+          {
+            "type": "raw_text",
+            "text": "48"
+          },
+          {
+            "type": "raw_text",
+            "text": "Context management for events"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "middleware/"
+          },
+          {
+            "type": "raw_text",
+            "text": "38"
+          },
+          {
+            "type": "raw_text",
+            "text": "Middleware components"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "workflows/"
+          },
+          {
+            "type": "raw_text",
+            "text": "16"
+          },
+          {
+            "type": "raw_text",
+            "text": "Workflow functionality"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "listener/"
+          },
+          {
+            "type": "raw_text",
+            "text": "14"
+          },
+          {
+            "type": "raw_text",
+            "text": "Event listener logic"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "oauth/"
+          },
+          {
+            "type": "raw_text",
+            "text": "9"
+          },
+          {
+            "type": "raw_text",
+            "text": "OAuth implementation"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "lazy_listener/"
+          },
+          {
+            "type": "raw_text",
+            "text": "7"
+          },
+          {
+            "type": "raw_text",
+            "text": "Lazy loading for listeners"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "authorization/"
+          },
+          {
+            "type": "raw_text",
+            "text": "6"
+          },
+          {
+            "type": "raw_text",
+            "text": "Authorization handling"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "listener_matcher/"
+          },
+          {
+            "type": "raw_text",
+            "text": "6"
+          },
+          {
+            "type": "raw_text",
+            "text": "Event matching logic"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "request/"
+          },
+          {
+            "type": "raw_text",
+            "text": "6"
+          },
+          {
+            "type": "raw_text",
+            "text": "Request handling"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "kwargs_injection/"
+          },
+          {
+            "type": "raw_text",
+            "text": "5"
+          },
+          {
+            "type": "raw_text",
+            "text": "Dependency injection"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "app/"
+          },
+          {
+            "type": "raw_text",
+            "text": "4"
+          },
+          {
+            "type": "raw_text",
+            "text": "Core app classes"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "util/"
+          },
+          {
+            "type": "raw_text",
+            "text": "3"
+          },
+          {
+            "type": "raw_text",
+            "text": "Utility functions"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "logger/"
+          },
+          {
+            "type": "raw_text",
+            "text": "2"
+          },
+          {
+            "type": "raw_text",
+            "text": "Logging setup"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "response/"
+          },
+          {
+            "type": "raw_text",
+            "text": "2"
+          },
+          {
+            "type": "raw_text",
+            "text": "Response handling"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "error/"
+          },
+          {
+            "type": "raw_text",
+            "text": "1"
+          },
+          {
+            "type": "raw_text",
+            "text": "Error classes"
+          }
+        ]
+      ]
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The *adapter/* directory contains integrations for 16 different Python web frameworks including aiohttp, bottle, cherrypy, django, falcon, fastapi, flask, pyramid, sanic, starlette, tornado, and more."
+      }
+    }
+  ]
+}

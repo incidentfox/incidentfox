@@ -1,0 +1,165 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Perfect! Here's everything about the *Flask adapter*:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Flask Adapter Overview*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udce6 Core Component: `SlackRequestHandler`*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The Flask adapter provides a simple handler class that bridges Flask and Bolt:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Key Features:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Request/Response Translation*: Converts between Flask and Bolt formats\n\u2023 *OAuth Flow Support*: Handles installation and OAuth redirect routes automatically\n\u2023 *Event Dispatching*: Routes POST requests to the Bolt app"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udd27 How It Works:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The `SlackRequestHandler` class:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nclass SlackRequestHandler:\n    def __init__(self, app: App):\n        self.app = app\n    \n    def handle(self, req: Request) -> Response:\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Handles 3 types of requests:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *GET `/install`* - OAuth installation flow (if OAuth is enabled)\n\u2023 *GET `/oauth_redirect`* - OAuth callback after authorization\n\u2023 *POST* - All Slack events, actions, commands, etc."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Helper functions:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `to_bolt_request()` - Converts Flask Request \u2192 BoltRequest\n\u2023 `to_flask_response()` - Converts BoltResponse \u2192 Flask Response"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udcdd Usage Example:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Basic App (app.py):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nfrom slack_bolt import App\nfrom slack_bolt.adapter.flask import SlackRequestHandler\nfrom flask import Flask, request\n\n# Create Bolt app\napp = App()\n\n@app.event(\"app_mention\")\ndef event_test(body, say, logger):\n    logger.info(body)\n    say(\"What's up?\")\n\n# Create Flask app and handler\nflask_app = Flask(__name__)\nhandler = SlackRequestHandler(app)\n\n@flask_app.route(\"/slack/events\", methods=[\"POST\"])\ndef slack_events():\n    return handler.handle(request)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*With OAuth (oauth_app.py):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\n# Same setup, but add OAuth routes:\n\n@flask_app.route(\"/slack/install\", methods=[\"GET\"])\ndef install():\n    return handler.handle(request)\n\n@flask_app.route(\"/slack/oauth_redirect\", methods=[\"GET\"])\ndef oauth_redirect():\n    return handler.handle(request)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\ude80 Running the App:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\n# Install dependencies\npip install -r requirements.txt\n\n# Set environment variables\nexport SLACK_SIGNING_SECRET=***\nexport SLACK_BOT_TOKEN=xoxb-***\n\n# Run Flask\nFLASK_APP=app.py FLASK_ENV=development flask run -p 3000\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\u2728 Key Benefits:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Simple Integration*: Just 3 lines to connect Bolt to Flask\n\u2023 *Automatic OAuth*: Handler manages OAuth flows if configured\n\u2023 *Full Flask Compatibility*: Works with all Flask features and extensions\n\u2023 *Synchronous*: Perfect for traditional Flask apps (use FastAPI/Starlette for async)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The Flask adapter is one of the simplest and most straightforward adapters in the collection!"
+      }
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The bolt-python repository has the following size characteristics:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Total repository size*: 27 MB\n\u2023 *Git directory (.git)*: 13 MB\n\u2023 *Source code and files*: ~14 MB"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*File counts*:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Non-git files*: 1,024 files\n\u2023 *Total files* (including git objects): 1,052 files"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "So the actual source code, documentation, examples, and tests make up about 14 MB, while the git history accounts for about 13 MB of the total size."
+      }
+    }
+  ]
+}

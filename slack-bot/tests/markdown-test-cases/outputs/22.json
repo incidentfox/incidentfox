@@ -1,0 +1,221 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Perfect! Here's everything about the *Google Cloud Functions adapter*:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Google Cloud Functions Adapter Overview*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udce6 Core Component: `SlackRequestHandler`*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The adapter is designed specifically for Google Cloud Functions (GCP's serverless FaaS platform)."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udd11 Key Features:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Built on Flask*: Uses Flask Request/Response (GCP Cloud Functions use Flask internally)\n\u2023 *Reuses Flask Adapter*: Imports `to_bolt_request` and `to_flask_response` from Flask adapter\n\u2023 *OAuth Simplification*: Both install and callback handled on a single endpoint\n\u2023 *No Lazy Listeners*: Explicitly disabled (raises error if used)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\u26a0\ufe0f Important Limitations:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nclass NoopLazyListenerRunner(LazyListenerRunner):\n    def start(self, function: Callable[..., None], request: BoltRequest) -> None:\n        raise BoltError(\n            \"The google_cloud_functions adapter does not support lazy listeners. \"\n            \"Please consider either having a queue to pass the request to a different function or \"\n            \"rewriting your code not to use lazy listeners.\"\n        )\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Why?* Lazy listeners run after the response is sent, but Cloud Functions terminate immediately after response."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83c\udfaf OAuth Handling:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The adapter smartly handles OAuth on a single endpoint:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *GET with `code`/`error`/`state` params* \u2192 OAuth callback\n\u2023 *GET without those params* \u2192 OAuth installation\n\u2023 *POST* \u2192 Slack events/commands"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udcdd Usage Examples:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*1. Simple App (simple_main.py):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nimport logging\nfrom slack_bolt import App\n\n# CRITICAL: Must set process_before_response=True for FaaS!\napp = App(process_before_response=True)\n\n@app.command(\"/hello-bolt-python-gcp\")\ndef hello_command(ack):\n    ack(\"Hi from Google Cloud Functions!\")\n\n@app.event(\"app_mention\")\ndef event_test(body, say, logger):\n    logger.info(body)\n    say(\"Hi from Google Cloud Functions!\")\n\n# Import adapter\nfrom slack_bolt.adapter.google_cloud_functions import SlackRequestHandler\nfrom flask import Request\n\nhandler = SlackRequestHandler(app)\n\n# Cloud Function entry point\ndef hello_bolt_app(req: Request):\n    \"\"\"HTTP Cloud Function.\"\"\"\n    return handler.handle(req)\n\n# For local development\nif __name__ == \"__main__\":\n    from flask import Flask, request\n    flask_app = Flask(__name__)\n    \n    @flask_app.route(\"/function\", methods=[\"GET\", \"POST\"])\n    def handle_anything():\n        return handler.handle(request)\n    \n    flask_app.run(port=3000)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*2. With OAuth (oauth_main.py):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nfrom slack_bolt import App\nfrom slack_bolt.oauth.oauth_settings import OAuthSettings\nfrom datastore import GoogleDatastoreInstallationStore, GoogleDatastoreOAuthStateStore\nfrom google.cloud import datastore\n\ndatastore_client = datastore.Client()\n\n# process_before_response=True is REQUIRED for FaaS\napp = App(\n    process_before_response=True,\n    installation_store=GoogleDatastoreInstallationStore(\n        datastore_client=datastore_client,\n        logger=logger,\n    ),\n    oauth_settings=OAuthSettings(\n        state_store=GoogleDatastoreOAuthStateStore(\n            datastore_client=datastore_client,\n            logger=logger,\n        ),\n    ),\n)\n\n# ... rest of the code same as simple example\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\uddc4\ufe0f Google Datastore Integration:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The example includes custom implementations:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`GoogleDatastoreInstallationStore`* - Stores OAuth installations in Datastore\n\u2023 *`GoogleDatastoreOAuthStateStore`* - Stores OAuth state in Datastore"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "These handle multi-workspace installations using GCP's native NoSQL database."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\ude80 Deployment Steps:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\n# Step 1: Create env file\ncp .env.yaml.sample .env.yaml\nvi .env.yaml  # Add SLACK_SIGNING_SECRET and SLACK_BOT_TOKEN\n\n# Step 2: Create GCP project\ngcloud projects create YOUR_PROJECT_NAME\ngcloud config set project YOUR_PROJECT_NAME\n\n# Step 3: Deploy function\ncp simple_main.py main.py\ngcloud functions deploy hello_bolt_app \\\n  --runtime python39 \\\n  --trigger-http \\\n  --allow-unauthenticated \\\n  --env-vars-file .env.yaml\n\n# Step 4: Get URL\ngcloud functions describe hello_bolt_app\n\n# Step 5: Configure Slack App\n# Set the function URL as:\n#  - Event Subscriptions Request URL\n#  - Slash Command Request URL\n#  - OAuth Redirect URL (if using OAuth)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udccb Environment Variables:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Simple app (.env.yaml.sample):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nSLACK_SIGNING_SECRET: \"***\"\nSLACK_BOT_TOKEN: \"xoxb-***\"\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*OAuth app (.env.yaml.oauth-sample):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nSLACK_SIGNING_SECRET: \"***\"\nSLACK_CLIENT_ID: \"111.111\"\nSLACK_CLIENT_SECRET: \"***\"\nSLACK_SCOPES: \"app_mentions:read,chat:write,commands\"\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\u2728 Key Points:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`process_before_response=True`* is *MANDATORY* - responses must complete before function terminates\n\u2023 *No lazy listeners* - use Cloud Tasks/Pub/Sub for background work instead\n\u2023 *Single endpoint OAuth* - handles both install and callback on same URL\n\u2023 *Local development* - Includes Flask dev server for testing locally\n\u2023 *Datastore integration* - Example OAuth state/installation storage"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "This adapter makes it super easy to run Bolt apps serverlessly on Google Cloud! \u2601\ufe0f"
+      }
+    }
+  ]
+}

@@ -1,0 +1,271 @@
+# SandboxTemplate: Reusable configuration for IncidentFox agent sandboxes
+# This defines the template - individual instances are created via SandboxClaim or programmatically
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxTemplate
+metadata:
+  name: incidentfox-agent-template
+  # namespace not specified - uses namespace from kubectl context
+spec:
+  podTemplate:
+    metadata:
+      labels:
+        app: incidentfox-agent
+        component: investigation
+    spec:
+      containers:
+      - name: agent
+        image: incidentfox-agent:latest
+        imagePullPolicy: IfNotPresent
+        # Run FastAPI server on port 8888 (agent-sandbox standard)
+        # SandboxClient SDK will communicate with this server via Router
+        ports:
+        - containerPort: 8888
+          name: sandbox
+        env:
+        # Core credentials
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: anthropic-api-key
+        - name: LMNR_PROJECT_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: laminar-api-key
+              optional: true
+        
+        # Observability platforms
+        - name: CORALOGIX_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: coralogix-api-key
+              optional: true
+        - name: CORALOGIX_DOMAIN
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: coralogix-domain
+              optional: true
+        - name: DATADOG_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: datadog-api-key
+              optional: true
+        - name: DATADOG_APP_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: datadog-app-key
+              optional: true
+        - name: DATADOG_SITE
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: datadog-site
+              optional: true
+        - name: PROMETHEUS_URL
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: prometheus-url
+              optional: true
+        - name: ALERTMANAGER_URL
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: alertmanager-url
+              optional: true
+        - name: GRAFANA_URL
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: grafana-url
+              optional: true
+        - name: GRAFANA_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: grafana-api-key
+              optional: true
+        - name: SENTRY_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: sentry-auth-token
+              optional: true
+        - name: SENTRY_ORGANIZATION
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: sentry-organization
+              optional: true
+        - name: SENTRY_PROJECT
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: sentry-project
+              optional: true
+        
+        # Logging backends
+        - name: ELASTICSEARCH_URL
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: elasticsearch-url
+              optional: true
+        - name: ELASTICSEARCH_INDEX
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: elasticsearch-index
+              optional: true
+        - name: LOKI_URL
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: loki-url
+              optional: true
+        - name: SPLUNK_HOST
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: splunk-host
+              optional: true
+        - name: SPLUNK_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: splunk-token
+              optional: true
+        - name: SPLUNK_PORT
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: splunk-port
+              optional: true
+        
+        # Collaboration tools
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: github-token
+              optional: true
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: github-app-id
+              optional: true
+        - name: GITHUB_PRIVATE_KEY_B64
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: github-private-key-b64
+              optional: true
+        - name: GITHUB_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: github-webhook-secret
+              optional: true
+        - name: GITHUB_INSTALLATION_ID
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: github-installation-id
+              optional: true
+        - name: GITHUB_REPOSITORY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: github-repository
+              optional: true
+        - name: SLACK_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: slack-bot-token
+              optional: true
+        - name: SLACK_DEFAULT_CHANNEL
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: slack-default-channel
+              optional: true
+        - name: PAGERDUTY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: pagerduty-api-key
+              optional: true
+        
+        # AWS credentials
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: aws-access-key-id
+              optional: true
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: aws-secret-access-key
+              optional: true
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: aws-region
+              optional: true
+        
+        # Advanced features
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: database-url
+              optional: true
+        - name: SERVICE_CATALOG_PATH
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: service-catalog-path
+              optional: true
+        - name: HISTORY_DB_PATH
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: history-db-path
+              optional: true
+        - name: REMEDIATION_LOG_PATH
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: remediation-log-path
+              optional: true
+        
+        # Kubernetes context (auto-detected)
+        - name: KUBECONFIG
+          value: /var/run/secrets/kubernetes.io/serviceaccount
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "100m"  # Low request: agents are I/O-bound (Claude API calls)
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"  # High limit: allows bursts for git/file operations
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+      # gVisor provides kernel-level isolation (syscall interception in userspace)
+      runtimeClassName: gvisor
+
