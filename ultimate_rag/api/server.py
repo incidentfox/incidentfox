@@ -91,7 +91,9 @@ class TeachRequest(BaseModel):
     knowledge_type: Optional[str] = Field(None, description="Type of knowledge")
     source: Optional[str] = Field(None, description="Source of the knowledge")
     entities: Optional[List[str]] = Field(None, description="Related entities")
-    importance: Optional[float] = Field(None, ge=0, le=1, description="Importance score")
+    importance: Optional[float] = Field(
+        None, ge=0, le=1, description="Importance score"
+    )
 
 
 class TeachResponse(BaseModel):
@@ -263,7 +265,9 @@ class V1TeachRequest(BaseModel):
     knowledge_type: str = Field("procedural", description="Type of knowledge")
     source: str = Field("agent_learning", description="Source")
     confidence: float = Field(0.7, description="Confidence score")
-    related_entities: List[str] = Field(default_factory=list, description="Related services")
+    related_entities: List[str] = Field(
+        default_factory=list, description="Related services"
+    )
     learned_from: str = Field("agent_investigation", description="Learning context")
     task_context: str = Field("", description="Task context")
 
@@ -512,7 +516,9 @@ class UltimateRAGServer:
             if pkl_files:
                 from ..raptor.bridge import import_raptor_tree
 
-                logger.info(f"Loading {len(pkl_files)} trees from {effective_trees_dir}")
+                logger.info(
+                    f"Loading {len(pkl_files)} trees from {effective_trees_dir}"
+                )
                 for pkl_file in pkl_files:
                     try:
                         tree_name = pkl_file.stem
@@ -535,7 +541,9 @@ class UltimateRAGServer:
             except Exception as e:
                 logger.error(f"Failed to load tree: {e}")
 
-        logger.info(f"Forest initialized with {len(self.forest.trees)} trees: {list(self.forest.trees.keys())}")
+        logger.info(
+            f"Forest initialized with {len(self.forest.trees)} trees: {list(self.forest.trees.keys())}"
+        )
 
         # Initialize graph
         self.graph = KnowledgeGraph()
@@ -849,7 +857,9 @@ class UltimateRAGServer:
                     )
 
                     # Get relationships
-                    for rel in self.graph.get_relationships_for_entity(request.entity_id):
+                    for rel in self.graph.get_relationships_for_entity(
+                        request.entity_id
+                    ):
                         relationships.append(
                             GraphRelationship(
                                 source_id=rel.source_id,
@@ -935,7 +945,9 @@ class UltimateRAGServer:
                 stats=stats,
             )
 
-        @app.post("/maintenance/run", response_model=MaintenanceResponse, tags=["Admin"])
+        @app.post(
+            "/maintenance/run", response_model=MaintenanceResponse, tags=["Admin"]
+        )
         async def run_maintenance():
             """Run a maintenance cycle."""
             if not self.maintenance:
@@ -982,7 +994,9 @@ class UltimateRAGServer:
                 "loaded": trees,
             }
 
-        @app.post("/api/v1/trees", response_model=V1CreateTreeResponse, tags=["v1-compat"])
+        @app.post(
+            "/api/v1/trees", response_model=V1CreateTreeResponse, tags=["v1-compat"]
+        )
         async def v1_create_tree(request: V1CreateTreeRequest):
             """
             Create a new empty knowledge tree (v1 compatible).
@@ -1031,9 +1045,13 @@ class UltimateRAGServer:
 
             except Exception as e:
                 logger.error(f"Error creating tree: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to create tree: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to create tree: {e}"
+                )
 
-        @app.get("/api/v1/tree/stats", response_model=V1TreeStatsResponse, tags=["v1-compat"])
+        @app.get(
+            "/api/v1/tree/stats", response_model=V1TreeStatsResponse, tags=["v1-compat"]
+        )
         async def v1_tree_stats(tree: Optional[str] = None):
             """
             Get statistics about a knowledge tree (v1 compatible).
@@ -1080,7 +1098,9 @@ class UltimateRAGServer:
 
             except Exception as e:
                 logger.error(f"Error getting tree stats: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to get tree stats: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to get tree stats: {e}"
+                )
 
         def _node_to_graph_node(node, node_id: int, layer: int) -> V1GraphNode:
             """Convert a KnowledgeNode to V1GraphNode."""
@@ -1162,7 +1182,9 @@ class UltimateRAGServer:
 
                             if child_id in included_node_ids:
                                 graph_edges.append(
-                                    V1GraphEdge(source=str(node_id), target=str(child_id))
+                                    V1GraphEdge(
+                                        source=str(node_id), target=str(child_id)
+                                    )
                                 )
 
             return V1TreeStructureResponse(
@@ -1207,10 +1229,14 @@ class UltimateRAGServer:
 
                 if child_node:
                     child_layer = getattr(child_node, "layer", 0)
-                    children_nodes.append(_node_to_graph_node(child_node, child_id, child_layer))
+                    children_nodes.append(
+                        _node_to_graph_node(child_node, child_id, child_layer)
+                    )
                     edges.append(V1GraphEdge(source=node_id, target=str(child_id)))
 
-            return V1NodeChildrenResponse(node_id=node_id, children=children_nodes, edges=edges)
+            return V1NodeChildrenResponse(
+                node_id=node_id, children=children_nodes, edges=edges
+            )
 
         @app.get(
             "/api/v1/tree/nodes/{node_id}/text",
@@ -1281,7 +1307,9 @@ class UltimateRAGServer:
                             id=str(node_id),
                             label=text[:100] + "..." if len(text) > 100 else text,
                             layer=layer,
-                            text_preview=text[:200] + "..." if len(text) > 200 else text,
+                            text_preview=(
+                                text[:200] + "..." if len(text) > 200 else text
+                            ),
                             score=1.0,  # Simple match
                             source_url=source_url,
                         )
@@ -1406,7 +1434,9 @@ class UltimateRAGServer:
                 raise HTTPException(503, "Server not initialized")
 
             try:
-                services = [request.affected_service] if request.affected_service else None
+                services = (
+                    [request.affected_service] if request.affected_service else None
+                )
 
                 result = await self.retriever.retrieve_for_incident(
                     symptoms=request.symptoms,
@@ -1494,11 +1524,15 @@ class UltimateRAGServer:
                         break
 
                 if not entity:
-                    result.hint = f"Entity '{request.entity_name}' not found in knowledge graph"
+                    result.hint = (
+                        f"Entity '{request.entity_name}' not found in knowledge graph"
+                    )
                     return result
 
                 # Get relationships based on query type
-                relationships = self.graph.get_relationships_for_entity(entity.entity_id)
+                relationships = self.graph.get_relationships_for_entity(
+                    entity.entity_id
+                )
 
                 if request.query_type == "dependencies":
                     deps = [
@@ -1611,7 +1645,9 @@ class UltimateRAGServer:
                     "temporal": KnowledgeType.TEMPORAL,
                     "relational": KnowledgeType.RELATIONAL,
                 }
-                knowledge_type = type_map.get(request.knowledge_type, KnowledgeType.PROCEDURAL)
+                knowledge_type = type_map.get(
+                    request.knowledge_type, KnowledgeType.PROCEDURAL
+                )
 
                 result = await self.teaching.teach(
                     knowledge=request.content,
@@ -1634,7 +1670,9 @@ class UltimateRAGServer:
                 elif status == "pending_review":
                     message = "Knowledge queued for human review before adding."
                 elif status == "contradiction":
-                    message = "This may contradict existing knowledge. Queued for review."
+                    message = (
+                        "This may contradict existing knowledge. Queued for review."
+                    )
 
                 return V1TeachResponse(
                     status=status,
@@ -1681,7 +1719,10 @@ class UltimateRAGServer:
 
                     metadata = chunk.metadata
                     # Only include if it looks like an incident
-                    if metadata.get("category") == "incident" or "incident" in chunk.text.lower():
+                    if (
+                        metadata.get("category") == "incident"
+                        or "incident" in chunk.text.lower()
+                    ):
                         similar.append(
                             V1SimilarIncident(
                                 incident_id=metadata.get("incident_id"),
@@ -1696,7 +1737,9 @@ class UltimateRAGServer:
 
                 hint = None
                 if not similar:
-                    hint = "No similar past incidents found. This may be a new issue type."
+                    hint = (
+                        "No similar past incidents found. This may be a new issue type."
+                    )
 
                 return V1SimilarIncidentsResponse(
                     ok=True,

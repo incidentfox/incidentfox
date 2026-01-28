@@ -410,20 +410,22 @@ async def _build_tool_calls_modal_blocks(
 
     if not run_id:
         # No run_id - show legacy message
-        blocks.extend([
-            {"type": "divider"},
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        "The detailed findings for this phase are included "
-                        "in the investigation summary above.\n\n"
-                        "_Tool call details are available for newer investigations._"
-                    ),
+        blocks.extend(
+            [
+                {"type": "divider"},
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            "The detailed findings for this phase are included "
+                            "in the investigation summary above.\n\n"
+                            "_Tool call details are available for newer investigations._"
+                        ),
+                    },
                 },
-            },
-        ])
+            ]
+        )
         return blocks
 
     # Fetch tool calls from config service
@@ -437,22 +439,33 @@ async def _build_tool_calls_modal_blocks(
         _log("slack_view_fetch_tool_calls_error", run_id=run_id, error=str(e))
 
     if not tool_calls:
-        blocks.extend([
-            {"type": "divider"},
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "_No tool calls found for this phase._",
+        blocks.extend(
+            [
+                {"type": "divider"},
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "_No tool calls found for this phase._",
+                    },
                 },
-            },
-        ])
+            ]
+        )
         return blocks
 
     # Filter tool calls by category (phase_key matches tool module)
     # Tool names typically contain the category: e.g., "list_pods" -> kubernetes
     category_patterns = {
-        "kubernetes": ["k8s", "pod", "deployment", "namespace", "kubectl", "list_pods", "get_pod", "describe_"],
+        "kubernetes": [
+            "k8s",
+            "pod",
+            "deployment",
+            "namespace",
+            "kubectl",
+            "list_pods",
+            "get_pod",
+            "describe_",
+        ],
         "coralogix_tools": ["coralogix", "search_coralogix", "get_coralogix"],
         "aws_tools": ["aws", "ec2", "cloudwatch", "lambda", "ecs", "rds", "s3"],
         "datadog_tools": ["datadog"],
@@ -485,35 +498,43 @@ async def _build_tool_calls_modal_blocks(
         filtered_calls = tool_calls
 
     if not filtered_calls:
-        blocks.extend([
-            {"type": "divider"},
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "_No tool calls found matching this category._",
+        blocks.extend(
+            [
+                {"type": "divider"},
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "_No tool calls found matching this category._",
+                    },
                 },
-            },
-        ])
+            ]
+        )
         return blocks
 
     # Show tool call count
-    blocks.append({
-        "type": "context",
-        "elements": [{"type": "mrkdwn", "text": f"*{len(filtered_calls)} tool call(s)*"}],
-    })
+    blocks.append(
+        {
+            "type": "context",
+            "elements": [
+                {"type": "mrkdwn", "text": f"*{len(filtered_calls)} tool call(s)*"}
+            ],
+        }
+    )
     blocks.append({"type": "divider"})
 
     # Display each tool call
     for i, tc in enumerate(filtered_calls):
         if len(blocks) >= 95:  # Leave room for truncation notice
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"_... and {len(filtered_calls) - i} more tool calls (truncated)_",
-                },
-            })
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"_... and {len(filtered_calls) - i} more tool calls (truncated)_",
+                    },
+                }
+            )
             break
 
         tool_name = tc.get("tool_name", "unknown")
@@ -526,10 +547,15 @@ async def _build_tool_calls_modal_blocks(
         duration_text = f" ({duration_ms}ms)" if duration_ms else ""
 
         # Tool name header
-        blocks.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": f"{status_icon} *{tool_name}*{duration_text}"},
-        })
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"{status_icon} *{tool_name}*{duration_text}",
+                },
+            }
+        )
 
         # Input parameters (truncated)
         tool_input = tc.get("tool_input")
@@ -540,31 +566,52 @@ async def _build_tool_calls_modal_blocks(
                     input_str = input_str[:500] + "\n... (truncated)"
                 # Escape backticks
                 input_str = input_str.replace("```", "` ` `")
-                blocks.append({
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"*Input:*\n```{input_str}```"},
-                })
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Input:*\n```{input_str}```",
+                        },
+                    }
+                )
             except (TypeError, ValueError):
                 pass
 
         # Output or error
         if error_msg:
-            error_display = error_msg[:500] + "..." if len(error_msg) > 500 else error_msg
+            error_display = (
+                error_msg[:500] + "..." if len(error_msg) > 500 else error_msg
+            )
             error_display = error_display.replace("```", "` ` `")
-            blocks.append({
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": f"*Error:*\n```{error_display}```"},
-            })
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*Error:*\n```{error_display}```",
+                    },
+                }
+            )
         else:
             tool_output = tc.get("tool_output", "")
             if tool_output:
-                output_display = tool_output[:1000] + "\n... (truncated)" if len(tool_output) > 1000 else tool_output
+                output_display = (
+                    tool_output[:1000] + "\n... (truncated)"
+                    if len(tool_output) > 1000
+                    else tool_output
+                )
                 # Escape backticks
                 output_display = output_display.replace("```", "` ` `")
-                blocks.append({
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"*Output:*\n```{output_display}```"},
-                })
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Output:*\n```{output_display}```",
+                        },
+                    }
+                )
 
         blocks.append({"type": "divider"})
 
