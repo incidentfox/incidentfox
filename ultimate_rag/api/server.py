@@ -572,10 +572,14 @@ class UltimateRAGServer:
         default_tree = None
         if self.forest.default_tree:
             default_tree = self.forest.get_tree(self.forest.default_tree)
-        self.teaching = TeachingInterface(
-            tree=default_tree,
-            graph=self.graph,
-        ) if default_tree else None
+        self.teaching = (
+            TeachingInterface(
+                tree=default_tree,
+                graph=self.graph,
+            )
+            if default_tree
+            else None
+        )
 
         # Initialize maintenance (works with forest)
         self.maintenance = MaintenanceAgent(
