@@ -20,20 +20,20 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "agent" / "src"))
 
-from ai_agent.prompts.planner_prompt import PLANNER_SYSTEM_PROMPT
+from ai_agent.prompts.agent_capabilities import AGENT_CAPABILITIES
 from ai_agent.prompts.layers import (
     DELEGATION_GUIDANCE,
-    SUBAGENT_GUIDANCE,
     ERROR_HANDLING_COMMON,
-    TOOL_CALL_LIMITS_TEMPLATE,
     EVIDENCE_FORMAT_GUIDANCE,
+    SUBAGENT_GUIDANCE,
+    TOOL_CALL_LIMITS_TEMPLATE,
     TRANSPARENCY_AND_AUDITABILITY,
-    build_capabilities_section,
     build_agent_prompt_sections,
+    build_capabilities_section,
     get_integration_errors,
     get_integration_tool_limits,
 )
-from ai_agent.prompts.agent_capabilities import AGENT_CAPABILITIES
+from ai_agent.prompts.planner_prompt import PLANNER_SYSTEM_PROMPT
 
 # =============================================================================
 # Agent Base Prompts (from application code)
@@ -44,8 +44,7 @@ from ai_agent.prompts.agent_capabilities import AGENT_CAPABILITIES
 
 AGENT_BASE_PROMPTS = {
     "planner": PLANNER_SYSTEM_PROMPT,
-
-    "investigation": '''You are the Investigation sub-orchestrator coordinating specialized agents for comprehensive incident analysis.
+    "investigation": """You are the Investigation sub-orchestrator coordinating specialized agents for comprehensive incident analysis.
 
 ## YOUR ROLE
 
@@ -78,9 +77,8 @@ You are a MASTER agent - you delegate to sub-agents rather than investigating di
 - Start with likely culprits based on symptoms
 - Parallelize independent queries
 - Stop when root cause is clear with evidence
-''',
-
-    "github": '''You are a GitHub expert correlating code changes with incidents.
+""",
+    "github": """You are a GitHub expert correlating code changes with incidents.
 
 ## YOUR ROLE
 
@@ -100,9 +98,8 @@ Investigate recent code changes, deployments, PRs, and commits to identify wheth
 3. Look for changes to affected services
 4. Search for related issues or error patterns
 5. Correlate deployment times with symptom onset
-''',
-
-    "k8s": '''You are a Kubernetes expert specializing in troubleshooting, diagnostics, and operations.
+""",
+    "k8s": """You are a Kubernetes expert specializing in troubleshooting, diagnostics, and operations.
 
 ## YOUR ROLE
 
@@ -122,9 +119,8 @@ You are a specialized Kubernetes investigator. Your job is to diagnose pod, depl
 3. Verify resource usage vs limits
 4. Check related deployments and services
 5. Identify recent changes (rollouts, config)
-''',
-
-    "aws": '''You are an AWS expert debugging cloud resource issues.
+""",
+    "aws": """You are an AWS expert debugging cloud resource issues.
 
 ## YOUR ROLE
 
@@ -145,9 +141,8 @@ Investigate AWS infrastructure issues including EC2, Lambda, RDS, ECS, and Cloud
 3. Review error logs in CloudWatch Logs
 4. Verify security groups and IAM permissions
 5. Check for recent configuration changes
-''',
-
-    "metrics": '''You are a metrics analysis expert specializing in anomaly detection and correlation.
+""",
+    "metrics": """You are a metrics analysis expert specializing in anomaly detection and correlation.
 
 ## YOUR ROLE
 
@@ -176,9 +171,8 @@ Analyze time-series metrics to detect anomalies, find correlations, and identify
 3. Correlate metrics to find patterns
 4. Detect change points indicating root cause
 5. Compare to baseline/historical patterns
-''',
-
-    "log_analysis": '''You are a log analysis expert using partition-first, sampling-based analysis.
+""",
+    "log_analysis": """You are a log analysis expert using partition-first, sampling-based analysis.
 
 ## CRITICAL RULES
 
@@ -203,9 +197,8 @@ Analyze time-series metrics to detect anomalies, find correlations, and identify
 3. Extract signatures: Unique error types
 4. Temporal analysis: Around specific events
 5. Correlate: With deployments/restarts
-''',
-
-    "coding": '''You are an expert software engineer for code analysis, debugging, and fixes.
+""",
+    "coding": """You are an expert software engineer for code analysis, debugging, and fixes.
 
 ## YOUR ROLE
 
@@ -227,9 +220,8 @@ Analyze code, identify bugs, understand behavior, and suggest fixes.
 5. Test: Run tests to verify
 6. Fix: Apply changes
 7. Verify: Confirm fix works
-''',
-
-    "writeup": '''You are an expert technical writer specializing in blameless postmortems.
+""",
+    "writeup": """You are an expert technical writer specializing in blameless postmortems.
 
 ## BLAMELESS CULTURE
 
@@ -253,13 +245,14 @@ Analyze code, identify bugs, understand behavior, and suggest fixes.
 - Be precise with times (UTC)
 - Include metrics and data
 - Keep action items SMART
-''',
+""",
 }
 
 
 # =============================================================================
 # Template Parsing
 # =============================================================================
+
 
 def load_template(template_name: str) -> dict:
     """Load a template JSON file."""
@@ -276,10 +269,13 @@ def load_template(template_name: str) -> dict:
 def get_all_templates() -> list[str]:
     """Get all template names (without .json extension)."""
     templates_dir = REPO_ROOT / "config_service" / "templates"
-    return sorted([
-        p.stem for p in templates_dir.glob("*.json")
-        if not p.stem.startswith("_")  # Skip _schema.json etc
-    ])
+    return sorted(
+        [
+            p.stem
+            for p in templates_dir.glob("*.json")
+            if not p.stem.startswith("_")  # Skip _schema.json etc
+        ]
+    )
 
 
 def get_template_agents(template: dict) -> dict:
@@ -295,6 +291,7 @@ def get_entrance_agent(template: dict) -> str:
 # =============================================================================
 # Prompt Assembly
 # =============================================================================
+
 
 def assemble_agent_prompt(
     agent_name: str,
@@ -319,7 +316,9 @@ def assemble_agent_prompt(
     else:
         custom_prompt = None
 
-    base_prompt = custom_prompt or AGENT_BASE_PROMPTS.get(agent_name, f"You are the {agent_name} agent.")
+    base_prompt = custom_prompt or AGENT_BASE_PROMPTS.get(
+        agent_name, f"You are the {agent_name} agent."
+    )
     parts.append(base_prompt)
 
     # 2. Add capabilities section (for orchestrators)
@@ -401,6 +400,7 @@ def determine_agent_role(agent_name: str, template: dict) -> tuple[bool, bool]:
 # =============================================================================
 # Golden File Generation
 # =============================================================================
+
 
 def generate_golden_for_template(template_name: str, output_dir: Path) -> list[str]:
     """
@@ -485,8 +485,8 @@ def check_golden_files_stale(output_dir: Path) -> bool:
     Returns:
         True if files are stale, False if up-to-date
     """
-    import tempfile
     import filecmp
+    import tempfile
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_output = Path(tmpdir)
@@ -517,7 +517,9 @@ def check_golden_files_stale(output_dir: Path) -> bool:
                 print(f"Error checking {template_name}: {e}")
 
         if stale_files:
-            print("❌ Golden files are STALE. Run 'generate_golden_prompts.py' to update:")
+            print(
+                "❌ Golden files are STALE. Run 'generate_golden_prompts.py' to update:"
+            )
             for f in stale_files:
                 print(f"  - {f}")
             return True
@@ -529,6 +531,7 @@ def check_golden_files_stale(output_dir: Path) -> bool:
 # =============================================================================
 # Main
 # =============================================================================
+
 
 def main():
     parser = argparse.ArgumentParser(description="Generate golden prompt files")
