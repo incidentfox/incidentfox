@@ -20,15 +20,20 @@ from typing import Any, Dict, List, Optional, Protocol
 from openai import AsyncOpenAI
 
 from ..intelligence import (
-    BatchContentAnalyzer,
     BatchConflictResolver,
+    BatchContentAnalyzer,
     ConflictRecommendation,
-    ContentAnalyzer,
-    ContentAnalysisResult,
     ConflictResolver,
+    ContentAnalysisResult,
+    ContentAnalyzer,
     PendingKnowledgeChange,
 )
-from .processor import DocumentProcessor, ProcessedChunk, ProcessingConfig, ProcessingResult
+from .processor import (
+    DocumentProcessor,
+    ProcessedChunk,
+    ProcessingConfig,
+    ProcessingResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -356,7 +361,8 @@ class IntelligentIngestionPipeline:
 
         dir_path = Path(directory)
         files = [
-            f for f in dir_path.glob(pattern)
+            f
+            for f in dir_path.glob(pattern)
             if f.is_file() and not f.name.startswith(".")
         ]
 
@@ -369,22 +375,24 @@ class IntelligentIngestionPipeline:
                 results.append(result)
             except Exception as e:
                 logger.error(f"Failed to ingest {file_path}: {e}")
-                results.append(IngestionResult(
-                    source_path=str(file_path),
-                    content_type="unknown",
-                    total_chunks=0,
-                    chunks_analyzed=0,
-                    chunks_stored=0,
-                    chunks_skipped=0,
-                    chunks_flagged=0,
-                    processing_time_ms=0,
-                    analysis_time_ms=0,
-                    total_time_ms=0,
-                    node_ids=[],
-                    pending_change_ids=[],
-                    warnings=[],
-                    errors=[str(e)],
-                ))
+                results.append(
+                    IngestionResult(
+                        source_path=str(file_path),
+                        content_type="unknown",
+                        total_chunks=0,
+                        chunks_analyzed=0,
+                        chunks_stored=0,
+                        chunks_skipped=0,
+                        chunks_flagged=0,
+                        processing_time_ms=0,
+                        analysis_time_ms=0,
+                        total_time_ms=0,
+                        node_ids=[],
+                        pending_change_ids=[],
+                        warnings=[],
+                        errors=[str(e)],
+                    )
+                )
 
             completed += 1
             if progress_callback:
@@ -452,7 +460,10 @@ class IntelligentIngestionPipeline:
         for chunk, analysis in zip(chunks, analyses):
             try:
                 # Check minimum importance threshold
-                if analysis.importance.overall_importance < self.config.min_importance_to_store:
+                if (
+                    analysis.importance.overall_importance
+                    < self.config.min_importance_to_store
+                ):
                     logger.debug(
                         f"Skipping low importance chunk {chunk.chunk_id}: "
                         f"{analysis.importance.overall_importance:.2f}"
@@ -615,7 +626,8 @@ class ProposedChangesAPIClient:
             "proposed_value": proposed_value,
             "previous_value": (
                 {"content": change.existing_content, "node_id": change.existing_node_id}
-                if change.existing_content else None
+                if change.existing_content
+                else None
             ),
             "requested_by": change.proposed_by or "content_analyzer",
             "reason": reason,
@@ -752,12 +764,14 @@ class InMemoryStorageBackend:
     ) -> None:
         """Update existing content."""
         if node_id in self.nodes:
-            self.nodes[node_id].update({
-                "content": content,
-                "source": source,
-                "analysis": analysis,
-                "updated_at": datetime.utcnow().isoformat(),
-            })
+            self.nodes[node_id].update(
+                {
+                    "content": content,
+                    "source": source,
+                    "analysis": analysis,
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            )
 
     async def find_similar(
         self,
@@ -788,13 +802,15 @@ class InMemoryStorageBackend:
             similarity = intersection / union if union > 0 else 0
 
             if similarity >= threshold:
-                results.append({
-                    "id": node_id,
-                    "content": node_content,
-                    "source": node.get("source", "unknown"),
-                    "updated_at": node.get("updated_at", "unknown"),
-                    "similarity_score": similarity,
-                })
+                results.append(
+                    {
+                        "id": node_id,
+                        "content": node_content,
+                        "source": node.get("source", "unknown"),
+                        "updated_at": node.get("updated_at", "unknown"),
+                        "similarity_score": similarity,
+                    }
+                )
 
         # Sort by similarity and limit
         results.sort(key=lambda x: x["similarity_score"], reverse=True)

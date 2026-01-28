@@ -207,8 +207,7 @@ class UltimateRAGStorageBackend:
 
         # Adjust importance
         adjusted_importance = min(
-            1.0,
-            analysis.importance.overall_importance * importance_multiplier
+            1.0, analysis.importance.overall_importance * importance_multiplier
         )
 
         # Re-teach with updated content (teaching interface handles updates)
@@ -260,13 +259,17 @@ class UltimateRAGStorageBackend:
             for chunk in result.chunks:
                 # Filter by threshold
                 if chunk.score >= threshold:
-                    similar.append({
-                        "id": chunk.metadata.get("node_id", chunk.metadata.get("chunk_id", "")),
-                        "content": chunk.text,
-                        "source": chunk.metadata.get("source", "unknown"),
-                        "updated_at": chunk.metadata.get("processed_at", "unknown"),
-                        "similarity_score": chunk.score,
-                    })
+                    similar.append(
+                        {
+                            "id": chunk.metadata.get(
+                                "node_id", chunk.metadata.get("chunk_id", "")
+                            ),
+                            "content": chunk.text,
+                            "source": chunk.metadata.get("source", "unknown"),
+                            "updated_at": chunk.metadata.get("processed_at", "unknown"),
+                            "similarity_score": chunk.score,
+                        }
+                    )
 
                 if len(similar) >= limit:
                     break
@@ -349,7 +352,8 @@ class UltimateRAGStorageBackend:
             "proposed_value": proposed_value,
             "previous_value": (
                 {"content": change.existing_content, "node_id": change.existing_node_id}
-                if change.existing_content else None
+                if change.existing_content
+                else None
             ),
             "requested_by": change.proposed_by or "content_analyzer",
             "reason": reason,
