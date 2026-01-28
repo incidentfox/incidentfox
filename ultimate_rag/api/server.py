@@ -568,14 +568,16 @@ class UltimateRAGServer:
         processing_config = ProcessingConfig()
         self.processor = DocumentProcessor(processing_config)
 
-        # Initialize teaching
+        # Initialize teaching (uses default tree from forest)
+        default_tree = None
+        if self.forest.default_tree:
+            default_tree = self.forest.get_tree(self.forest.default_tree)
         self.teaching = TeachingInterface(
-            forest=self.forest,
+            tree=default_tree,
             graph=self.graph,
-            observation_collector=self.observations,
-        )
+        ) if default_tree else None
 
-        # Initialize maintenance
+        # Initialize maintenance (works with forest)
         self.maintenance = MaintenanceAgent(
             forest=self.forest,
             graph=self.graph,
