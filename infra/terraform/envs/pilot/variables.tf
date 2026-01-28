@@ -146,6 +146,40 @@ variable "eks_node_security_group_id" {
   description = "Security group to allow DB ingress from (BYO EKS cluster SG or node SG)"
 }
 
+# Memory-intensive node group for RAG/knowledge-base workloads
+variable "memory_intensive_nodegroup_enabled" {
+  type        = bool
+  default     = true
+  description = "Enable memory-intensive node group for RAG workloads"
+}
+
+variable "memory_intensive_instance_types" {
+  type        = list(string)
+  default     = ["r6i.xlarge"]
+  description = "Instance types for memory-intensive nodegroup (32GB RAM for RAG trees + rolling updates)"
+}
+
+variable "memory_intensive_disk_size" {
+  type        = number
+  default     = 50
+  description = "Disk size in GB for memory-intensive nodes"
+}
+
+variable "memory_intensive_min_size" {
+  type    = number
+  default = 0
+}
+
+variable "memory_intensive_max_size" {
+  type    = number
+  default = 2
+}
+
+variable "memory_intensive_desired_size" {
+  type    = number
+  default = 1
+}
+
 # ESO permissions
 variable "eso_allowed_secret_arns" {
   type        = list(string)
