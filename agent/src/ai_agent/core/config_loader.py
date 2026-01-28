@@ -14,7 +14,10 @@ from .logging import get_logger
 
 logger = get_logger(__name__)
 
-CONFIG_SERVICE_URL = os.getenv("CONFIG_SERVICE_URL", "http://localhost:8080")
+# Use same default as agent_runner.py for k8s service discovery
+CONFIG_SERVICE_URL = os.getenv(
+    "CONFIG_SERVICE_URL", "http://incidentfox-config-service:8080"
+)
 
 
 def fetch_team_config(
