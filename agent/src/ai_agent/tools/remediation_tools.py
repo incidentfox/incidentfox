@@ -29,7 +29,10 @@ from ..core.logging import get_logger
 logger = get_logger(__name__)
 
 # Configuration
-CONFIG_SERVICE_URL = os.getenv("CONFIG_SERVICE_URL", "http://localhost:8080")
+# Use same default as agent_runner.py for k8s service discovery
+CONFIG_SERVICE_URL = os.getenv(
+    "CONFIG_SERVICE_URL", "http://incidentfox-config-service:8080"
+)
 REMEDIATION_API_URL = os.getenv("REMEDIATION_API_URL", CONFIG_SERVICE_URL)
 
 
