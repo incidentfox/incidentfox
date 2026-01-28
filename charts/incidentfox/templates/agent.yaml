@@ -54,6 +54,9 @@ spec:
               value: "true"
             - name: CONFIG_BASE_URL
               value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
+            # CONFIG_SERVICE_URL used by trace_recorder, config_loader, remediation_tools
+            - name: CONFIG_SERVICE_URL
+              value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
             # Dedicated health server port (separate from main Sanic server)
             - name: HEALTH_SERVER_PORT
               value: {{ .Values.services.agent.healthServer.port | default 8081 | quote }}
