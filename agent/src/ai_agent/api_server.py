@@ -2772,6 +2772,31 @@ def create_app() -> Sanic:
         update_heartbeat(status="idle")
         logger.info("main_server_ready_health_server_active")
 
+        # Start periodic heartbeat refresh to prevent staleness when idle
+        async def periodic_heartbeat_refresh():
+            """
+            Periodically refresh heartbeat when the server is idle.
+
+            The health server returns 503 if heartbeat is older than 5 minutes.
+            This task ensures the heartbeat stays fresh even when no agent
+            runs are happening.
+            """
+            heartbeat_interval = 60  # Refresh every 60 seconds
+            while True:
+                await asyncio.sleep(heartbeat_interval)
+                # Only update if no agent runs are in flight
+                # (active runs update heartbeat via CompositeHooks)
+                in_flight = get_in_flight_runs()
+                if not in_flight:
+                    update_heartbeat(status="idle")
+                    logger.debug(
+                        "periodic_heartbeat_refresh",
+                        status="idle",
+                        interval_seconds=heartbeat_interval,
+                    )
+
+        app.add_task(periodic_heartbeat_refresh())
+
     return app
 
 
