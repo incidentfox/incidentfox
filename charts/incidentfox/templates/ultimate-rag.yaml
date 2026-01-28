@@ -102,11 +102,21 @@ spec:
           volumeMounts:
             - name: trees-volume
               mountPath: /app/trees
+          # Startup probe: allows long startup time for S3 download + model loading
+          # Once startup probe passes, liveness/readiness kick in with shorter timeouts
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.ultimateRag.servicePort }}
+            initialDelaySeconds: {{ .Values.services.ultimateRag.startupProbe.initialDelaySeconds | default 30 }}
+            periodSeconds: {{ .Values.services.ultimateRag.startupProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.services.ultimateRag.startupProbe.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.services.ultimateRag.startupProbe.failureThreshold | default 30 }}
           readinessProbe:
             httpGet:
               path: /health
               port: {{ .Values.services.ultimateRag.servicePort }}
-            initialDelaySeconds: {{ .Values.services.ultimateRag.readinessProbe.initialDelaySeconds | default 120 }}
+            initialDelaySeconds: {{ .Values.services.ultimateRag.readinessProbe.initialDelaySeconds | default 5 }}
             periodSeconds: {{ .Values.services.ultimateRag.readinessProbe.periodSeconds | default 10 }}
             timeoutSeconds: {{ .Values.services.ultimateRag.readinessProbe.timeoutSeconds | default 5 }}
           {{- if .Values.services.ultimateRag.livenessProbe.enabled }}
@@ -114,7 +124,7 @@ spec:
             httpGet:
               path: {{ .Values.services.ultimateRag.livenessProbe.path | default "/health" }}
               port: {{ .Values.services.ultimateRag.servicePort }}
-            initialDelaySeconds: {{ .Values.services.ultimateRag.livenessProbe.initialDelaySeconds | default 180 }}
+            initialDelaySeconds: {{ .Values.services.ultimateRag.livenessProbe.initialDelaySeconds | default 10 }}
             periodSeconds: {{ .Values.services.ultimateRag.livenessProbe.periodSeconds | default 30 }}
             timeoutSeconds: {{ .Values.services.ultimateRag.livenessProbe.timeoutSeconds | default 10 }}
           {{- end }}
