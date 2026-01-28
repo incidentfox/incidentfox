@@ -240,6 +240,10 @@ def _detect_embedding_info(tree: Tree) -> tuple[str, int]:
     Returns:
         tuple of (embedding_key, embedding_dimension)
     """
+    # Handle empty/None trees
+    if tree is None or not hasattr(tree, "all_nodes") or not tree.all_nodes:
+        return "OpenAI", 1536
+
     for node in tree.all_nodes.values():
         if hasattr(node, "embeddings") and node.embeddings:
             keys = list(node.embeddings.keys())
@@ -1290,6 +1294,16 @@ async def get_tree_stats(tree: Optional[str] = None):
         raise HTTPException(status_code=404, detail=f"Tree not found: {tree_name}")
 
     raptor_tree = ra.tree
+    # Handle empty/None trees (newly created trees with no documents)
+    if raptor_tree is None:
+        return TreeStatsResponse(
+            tree=tree_name,
+            total_nodes=0,
+            layers=0,
+            leaf_nodes=0,
+            summary_nodes=0,
+            layer_counts={},
+        )
     all_nodes = raptor_tree.all_nodes if hasattr(raptor_tree, "all_nodes") else {}
 
     # Use layer_to_nodes if available (more reliable than node.layer attribute)
