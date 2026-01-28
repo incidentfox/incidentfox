@@ -71,11 +71,17 @@ class RaptorBridge:
         # Track layer info for importance scoring
         max_layer = raptor_tree.num_layers
 
+        # Pre-build node-to-layer index for O(1) lookup (instead of O(n) per node)
+        node_to_layer: Dict[int, int] = {}
+        for layer, nodes in raptor_tree.layer_to_nodes.items():
+            for node in nodes:
+                node_to_layer[node.index] = layer
+
         # Convert all nodes
         for raptor_node in raptor_tree.all_nodes.values():
             knowledge_node = self._convert_raptor_node(
                 raptor_node,
-                raptor_tree,
+                node_to_layer,
                 max_layer,
                 infer_types,
             )
@@ -123,13 +129,13 @@ class RaptorBridge:
     def _convert_raptor_node(
         self,
         raptor_node: "RaptorNode",
-        raptor_tree: "RaptorTree",
+        node_to_layer: Dict[int, int],
         max_layer: int,
         infer_types: bool,
     ) -> KnowledgeNode:
         """Convert a single RAPTOR node to KnowledgeNode."""
-        # Determine layer for this node
-        node_layer = self._get_node_layer(raptor_node, raptor_tree)
+        # Determine layer for this node (O(1) lookup from pre-built index)
+        node_layer = node_to_layer.get(raptor_node.index, 0)
 
         # Infer knowledge type from content
         knowledge_type = KnowledgeType.FACTUAL  # Default
@@ -146,9 +152,6 @@ class RaptorBridge:
 
         # Extract metadata from RAPTOR node
         metadata = self._extract_metadata(raptor_node)
-
-        # Get parent IDs (RAPTOR stores children, we need to invert)
-        parent_ids = self._find_parents(raptor_node.index, raptor_tree)
 
         # Create KnowledgeNode
         # Convert children to set if it's a list
