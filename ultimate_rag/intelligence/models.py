@@ -12,7 +12,6 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-
 # =============================================================================
 # Knowledge Type Classification
 # =============================================================================
@@ -251,9 +250,7 @@ class ConflictResolutionResult(BaseModel):
     recommendation: ConflictRecommendation = Field(
         description="Recommended action to take"
     )
-    confidence: float = Field(
-        ge=0.0, le=1.0, description="Confidence in this decision"
-    )
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence in this decision")
     importance_adjustment: ImportanceAdjustment = Field(
         default_factory=ImportanceAdjustment,
         description="How to adjust importance scores",

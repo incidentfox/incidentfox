@@ -134,9 +134,7 @@ class ContentAnalyzer:
                     return result
 
             except Exception as e:
-                logger.warning(
-                    f"Content analysis attempt {attempt + 1} failed: {e}"
-                )
+                logger.warning(f"Content analysis attempt {attempt + 1} failed: {e}")
                 if attempt == self.max_retries - 1:
                     logger.error(f"All {self.max_retries} analysis attempts failed")
                     # Return a minimal result on failure
@@ -175,7 +173,9 @@ class ContentAnalyzer:
 
         knowledge_type_task = self._classify_knowledge_type(content)
         entities_task = self._extract_entities(content)
-        importance_task = self._assess_importance(content, source_url or "unknown", last_modified)
+        importance_task = self._assess_importance(
+            content, source_url or "unknown", last_modified
+        )
         summary_task = self._generate_summary(content)
 
         results = await asyncio.gather(
@@ -186,9 +186,17 @@ class ContentAnalyzer:
             return_exceptions=True,
         )
 
-        knowledge_type = results[0] if not isinstance(results[0], Exception) else self._default_knowledge_type()
+        knowledge_type = (
+            results[0]
+            if not isinstance(results[0], Exception)
+            else self._default_knowledge_type()
+        )
         entities = results[1] if not isinstance(results[1], Exception) else []
-        importance = results[2] if not isinstance(results[2], Exception) else self._default_importance()
+        importance = (
+            results[2]
+            if not isinstance(results[2], Exception)
+            else self._default_importance()
+        )
         summary = results[3] if not isinstance(results[3], Exception) else content[:150]
 
         # Extract relationships needs entities first
@@ -259,8 +267,7 @@ class ContentAnalyzer:
     ) -> list[ExtractedRelationship]:
         """Extract relationships between entities."""
         entities_str = "\n".join(
-            f"- {e.name} ({e.entity_type.value}): {e.context}"
-            for e in entities
+            f"- {e.name} ({e.entity_type.value}): {e.context}" for e in entities
         )
 
         prompt = RELATIONSHIP_EXTRACTION_PROMPT.format(
@@ -474,10 +481,7 @@ class BatchContentAnalyzer:
                         progress_callback(completed, len(contents))
 
         # Process all items
-        tasks = [
-            analyze_one(i, item)
-            for i, item in enumerate(contents)
-        ]
+        tasks = [analyze_one(i, item) for i, item in enumerate(contents)]
         await asyncio.gather(*tasks)
 
         return results
@@ -540,10 +544,7 @@ class BatchContentAnalyzer:
                     )
 
         # Start workers
-        workers = [
-            asyncio.create_task(worker())
-            for _ in range(self.max_concurrent)
-        ]
+        workers = [asyncio.create_task(worker()) for _ in range(self.max_concurrent)]
 
         # Start producer
         producer_task = asyncio.create_task(producer())

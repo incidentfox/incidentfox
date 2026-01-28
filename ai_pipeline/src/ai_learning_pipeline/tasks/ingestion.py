@@ -97,12 +97,14 @@ class APIIntegratedStorageBackend:
     ) -> None:
         """Update existing content."""
         if node_id in self.nodes:
-            self.nodes[node_id].update({
-                "content": content,
-                "source": source,
-                "analysis": analysis,
-                "updated_at": datetime.utcnow().isoformat(),
-            })
+            self.nodes[node_id].update(
+                {
+                    "content": content,
+                    "source": source,
+                    "analysis": analysis,
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            )
 
     async def find_similar(
         self,
@@ -128,13 +130,15 @@ class APIIntegratedStorageBackend:
             similarity = intersection / union if union > 0 else 0
 
             if similarity >= threshold:
-                results.append({
-                    "id": node_id,
-                    "content": node_content,
-                    "source": node.get("source", "unknown"),
-                    "updated_at": node.get("updated_at", "unknown"),
-                    "similarity_score": similarity,
-                })
+                results.append(
+                    {
+                        "id": node_id,
+                        "content": node_content,
+                        "source": node.get("source", "unknown"),
+                        "updated_at": node.get("updated_at", "unknown"),
+                        "similarity_score": similarity,
+                    }
+                )
 
         results.sort(key=lambda x: x["similarity_score"], reverse=True)
         return results[:limit]
@@ -174,8 +178,12 @@ class APIIntegratedStorageBackend:
                 "change_type": "knowledge",
                 "proposed_value": proposed_value,
                 "previous_value": (
-                    {"content": change.existing_content, "node_id": change.existing_node_id}
-                    if change.existing_content else None
+                    {
+                        "content": change.existing_content,
+                        "node_id": change.existing_node_id,
+                    }
+                    if change.existing_content
+                    else None
                 ),
                 "requested_by": change.proposed_by or "content_analyzer",
                 "reason": reason,
@@ -286,7 +294,9 @@ class KnowledgeIngestionTask:
             )
 
             # Create storage backend with API integration for pending changes
-            config_service_url = os.getenv("CONFIG_SERVICE_URL", "http://config-service:8080")
+            config_service_url = os.getenv(
+                "CONFIG_SERVICE_URL", "http://config-service:8080"
+            )
             storage = APIIntegratedStorageBackend(
                 org_id=self.org_id,
                 team_node_id=self.team_node_id,
@@ -438,7 +448,9 @@ class KnowledgeIngestionTask:
                                     "incident_id": incident.get("id"),
                                     "category": "incident",
                                     "severity": incident.get("severity"),
-                                    "services_affected": incident.get("services_affected", []),
+                                    "services_affected": incident.get(
+                                        "services_affected", []
+                                    ),
                                 },
                             )
 

@@ -165,9 +165,7 @@ class ConflictResolver:
                     return result
 
             except Exception as e:
-                logger.warning(
-                    f"Conflict resolution attempt {attempt + 1} failed: {e}"
-                )
+                logger.warning(f"Conflict resolution attempt {attempt + 1} failed: {e}")
                 if attempt == self.max_retries - 1:
                     # On failure, default to flagging for review
                     return self._create_fallback_resolution()
@@ -294,7 +292,10 @@ class ConflictResolver:
 
         elif resolution.recommendation == ConflictRecommendation.MERGE:
             # Merge contents
-            merged_content = resolution.merged_content or f"{existing.get('content', '')}\n\n---\n\n{new_content}"
+            merged_content = (
+                resolution.merged_content
+                or f"{existing.get('content', '')}\n\n---\n\n{new_content}"
+            )
             await storage_backend.update_content(
                 node_id=existing_node_id,
                 content=merged_content,
@@ -321,7 +322,9 @@ class ConflictResolver:
                 analysis=new_analysis,
                 related_node_ids=[existing_node_id],
             )
-            logger.info(f"Added as new content {node_id}, related to {existing_node_id}")
+            logger.info(
+                f"Added as new content {node_id}, related to {existing_node_id}"
+            )
             return {
                 "action": "added_as_related",
                 "node_id": node_id,
@@ -390,11 +393,11 @@ class ConflictResolver:
 
         # Create descriptive title based on conflict type
         if resolution.relationship == ConflictRelationship.CONTRADICTS:
-            title = f"Conflicting information detected"
+            title = "Conflicting information detected"
         elif resolution.relationship == ConflictRelationship.SUPERSEDES:
-            title = f"Potentially outdated information found"
+            title = "Potentially outdated information found"
         else:
-            title = f"Knowledge update requires review"
+            title = "Knowledge update requires review"
 
         # Create detailed description
         description = self._create_change_description(

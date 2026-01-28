@@ -24,14 +24,13 @@ from .extractors import (
 )
 from .pipeline import (
     BatchIngestionResult,
-    InMemoryStorageBackend,
     IngestionResult,
+    InMemoryStorageBackend,
     IntelligentIngestionPipeline,
     PipelineConfig,
     ProposedChangesAPIClient,
     StorageBackend,
 )
-from .storage_backend import UltimateRAGStorageBackend
 from .processor import (
     DocumentProcessor,
     ProcessingConfig,
@@ -44,6 +43,7 @@ from .sources import (
     GitRepoSource,
     SlackSource,
 )
+from .storage_backend import UltimateRAGStorageBackend
 
 __all__ = [
     # Intelligent Pipeline (recommended entry point)
