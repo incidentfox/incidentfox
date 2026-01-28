@@ -74,7 +74,9 @@ MAX_CACHED_TREES = int(os.getenv("MAX_CACHED_TREES", "5"))
 _tree_cache: OrderedDict[str, RetrievalAugmentation] = OrderedDict()
 _tree_sizes: Dict[str, int] = {}  # tree_name -> size in bytes
 _cache_lock = threading.Lock()
-_download_locks: Dict[str, threading.Lock] = {}  # Prevent concurrent downloads of same tree
+_download_locks: Dict[str, threading.Lock] = (
+    {}
+)  # Prevent concurrent downloads of same tree
 
 
 def _get_download_lock(tree_name: str) -> threading.Lock:
@@ -99,7 +101,9 @@ def _download_tree_from_s3(tree_name: str) -> Path:
         RuntimeError: If download fails
     """
     if not S3_ENABLED:
-        raise FileNotFoundError(f"S3 lazy loading disabled, tree not found: {tree_name}")
+        raise FileNotFoundError(
+            f"S3 lazy loading disabled, tree not found: {tree_name}"
+        )
 
     try:
         import boto3
@@ -132,10 +136,14 @@ def _download_tree_from_s3(tree_name: str) -> Path:
 
         for s3_key in s3_keys_to_try:
             try:
-                logger.info(f"Attempting to download tree from s3://{S3_TREES_BUCKET}/{s3_key}")
+                logger.info(
+                    f"Attempting to download tree from s3://{S3_TREES_BUCKET}/{s3_key}"
+                )
 
                 # Get file size first
-                head_response = s3_client.head_object(Bucket=S3_TREES_BUCKET, Key=s3_key)
+                head_response = s3_client.head_object(
+                    Bucket=S3_TREES_BUCKET, Key=s3_key
+                )
                 file_size = head_response["ContentLength"]
                 file_size_gb = file_size / (1024**3)
 
@@ -151,7 +159,9 @@ def _download_tree_from_s3(tree_name: str) -> Path:
                 temp_path.rename(local_path)
 
                 download_time = time.time() - start_time
-                speed_mbps = (file_size / (1024**2)) / download_time if download_time > 0 else 0
+                speed_mbps = (
+                    (file_size / (1024**2)) / download_time if download_time > 0 else 0
+                )
 
                 logger.info(
                     f"Downloaded tree {tree_name}: {file_size_gb:.2f} GB in {download_time:.1f}s "
@@ -204,7 +214,9 @@ def _evict_lru_trees_if_needed(new_tree_size: int) -> None:
             if not _tree_cache:
                 break
             oldest_tree = next(iter(_tree_cache))
-            logger.info(f"Evicting tree {oldest_tree} (max trees limit: {MAX_CACHED_TREES})")
+            logger.info(
+                f"Evicting tree {oldest_tree} (max trees limit: {MAX_CACHED_TREES})"
+            )
             del _tree_cache[oldest_tree]
             _tree_sizes.pop(oldest_tree, None)
 
@@ -660,11 +672,13 @@ async def get_cache_stats():
         tree_details = []
         for tree_name in _tree_cache:
             size_bytes = _tree_sizes.get(tree_name, 0)
-            tree_details.append({
-                "name": tree_name,
-                "size_gb": round(size_bytes / 1024**3, 3),
-                "size_bytes": size_bytes,
-            })
+            tree_details.append(
+                {
+                    "name": tree_name,
+                    "size_gb": round(size_bytes / 1024**3, 3),
+                    "size_bytes": size_bytes,
+                }
+            )
 
         total_size = _get_total_cache_size()
 
@@ -673,7 +687,9 @@ async def get_cache_stats():
         "max_trees": MAX_CACHED_TREES,
         "total_size_gb": round(total_size / 1024**3, 3),
         "max_size_gb": MAX_CACHE_SIZE_GB,
-        "utilization_percent": round((total_size / (MAX_CACHE_SIZE_GB * 1024**3)) * 100, 1),
+        "utilization_percent": round(
+            (total_size / (MAX_CACHE_SIZE_GB * 1024**3)) * 100, 1
+        ),
         "trees": tree_details,
         "s3_enabled": S3_ENABLED,
         "s3_bucket": S3_TREES_BUCKET,
