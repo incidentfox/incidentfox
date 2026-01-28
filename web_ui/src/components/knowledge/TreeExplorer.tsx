@@ -199,6 +199,10 @@ export function TreeExplorer({ treeName = 'mega_ultra_v2' }: TreeExplorerProps) 
   const [stats, setStats] = useState<TreeStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // First-time load state (tree not cached, needs S3 download)
+  const [isFirstTimeLoad, setIsFirstTimeLoad] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState<string>('');
   
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -250,16 +254,49 @@ export function TreeExplorer({ treeName = 'mega_ultra_v2' }: TreeExplorerProps) 
     async function loadTree() {
       setLoading(true);
       setError(null);
-      
+      setIsFirstTimeLoad(false);
+      setLoadingProgress('');
+
       try {
-        // First, just verify the tree exists by loading stats
-        const statsRes = await apiFetch(`/api/team/knowledge/tree/stats?tree=${treeName}`);
+        // Pre-flight check: see if tree is already cached
+        // This helps us show appropriate loading messages
+        let needsDownload = false;
+        try {
+          const cacheRes = await apiFetch('/api/team/knowledge/tree/cache');
+          if (cacheRes.ok) {
+            const cacheData = await cacheRes.json();
+            const cachedTrees = cacheData.trees?.map((t: { name: string }) => t.name) || [];
+            const isCached = cachedTrees.includes(treeName);
+
+            if (!isCached) {
+              needsDownload = true;
+              setIsFirstTimeLoad(true);
+              setLoadingProgress('Downloading knowledge base from cloud storage...');
+            }
+          }
+        } catch (e) {
+          // If cache check fails, proceed anyway - non-critical
+          console.debug('Cache check failed, proceeding:', e);
+        }
+
+        // Load tree stats - this triggers lazy loading if tree is not cached
+        // Use AbortController with extended timeout for first-time loads
+        const controller = new AbortController();
+        const timeoutMs = needsDownload ? 300000 : 60000; // 5 min for first load, 1 min otherwise
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        const statsRes = await apiFetch(`/api/team/knowledge/tree/stats?tree=${treeName}`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
         if (!statsRes.ok) {
           const err = await statsRes.json();
           throw new Error(err.error || 'Failed to load tree');
         }
-        
+
         const statsData = await statsRes.json();
+        setLoadingProgress('Building tree visualization...');
         
         // Create just the ROOT node initially
         // Use refs for handlers to avoid dependency issues
@@ -640,9 +677,23 @@ export function TreeExplorer({ treeName = 'mega_ultra_v2' }: TreeExplorerProps) 
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <Loader2 className="w-8 h-8 animate-spin text-orange-500 mx-auto mb-3" />
-          <p className="text-gray-500">Loading knowledge tree...</p>
+          {isFirstTimeLoad ? (
+            <>
+              <p className="text-gray-700 dark:text-gray-200 font-medium mb-2">
+                First-time setup for this knowledge base
+              </p>
+              <p className="text-gray-500 text-sm mb-2">
+                {loadingProgress || 'Preparing knowledge base...'}
+              </p>
+              <p className="text-gray-400 text-xs">
+                This may take 1-2 minutes. Subsequent loads will be instant.
+              </p>
+            </>
+          ) : (
+            <p className="text-gray-500">Loading knowledge tree...</p>
+          )}
         </div>
       </div>
     );

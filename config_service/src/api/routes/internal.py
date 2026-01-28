@@ -1317,3 +1317,90 @@ def get_feedback_statistics(
         positive_rate=positive_rate,
         by_source=stats["by_source"],
     )
+
+
+# ==================== Knowledge Tree Management ====================
+
+
+class ActiveTreeInfo(BaseModel):
+    """Information about an active knowledge tree."""
+
+    tree_name: str
+    org_id: str
+    team_count: int  # Number of teams using this tree
+    teams: List[str]  # Team node IDs using this tree
+
+
+class ActiveTreesResponse(BaseModel):
+    """Response with all active knowledge trees."""
+
+    trees: List[ActiveTreeInfo]
+    total_trees: int
+    total_teams_with_trees: int
+
+
+@router.get("/active-trees", response_model=ActiveTreesResponse)
+def get_active_trees(
+    org_id: Optional[str] = None,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Get all unique knowledge trees configured across teams.
+
+    This endpoint is used by:
+    - Init containers to know which trees to preload
+    - Monitoring dashboards to track tree usage
+    - Cache warmup jobs
+
+    Args:
+        org_id: Optional org filter (omit to get all orgs)
+
+    Returns:
+        List of unique tree names with usage stats
+    """
+    # Build query for all team configurations
+    query = session.query(NodeConfiguration)
+
+    if org_id:
+        query = query.filter(NodeConfiguration.org_id == org_id)
+
+    configs = query.all()
+
+    # Extract knowledge_tree from each config and group by tree name
+    tree_teams: Dict[str, List[tuple]] = {}  # tree_name -> [(org_id, team_node_id), ...]
+
+    for config in configs:
+        if not config.config_json:
+            continue
+
+        knowledge_tree = config.config_json.get("knowledge_tree")
+        if knowledge_tree:
+            if knowledge_tree not in tree_teams:
+                tree_teams[knowledge_tree] = []
+            tree_teams[knowledge_tree].append((config.org_id, config.node_id))
+
+    # Build response
+    trees = []
+    for tree_name, team_list in sorted(tree_teams.items()):
+        trees.append(
+            ActiveTreeInfo(
+                tree_name=tree_name,
+                org_id=team_list[0][0] if team_list else "",
+                team_count=len(team_list),
+                teams=[t[1] for t in team_list],
+            )
+        )
+
+    logger.info(
+        "active_trees_query",
+        org_id=org_id,
+        total_trees=len(trees),
+        total_teams=sum(t.team_count for t in trees),
+    )
+
+    return ActiveTreesResponse(
+        trees=trees,
+        total_trees=len(trees),
+        total_teams_with_trees=sum(t.team_count for t in trees),
+    )
