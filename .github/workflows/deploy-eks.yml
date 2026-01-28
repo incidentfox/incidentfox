@@ -16,6 +16,7 @@ on:
           - agent
           - ai-pipeline
           - config-service
+          - knowledge-base
           - orchestrator
           - web-ui
       skip_deploy:
@@ -39,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [agent, ai-pipeline, config-service, orchestrator, web-ui]
+        service: [agent, ai-pipeline, config-service, knowledge-base, orchestrator, web-ui]
         include:
           - service: agent
             context: ./agent
@@ -53,6 +54,10 @@ jobs:
             context: ./config_service
             dockerfile: ./config_service/Dockerfile
             image: incidentfox-config-service
+          - service: knowledge-base
+            context: ./knowledge_base
+            dockerfile: ./knowledge_base/Dockerfile
+            image: incidentfox-knowledge-base
           - service: orchestrator
             context: ./orchestrator
             dockerfile: ./orchestrator/Dockerfile
@@ -206,6 +211,7 @@ jobs:
           if [ "${{ github.event.inputs.services }}" = "all" ]; then
             kubectl rollout restart deployment/incidentfox-agent \
               deployment/incidentfox-config-service \
+              deployment/incidentfox-knowledge-base \
               deployment/incidentfox-orchestrator \
               deployment/incidentfox-web-ui \
               -n ${{ env.HELM_NAMESPACE }}
@@ -221,6 +227,7 @@ jobs:
           if [ "${{ github.event.inputs.services }}" = "all" ]; then
             kubectl rollout status deployment/incidentfox-agent -n ${{ env.HELM_NAMESPACE }} --timeout=10m
             kubectl rollout status deployment/incidentfox-config-service -n ${{ env.HELM_NAMESPACE }} --timeout=10m
+            kubectl rollout status deployment/incidentfox-knowledge-base -n ${{ env.HELM_NAMESPACE }} --timeout=10m
             kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=10m
             kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=10m
           elif [ "${{ github.event.inputs.services }}" = "ai-pipeline" ]; then
@@ -240,7 +247,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Image Digests" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|orchestrator|web-ui)" >> $GITHUB_STEP_SUMMARY || true
+          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|knowledge-base|orchestrator|web-ui)" >> $GITHUB_STEP_SUMMARY || true
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Summary
