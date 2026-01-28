@@ -456,7 +456,10 @@ def build_tool_calls_modal(
         blocks.append(
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": "_No tool calls found for this phase._"},
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "_No tool calls found for this phase._",
+                },
             }
         )
     else:
@@ -475,7 +478,10 @@ def build_tool_calls_modal(
                 blocks.append(
                     {
                         "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"_... and {len(tool_calls) - i} more tool calls (truncated)_"},
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"_... and {len(tool_calls) - i} more tool calls (truncated)_",
+                        },
                     }
                 )
                 break
@@ -504,6 +510,7 @@ def build_tool_calls_modal(
             tool_input = call.get("tool_input")
             if tool_input:
                 import json
+
                 try:
                     input_str = json.dumps(tool_input, indent=2)
                     if len(input_str) > 500:
@@ -511,7 +518,10 @@ def build_tool_calls_modal(
                     blocks.append(
                         {
                             "type": "section",
-                            "text": {"type": "mrkdwn", "text": f"*Input:*\n```{input_str}```"},
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f"*Input:*\n```{input_str}```",
+                            },
                         }
                     )
                 except (TypeError, ValueError):
@@ -519,23 +529,35 @@ def build_tool_calls_modal(
 
             # Output or error
             if error_msg:
-                error_display = error_msg[:500] + "..." if len(error_msg) > 500 else error_msg
+                error_display = (
+                    error_msg[:500] + "..." if len(error_msg) > 500 else error_msg
+                )
                 blocks.append(
                     {
                         "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"*Error:*\n```{error_display}```"},
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Error:*\n```{error_display}```",
+                        },
                     }
                 )
             else:
                 tool_output = call.get("tool_output", "")
                 if tool_output:
-                    output_display = tool_output[:1000] + "\n... (truncated)" if len(tool_output) > 1000 else tool_output
+                    output_display = (
+                        tool_output[:1000] + "\n... (truncated)"
+                        if len(tool_output) > 1000
+                        else tool_output
+                    )
                     # Escape backticks in output to avoid breaking code blocks
                     output_display = output_display.replace("```", "` ` `")
                     blocks.append(
                         {
                             "type": "section",
-                            "text": {"type": "mrkdwn", "text": f"*Output:*\n```{output_display}```"},
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f"*Output:*\n```{output_display}```",
+                            },
                         }
                     )
 
