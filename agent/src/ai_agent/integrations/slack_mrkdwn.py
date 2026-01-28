@@ -34,36 +34,30 @@ def markdown_to_slack_mrkdwn(text: str) -> str:
 
     # Convert headings to bold text (Slack has no native headers)
     # Pattern: ### Header text at start of line
-    # Also handle case where header runs into next text without newline
+    # Also handle case where header runs into next text without newline (run-on headers)
     def _convert_header(m):
         title = m.group(2).strip()
-        trailing = m.group(3) if m.lastindex >= 3 else ""
-        # If there's trailing content on the same line, add a newline
-        if trailing and trailing.strip():
-            return f"*{title}*\n{trailing}"
+
+        # Detect run-on headers where title word merges with next sentence
+        # e.g., "SummaryThe payment service..." -> "Summary" + "The payment service..."
+        # Look for lowercase->uppercase transition (camelCase boundary)
+        for i, char in enumerate(title[1:], 1):
+            if char.isupper() and title[i - 1].islower():
+                # Found camelCase boundary - split here
+                header_part = title[:i]
+                rest_part = title[i:]
+                return f"*{header_part}*\n{rest_part}"
+
         return f"*{title}*"
 
-    # Match headers with optional trailing content on same line
-    # Group 1: hash marks, Group 2: header text, Group 3: rest of line (optional)
+    # Match headers: ### followed by optional space and content
+    # This handles both "### Header" and "###Header" and "### HeaderText"
     t = re.sub(
-        r"^(#{1,6})\s+([^\n]+?)(?=\n|$)([^\n]*)?",
+        r"^(#{1,6})\s*([^\n]+)$",
         _convert_header,
         t,
         flags=re.MULTILINE,
     )
-
-    # Handle edge case: ### HeaderText (no space after header, runs into next word)
-    # This catches malformed markdown like "### SummaryThe payment..."
-    def _fix_runon_header(m):
-        title = m.group(2)
-        # Find where the header title likely ends (capital letter or common words)
-        # Split on transition from title case to next sentence
-        for i, char in enumerate(title[1:], 1):
-            if char.isupper() and title[i - 1].islower():
-                return f"*{title[:i]}*\n{title[i:]}"
-        return f"*{title}*"
-
-    t = re.sub(r"^(#{1,6})([A-Z][^\n]+)$", _fix_runon_header, t, flags=re.MULTILINE)
 
     # Convert dash bullets to Slack bullets
     t = re.sub(r"^(\s*)-\s+", r"\1• ", t, flags=re.MULTILINE)
