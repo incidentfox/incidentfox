@@ -198,21 +198,58 @@ jobs:
             kubectl delete deployment "$RESOURCE_NAME" -n "$NS" --wait=false
           fi
 
-      - name: Deploy with Helm
+      - name: Deploy with Helm (no wait)
         working-directory: charts
         run: |
-          # Increased timeout for slow-starting services (ultimate-rag downloads from S3 + loads model)
+          # Deploy without --wait to avoid Helm's aggressive API polling
+          # We'll use kubectl rollout status instead (more efficient, better errors)
           helm upgrade --install incidentfox ./incidentfox \
             -n ${{ env.HELM_NAMESPACE }} \
             -f incidentfox/values.prod.yaml \
             --no-hooks \
             --force \
-            --wait \
-            --timeout 15m
+            --timeout 5m
 
-      # Note: rollout restart is NOT needed after helm upgrade --force
-      # The --force flag already recreates pods, and --wait ensures they're ready
-      # Removing the redundant restart avoids double-waiting for slow-starting services
+      - name: Wait for core services
+        run: |
+          echo "Waiting for core services to be ready..."
+          # Core services should start quickly (1-2 min)
+          kubectl rollout status deployment/incidentfox-config-service -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+          kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+          kubectl rollout status deployment/incidentfox-agent -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+          kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+
+      - name: Wait for RAG services (slow startup)
+        run: |
+          echo "Waiting for RAG services (these download from S3 and load models)..."
+          # RAG services need longer timeout (S3 download + model loading)
+          # Run in parallel with background processes
+          pids=()
+
+          if kubectl get deployment/incidentfox-knowledge-base -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
+            kubectl rollout status deployment/incidentfox-knowledge-base -n ${{ env.HELM_NAMESPACE }} --timeout=10m &
+            pids+=($!)
+          fi
+
+          if kubectl get deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
+            kubectl rollout status deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} --timeout=10m &
+            pids+=($!)
+          fi
+
+          # Wait for all background processes
+          failed=0
+          for pid in "${pids[@]}"; do
+            if ! wait $pid; then
+              failed=1
+            fi
+          done
+
+          if [ $failed -eq 1 ]; then
+            echo "::warning::One or more RAG services failed to start. Checking pod status..."
+            kubectl get pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component in (knowledge-base, ultimate-rag)'
+            kubectl describe pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component in (knowledge-base, ultimate-rag)' | tail -100
+            exit 1
+          fi
 
       - name: Verify deployment
         run: |
@@ -220,12 +257,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Pods" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/instance=incidentfox' >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ env.HELM_NAMESPACE }} >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Image Digests" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|knowledge-base|orchestrator|web-ui)" >> $GITHUB_STEP_SUMMARY || true
+          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|knowledge-base|orchestrator|web-ui|ultimate-rag)" >> $GITHUB_STEP_SUMMARY || true
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Summary
