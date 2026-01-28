@@ -249,8 +249,8 @@ class RaptorBridge:
             source_info = SourceInfo(
                 source_type="document",
                 source_id=raptor_meta.get("doc_id", ""),
-                url=source_url,
-                title=raptor_meta.get("rel_path", ""),
+                source_url=source_url,
+                file_path=raptor_meta.get("rel_path", ""),
             )
 
         # Create metadata
