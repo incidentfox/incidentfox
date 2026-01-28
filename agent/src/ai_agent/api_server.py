@@ -1030,6 +1030,7 @@ def create_app() -> Sanic:
                                     title=f"{display_name} Investigation",
                                     context_text=f"_Investigating: {message[:100]}{'...' if len(message) > 100 else ''}_",
                                     phases={},  # Empty - will be populated dynamically
+                                    run_id=run_id,
                                 )
 
                                 # Update the initial message with dashboard format
@@ -1045,6 +1046,7 @@ def create_app() -> Sanic:
                                     channel_id=channel_id,
                                     message_ts=message_ts,
                                     thread_ts=thread_ts,
+                                    run_id=run_id,
                                     title=f"{display_name} Investigation",
                                 )
                                 slack_hooks = SlackUpdateHooks(

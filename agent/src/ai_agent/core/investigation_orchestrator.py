@@ -96,6 +96,7 @@ class InvestigationOrchestrator:
         severity: str | None = None,
         title: str = "IncidentFox Investigation",
         context: str | None = None,
+        run_id: str | None = None,
     ) -> InvestigationResult:
         """
         Run an investigation with real-time Slack updates.
@@ -108,6 +109,7 @@ class InvestigationOrchestrator:
             severity: Optional severity level
             title: Dashboard title
             context: Optional additional context
+            run_id: Optional agent run ID for tool call tracking
 
         Returns:
             InvestigationResult with findings and phase results
@@ -125,6 +127,7 @@ class InvestigationOrchestrator:
                 incident_id=incident_id,
                 severity=severity,
                 context_text=f"_Investigating: {prompt[:100]}{'...' if len(prompt) > 100 else ''}_",
+                run_id=run_id,
             )
 
             result = await self.slack_client.chat_postMessage(
@@ -147,6 +150,7 @@ class InvestigationOrchestrator:
                 channel_id=channel_id,
                 message_ts=message_ts,
                 thread_ts=thread_ts,
+                run_id=run_id,
                 incident_id=incident_id,
                 severity=severity,
                 title=title,
