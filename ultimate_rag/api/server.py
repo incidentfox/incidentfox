@@ -11,6 +11,21 @@ FastAPI server that exposes all Ultimate RAG capabilities:
 
 import logging
 import os
+import sys
+
+# Pickle compatibility shim for legacy RAPTOR trees.
+# Old pickle files reference 'raptor.tree_structures' but the module is now
+# at 'knowledge_base.raptor.tree_structures'. This shim creates module aliases
+# so pickle.load() can find the classes.
+try:
+    from knowledge_base import raptor as kb_raptor
+
+    sys.modules["raptor"] = kb_raptor
+    # Also alias submodules that might be referenced
+    if hasattr(kb_raptor, "tree_structures"):
+        sys.modules["raptor.tree_structures"] = kb_raptor.tree_structures
+except ImportError:
+    pass  # knowledge_base not available, skip shim
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
