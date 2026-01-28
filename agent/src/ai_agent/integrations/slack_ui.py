@@ -170,6 +170,8 @@ def build_findings_section(
     confidence: int | None = None,
 ) -> list[dict[str, Any]]:
     """Build the root cause analysis / findings section."""
+    from .slack_mrkdwn import markdown_to_slack_mrkdwn
+
     blocks: list[dict[str, Any]] = [
         {"type": "divider"},
         {
@@ -182,8 +184,9 @@ def build_findings_section(
         },
     ]
 
-    # Split findings into chunks if too long
-    for chunk in chunk_mrkdwn(findings, limit=2900):
+    # Convert markdown to Slack mrkdwn format, then split into chunks
+    findings_mrkdwn = markdown_to_slack_mrkdwn(findings)
+    for chunk in chunk_mrkdwn(findings_mrkdwn, limit=2900):
         blocks.append(
             {
                 "type": "section",
