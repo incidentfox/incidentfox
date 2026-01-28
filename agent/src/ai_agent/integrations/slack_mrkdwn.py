@@ -14,6 +14,12 @@ def markdown_to_slack_mrkdwn(text: str) -> str:
     """
     Best-effort conversion from common Markdown -> Slack mrkdwn.
     This prevents ugly rendering when the model outputs GitHub-flavored Markdown.
+
+    Key conversions:
+    - ### Header -> *Header* (bold, since Slack has no headers)
+    - **bold** -> *bold*
+    - [label](url) -> <url|label>
+    - - bullet -> • bullet
     """
     if not text:
         return ""
@@ -23,18 +29,41 @@ def markdown_to_slack_mrkdwn(text: str) -> str:
     # Convert markdown links [label](url) -> <url|label>
     t = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"<\2|\1>", t)
 
-    # Convert **bold** -> *bold*
+    # Convert **bold** -> *bold* (must be done before header conversion)
     t = re.sub(r"\*\*([^*]+)\*\*", r"*\1*", t)
 
-    # Convert headings to Slack-friendly format
-    def _hdr(m):
-        hashes = m.group(1)
+    # Convert headings to bold text (Slack has no native headers)
+    # Pattern: ### Header text at start of line
+    # Also handle case where header runs into next text without newline
+    def _convert_header(m):
         title = m.group(2).strip()
-        if len(hashes) <= 1:
-            return f"*# {title}*"
-        return f"*## {title}*"
+        trailing = m.group(3) if m.lastindex >= 3 else ""
+        # If there's trailing content on the same line, add a newline
+        if trailing and trailing.strip():
+            return f"*{title}*\n{trailing}"
+        return f"*{title}*"
 
-    t = re.sub(r"^(#{1,6})\s+(.+)$", _hdr, t, flags=re.MULTILINE)
+    # Match headers with optional trailing content on same line
+    # Group 1: hash marks, Group 2: header text, Group 3: rest of line (optional)
+    t = re.sub(
+        r"^(#{1,6})\s+([^\n]+?)(?=\n|$)([^\n]*)?",
+        _convert_header,
+        t,
+        flags=re.MULTILINE,
+    )
+
+    # Handle edge case: ### HeaderText (no space after header, runs into next word)
+    # This catches malformed markdown like "### SummaryThe payment..."
+    def _fix_runon_header(m):
+        title = m.group(2)
+        # Find where the header title likely ends (capital letter or common words)
+        # Split on transition from title case to next sentence
+        for i, char in enumerate(title[1:], 1):
+            if char.isupper() and title[i - 1].islower():
+                return f"*{title[:i]}*\n{title[i:]}"
+        return f"*{title}*"
+
+    t = re.sub(r"^(#{1,6})([A-Z][^\n]+)$", _fix_runon_header, t, flags=re.MULTILINE)
 
     # Convert dash bullets to Slack bullets
     t = re.sub(r"^(\s*)-\s+", r"\1• ", t, flags=re.MULTILINE)
