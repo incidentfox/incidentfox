@@ -504,7 +504,11 @@ class UltimateRAGServer:
         logger.info("Initializing Ultimate RAG server...")
 
         # Initialize forest
-        self.forest = TreeForest()
+        self.forest = TreeForest(
+            forest_id="default",
+            name="Default Forest",
+            description="Auto-created forest for RAPTOR trees",
+        )
 
         # Determine trees directory from parameter or environment
         effective_trees_dir = trees_dir or RAPTOR_TREES_DIR
