@@ -85,7 +85,9 @@ class TeachRequest(BaseModel):
     knowledge_type: Optional[str] = Field(None, description="Type of knowledge")
     source: Optional[str] = Field(None, description="Source of the knowledge")
     entities: Optional[List[str]] = Field(None, description="Related entities")
-    importance: Optional[float] = Field(None, ge=0, le=1, description="Importance score")
+    importance: Optional[float] = Field(
+        None, ge=0, le=1, description="Importance score"
+    )
 
 
 class TeachResponse(BaseModel):
@@ -257,7 +259,9 @@ class V1TeachRequest(BaseModel):
     knowledge_type: str = Field("procedural", description="Type of knowledge")
     source: str = Field("agent_learning", description="Source")
     confidence: float = Field(0.7, description="Confidence score")
-    related_entities: List[str] = Field(default_factory=list, description="Related services")
+    related_entities: List[str] = Field(
+        default_factory=list, description="Related services"
+    )
     learned_from: str = Field("agent_investigation", description="Learning context")
     task_context: str = Field("", description="Task context")
 
@@ -710,7 +714,9 @@ class UltimateRAGServer:
                     )
 
                     # Get relationships
-                    for rel in self.graph.get_relationships_for_entity(request.entity_id):
+                    for rel in self.graph.get_relationships_for_entity(
+                        request.entity_id
+                    ):
                         relationships.append(
                             GraphRelationship(
                                 source_id=rel.source_id,
@@ -796,7 +802,9 @@ class UltimateRAGServer:
                 stats=stats,
             )
 
-        @app.post("/maintenance/run", response_model=MaintenanceResponse, tags=["Admin"])
+        @app.post(
+            "/maintenance/run", response_model=MaintenanceResponse, tags=["Admin"]
+        )
         async def run_maintenance():
             """Run a maintenance cycle."""
             if not self.maintenance:
@@ -843,7 +851,9 @@ class UltimateRAGServer:
                 "loaded": trees,
             }
 
-        @app.post("/api/v1/trees", response_model=V1CreateTreeResponse, tags=["v1-compat"])
+        @app.post(
+            "/api/v1/trees", response_model=V1CreateTreeResponse, tags=["v1-compat"]
+        )
         async def v1_create_tree(request: V1CreateTreeRequest):
             """
             Create a new empty knowledge tree (v1 compatible).
@@ -892,7 +902,9 @@ class UltimateRAGServer:
 
             except Exception as e:
                 logger.error(f"Error creating tree: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to create tree: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to create tree: {e}"
+                )
 
         @app.post("/api/v1/search", response_model=V1SearchResponse, tags=["v1-compat"])
         async def v1_search(request: V1SearchRequest):
@@ -979,7 +991,9 @@ class UltimateRAGServer:
                 raise HTTPException(503, "Server not initialized")
 
             try:
-                services = [request.affected_service] if request.affected_service else None
+                services = (
+                    [request.affected_service] if request.affected_service else None
+                )
 
                 result = await self.retriever.retrieve_for_incident(
                     symptoms=request.symptoms,
@@ -1067,11 +1081,15 @@ class UltimateRAGServer:
                         break
 
                 if not entity:
-                    result.hint = f"Entity '{request.entity_name}' not found in knowledge graph"
+                    result.hint = (
+                        f"Entity '{request.entity_name}' not found in knowledge graph"
+                    )
                     return result
 
                 # Get relationships based on query type
-                relationships = self.graph.get_relationships_for_entity(entity.entity_id)
+                relationships = self.graph.get_relationships_for_entity(
+                    entity.entity_id
+                )
 
                 if request.query_type == "dependencies":
                     deps = [
@@ -1184,7 +1202,9 @@ class UltimateRAGServer:
                     "temporal": KnowledgeType.TEMPORAL,
                     "relational": KnowledgeType.RELATIONAL,
                 }
-                knowledge_type = type_map.get(request.knowledge_type, KnowledgeType.PROCEDURAL)
+                knowledge_type = type_map.get(
+                    request.knowledge_type, KnowledgeType.PROCEDURAL
+                )
 
                 result = await self.teaching.teach(
                     knowledge=request.content,
@@ -1207,7 +1227,9 @@ class UltimateRAGServer:
                 elif status == "pending_review":
                     message = "Knowledge queued for human review before adding."
                 elif status == "contradiction":
-                    message = "This may contradict existing knowledge. Queued for review."
+                    message = (
+                        "This may contradict existing knowledge. Queued for review."
+                    )
 
                 return V1TeachResponse(
                     status=status,
@@ -1254,7 +1276,10 @@ class UltimateRAGServer:
 
                     metadata = chunk.metadata
                     # Only include if it looks like an incident
-                    if metadata.get("category") == "incident" or "incident" in chunk.text.lower():
+                    if (
+                        metadata.get("category") == "incident"
+                        or "incident" in chunk.text.lower()
+                    ):
                         similar.append(
                             V1SimilarIncident(
                                 incident_id=metadata.get("incident_id"),
@@ -1269,7 +1294,9 @@ class UltimateRAGServer:
 
                 hint = None
                 if not similar:
-                    hint = "No similar past incidents found. This may be a new issue type."
+                    hint = (
+                        "No similar past incidents found. This may be a new issue type."
+                    )
 
                 return V1SimilarIncidentsResponse(
                     ok=True,
