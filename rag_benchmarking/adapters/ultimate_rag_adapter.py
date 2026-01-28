@@ -18,6 +18,7 @@ import requests
 @dataclass
 class RetrievalResult:
     """A single retrieved chunk."""
+
     text: str
     score: float
     importance: float = 0.0
@@ -28,6 +29,7 @@ class RetrievalResult:
 @dataclass
 class BenchmarkResult:
     """Result of running a benchmark query."""
+
     query: str
     retrieved_chunks: List[RetrievalResult]
     generated_answer: Optional[str] = None
@@ -73,10 +75,7 @@ class UltimateRAGAdapter:
     def health_check(self) -> bool:
         """Check if the Ultimate RAG server is healthy."""
         try:
-            resp = self._session.get(
-                f"{self.api_url}/health",
-                timeout=self.timeout
-            )
+            resp = self._session.get(f"{self.api_url}/health", timeout=self.timeout)
             return resp.status_code == 200 and resp.json().get("status") == "healthy"
         except Exception as e:
             print(f"Health check failed: {e}")
@@ -413,18 +412,26 @@ class MultiHopRAGEvaluator:
             evidence_list = q.get("evidence_list", q.get("supporting_facts", []))
 
             # Retrieve
-            benchmark_result = self.adapter.retrieve_for_benchmark(query_text, top_k=top_k)
+            benchmark_result = self.adapter.retrieve_for_benchmark(
+                query_text, top_k=top_k
+            )
             total_time += benchmark_result.retrieval_time_ms
 
             # Get retrieved texts
-            retrieved_texts = [r.text.lower() for r in benchmark_result.retrieved_chunks]
+            retrieved_texts = [
+                r.text.lower() for r in benchmark_result.retrieved_chunks
+            ]
 
             # Calculate recall
             if evidence_list:
                 found = 0
                 first_rank = None
                 for i, evidence in enumerate(evidence_list):
-                    evidence_text = evidence.lower() if isinstance(evidence, str) else str(evidence).lower()
+                    evidence_text = (
+                        evidence.lower()
+                        if isinstance(evidence, str)
+                        else str(evidence).lower()
+                    )
                     for rank, retrieved in enumerate(retrieved_texts):
                         if evidence_text in retrieved or retrieved in evidence_text:
                             found += 1
@@ -442,8 +449,14 @@ class MultiHopRAGEvaluator:
                     results["mrr"].append(0.0)
 
         # Aggregate metrics
-        results["avg_recall_at_k"] = sum(results["recall_at_k"]) / len(results["recall_at_k"]) if results["recall_at_k"] else 0
-        results["avg_mrr"] = sum(results["mrr"]) / len(results["mrr"]) if results["mrr"] else 0
+        results["avg_recall_at_k"] = (
+            sum(results["recall_at_k"]) / len(results["recall_at_k"])
+            if results["recall_at_k"]
+            else 0
+        )
+        results["avg_mrr"] = (
+            sum(results["mrr"]) / len(results["mrr"]) if results["mrr"] else 0
+        )
         results["hit_rate"] = hits / len(queries) if queries else 0
         results["avg_retrieval_time_ms"] = total_time / len(queries) if queries else 0
 
@@ -499,9 +512,9 @@ class RAGBenchEvaluator:
         """
         results = {
             "utilization": [],  # How much of retrieved context is used
-            "relevance": [],    # Are retrieved docs relevant
-            "adherence": [],    # Does answer stick to context (no hallucination)
-            "completeness": [], # Does answer cover all aspects
+            "relevance": [],  # Are retrieved docs relevant
+            "adherence": [],  # Does answer stick to context (no hallucination)
+            "completeness": [],  # Does answer cover all aspects
         }
 
         for q in queries:
@@ -510,9 +523,7 @@ class RAGBenchEvaluator:
 
             # Full RAG pipeline
             benchmark_result = self.adapter.retrieve_and_generate(
-                query_text,
-                top_k=top_k,
-                ground_truth=ground_truth
+                query_text, top_k=top_k, ground_truth=ground_truth
             )
 
             # Note: Full TRACe evaluation requires LLM-as-judge
@@ -530,7 +541,11 @@ class RAGBenchEvaluator:
 
         # Aggregate
         return {
-            "avg_completeness": sum(results["completeness"]) / len(results["completeness"]) if results["completeness"] else 0,
+            "avg_completeness": (
+                sum(results["completeness"]) / len(results["completeness"])
+                if results["completeness"]
+                else 0
+            ),
             "total_evaluated": len(queries),
         }
 
@@ -579,7 +594,12 @@ class CRAGEvaluator:
         ground_truth = ground_truth.strip().lower()
 
         # Check for abstention
-        abstention_phrases = ["i don't know", "cannot answer", "no information", "unclear"]
+        abstention_phrases = [
+            "i don't know",
+            "cannot answer",
+            "no information",
+            "unclear",
+        ]
         if any(phrase in generated for phrase in abstention_phrases):
             return 0  # Missing
 
@@ -648,7 +668,9 @@ class CRAGEvaluator:
         total = results["total"]
         results["accuracy"] = results["correct"] / total if total else 0
         results["hallucination_rate"] = results["hallucination"] / total if total else 0
-        results["crag_score"] = (results["correct"] - results["hallucination"]) / total if total else 0
+        results["crag_score"] = (
+            (results["correct"] - results["hallucination"]) / total if total else 0
+        )
 
         return results
 
@@ -667,7 +689,9 @@ def run_quick_test(api_url: str = "http://localhost:8000"):
 
     # Test retrieval
     results, meta = adapter.retrieve("test query", top_k=3)
-    print(f"Retrieval test: got {len(results)} results in {meta['retrieval_time_ms']:.1f}ms")
+    print(
+        f"Retrieval test: got {len(results)} results in {meta['retrieval_time_ms']:.1f}ms"
+    )
     print(f"Strategies used: {meta['strategies_used']}")
 
     return True

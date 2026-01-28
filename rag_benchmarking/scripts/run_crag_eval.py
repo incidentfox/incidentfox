@@ -21,16 +21,24 @@ from pathlib import Path
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from adapters.ultimate_rag_adapter import UltimateRAGAdapter, CRAGEvaluator
+from adapters.ultimate_rag_adapter import CRAGEvaluator, UltimateRAGAdapter
 
 
 def main():
     parser = argparse.ArgumentParser(description="Run CRAG evaluation")
-    parser.add_argument("--api-url", default="http://localhost:8000", help="Ultimate RAG API URL")
+    parser.add_argument(
+        "--api-url", default="http://localhost:8000", help="Ultimate RAG API URL"
+    )
     parser.add_argument("--data-dir", default=None, help="CRAG data directory")
-    parser.add_argument("--top-k", type=int, default=5, help="Number of chunks to retrieve")
-    parser.add_argument("--max-queries", type=int, default=None, help="Max queries to evaluate")
-    parser.add_argument("--output", default="crag_results.json", help="Output file for results")
+    parser.add_argument(
+        "--top-k", type=int, default=5, help="Number of chunks to retrieve"
+    )
+    parser.add_argument(
+        "--max-queries", type=int, default=None, help="Max queries to evaluate"
+    )
+    parser.add_argument(
+        "--output", default="crag_results.json", help="Output file for results"
+    )
     args = parser.parse_args()
 
     # Determine data directory
@@ -39,7 +47,7 @@ def main():
     else:
         data_dir = Path(__file__).parent.parent / "crag"
 
-    print(f"=== CRAG Evaluation ===")
+    print("=== CRAG Evaluation ===")
     print(f"API URL: {args.api_url}")
     print(f"Data directory: {data_dir}")
     print(f"Top-K: {args.top_k}")
@@ -76,7 +84,7 @@ def main():
         sys.exit(1)
 
     if args.max_queries:
-        queries = queries[:args.max_queries]
+        queries = queries[: args.max_queries]
         print(f"Limited to {len(queries)} queries")
 
     # Run evaluation
@@ -94,9 +102,15 @@ def main():
     # Print results
     print("=== CRAG Results ===")
     print(f"Total queries: {results['total']}")
-    print(f"Correct (+1): {results['correct']} ({results['correct']/results['total']*100:.1f}%)")
-    print(f"Missing (0): {results['missing']} ({results['missing']/results['total']*100:.1f}%)")
-    print(f"Hallucination (-1): {results['hallucination']} ({results['hallucination']/results['total']*100:.1f}%)")
+    print(
+        f"Correct (+1): {results['correct']} ({results['correct']/results['total']*100:.1f}%)"
+    )
+    print(
+        f"Missing (0): {results['missing']} ({results['missing']/results['total']*100:.1f}%)"
+    )
+    print(
+        f"Hallucination (-1): {results['hallucination']} ({results['hallucination']/results['total']*100:.1f}%)"
+    )
     print("")
     print(f"Accuracy: {results['accuracy']:.4f}")
     print(f"Hallucination Rate: {results['hallucination_rate']:.4f}")
