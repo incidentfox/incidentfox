@@ -73,6 +73,15 @@ module "eks" {
   node_min_size       = var.node_min_size
   node_max_size       = var.node_max_size
   node_desired_size   = var.node_desired_size
+
+  # Memory-intensive node group for RAG workloads
+  memory_intensive_nodegroup_enabled = var.memory_intensive_nodegroup_enabled
+  memory_intensive_instance_types    = var.memory_intensive_instance_types
+  memory_intensive_disk_size         = var.memory_intensive_disk_size
+  memory_intensive_min_size          = var.memory_intensive_min_size
+  memory_intensive_max_size          = var.memory_intensive_max_size
+  memory_intensive_desired_size      = var.memory_intensive_desired_size
+
   tags                = local.tags
 }
 
