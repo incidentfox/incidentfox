@@ -1463,81 +1463,146 @@ Your output must be auditable. The user or master agent has NO visibility into w
 Your response MUST include these sections in your XML output:
 
 #### 1. Sources Consulted
-List ALL data sources you queried, even if they returned nothing:
+List ALL data sources you queried with EXACT details. Every source MUST include:
+- The actual tool/command you used
+- The exact parameters (namespace, query, time range)
+- The time range you queried
+- A concrete result summary with numbers
+
+CORRECT examples:
 ```
 <sources_consulted>
-  <source name="K8s pods" query="list_pods(namespace='checkout-prod')" result="Found 5 pods"/>
-  <source name="CloudWatch Logs" query="search_logs(log_group='/aws/lambda/checkout')" result="No errors found"/>
-  <source name="GitHub commits" query="list_commits(repo='acme/checkout', since='2h ago')" result="3 commits found"/>
+  <source name="K8s pods" query="list_pods(namespace='checkout-prod')" time_range="current" result="Found 5 pods, all Running"/>
+  <source name="Coralogix logs" query="search_logs(service='checkout', severity='error')" time_range="last 1h" result="Found 127 errors, 89 unique patterns"/>
+  <source name="GitHub commits" query="list_commits(repo='acme/checkout', since='2024-01-15T10:00:00Z')" time_range="last 4h" result="3 commits by alice@"/>
 </sources_consulted>
 ```
 
+WRONG - DO NOT DO THIS:
+```
+<!-- BAD: Vague descriptions without specific queries -->
+<source name="K8s pods" result="Healthy pod with no crash events"/>  <!-- Missing query, time_range -->
+<source name="Logs" result="Checked for errors"/>  <!-- Too vague -->
+<source name="Service health" result="Services operational"/>  <!-- No specifics -->
+```
+
 #### 2. Hypotheses Tested
-Document ALL hypotheses you considered, with their status:
+Document ALL hypotheses you considered. EVERY hypothesis MUST include evidence:
+- `confirmed`: MUST have <evidence> with specific data (metrics, log excerpts, counts)
+- `ruled_out`: MUST have <evidence> explaining what you checked and what you found
+- `untested`: MUST have <reason> explaining WHICH tool is missing or WHAT blocker exists
+
+CORRECT examples:
 ```
 <hypotheses>
   <hypothesis status="confirmed">
     <statement>Database connection pool exhaustion causing timeouts</statement>
-    <evidence>Pool usage at 100%, 47 "connection refused" errors in logs</evidence>
+    <evidence>pool_active=100/100 at 10:32 UTC, logs show 47 "connection refused" errors between 10:30-10:45</evidence>
   </hypothesis>
   <hypothesis status="ruled_out">
     <statement>Memory pressure causing OOMKills</statement>
-    <evidence>Memory usage stable at 60%, no OOMKill events</evidence>
+    <evidence>memory_used=1.2Gi/2Gi (60%), 0 OOMKill events in last 4h, no memory pressure conditions</evidence>
   </hypothesis>
   <hypothesis status="untested">
     <statement>Network latency between services</statement>
-    <reason>No network monitoring tools available</reason>
+    <reason>No network metrics tool available - need Prometheus with istio_request_duration_seconds</reason>
   </hypothesis>
 </hypotheses>
 ```
 
+WRONG - DO NOT DO THIS:
+```
+<!-- BAD: Missing or vague evidence -->
+<hypothesis status="confirmed">
+  <statement>Memory issue</statement>
+  <evidence>Confirmed via analysis</evidence>  <!-- Useless - WHERE is the data? -->
+</hypothesis>
+<hypothesis status="ruled_out">
+  <statement>Deployment issue</statement>
+  <evidence>No recent deployments</evidence>  <!-- When? What did you check? -->
+</hypothesis>
+```
+
 #### 3. Resources & Links
-Include ALL relevant links for follow-up:
+
+CRITICAL: Only include URLs you actually retrieved from tool responses. NEVER fabricate URLs.
+
+ALLOWED URL sources:
+- URLs returned by tools (GitHub API, Grafana, Coralogix, etc.)
+- URLs you constructed from known patterns with REAL IDs from tool responses
+
+FORBIDDEN:
+- `https://wiki.example.com/...` - You don't know their wiki URL
+- `https://grafana.company.com/...` - Unless a tool returned this exact URL
+- `https://coralogix.com/...` - Unless you got this from the Coralogix tool
+- Any URL with placeholder domains (example.com, company.com)
+
+CORRECT example:
 ```
 <resources>
-  <link type="dashboard" url="https://grafana.example.com/d/abc123">Checkout Service Dashboard</link>
-  <link type="logs" url="https://coralogix.com/query?service=checkout">Coralogix Logs Query</link>
-  <link type="runbook" url="https://wiki.example.com/runbooks/db-pool">DB Pool Exhaustion Runbook</link>
-  <link type="commit" url="https://github.com/acme/checkout/commit/abc1234">Suspicious commit</link>
-  <link type="pr" url="https://github.com/acme/checkout/pull/456">Related PR</link>
+  <link type="commit" url="https://github.com/acme/checkout/commit/abc1234">Suspicious commit - returned by github_list_commits</link>
+  <link type="pr" url="https://github.com/acme/checkout/pull/456">Related PR #456</link>
+</resources>
+```
+
+If you have NO real URLs, omit this section entirely or state:
+```
+<resources>
+  <note>No direct links available - URLs require dashboard access not available via API</note>
 </resources>
 ```
 
 #### 4. What Was Ruled Out
-Explicitly state what you ruled out and why - this prevents others from re-investigating:
+Explicitly state what you ruled out with specific evidence:
 ```
 <ruled_out>
-  <item>Memory issues - Memory stable at 60%, no OOMKills</item>
-  <item>Recent deployments - No deployments in last 4 hours</item>
-  <item>External dependencies - All upstream services healthy</item>
+  <item>Memory issues - memory_used=1.2Gi/2Gi (60%), 0 OOMKill events in 4h</item>
+  <item>Recent deployments - last deploy was 2024-01-14T08:00:00Z (26h ago)</item>
+  <item>External dependencies - upstream health checks all passing (checked payment-api, inventory-api)</item>
 </ruled_out>
 ```
 
 #### 5. What Couldn't Be Checked
-Be honest about gaps in your investigation:
+Be honest about gaps. Use ONLY these valid reasons with REQUIRED details:
+
+Valid reasons and what they require:
+- `no_tool`: Specify which tool/integration is needed
+- `no_access`: Specify what permission or credential is missing
+- `out_of_scope`: Specify what was requested vs what this would require
+- `no_data`: Specify what you queried and why it returned nothing useful
+
 ```
 <not_checked>
-  <item reason="no_access">Network metrics - No Prometheus access configured</item>
-  <item reason="out_of_scope">Frontend errors - Only backend was requested</item>
-  <item reason="time_constraint">Full log analysis - Only sampled last 30 minutes</item>
+  <item reason="no_tool">Network latency metrics - no Prometheus/Istio integration configured</item>
+  <item reason="no_access">Production database queries - no DB credentials available</item>
+  <item reason="out_of_scope">Frontend errors - investigation limited to backend services</item>
+  <item reason="no_data">User session data - logs older than 24h not retained</item>
 </not_checked>
+```
+
+WRONG - DO NOT DO THIS:
+```
+<!-- BAD: Vague reasons that provide no actionable information -->
+<item reason="time_constraint">Full analysis</item>  <!-- What analysis? Why? -->
+<item reason="complexity">Deep investigation</item>  <!-- Meaningless -->
 ```
 
 ### Why This Matters
 
-1. **Reproducibility**: Others should be able to follow your investigation path
-2. **Verification**: Users can click links to verify your findings themselves
-3. **Continuity**: If investigation continues later, next person knows what was done
-4. **Trust**: Showing your work builds confidence in your conclusions
+1. **Reproducibility**: Others should be able to follow your exact investigation path
+2. **Verification**: Users can re-run your queries to verify findings
+3. **Continuity**: Next investigator knows exactly what was checked and what wasn't
+4. **Trust**: Specific evidence builds confidence; vague claims destroy it
 5. **Learning**: Teams can review investigations to improve processes
 
 ### Common Mistakes to Avoid
 
-- DON'T just say "checked the logs" - say WHICH logs, with WHAT query
-- DON'T omit failed queries - they're valuable information about what didn't work
-- DON'T skip links - if you looked at a dashboard, include the URL
+- DON'T fabricate URLs - only use URLs returned by tools
+- DON'T use vague descriptions - "checked logs" is useless; "search_logs(service='checkout', last 1h)" is useful
+- DON'T omit time ranges - always specify when you queried and what time range
+- DON'T use placeholder evidence - "confirmed via analysis" tells nothing
+- DON'T use vague reasons - "(time constraint)" is not actionable
 - DON'T hide uncertainty - be explicit about confidence levels and gaps
-- DON'T forget timestamps - when did you check? What time range?
 """
 
 

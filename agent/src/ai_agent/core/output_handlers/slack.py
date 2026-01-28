@@ -475,6 +475,11 @@ class SlackOutputHandler(OutputHandler):
 
     def _format_output(self, output: Any) -> list[dict[str, Any]]:
         """Format agent output into Slack blocks."""
+        from ..integrations.slack_mrkdwn import (
+            chunk_mrkdwn,
+            markdown_to_slack_mrkdwn,
+        )
+
         blocks = []
 
         if output is None:
@@ -485,9 +490,9 @@ class SlackOutputHandler(OutputHandler):
                 }
             )
         elif isinstance(output, str):
-            # String output - chunk if needed
-            chunks = self._chunk_text(output, 2900)
-            for chunk in chunks:
+            # String output - convert markdown to Slack mrkdwn and chunk
+            mrkdwn = markdown_to_slack_mrkdwn(output)
+            for chunk in chunk_mrkdwn(mrkdwn, limit=2900):
                 blocks.append(
                     {
                         "type": "section",
@@ -522,6 +527,8 @@ class SlackOutputHandler(OutputHandler):
 
     def _format_dict_output(self, output: dict) -> list[dict[str, Any]]:
         """Format dict output with smart extraction."""
+        from ..integrations.slack_mrkdwn import markdown_to_slack_mrkdwn
+
         blocks = []
 
         # Look for common structured fields
@@ -533,23 +540,26 @@ class SlackOutputHandler(OutputHandler):
         confidence = output.get("confidence")
 
         if summary:
+            summary_mrkdwn = markdown_to_slack_mrkdwn(str(summary))
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"*Summary*\n{summary}"},
+                    "text": {"type": "mrkdwn", "text": f"*Summary*\n{summary_mrkdwn}"},
                 }
             )
 
         if root_cause:
+            rc_mrkdwn = markdown_to_slack_mrkdwn(str(root_cause))
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"*Root Cause*\n{root_cause}"},
+                    "text": {"type": "mrkdwn", "text": f"*Root Cause*\n{rc_mrkdwn}"},
                 }
             )
 
         if recommendations:
-            rec_text = "\n".join([f"• {r}" for r in recommendations[:10]])
+            recs = [markdown_to_slack_mrkdwn(str(r)) for r in recommendations[:10]]
+            rec_text = "\n".join([f"• {r}" for r in recs])
             blocks.append(
                 {
                     "type": "section",
@@ -594,38 +604,49 @@ class SlackOutputHandler(OutputHandler):
 
     def _format_structured_output(self, output: Any) -> list[dict[str, Any]]:
         """Format pydantic/structured output."""
+        from ..integrations.slack_mrkdwn import markdown_to_slack_mrkdwn
+
         blocks = []
 
         if hasattr(output, "summary") and output.summary:
+            summary_mrkdwn = markdown_to_slack_mrkdwn(str(output.summary))
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"*Summary*\n{output.summary}"},
+                    "text": {"type": "mrkdwn", "text": f"*Summary*\n{summary_mrkdwn}"},
                 }
             )
 
         if hasattr(output, "root_cause"):
             rc = output.root_cause
             if hasattr(rc, "description"):
+                rc_mrkdwn = markdown_to_slack_mrkdwn(str(rc.description))
                 blocks.append(
                     {
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": f"*Root Cause*\n{rc.description}",
+                            "text": f"*Root Cause*\n{rc_mrkdwn}",
                         },
                     }
                 )
             elif rc:
+                rc_mrkdwn = markdown_to_slack_mrkdwn(str(rc))
                 blocks.append(
                     {
                         "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"*Root Cause*\n{rc}"},
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Root Cause*\n{rc_mrkdwn}",
+                        },
                     }
                 )
 
         if hasattr(output, "recommendations") and output.recommendations:
-            rec_text = "\n".join([f"• {r}" for r in output.recommendations[:10]])
+            recs = [
+                markdown_to_slack_mrkdwn(str(r)) for r in output.recommendations[:10]
+            ]
+            rec_text = "\n".join([f"• {r}" for r in recs])
             blocks.append(
                 {
                     "type": "section",

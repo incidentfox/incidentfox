@@ -14,6 +14,12 @@ def markdown_to_slack_mrkdwn(text: str) -> str:
     """
     Best-effort conversion from common Markdown -> Slack mrkdwn.
     This prevents ugly rendering when the model outputs GitHub-flavored Markdown.
+
+    Key conversions:
+    - ### Header -> *Header* (bold, since Slack has no headers)
+    - **bold** -> *bold*
+    - [label](url) -> <url|label>
+    - - bullet -> • bullet
     """
     if not text:
         return ""
@@ -23,18 +29,35 @@ def markdown_to_slack_mrkdwn(text: str) -> str:
     # Convert markdown links [label](url) -> <url|label>
     t = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"<\2|\1>", t)
 
-    # Convert **bold** -> *bold*
+    # Convert **bold** -> *bold* (must be done before header conversion)
     t = re.sub(r"\*\*([^*]+)\*\*", r"*\1*", t)
 
-    # Convert headings to Slack-friendly format
-    def _hdr(m):
-        hashes = m.group(1)
+    # Convert headings to bold text (Slack has no native headers)
+    # Pattern: ### Header text at start of line
+    # Also handle case where header runs into next text without newline (run-on headers)
+    def _convert_header(m):
         title = m.group(2).strip()
-        if len(hashes) <= 1:
-            return f"*# {title}*"
-        return f"*## {title}*"
 
-    t = re.sub(r"^(#{1,6})\s+(.+)$", _hdr, t, flags=re.MULTILINE)
+        # Detect run-on headers where title word merges with next sentence
+        # e.g., "SummaryThe payment service..." -> "Summary" + "The payment service..."
+        # Look for lowercase->uppercase transition (camelCase boundary)
+        for i, char in enumerate(title[1:], 1):
+            if char.isupper() and title[i - 1].islower():
+                # Found camelCase boundary - split here
+                header_part = title[:i]
+                rest_part = title[i:]
+                return f"*{header_part}*\n{rest_part}"
+
+        return f"*{title}*"
+
+    # Match headers: ### followed by optional space and content
+    # This handles both "### Header" and "###Header" and "### HeaderText"
+    t = re.sub(
+        r"^(#{1,6})\s*([^\n]+)$",
+        _convert_header,
+        t,
+        flags=re.MULTILINE,
+    )
 
     # Convert dash bullets to Slack bullets
     t = re.sub(r"^(\s*)-\s+", r"\1• ", t, flags=re.MULTILINE)

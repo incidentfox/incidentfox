@@ -373,6 +373,8 @@ class SlackOutputHandler:
 
     def _format_dict_output(self, output: dict) -> list[dict[str, Any]]:
         """Format dict output with smart extraction."""
+        from ..integrations.slack_mrkdwn import markdown_to_slack_mrkdwn
+
         blocks = []
 
         # Look for common structured fields
@@ -384,18 +386,37 @@ class SlackOutputHandler:
         confidence = output.get("confidence")
 
         if summary:
+            # Convert any markdown in the summary value
+            summary_mrkdwn = markdown_to_slack_mrkdwn(str(summary))
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"*Summary*\n{summary}"},
+                    "text": {"type": "mrkdwn", "text": f"*Summary*\n{summary_mrkdwn}"},
                 }
             )
 
         if root_cause:
+            # Convert any markdown in the root cause value
+            if isinstance(root_cause, dict):
+                # Handle structured root cause
+                rc_parts = []
+                if root_cause.get("description"):
+                    rc_parts.append(
+                        markdown_to_slack_mrkdwn(str(root_cause["description"]))
+                    )
+                if root_cause.get("confidence"):
+                    rc_parts.append(f"_Confidence: {root_cause['confidence']}_")
+                if root_cause.get("evidence"):
+                    rc_parts.append(
+                        f"Evidence: {markdown_to_slack_mrkdwn(str(root_cause['evidence']))}"
+                    )
+                rc_text = "\n".join(rc_parts) if rc_parts else str(root_cause)
+            else:
+                rc_text = markdown_to_slack_mrkdwn(str(root_cause))
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"*Root Cause*\n{root_cause}"},
+                    "text": {"type": "mrkdwn", "text": f"*Root Cause*\n{rc_text}"},
                 }
             )
 
@@ -445,38 +466,50 @@ class SlackOutputHandler:
 
     def _format_investigation_output(self, output: Any) -> list[dict[str, Any]]:
         """Format investigation-style pydantic output."""
+        from ..integrations.slack_mrkdwn import markdown_to_slack_mrkdwn
+
         blocks = []
 
         if hasattr(output, "summary") and output.summary:
+            summary_mrkdwn = markdown_to_slack_mrkdwn(str(output.summary))
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"*Summary*\n{output.summary}"},
+                    "text": {"type": "mrkdwn", "text": f"*Summary*\n{summary_mrkdwn}"},
                 }
             )
 
         if hasattr(output, "root_cause"):
             rc = output.root_cause
             if hasattr(rc, "description"):
+                rc_mrkdwn = markdown_to_slack_mrkdwn(str(rc.description))
                 blocks.append(
                     {
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": f"*Root Cause*\n{rc.description}",
+                            "text": f"*Root Cause*\n{rc_mrkdwn}",
                         },
                     }
                 )
             elif rc:
+                rc_mrkdwn = markdown_to_slack_mrkdwn(str(rc))
                 blocks.append(
                     {
                         "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"*Root Cause*\n{rc}"},
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Root Cause*\n{rc_mrkdwn}",
+                        },
                     }
                 )
 
         if hasattr(output, "recommendations") and output.recommendations:
-            rec_text = "\n".join([f"• {r}" for r in output.recommendations[:10]])
+            # Convert markdown in each recommendation
+            recs = [
+                markdown_to_slack_mrkdwn(str(r)) for r in output.recommendations[:10]
+            ]
+            rec_text = "\n".join([f"• {r}" for r in recs])
             blocks.append(
                 {
                     "type": "section",
