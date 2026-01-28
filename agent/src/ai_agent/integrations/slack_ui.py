@@ -103,6 +103,7 @@ def build_progress_section(
     phase_status: dict[str, str],
     show_pending: bool = False,
     phases: dict[str, dict[str, str]] | None = None,
+    show_view_buttons: bool = False,
 ) -> list[dict[str, Any]]:
     """
     Build the investigation progress section with status indicators.
@@ -112,6 +113,8 @@ def build_progress_section(
         show_pending: Whether to show pending phases
         phases: Optional dict of phase key -> display info. If None, uses DEFAULT_INVESTIGATION_PHASES.
                 Each phase should have 'label', 'icon', and 'action_id' keys.
+        show_view_buttons: Whether to show View buttons (requires Slack app interactivity).
+                          Defaults to False since most Slack apps don't have interactivity configured.
     """
     # Use provided phases or fall back to defaults
     active_phases = phases if phases is not None else DEFAULT_INVESTIGATION_PHASES
@@ -147,20 +150,29 @@ def build_progress_section(
                 }
             )
         elif status in ("done", "failed"):
-            # Completed items shown with View button
-            action_id = meta.get("action_id", f"view_{key}")
-            blocks.append(
-                {
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"{status_icon} {display_text}"},
-                    "accessory": {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "View"},
-                        "value": key,
-                        "action_id": action_id,
-                    },
-                }
-            )
+            if show_view_buttons:
+                # Completed items shown with View button (requires interactivity)
+                action_id = meta.get("action_id", f"view_{key}")
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": f"{status_icon} {display_text}"},
+                        "accessory": {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "View"},
+                            "value": key,
+                            "action_id": action_id,
+                        },
+                    }
+                )
+            else:
+                # No View button - just show status
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": f"{status_icon} {display_text}"},
+                    }
+                )
 
     return blocks
 
@@ -170,6 +182,8 @@ def build_findings_section(
     confidence: int | None = None,
 ) -> list[dict[str, Any]]:
     """Build the root cause analysis / findings section."""
+    from .slack_mrkdwn import markdown_to_slack_mrkdwn
+
     blocks: list[dict[str, Any]] = [
         {"type": "divider"},
         {
@@ -182,8 +196,9 @@ def build_findings_section(
         },
     ]
 
-    # Split findings into chunks if too long
-    for chunk in chunk_mrkdwn(findings, limit=2900):
+    # Convert markdown to Slack mrkdwn format, then split into chunks
+    findings_mrkdwn = markdown_to_slack_mrkdwn(findings)
+    for chunk in chunk_mrkdwn(findings_mrkdwn, limit=2900):
         blocks.append(
             {
                 "type": "section",
@@ -252,6 +267,7 @@ def build_investigation_dashboard(
     show_actions: bool = False,
     custom_actions: list[dict[str, str]] | None = None,
     phases: dict[str, dict[str, str]] | None = None,
+    show_view_buttons: bool = False,
 ) -> list[dict[str, Any]]:
     """
     Build the complete investigation dashboard.
@@ -270,6 +286,8 @@ def build_investigation_dashboard(
         custom_actions: Custom action buttons to show
         phases: Optional dict of phase key -> display info for dynamic phases.
                 If None, uses DEFAULT_INVESTIGATION_PHASES.
+        show_view_buttons: Whether to show View buttons (requires Slack app interactivity).
+                          Defaults to False.
 
     Returns:
         List of Slack Block Kit blocks
@@ -294,8 +312,12 @@ def build_investigation_dashboard(
             }
         )
 
-    # Progress section with dynamic phases
-    blocks.extend(build_progress_section(phase_status, phases=phases))
+    # Progress section with dynamic phases (View buttons disabled by default)
+    blocks.extend(
+        build_progress_section(
+            phase_status, phases=phases, show_view_buttons=show_view_buttons
+        )
+    )
 
     # Findings (if investigation complete)
     if findings:
