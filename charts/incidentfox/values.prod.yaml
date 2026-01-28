@@ -150,9 +150,9 @@ services:
     enabled: false
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ai-pipeline-api:latest"
 
-  # RAPTOR Knowledge Base for semantic search (legacy - kept as fallback)
+  # RAPTOR Knowledge Base for semantic search (legacy - disabled, using ultimate-rag instead)
   knowledgeBase:
-    enabled: true
+    enabled: false
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-knowledge-base:latest"
     replicas: 1
     # IRSA role created via Terraform - update after terraform apply
