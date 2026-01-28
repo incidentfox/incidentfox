@@ -710,7 +710,7 @@ async def get_agent_run(
     run = (
         db.query(AgentRun)
         .filter(
-            AgentRun.id == int(run_id),
+            AgentRun.id == run_id,
             AgentRun.org_id == team.org_id,
             AgentRun.team_node_id == team.team_node_id,
         )

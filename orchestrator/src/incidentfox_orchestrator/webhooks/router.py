@@ -494,29 +494,8 @@ async def _process_github_webhook(
                 )
                 # Continue with original message if enrichment fails
 
-        if audit_api:
-            # Run sync HTTP call in thread pool to avoid blocking event loop
-            await asyncio.to_thread(
-                partial(
-                    audit_api.create_agent_run,
-                    run_id=run_id,
-                    org_id=org_id,
-                    team_node_id=team_node_id,
-                    correlation_id=correlation_id,
-                    trigger_source="github",
-                    trigger_actor=payload.get("sender", {}).get("login"),
-                    trigger_message=enriched_message[:500],
-                    agent_name=entrance_agent_name,
-                    metadata={
-                        "event_type": event_type,
-                        "repo": repo_full_name,
-                        "pr_number": pr_number,
-                        "issue_number": issue_number,
-                        "is_pr": bool(pr_number),
-                    },
-                )
-            )
-            agent_run_created = True
+        # Note: Agent service now handles agent run creation.
+        # We pass trigger_source to ensure proper attribution.
 
         # Run agent with session resumption
         # OpenAIConversationsSession uses pr_number as conversation_id
@@ -546,19 +525,11 @@ async def _process_github_webhook(
                 correlation_id=correlation_id,
                 agent_base_url=dedicated_agent_url,
                 output_destinations=output_destinations,
+                trigger_source="github",
             )
         )
 
-        if audit_api:
-            status = "completed" if result.get("success", True) else "failed"
-            # Run audit call in thread pool as well
-            await asyncio.to_thread(
-                audit_api.complete_agent_run,
-                org_id=org_id,
-                run_id=run_id,
-                status=status,
-                tool_calls_count=result.get("tool_calls_count"),
-            )
+        # Note: Agent service handles run completion recording
 
         _log(
             "github_webhook_completed",
@@ -574,23 +545,7 @@ async def _process_github_webhook(
             event_type=event_type,
             error=str(e),
         )
-        # Mark agent run as failed if it was created
-        if agent_run_created and audit_api and run_id and org_id:
-            try:
-                await asyncio.to_thread(
-                    audit_api.complete_agent_run,
-                    org_id=org_id,
-                    run_id=run_id,
-                    status="failed",
-                    error_message=str(e)[:500],
-                )
-            except Exception as completion_err:
-                _log(
-                    "github_webhook_failed_completion_error",
-                    correlation_id=correlation_id,
-                    run_id=run_id,
-                    error=str(completion_err),
-                )
+        # Note: Agent service handles run failure recording if the run was started
 
 
 def _build_github_message(event_type: str, payload: dict) -> str:
@@ -874,22 +829,8 @@ async def _process_pagerduty_webhook(
             ).get("default_slack_channel_id"),
         )
 
-        if audit_api:
-            audit_api.create_agent_run(
-                run_id=run_id,
-                org_id=org_id,
-                team_node_id=team_node_id,
-                correlation_id=correlation_id,
-                trigger_source="pagerduty",
-                trigger_message=message[:500],
-                agent_name=entrance_agent_name,
-                metadata={
-                    "event_type": event_type,
-                    "service_id": service_id,
-                    "correlation": correlation_context,
-                },
-            )
-            agent_run_created = True
+        # Note: Agent service now handles agent run creation.
+        # We pass trigger_source to ensure proper attribution.
 
         # Build context with optional correlation data
         agent_context: dict = {
@@ -917,16 +858,10 @@ async def _process_pagerduty_webhook(
             correlation_id=correlation_id,
             agent_base_url=dedicated_agent_url,
             output_destinations=output_destinations,
+            trigger_source="pagerduty",
         )
 
-        if audit_api:
-            status = "completed" if result.get("success", True) else "failed"
-            audit_api.complete_agent_run(
-                org_id=org_id,
-                run_id=run_id,
-                status=status,
-                tool_calls_count=result.get("tool_calls_count"),
-            )
+        # Note: Agent service handles run completion recording
 
         _log(
             "pagerduty_webhook_completed",
@@ -941,22 +876,7 @@ async def _process_pagerduty_webhook(
             correlation_id=correlation_id,
             error=str(e),
         )
-        # Mark agent run as failed if it was created
-        if agent_run_created and audit_api and run_id and org_id:
-            try:
-                audit_api.complete_agent_run(
-                    org_id=org_id,
-                    run_id=run_id,
-                    status="failed",
-                    error_message=str(e)[:500],
-                )
-            except Exception as completion_err:
-                _log(
-                    "pagerduty_webhook_failed_completion_error",
-                    correlation_id=correlation_id,
-                    run_id=run_id,
-                    error=str(completion_err),
-                )
+        # Note: Agent service handles run failure recording if the run was started
 
 
 # ============================================================================
@@ -1320,26 +1240,8 @@ async def _process_incidentio_webhook(
             ).get("default_slack_channel_id"),
         )
 
-        if audit_api:
-            # Run sync HTTP call in thread pool to avoid blocking event loop
-            await asyncio.to_thread(
-                partial(
-                    audit_api.create_agent_run,
-                    run_id=run_id,
-                    org_id=org_id,
-                    team_node_id=team_node_id,
-                    correlation_id=correlation_id,
-                    trigger_source="incidentio",
-                    trigger_message=message[:500],
-                    agent_name=entrance_agent_name,
-                    metadata={
-                        "event_type": event_type,
-                        "incident_id": incident_id,
-                        "correlation": correlation_context,
-                    },
-                )
-            )
-            agent_run_created = True
+        # Note: Agent service now handles agent run creation.
+        # We pass trigger_source to ensure proper attribution.
 
         # Build context with optional correlation data
         agent_context: dict = {
@@ -1374,19 +1276,11 @@ async def _process_incidentio_webhook(
                 correlation_id=correlation_id,
                 agent_base_url=dedicated_agent_url,
                 output_destinations=output_destinations,
+                trigger_source="incidentio",
             )
         )
 
-        if audit_api:
-            run_status = "completed" if result.get("success", True) else "failed"
-            # Run audit call in thread pool as well
-            await asyncio.to_thread(
-                audit_api.complete_agent_run,
-                org_id=org_id,
-                run_id=run_id,
-                status=run_status,
-                tool_calls_count=result.get("tool_calls_count"),
-            )
+        # Note: Agent service handles run completion recording
 
         _log(
             "incidentio_webhook_completed",
@@ -1401,23 +1295,7 @@ async def _process_incidentio_webhook(
             correlation_id=correlation_id,
             error=str(e),
         )
-        # Mark agent run as failed if it was created
-        if agent_run_created and audit_api and run_id and org_id:
-            try:
-                await asyncio.to_thread(
-                    audit_api.complete_agent_run,
-                    org_id=org_id,
-                    run_id=run_id,
-                    status="failed",
-                    error_message=str(e)[:500],
-                )
-            except Exception as completion_err:
-                _log(
-                    "incidentio_webhook_failed_completion_error",
-                    correlation_id=correlation_id,
-                    run_id=run_id,
-                    error=str(completion_err),
-                )
+        # Note: Agent service handles run failure recording if the run was started
 
 
 # ============================================================================

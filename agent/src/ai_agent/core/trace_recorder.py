@@ -27,6 +27,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -43,8 +44,6 @@ from .logging import get_logger
 logger = get_logger(__name__)
 
 # Config service URL from environment
-import os
-
 CONFIG_SERVICE_URL = os.getenv("CONFIG_SERVICE_URL", "http://localhost:8080")
 
 
@@ -140,8 +139,11 @@ class TraceRecorderHooks(RunHooks):
         self.trace = TraceData(run_id=run_id)
         self.trace.agent_stack.append(agent_name)
 
-        # Track in-progress tool calls by a composite key
-        self._pending_calls: dict[str, ToolCallRecord] = {}
+        # Track in-progress tool calls by context object identity.
+        # The SDK passes the same context object to both on_tool_start and on_tool_end
+        # for each invocation, so id(context) uniquely identifies each tool call.
+        # This correctly handles parallel calls to the same tool.
+        self._pending_calls: dict[int, ToolCallRecord] = {}
 
         # Thread-safe lock for cross-event-loop safety.
         # asyncio.Lock() fails when hooks are called from subagent threads
@@ -205,8 +207,11 @@ class TraceRecorderHooks(RunHooks):
                     status="running",
                 )
 
-                # Store pending call - use tool_name as key since we process sequentially
-                self._pending_calls[tool_name] = record
+                # Store pending call keyed by context object identity.
+                # This uniquely identifies each tool invocation even for
+                # parallel calls to the same tool.
+                context_id = id(context)
+                self._pending_calls[context_id] = record
 
             logger.debug(
                 "trace_tool_start",
@@ -214,6 +219,7 @@ class TraceRecorderHooks(RunHooks):
                 tool=tool_name,
                 agent=self.current_agent,
                 sequence=sequence,
+                context_id=context_id,
             )
 
         except Exception as e:
@@ -232,11 +238,17 @@ class TraceRecorderHooks(RunHooks):
             duration_ms = None
 
             # Thread-safe access to shared state
+            context_id = id(context)
+            matched = False
+
             with self._lock:
-                # Find the pending call
-                record = self._pending_calls.pop(tool_name, None)
+                # Find the pending call by context identity.
+                # The SDK passes the same context object to both on_tool_start
+                # and on_tool_end for each invocation.
+                record = self._pending_calls.pop(context_id, None)
 
                 if record:
+                    matched = True
                     record.ended_at = datetime.now(UTC)
                     record.tool_output = (
                         str(result)[:5000] if result is not None else None
@@ -275,13 +287,26 @@ class TraceRecorderHooks(RunHooks):
                     )
                     self.trace.tool_calls.append(record)
 
+            # Log with context_id to validate matching works correctly
             logger.debug(
                 "trace_tool_end",
                 run_id=self.trace.run_id,
                 tool=tool_name,
                 agent=self.current_agent,
                 duration_ms=duration_ms,
+                context_id=context_id,
+                matched=matched,
             )
+
+            # Warn if context matching failed - helps validate our assumption
+            if not matched:
+                logger.warning(
+                    "trace_tool_context_mismatch",
+                    run_id=self.trace.run_id,
+                    tool=tool_name,
+                    context_id=context_id,
+                    pending_context_ids=list(self._pending_calls.keys()),
+                )
 
         except Exception as e:
             logger.warning("trace_recorder_error", hook="on_tool_end", error=str(e))
