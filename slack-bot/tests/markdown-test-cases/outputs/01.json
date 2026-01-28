@@ -1,0 +1,11 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Hello! \ud83d\udc4b How can I help you today? Whether you need assistance with coding, debugging, file operations, or anything else, I'm here to help!"
+      }
+    }
+  ]
+}

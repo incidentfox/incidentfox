@@ -1,0 +1,318 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Here's a summary of Bolt for Python in table format:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Bolt for Python Summary*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Basic Information*"
+      }
+    },
+    {
+      "type": "table",
+      "rows": [
+        [
+          {
+            "type": "raw_text",
+            "text": "Aspect"
+          },
+          {
+            "type": "raw_text",
+            "text": "Details"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Purpose"
+          },
+          {
+            "type": "raw_text",
+            "text": "Python framework to build Slack apps quickly"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Python Version"
+          },
+          {
+            "type": "raw_text",
+            "text": "3.7+ required"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Installation"
+          },
+          {
+            "type": "raw_text",
+            "text": "pip install slack_bolt"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Async Support"
+          },
+          {
+            "type": "raw_text",
+            "text": "Yes, via AsyncApp with aiohttp"
+          }
+        ]
+      ]
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*App Modes*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*1.*\n\u2023 *Mode*: HTTP Mode\n\u2023 *Class*: App\n\u2023 *Use Case*: Standard web server\n\u2023 *Requirements*: SLACK_SIGNING_SECRET, SLACK_BOT_TOKEN, ngrok"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*2.*\n\u2023 *Mode*: Socket Mode\n\u2023 *Class*: App + SocketModeHandler\n\u2023 *Use Case*: No public URL needed\n\u2023 *Requirements*: SLACK_APP_TOKEN, SLACK_BOT_TOKEN"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*3.*\n\u2023 *Mode*: Async Mode\n\u2023 *Class*: AsyncApp\n\u2023 *Use Case*: Async/await pattern\n\u2023 *Requirements*: aiohttp library"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Event Listener Methods*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*1.*\n\u2023 *Method*: app.action(action_id)\n\u2023 *Purpose*: Block Kit element interactions\n\u2023 *Example Use Case*: Button clicks, select menus, date pickers"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*2.*\n\u2023 *Method*: app.command(command_name)\n\u2023 *Purpose*: Slash commands\n\u2023 *Example Use Case*: /hello-bot commands"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*3.*\n\u2023 *Method*: app.event(event_type)\n\u2023 *Purpose*: Events API events\n\u2023 *Example Use Case*: Message posted, user joined"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*4.*\n\u2023 *Method*: app.message([pattern])\n\u2023 *Purpose*: Message events\n\u2023 *Example Use Case*: Listen for specific message patterns"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*5.*\n\u2023 *Method*: app.shortcut(callback_id)\n\u2023 *Purpose*: Global/message shortcuts\n\u2023 *Example Use Case*: Quick actions from Slack UI"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*6.*\n\u2023 *Method*: app.view(callback_id)\n\u2023 *Purpose*: Modal submissions\n\u2023 *Example Use Case*: Form submissions"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*7.*\n\u2023 *Method*: app.function(callback_id)\n\u2023 *Purpose*: Custom workflow steps\n\u2023 *Example Use Case*: Workflow automation"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*8.*\n\u2023 *Method*: app.options(action_id)\n\u2023 *Purpose*: External data sources\n\u2023 *Example Use Case*: Dynamic select menu options"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Listener Function Arguments*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*1.*\n\u2023 *Argument*: body\n\u2023 *Type*: dict\n\u2023 *Description*: Complete request body\n\u2023 *Available For*: All events"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*2.*\n\u2023 *Argument*: payload\n\u2023 *Type*: dict\n\u2023 *Description*: Core event data\n\u2023 *Available For*: All events"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*3.*\n\u2023 *Argument*: context\n\u2023 *Type*: dict\n\u2023 *Description*: Event context (botId, etc.)\n\u2023 *Available For*: All events"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*4.*\n\u2023 *Argument*: ack\n\u2023 *Type*: function\n\u2023 *Description*: Acknowledge event receipt (required)\n\u2023 *Available For*: Actions, shortcuts, views, commands, options"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*5.*\n\u2023 *Argument*: say\n\u2023 *Type*: function\n\u2023 *Description*: Send message to channel\n\u2023 *Available For*: Events with channel_id"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*6.*\n\u2023 *Argument*: respond\n\u2023 *Type*: function\n\u2023 *Description*: Respond to event\n\u2023 *Available For*: Events with response_url"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*7.*\n\u2023 *Argument*: client\n\u2023 *Type*: Web API client\n\u2023 *Description*: Make API calls\n\u2023 *Available For*: All events"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*8.*\n\u2023 *Argument*: logger\n\u2023 *Type*: Logger\n\u2023 *Description*: Python logging instance\n\u2023 *Available For*: All events"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*9.*\n\u2023 *Argument*: complete\n\u2023 *Type*: function\n\u2023 *Description*: Signal workflow step success\n\u2023 *Available For*: Custom workflow steps"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*10.*\n\u2023 *Argument*: fail\n\u2023 *Type*: function\n\u2023 *Description*: Signal workflow step failure\n\u2023 *Available For*: Custom workflow steps"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Environment Variables*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*1.*\n\u2023 *Variable*: SLACK_BOT_TOKEN\n\u2023 *Format*: xoxb-***\n\u2023 *Required For*: All modes\n\u2023 *Purpose*: Bot authentication"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*2.*\n\u2023 *Variable*: SLACK_SIGNING_SECRET\n\u2023 *Format*: ***\n\u2023 *Required For*: HTTP mode only\n\u2023 *Purpose*: Request verification"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*3.*\n\u2023 *Variable*: SLACK_APP_TOKEN\n\u2023 *Format*: xapp-***\n\u2023 *Required For*: Socket mode only\n\u2023 *Purpose*: WebSocket connection"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Resources*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*1.*\n\u2023 *Resource*: Documentation\n\u2023 *URL*: https://docs.slack.dev/tools/bolt-python/"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*2.*\n\u2023 *Resource*: Code Examples\n\u2023 *URL*: https://github.com/slackapi/bolt-python/tree/main/examples"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*3.*\n\u2023 *Resource*: API Reference\n\u2023 *URL*: https://docs.slack.dev/tools/bolt-python/reference/"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*4.*\n\u2023 *Resource*: Issue Tracker\n\u2023 *URL*: http://github.com/slackapi/bolt-python/issues"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*5.*\n\u2023 *Resource*: Support Email\n\u2023 *URL*: support@slack.com"
+      }
+    }
+  ]
+}

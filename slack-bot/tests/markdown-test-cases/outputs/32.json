@@ -1,0 +1,88 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Short Summary*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Here's a quick overview of the *bolt-python* repository:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Project Info*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Package*: `slack_bolt` v1.27.0\n\u2023 *License*: MIT (Copyright Slack Technologies, LLC)\n\u2023 *Author*: Slack Technologies, LLC\n\u2023 *Python Support*: 3.7 - 3.14\n\u2023 *Main Dependency*: `slack_sdk>=3.38.0,<4`"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Project Structure*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The main `slack_bolt` package contains:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Core components*: `App`, `AsyncApp`, `BoltContext`, `BoltRequest`, `BoltResponse`\n\u2023 *Utilities*: `Ack`, `Respond`, `Say`, `Complete`, `Fail`\n\u2023 *AI/Assistants*: Built-in support for Slack AI Agents and Assistants with thread context management\n\u2023 *Adapters*: Multiple web framework adapters (ASGI, AWS Lambda, Chalice, Bottle, etc.)\n\u2023 *Middleware system*: OAuth, authorization, request handling\n\u2023 *Listener system*: Event matching and handler management"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Examples Included*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Has extensive examples for various deployment scenarios:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 Basic sync/async apps\n\u2023 Different web frameworks (ASGI, AWS Lambda, Bottle, etc.)\n\u2023 AI assistants\n\u2023 OAuth implementations\n\u2023 Socket Mode apps"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Key Highlights*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 Modern Python framework built on top of `slack_sdk`\n\u2023 Type hints support (`py.typed`)\n\u2023 Both synchronous and asynchronous app support\n\u2023 Built-in AI/Assistant capabilities for Slack's AI features\n\u2023 Production-ready with comprehensive testing setup"
+      }
+    }
+  ]
+}

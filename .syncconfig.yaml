@@ -20,16 +20,11 @@ exclude_from_public:
   - "ai_pipeline/**"
   - "!ai_pipeline/README.md"  # Keep the stub README
 
-  - "sre-agent/**"
-  - "!sre-agent/README.md"
-
   - "correlation_service/**"
   - "!correlation_service/README.md"
 
   - "dependency_service/**"
   - "!dependency_service/README.md"
-
-  - "slack-bot/**"
 
   - "telemetry_collector/**"
 
@@ -69,7 +64,6 @@ exclude_from_private:
 # Stub directories: Public gets only README.md, private has full content
 stub_directories:
   - "ai_pipeline"
-  - "sre-agent"
   - "correlation_service"
   - "dependency_service"
 

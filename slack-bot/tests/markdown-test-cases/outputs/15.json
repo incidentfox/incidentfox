@@ -1,0 +1,102 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Perfect! I've successfully cloned the bolt-python repository and read its README.md file. Here's a summary of what I found:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Bolt for Python - Overview*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Bolt for Python* is a framework by Slack for building Slack apps quickly using the latest platform features."
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Key Features:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Setup Requirements*: Python 3.7+ required\n\u2023 *Installation*: `pip install slack_bolt`"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Main Capabilities:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Synchronous &amp; Async Support*: Supports both standard Python apps and async apps using `asyncio` and AIOHTTP"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Socket Mode*: Can run apps using Socket Mode (no need for ngrok or public endpoints)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Event Listeners*: Multiple listener types for different Slack events:\n\u2003\u2003\u21b3 Actions (buttons, select menus, etc.)\n\u2003\u2003\u21b3 Commands (slash commands)\n\u2003\u2003\u21b3 Events (Events API)\n\u2003\u2003\u21b3 Functions (workflow custom steps)\n\u2003\u2003\u21b3 Messages\n\u2003\u2003\u21b3 Options (external select menus)\n\u2003\u2003\u21b3 Shortcuts\n\u2003\u2003\u21b3 Views (modals)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Quick Start Example:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nfrom slack_bolt import App\n\napp = App()  # Uses SLACK_SIGNING_SECRET and SLACK_BOT_TOKEN env vars\n\n# Add listeners here\n\nif __name__ == \"__main__\":\n    app.start(3000)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Key Arguments in Listeners:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `body`, `payload` - Event data\n\u2023 `ack` - Must be called to acknowledge events\n\u2023 `say` - Send messages to channels\n\u2023 `respond` - Respond to events with response_url\n\u2023 `client` - Web API client\n\u2023 `logger` - Logging instance\n\u2023 `complete`/`fail` - For custom workflow steps"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The framework supports various adapters for web frameworks like Sanic, FastAPI, and Starlette, with examples available in the repository."
+      }
+    }
+  ]
+}

@@ -1,0 +1,133 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Here's a simpler table:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Bolt for Python - Simple Summary*"
+      }
+    },
+    {
+      "type": "table",
+      "rows": [
+        [
+          {
+            "type": "raw_text",
+            "text": "Category"
+          },
+          {
+            "type": "raw_text",
+            "text": "Details"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "What it is"
+          },
+          {
+            "type": "raw_text",
+            "text": "Python framework for building Slack apps"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Installation"
+          },
+          {
+            "type": "raw_text",
+            "text": "pip install slack_bolt"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Python Version"
+          },
+          {
+            "type": "raw_text",
+            "text": "3.7+"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Main Classes"
+          },
+          {
+            "type": "raw_text",
+            "text": "App (sync) or AsyncApp (async)"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Running Modes"
+          },
+          {
+            "type": "raw_text",
+            "text": "HTTP (needs ngrok) or Socket Mode (no ngrok)"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Listen to Events"
+          },
+          {
+            "type": "raw_text",
+            "text": ".action(), .command(), .event(), .message(), .shortcut(), .view()"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Key Functions"
+          },
+          {
+            "type": "raw_text",
+            "text": "ack() - acknowledge, say() - send message, respond() - reply"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Required Tokens"
+          },
+          {
+            "type": "raw_text",
+            "text": "SLACK_BOT_TOKEN (always), SLACK_SIGNING_SECRET (HTTP), SLACK_APP_TOKEN (Socket)"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Documentation"
+          },
+          {
+            "type": "raw_text",
+            "text": "https://docs.slack.dev/tools/bolt-python/"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "Examples"
+          },
+          {
+            "type": "raw_text",
+            "text": "https://github.com/slackapi/bolt-python/tree/main/examples"
+          }
+        ]
+      ]
+    }
+  ]
+}

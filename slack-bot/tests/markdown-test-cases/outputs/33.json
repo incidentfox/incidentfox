@@ -1,0 +1,81 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Key Files &amp; Root Directory Overview*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Root Directory Structure:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nbolt-python/\n\u251c\u2500\u2500 Configuration Files\n\u2502   \u251c\u2500\u2500 pyproject.toml          # Main package config (build, dependencies, tools)\n\u2502   \u251c\u2500\u2500 setup.cfg               # Legacy package metadata (URL, author)\n\u2502   \u251c\u2500\u2500 .flake8                 # Linting config (max-line-length: 125)\n\u2502   \u251c\u2500\u2500 codecov.yml             # Code coverage settings (50% patch target)\n\u2502   \u251c\u2500\u2500 .gitignore              # Git ignore patterns\n\u2502   \u2514\u2500\u2500 MANIFEST.in             # Package distribution files\n\u2502\n\u251c\u2500\u2500 Documentation\n\u2502   \u251c\u2500\u2500 README.md               # Main documentation\n\u2502   \u251c\u2500\u2500 LICENSE                 # MIT License\n\u2502   \u2514\u2500\u2500 docs/                   # Full documentation\n\u2502\n\u251c\u2500\u2500 Source Code\n\u2502   \u2514\u2500\u2500 slack_bolt/             # Main package (18 modules)\n\u2502\n\u251c\u2500\u2500 Testing & Examples\n\u2502   \u251c\u2500\u2500 tests/                  # Test suite\n\u2502   \u251c\u2500\u2500 examples/               # 20+ example apps\n\u2502   \u2514\u2500\u2500 requirements/           # Dependency files\n\u2502       \u251c\u2500\u2500 testing.txt         # Test dependencies\n\u2502       \u251c\u2500\u2500 async.txt           # Async dependencies\n\u2502       \u251c\u2500\u2500 adapter.txt         # Web framework adapters\n\u2502       \u2514\u2500\u2500 tools.txt           # Dev tools\n\u2502\n\u251c\u2500\u2500 Development Tools\n\u2502   \u251c\u2500\u2500 scripts/                # Build & deployment scripts\n\u2502   \u2502   \u251c\u2500\u2500 run_tests.sh\n\u2502   \u2502   \u251c\u2500\u2500 format.sh\n\u2502   \u2502   \u251c\u2500\u2500 lint.sh\n\u2502   \u2502   \u251c\u2500\u2500 run_mypy.sh\n\u2502   \u2502   \u2514\u2500\u2500 build_pypi_package.sh\n\u2502   \u2514\u2500\u2500 logs/                   # Test logs directory\n\u2502\n\u2514\u2500\u2500 GitHub Workflows\n    \u2514\u2500\u2500 .github/\n        \u251c\u2500\u2500 workflows/          # CI/CD pipelines\n        \u2502   \u251c\u2500\u2500 ci-build.yml\n        \u2502   \u251c\u2500\u2500 pypi-release.yml\n        \u2502   \u2514\u2500\u2500 triage-issues.yml\n        \u251c\u2500\u2500 contributing.md     # Contribution guidelines\n        \u251c\u2500\u2500 maintainers_guide.md\n        \u2514\u2500\u2500 CODEOWNERS\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Key Files:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Configuration &amp; Build:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `pyproject.toml` - Modern Python packaging config, build system, testing, linting rules\n\u2023 `.flake8` - Code style rules (125 char line length)\n\u2023 `codecov.yml` - Code coverage thresholds"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Core Source Files:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `slack_bolt/__init__.py` - Main exports (App, Context, Listeners, AI/Assistant classes)\n\u2023 `slack_bolt/app/app.py` - Core synchronous App class\n\u2023 `slack_bolt/async_app.py` - Asynchronous App class\n\u2023 `slack_bolt/version.py` - Version number (1.27.0)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Package Structure Highlights:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *17 web framework adapters* (Flask, Django, FastAPI, AWS Lambda, etc.)\n\u2023 *Middleware system* (auth, request verification, SSL check, URL verification)\n\u2023 *AI/Assistant support* with thread context management\n\u2023 *OAuth implementation* built-in\n\u2023 *Context utilities* (ack, say, respond, complete, fail)"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The project is well-organized with clear separation between source code, tests, examples, and tooling!"
+      }
+    }
+  ]
+}

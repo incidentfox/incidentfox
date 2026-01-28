@@ -1,0 +1,335 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Here's what's in the *`slack_bolt/listener/`* directory:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Overview:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *Total Size*: 80 KB\n\u2023 *Python Files*: 14 files\n\u2023 *Total Lines*: 1,108 lines of code"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Files (sorted by size):*"
+      }
+    },
+    {
+      "type": "table",
+      "rows": [
+        [
+          {
+            "type": "raw_text",
+            "text": "File"
+          },
+          {
+            "type": "raw_text",
+            "text": "Size"
+          },
+          {
+            "type": "raw_text",
+            "text": "Lines"
+          },
+          {
+            "type": "raw_text",
+            "text": "Purpose"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "thread_runner.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "12K"
+          },
+          {
+            "type": "raw_text",
+            "text": "202"
+          },
+          {
+            "type": "raw_text",
+            "text": "Runs listeners in threads (sync)"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "asyncio_runner.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "12K"
+          },
+          {
+            "type": "raw_text",
+            "text": "190"
+          },
+          {
+            "type": "raw_text",
+            "text": "Runs listeners with asyncio (async)"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "async_listener.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "8K"
+          },
+          {
+            "type": "raw_text",
+            "text": "132"
+          },
+          {
+            "type": "raw_text",
+            "text": "Async listener implementation"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "listener.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "4K"
+          },
+          {
+            "type": "raw_text",
+            "text": "69"
+          },
+          {
+            "type": "raw_text",
+            "text": "Base listener class"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "listener_error_handler.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "4K"
+          },
+          {
+            "type": "raw_text",
+            "text": "67"
+          },
+          {
+            "type": "raw_text",
+            "text": "Error handling for sync listeners"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "async_listener_error_handler.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "4K"
+          },
+          {
+            "type": "raw_text",
+            "text": "67"
+          },
+          {
+            "type": "raw_text",
+            "text": "Error handling for async listeners"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "listener_start_handler.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "4K"
+          },
+          {
+            "type": "raw_text",
+            "text": "61"
+          },
+          {
+            "type": "raw_text",
+            "text": "Start hooks for sync listeners"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "custom_listener.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "4K"
+          },
+          {
+            "type": "raw_text",
+            "text": "61"
+          },
+          {
+            "type": "raw_text",
+            "text": "Custom listener implementation"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "listener_completion_handler.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "4K"
+          },
+          {
+            "type": "raw_text",
+            "text": "57"
+          },
+          {
+            "type": "raw_text",
+            "text": "Completion hooks for sync listeners"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "async_listener_start_handler.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "4K"
+          },
+          {
+            "type": "raw_text",
+            "text": "57"
+          },
+          {
+            "type": "raw_text",
+            "text": "Start hooks for async listeners"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "async_listener_completion_handler.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "4K"
+          },
+          {
+            "type": "raw_text",
+            "text": "57"
+          },
+          {
+            "type": "raw_text",
+            "text": "Completion hooks for async listeners"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "async_builtins.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "4K"
+          },
+          {
+            "type": "raw_text",
+            "text": "35"
+          },
+          {
+            "type": "raw_text",
+            "text": "Built-in async listener utilities"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "builtins.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "4K"
+          },
+          {
+            "type": "raw_text",
+            "text": "33"
+          },
+          {
+            "type": "raw_text",
+            "text": "Built-in sync listener utilities"
+          }
+        ],
+        [
+          {
+            "type": "raw_text",
+            "text": "__init__.py"
+          },
+          {
+            "type": "raw_text",
+            "text": "4K"
+          },
+          {
+            "type": "raw_text",
+            "text": "20"
+          },
+          {
+            "type": "raw_text",
+            "text": "Package initialization"
+          }
+        ]
+      ]
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Purpose:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The listener module handles the processing of incoming requests from Slack. Listeners:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 Match incoming requests against predefined conditions\n\u2023 Acknowledge requests from Slack\n\u2023 Process request data\n\u2023 Send responses back to Slack"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "The module provides both *synchronous* (thread-based) and *asynchronous* (asyncio-based) implementations, with separate runners, error handlers, and lifecycle hooks for each execution model."
+      }
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "I already showed you the FastAPI adapter! Let me give you a quick summary of what we covered:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*FastAPI Adapter - Quick Reference*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udcc1 File Structure:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nslack_bolt/adapter/fastapi/\n\u251c\u2500\u2500 __init__.py              # Exports SlackRequestHandler (sync)\n\u2514\u2500\u2500 async_handler.py         # Exports AsyncSlackRequestHandler (async)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udd11 Key Classes:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 *`SlackRequestHandler`* - For sync `App`\n\u2023 *`AsyncSlackRequestHandler`* - For async `AsyncApp` \u2b50 Recommended"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udca1 Quick Start (Async):*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nfrom slack_bolt.async_app import AsyncApp\nfrom slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler\nfrom fastapi import FastAPI, Request\n\n# Create Bolt app\napp = AsyncApp()\napp_handler = AsyncSlackRequestHandler(app)\n\n# Add Slack event handlers\n@app.event(\"app_mention\")\nasync def handle_mentions(body, say, logger):\n    logger.info(body)\n    await say(\"What's up?\")\n\n# Create FastAPI app\napi = FastAPI()\n\n@api.post(\"/slack/events\")\nasync def endpoint(req: Request):\n    return await app_handler.handle(req)\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\ude80 Run it:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "```\nexport SLACK_SIGNING_SECRET=***\nexport SLACK_BOT_TOKEN=xoxb-***\nuvicorn async_app:api --reload --port 3000\n```"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*\ud83d\udcc2 Examples Available:*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 `app.py` - Sync version\n\u2023 `async_app.py` - Async version (recommended)\n\u2023 `async_oauth_app.py` - With OAuth flow\n\u2023 `async_app_custom_props.py` - With FastAPI dependencies"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Did you want to see something specific about FastAPI that I didn't cover?* Like:"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2023 Implementation details of the async handler?\n\u2023 How OAuth works?\n\u2023 The custom properties example?\n\u2023 Comparison with other frameworks?"
+      }
+    }
+  ]
+}
