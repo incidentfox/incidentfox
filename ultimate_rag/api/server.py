@@ -326,6 +326,23 @@ class V1AddDocumentsResponse(BaseModel):
     message: str
 
 
+class V1CreateTreeRequest(BaseModel):
+    """v1 API create tree request."""
+
+    tree_name: str = Field(
+        ..., description="Name for the new tree (alphanumeric, hyphens, underscores)"
+    )
+    description: Optional[str] = Field(None, description="Optional description")
+
+
+class V1CreateTreeResponse(BaseModel):
+    """v1 API create tree response."""
+
+    tree_name: str
+    message: str
+    tree_path: Optional[str] = None
+
+
 # ==================== API Server ====================
 
 
@@ -379,7 +396,8 @@ class UltimateRAGServer:
 
             try:
                 tree = import_raptor_tree(tree_path)
-                self.forest.add_tree("main", tree)
+                tree.tree_id = "main"  # Ensure tree has the expected ID
+                self.forest.add_tree(tree)
                 logger.info(f"Loaded tree from {tree_path}")
             except Exception as e:
                 logger.error(f"Failed to load tree: {e}")
@@ -832,6 +850,61 @@ class UltimateRAGServer:
                 "default": trees[0] if trees else "main",
                 "loaded": trees,
             }
+
+        @app.post(
+            "/api/v1/trees", response_model=V1CreateTreeResponse, tags=["v1-compat"]
+        )
+        async def v1_create_tree(request: V1CreateTreeRequest):
+            """
+            Create a new empty knowledge tree (v1 compatible).
+
+            The tree will be initialized with an empty structure and can have
+            documents added via the /api/v1/tree/documents endpoint.
+            """
+            import re
+
+            from ..core.node import KnowledgeTree
+
+            if not self.forest:
+                raise HTTPException(503, "Server not initialized")
+
+            # Validate tree name
+            if not re.match(r"^[a-zA-Z0-9_-]+$", request.tree_name):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Tree name must contain only alphanumeric characters, hyphens, and underscores",
+                )
+
+            # Check if tree already exists
+            if request.tree_name in self.forest.trees:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Tree '{request.tree_name}' already exists",
+                )
+
+            try:
+                # Create empty tree
+                tree = KnowledgeTree(
+                    tree_id=request.tree_name,
+                    name=request.tree_name,
+                    description=request.description or "",
+                )
+
+                # Add to forest
+                self.forest.add_tree(tree)
+
+                logger.info(f"Created new tree: {request.tree_name}")
+
+                return V1CreateTreeResponse(
+                    tree_name=request.tree_name,
+                    message=f"Tree '{request.tree_name}' created successfully",
+                )
+
+            except Exception as e:
+                logger.error(f"Error creating tree: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to create tree: {e}"
+                )
 
         @app.post("/api/v1/search", response_model=V1SearchResponse, tags=["v1-compat"])
         async def v1_search(request: V1SearchRequest):
