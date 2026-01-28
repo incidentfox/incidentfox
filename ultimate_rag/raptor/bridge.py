@@ -14,8 +14,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
 
 if TYPE_CHECKING:
     # Import RAPTOR types for type hints only
-    from knowledge_base.raptor.tree_structures import Node as RaptorNode
-    from knowledge_base.raptor.tree_structures import Tree as RaptorTree
+    # Note: raptor module is at /app/raptor/ in the container
+    from raptor.tree_structures import Node as RaptorNode
+    from raptor.tree_structures import Tree as RaptorTree
 
 from ..core.metadata import NodeMetadata, SourceInfo, ValidationStatus
 from ..core.node import KnowledgeNode, KnowledgeTree, TreeForest
@@ -278,8 +279,9 @@ class RaptorBridge:
         Useful for using RAPTOR's retrieval or updating an existing tree.
         """
         # Import RAPTOR types
-        from knowledge_base.raptor.tree_structures import Node as RaptorNode
-        from knowledge_base.raptor.tree_structures import Tree as RaptorTree
+        # Note: raptor module is at /app/raptor/ in the container
+        from raptor.tree_structures import Node as RaptorNode
+        from raptor.tree_structures import Tree as RaptorTree
 
         all_nodes = {}
         layer_to_nodes = {}
