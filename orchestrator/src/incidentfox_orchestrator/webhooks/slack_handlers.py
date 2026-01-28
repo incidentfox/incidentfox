@@ -385,20 +385,28 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
         """
         Handle View button clicks for investigation phases.
 
-        These buttons allow users to see detailed results for each phase.
-        Since phase results are not persisted after the agent run, we show
-        an informational modal directing users to the main response.
+        These buttons show tool calls for the clicked phase by fetching
+        them from the config service using the run_id embedded in the button value.
         """
         await ack()
         action = (body.get("actions") or [{}])[0]
         action_id = action.get("action_id", "view_unknown")
-        phase_key = action.get("value", "unknown")
+        button_value = action.get("value", "unknown")
         trigger_id = body.get("trigger_id")
+
+        # Parse run_id and phase_key from button value
+        # Format: "{run_id}:{phase_key}" or just "{phase_key}" (legacy)
+        if ":" in button_value:
+            run_id, phase_key = button_value.split(":", 1)
+        else:
+            run_id = None
+            phase_key = button_value
 
         _log(
             "slack_view_phase_clicked",
             action_id=action_id,
             phase_key=phase_key,
+            run_id=run_id,
         )
 
         # Map phase keys to friendly names
@@ -408,56 +416,36 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
             "aws_tools": "AWS",
             "datadog_tools": "Datadog",
             "github_tools": "GitHub",
+            "github_app_tools": "GitHub",
             "postgres_tools": "PostgreSQL",
             "snowflake_tools": "Snowflake",
+            "elasticsearch_tools": "Elasticsearch",
+            "grafana_tools": "Grafana",
+            "splunk_tools": "Splunk",
+            "sentry_tools": "Sentry",
+            "pagerduty_tools": "PagerDuty",
+            "jira_tools": "Jira",
+            "slack_tools": "Slack",
+            "git_tools": "Git",
+            "log_analysis_tools": "Log Analysis",
             "root_cause_analysis": "Root Cause Analysis",
         }
         phase_name = phase_labels.get(phase_key, phase_key.replace("_", " ").title())
 
-        # Open a modal with phase info
+        # Open a modal with tool call details
         if trigger_id:
             try:
+                modal_blocks = await _build_tool_calls_modal_blocks(
+                    integration, run_id, phase_key, phase_name
+                )
+
                 await client.views_open(
                     trigger_id=trigger_id,
                     view={
                         "type": "modal",
                         "title": {"type": "plain_text", "text": phase_name[:24]},
                         "close": {"type": "plain_text", "text": "Close"},
-                        "blocks": [
-                            {
-                                "type": "section",
-                                "text": {
-                                    "type": "mrkdwn",
-                                    "text": f"*{phase_name} Results*",
-                                },
-                            },
-                            {"type": "divider"},
-                            {
-                                "type": "section",
-                                "text": {
-                                    "type": "mrkdwn",
-                                    "text": (
-                                        "The detailed findings for this phase are included "
-                                        "in the investigation summary above.\n\n"
-                                        "Look for the *Sources Consulted* and *Hypotheses* "
-                                        "sections in the main response for specific queries "
-                                        "and evidence from this data source."
-                                    ),
-                                },
-                            },
-                            {
-                                "type": "context",
-                                "elements": [
-                                    {
-                                        "type": "mrkdwn",
-                                        "text": (
-                                            "_Future: Real-time phase details will be "
-                                            "available in a persistent view._"
-                                        ),
-                                    }
-                                ],
-                            },
-                        ],
+                        "blocks": modal_blocks[:100],  # Max 100 blocks
                     },
                 )
             except Exception as e:
@@ -466,6 +454,187 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                     action_id=action_id,
                     error=str(e),
                 )
+
+
+async def _build_tool_calls_modal_blocks(
+    integration: SlackBoltIntegration,
+    run_id: Optional[str],
+    phase_key: str,
+    phase_name: str,
+) -> list:
+    """
+    Build modal blocks showing tool calls for a phase.
+
+    Fetches tool calls from config service and filters by category.
+    """
+    blocks = [
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*{phase_name} Tool Calls*"},
+        },
+    ]
+
+    if not run_id:
+        # No run_id - show legacy message
+        blocks.extend([
+            {"type": "divider"},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        "The detailed findings for this phase are included "
+                        "in the investigation summary above.\n\n"
+                        "_Tool call details are available for newer investigations._"
+                    ),
+                },
+            },
+        ])
+        return blocks
+
+    # Fetch tool calls from config service
+    tool_calls = []
+    try:
+        tool_calls = await asyncio.to_thread(
+            integration.config_service.get_tool_calls,
+            run_id=run_id,
+        )
+    except Exception as e:
+        _log("slack_view_fetch_tool_calls_error", run_id=run_id, error=str(e))
+
+    if not tool_calls:
+        blocks.extend([
+            {"type": "divider"},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "_No tool calls found for this phase._",
+                },
+            },
+        ])
+        return blocks
+
+    # Filter tool calls by category (phase_key matches tool module)
+    # Tool names typically contain the category: e.g., "list_pods" -> kubernetes
+    category_patterns = {
+        "kubernetes": ["k8s", "pod", "deployment", "namespace", "kubectl", "list_pods", "get_pod", "describe_"],
+        "coralogix_tools": ["coralogix", "search_coralogix", "get_coralogix"],
+        "aws_tools": ["aws", "ec2", "cloudwatch", "lambda", "ecs", "rds", "s3"],
+        "datadog_tools": ["datadog"],
+        "github_tools": ["github", "gh_"],
+        "github_app_tools": ["github", "gh_"],
+        "postgres_tools": ["postgres", "pg_", "query_postgres"],
+        "snowflake_tools": ["snowflake", "query_snowflake"],
+        "elasticsearch_tools": ["elasticsearch", "es_"],
+        "grafana_tools": ["grafana"],
+        "splunk_tools": ["splunk"],
+        "sentry_tools": ["sentry"],
+        "pagerduty_tools": ["pagerduty", "pd_"],
+        "jira_tools": ["jira"],
+        "slack_tools": ["slack", "search_slack"],
+        "git_tools": ["git_log", "git_diff", "git_blame"],
+        "log_analysis_tools": ["log_", "get_log_", "search_log"],
+    }
+
+    patterns = category_patterns.get(phase_key, [phase_key.replace("_tools", "")])
+
+    # Filter tool calls matching this category
+    filtered_calls = []
+    for tc in tool_calls:
+        tool_name = tc.get("tool_name", "").lower()
+        if any(p.lower() in tool_name for p in patterns):
+            filtered_calls.append(tc)
+
+    # If no filtered calls but we have tool calls, show all (for root_cause_analysis)
+    if not filtered_calls and phase_key == "root_cause_analysis":
+        filtered_calls = tool_calls
+
+    if not filtered_calls:
+        blocks.extend([
+            {"type": "divider"},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "_No tool calls found matching this category._",
+                },
+            },
+        ])
+        return blocks
+
+    # Show tool call count
+    blocks.append({
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": f"*{len(filtered_calls)} tool call(s)*"}],
+    })
+    blocks.append({"type": "divider"})
+
+    # Display each tool call
+    for i, tc in enumerate(filtered_calls):
+        if len(blocks) >= 95:  # Leave room for truncation notice
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"_... and {len(filtered_calls) - i} more tool calls (truncated)_",
+                },
+            })
+            break
+
+        tool_name = tc.get("tool_name", "unknown")
+        status = tc.get("status", "success")
+        duration_ms = tc.get("duration_ms")
+        error_msg = tc.get("error_message")
+
+        # Status indicator
+        status_icon = "✅" if status == "success" else "❌"
+        duration_text = f" ({duration_ms}ms)" if duration_ms else ""
+
+        # Tool name header
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"{status_icon} *{tool_name}*{duration_text}"},
+        })
+
+        # Input parameters (truncated)
+        tool_input = tc.get("tool_input")
+        if tool_input:
+            try:
+                input_str = json.dumps(tool_input, indent=2)
+                if len(input_str) > 500:
+                    input_str = input_str[:500] + "\n... (truncated)"
+                # Escape backticks
+                input_str = input_str.replace("```", "` ` `")
+                blocks.append({
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"*Input:*\n```{input_str}```"},
+                })
+            except (TypeError, ValueError):
+                pass
+
+        # Output or error
+        if error_msg:
+            error_display = error_msg[:500] + "..." if len(error_msg) > 500 else error_msg
+            error_display = error_display.replace("```", "` ` `")
+            blocks.append({
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Error:*\n```{error_display}```"},
+            })
+        else:
+            tool_output = tc.get("tool_output", "")
+            if tool_output:
+                output_display = tool_output[:1000] + "\n... (truncated)" if len(tool_output) > 1000 else tool_output
+                # Escape backticks
+                output_display = output_display.replace("```", "` ` `")
+                blocks.append({
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"*Output:*\n```{output_display}```"},
+                })
+
+        blocks.append({"type": "divider"})
+
+    return blocks
 
 
 async def _handle_feedback(

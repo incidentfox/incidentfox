@@ -103,6 +103,7 @@ def build_progress_section(
     phase_status: dict[str, str],
     show_pending: bool = False,
     phases: dict[str, dict[str, str]] | None = None,
+    run_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """
     Build the investigation progress section with status indicators.
@@ -112,6 +113,7 @@ def build_progress_section(
         show_pending: Whether to show pending phases
         phases: Optional dict of phase key -> display info. If None, uses DEFAULT_INVESTIGATION_PHASES.
                 Each phase should have 'label', 'icon', and 'action_id' keys.
+        run_id: Optional agent run ID for fetching tool calls when View button is clicked.
     """
     # Use provided phases or fall back to defaults
     active_phases = phases if phases is not None else DEFAULT_INVESTIGATION_PHASES
@@ -149,6 +151,8 @@ def build_progress_section(
         elif status in ("done", "failed"):
             # Completed items shown with View button
             action_id = meta.get("action_id", f"view_{key}")
+            # Include run_id in value so handler can fetch tool calls
+            button_value = f"{run_id}:{key}" if run_id else key
             blocks.append(
                 {
                     "type": "section",
@@ -156,7 +160,7 @@ def build_progress_section(
                     "accessory": {
                         "type": "button",
                         "text": {"type": "plain_text", "text": "View"},
-                        "value": key,
+                        "value": button_value,
                         "action_id": action_id,
                     },
                 }
@@ -255,6 +259,7 @@ def build_investigation_dashboard(
     show_actions: bool = False,
     custom_actions: list[dict[str, str]] | None = None,
     phases: dict[str, dict[str, str]] | None = None,
+    run_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """
     Build the complete investigation dashboard.
@@ -273,6 +278,7 @@ def build_investigation_dashboard(
         custom_actions: Custom action buttons to show
         phases: Optional dict of phase key -> display info for dynamic phases.
                 If None, uses DEFAULT_INVESTIGATION_PHASES.
+        run_id: Optional agent run ID for fetching tool calls when View button is clicked.
 
     Returns:
         List of Slack Block Kit blocks
@@ -298,7 +304,7 @@ def build_investigation_dashboard(
         )
 
     # Progress section with dynamic phases
-    blocks.extend(build_progress_section(phase_status, phases=phases))
+    blocks.extend(build_progress_section(phase_status, phases=phases, run_id=run_id))
 
     # Findings (if investigation complete)
     if findings:
@@ -404,6 +410,145 @@ def build_all_phases_modal(
         "title": {"type": "plain_text", "text": "Investigation"},
         "close": {"type": "plain_text", "text": "Close"},
         "blocks": blocks[:100],
+    }
+
+
+def build_tool_calls_modal(
+    phase_key: str,
+    tool_calls: list[dict[str, Any]],
+    phases: dict[str, dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """
+    Build a modal showing tool calls for a specific phase.
+
+    Args:
+        phase_key: The phase key (e.g., 'kubernetes', 'coralogix')
+        tool_calls: List of tool call dicts with keys:
+            - tool_name: Name of the tool
+            - tool_input: Input parameters (dict or None)
+            - tool_output: Output text (may be truncated)
+            - started_at: ISO timestamp
+            - duration_ms: Duration in milliseconds
+            - status: 'success' or 'error'
+            - error_message: Error message if failed
+        phases: Optional phase metadata dict
+
+    Returns:
+        Slack modal view payload
+    """
+    active_phases = phases if phases is not None else DEFAULT_INVESTIGATION_PHASES
+    phase_meta = active_phases.get(phase_key, {})
+    phase_label = phase_meta.get("label", phase_key.replace("_", " ").title())
+    phase_icon = phase_meta.get("icon", "🔧")
+
+    blocks: list[dict[str, Any]] = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"{phase_icon} {phase_label[:20]}",
+                "emoji": True,
+            },
+        },
+    ]
+
+    if not tool_calls:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "_No tool calls found for this phase._"},
+            }
+        )
+    else:
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": f"*{len(tool_calls)} tool call(s)*"}
+                ],
+            }
+        )
+        blocks.append({"type": "divider"})
+
+        for i, call in enumerate(tool_calls):
+            if len(blocks) >= 95:  # Leave room for truncation notice
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": f"_... and {len(tool_calls) - i} more tool calls (truncated)_"},
+                    }
+                )
+                break
+
+            tool_name = call.get("tool_name", "unknown")
+            status = call.get("status", "success")
+            duration_ms = call.get("duration_ms")
+            error_msg = call.get("error_message")
+
+            # Status indicator
+            status_icon = "✅" if status == "success" else "❌"
+            duration_text = f" ({duration_ms}ms)" if duration_ms else ""
+
+            # Tool name header
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"{status_icon} *{tool_name}*{duration_text}",
+                    },
+                }
+            )
+
+            # Input parameters (truncated)
+            tool_input = call.get("tool_input")
+            if tool_input:
+                import json
+                try:
+                    input_str = json.dumps(tool_input, indent=2)
+                    if len(input_str) > 500:
+                        input_str = input_str[:500] + "\n... (truncated)"
+                    blocks.append(
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": f"*Input:*\n```{input_str}```"},
+                        }
+                    )
+                except (TypeError, ValueError):
+                    pass
+
+            # Output or error
+            if error_msg:
+                error_display = error_msg[:500] + "..." if len(error_msg) > 500 else error_msg
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": f"*Error:*\n```{error_display}```"},
+                    }
+                )
+            else:
+                tool_output = call.get("tool_output", "")
+                if tool_output:
+                    output_display = tool_output[:1000] + "\n... (truncated)" if len(tool_output) > 1000 else tool_output
+                    # Escape backticks in output to avoid breaking code blocks
+                    output_display = output_display.replace("```", "` ` `")
+                    blocks.append(
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": f"*Output:*\n```{output_display}```"},
+                        }
+                    )
+
+            blocks.append({"type": "divider"})
+
+    # Truncate title to 24 chars for Slack modal
+    safe_title = phase_label[:24] if len(phase_label) > 24 else phase_label
+
+    return {
+        "type": "modal",
+        "title": {"type": "plain_text", "text": safe_title},
+        "close": {"type": "plain_text", "text": "Close"},
+        "blocks": blocks[:100],  # Max 100 blocks per modal
     }
 
 
