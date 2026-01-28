@@ -401,11 +401,15 @@ class SlackOutputHandler:
                 # Handle structured root cause
                 rc_parts = []
                 if root_cause.get("description"):
-                    rc_parts.append(markdown_to_slack_mrkdwn(str(root_cause["description"])))
+                    rc_parts.append(
+                        markdown_to_slack_mrkdwn(str(root_cause["description"]))
+                    )
                 if root_cause.get("confidence"):
                     rc_parts.append(f"_Confidence: {root_cause['confidence']}_")
                 if root_cause.get("evidence"):
-                    rc_parts.append(f"Evidence: {markdown_to_slack_mrkdwn(str(root_cause['evidence']))}")
+                    rc_parts.append(
+                        f"Evidence: {markdown_to_slack_mrkdwn(str(root_cause['evidence']))}"
+                    )
                 rc_text = "\n".join(rc_parts) if rc_parts else str(root_cause)
             else:
                 rc_text = markdown_to_slack_mrkdwn(str(root_cause))
@@ -493,13 +497,18 @@ class SlackOutputHandler:
                 blocks.append(
                     {
                         "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"*Root Cause*\n{rc_mrkdwn}"},
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Root Cause*\n{rc_mrkdwn}",
+                        },
                     }
                 )
 
         if hasattr(output, "recommendations") and output.recommendations:
             # Convert markdown in each recommendation
-            recs = [markdown_to_slack_mrkdwn(str(r)) for r in output.recommendations[:10]]
+            recs = [
+                markdown_to_slack_mrkdwn(str(r)) for r in output.recommendations[:10]
+            ]
             rec_text = "\n".join([f"• {r}" for r in recs])
             blocks.append(
                 {

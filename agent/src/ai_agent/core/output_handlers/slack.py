@@ -635,12 +635,17 @@ class SlackOutputHandler(OutputHandler):
                 blocks.append(
                     {
                         "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"*Root Cause*\n{rc_mrkdwn}"},
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Root Cause*\n{rc_mrkdwn}",
+                        },
                     }
                 )
 
         if hasattr(output, "recommendations") and output.recommendations:
-            recs = [markdown_to_slack_mrkdwn(str(r)) for r in output.recommendations[:10]]
+            recs = [
+                markdown_to_slack_mrkdwn(str(r)) for r in output.recommendations[:10]
+            ]
             rec_text = "\n".join([f"• {r}" for r in recs])
             blocks.append(
                 {
