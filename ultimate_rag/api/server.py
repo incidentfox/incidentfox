@@ -1043,11 +1043,11 @@ class UltimateRAGServer:
                 "max_trees": 5,
                 "total_size_gb": round(total_size_bytes / 1024**3, 3),
                 "max_size_gb": max_size_gb,
-                "utilization_percent": round(
-                    (total_size_bytes / (max_size_gb * 1024**3)) * 100, 1
-                )
-                if max_size_gb > 0
-                else 0,
+                "utilization_percent": (
+                    round((total_size_bytes / (max_size_gb * 1024**3)) * 100, 1)
+                    if max_size_gb > 0
+                    else 0
+                ),
                 "trees": trees_info,
                 "s3_enabled": bool(os.environ.get("TREES_S3_BUCKET")),
                 "s3_bucket": os.environ.get("TREES_S3_BUCKET"),
