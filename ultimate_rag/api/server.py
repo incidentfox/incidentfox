@@ -343,6 +343,17 @@ class V1CreateTreeResponse(BaseModel):
     tree_path: Optional[str] = None
 
 
+class V1TreeStatsResponse(BaseModel):
+    """v1 API tree stats response."""
+
+    tree: str
+    total_nodes: int
+    layers: int
+    leaf_nodes: int
+    summary_nodes: int
+    layer_counts: Dict[int, int]
+
+
 # ==================== API Server ====================
 
 
@@ -905,6 +916,55 @@ class UltimateRAGServer:
                 raise HTTPException(
                     status_code=500, detail=f"Failed to create tree: {e}"
                 )
+
+        @app.get("/api/v1/tree/stats", response_model=V1TreeStatsResponse, tags=["v1-compat"])
+        async def v1_tree_stats(tree: Optional[str] = None):
+            """
+            Get statistics about a knowledge tree (v1 compatible).
+
+            Returns node counts, layer information, and other tree statistics.
+            """
+            if not self.forest:
+                raise HTTPException(503, "Server not initialized")
+
+            tree_name = tree or "main"
+
+            # Get the tree from forest
+            knowledge_tree = self.forest.get_tree(tree_name)
+            if not knowledge_tree:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Tree '{tree_name}' not found",
+                )
+
+            try:
+                # Calculate layer counts
+                layer_counts: Dict[int, int] = {}
+                if knowledge_tree.layer_to_nodes:
+                    for layer, nodes in knowledge_tree.layer_to_nodes.items():
+                        layer_counts[layer] = len(nodes) if nodes else 0
+                else:
+                    # Fallback to counting from all_nodes
+                    for node in knowledge_tree.all_nodes.values():
+                        layer = getattr(node, "layer", 0) or 0
+                        layer_counts[layer] = layer_counts.get(layer, 0) + 1
+
+                leaf_count = layer_counts.get(0, 0)
+                summary_count = sum(c for l, c in layer_counts.items() if l > 0)
+
+                return V1TreeStatsResponse(
+                    tree=tree_name,
+                    total_nodes=len(knowledge_tree.all_nodes),
+                    layers=knowledge_tree.num_layers
+                    or (max(layer_counts.keys()) + 1 if layer_counts else 0),
+                    leaf_nodes=leaf_count,
+                    summary_nodes=summary_count,
+                    layer_counts=layer_counts,
+                )
+
+            except Exception as e:
+                logger.error(f"Error getting tree stats: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to get tree stats: {e}")
 
         @app.post("/api/v1/search", response_model=V1SearchResponse, tags=["v1-compat"])
         async def v1_search(request: V1SearchRequest):
