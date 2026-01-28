@@ -30,10 +30,8 @@ DRY_RUN=false
 EXCLUDE_FROM_PUBLIC=(
     # Premium services (full content)
     "ai_pipeline/*"
-    "sre-agent/*"
     "correlation_service/*"
     "dependency_service/*"
-    "slack-bot"
     "telemetry_collector"
 
     # Internal config files
@@ -63,7 +61,6 @@ EXCLUDE_FROM_PUBLIC=(
 # Stub directories - keep only README.md in public
 STUB_DIRS=(
     "ai_pipeline"
-    "sre-agent"
     "correlation_service"
     "dependency_service"
 )
@@ -111,7 +108,7 @@ check_prerequisites() {
     log_info "Checking prerequisites..."
 
     # Check for required tools
-    for cmd in git rsync yq; do
+    for cmd in git rsync; do
         if ! command -v "$cmd" &> /dev/null; then
             log_error "$cmd is required but not installed."
             exit 1
@@ -266,10 +263,8 @@ sync_from_public() {
     local exclude_from_sync=(
         ".git"
         "ai_pipeline"      # Stub only in public
-        "sre-agent"        # Stub only in public
         "correlation_service"
         "dependency_service"
-        "slack-bot"
         "telemetry_collector"
     )
 
