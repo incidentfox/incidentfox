@@ -136,15 +136,9 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
             )
             return
 
-        # Track whether agent run was created so we can mark it failed on exception
-        agent_run_created = False
-        run_id = None
-        org_id = None
-
         try:
             cfg = integration.config_service
             agent_api = integration.agent_api
-            audit_api = integration.audit_api
 
             # Look up team via routing
             # Use asyncio.to_thread() for sync HTTP calls to avoid blocking the event loop
@@ -221,29 +215,8 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
 
             run_id = uuid.uuid4().hex
 
-            # Record agent run start
-            if audit_api:
-                # Run sync HTTP call in thread pool to avoid blocking event loop
-                await asyncio.to_thread(
-                    partial(
-                        audit_api.create_agent_run,
-                        run_id=run_id,
-                        org_id=org_id,
-                        team_node_id=team_node_id,
-                        correlation_id=correlation_id,
-                        trigger_source="slack",
-                        trigger_actor=user_id,
-                        trigger_message=text,
-                        trigger_channel_id=channel_id,
-                        agent_name=entrance_agent_name,
-                        metadata={
-                            "event_ts": event_ts,
-                            "thread_ts": thread_ts,
-                            "session_id": session_id,
-                        },
-                    )
-                )
-                agent_run_created = True
+            # Note: Agent service now handles agent run creation.
+            # We pass trigger_source to ensure proper attribution.
 
             # Resolve output destinations
             from incidentfox_orchestrator.output_resolver import (
@@ -305,34 +278,11 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                     correlation_id=correlation_id,
                     agent_base_url=dedicated_agent_url,
                     output_destinations=output_destinations,
+                    trigger_source="slack",
                 )
             )
 
-            # Record completion
-            if audit_api:
-                out = result.get("output") or result.get("agent_output")
-                output_summary = None
-                if isinstance(out, dict):
-                    output_summary = out.get("summary") or out.get("root_cause")
-                elif isinstance(out, str):
-                    output_summary = out[:200] if len(out) > 200 else out
-
-                status = "completed" if result.get("success", True) else "failed"
-                # Run audit call in thread pool as well
-                await asyncio.to_thread(
-                    partial(
-                        audit_api.complete_agent_run,
-                        org_id=org_id,
-                        run_id=run_id,
-                        status=status,
-                        tool_calls_count=result.get("tool_calls_count"),
-                        output_summary=(
-                            output_summary[:200]
-                            if output_summary and len(output_summary) > 200
-                            else output_summary
-                        ),
-                    )
-                )
+            # Note: Agent service handles run completion recording
 
             _log(
                 "slack_event_completed",
@@ -350,23 +300,7 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                 channel_id=channel_id,
                 error=str(e),
             )
-            # Mark agent run as failed if it was created
-            if agent_run_created and audit_api and run_id and org_id:
-                try:
-                    await asyncio.to_thread(
-                        audit_api.complete_agent_run,
-                        org_id=org_id,
-                        run_id=run_id,
-                        status="failed",
-                        error_message=str(e)[:500],  # Truncate long errors
-                    )
-                except Exception as completion_err:
-                    _log(
-                        "slack_event_failed_completion_error",
-                        correlation_id=correlation_id,
-                        run_id=run_id,
-                        error=str(completion_err),
-                    )
+            # Note: Agent service handles run failure recording
 
     @app.action("feedback_positive")
     async def handle_feedback_positive(ack, body, respond):
