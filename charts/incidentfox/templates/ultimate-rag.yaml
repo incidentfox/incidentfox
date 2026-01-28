@@ -25,6 +25,10 @@ metadata:
     app.kubernetes.io/component: ultimate-rag
 spec:
   replicas: {{ .Values.services.ultimateRag.replicas }}
+  # RollingUpdate for zero-downtime deployments (requires node with 2x memory)
+  # Use Recreate if node memory is limited
+  strategy:
+    type: {{ .Values.services.ultimateRag.strategy | default "RollingUpdate" }}
   selector:
     matchLabels:
       app.kubernetes.io/name: incidentfox-ultimate-rag
