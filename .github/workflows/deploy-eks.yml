@@ -201,50 +201,18 @@ jobs:
       - name: Deploy with Helm
         working-directory: charts
         run: |
+          # Increased timeout for slow-starting services (ultimate-rag downloads from S3 + loads model)
           helm upgrade --install incidentfox ./incidentfox \
             -n ${{ env.HELM_NAMESPACE }} \
             -f incidentfox/values.prod.yaml \
             --no-hooks \
             --force \
             --wait \
-            --timeout 10m
+            --timeout 15m
 
-      - name: Rollout restart deployments
-        run: |
-          # Force pods to pull new images
-          # Note: ai-pipeline is a CronJob, not a Deployment, so skip rollout restart
-          # Note: ultimate-rag may not be deployed yet (disabled by default)
-          if [ "${{ github.event.inputs.services }}" = "all" ]; then
-            kubectl rollout restart deployment/incidentfox-agent \
-              deployment/incidentfox-config-service \
-              deployment/incidentfox-knowledge-base \
-              deployment/incidentfox-orchestrator \
-              deployment/incidentfox-web-ui \
-              -n ${{ env.HELM_NAMESPACE }}
-            # Optional: restart ultimate-rag if deployed
-            kubectl rollout restart deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} 2>/dev/null || true
-          elif [ "${{ github.event.inputs.services }}" = "ai-pipeline" ]; then
-            echo "ai-pipeline is a CronJob - no rollout restart needed"
-          else
-            kubectl rollout restart deployment/incidentfox-${{ github.event.inputs.services }} \
-              -n ${{ env.HELM_NAMESPACE }}
-          fi
-
-      - name: Wait for rollout
-        run: |
-          if [ "${{ github.event.inputs.services }}" = "all" ]; then
-            kubectl rollout status deployment/incidentfox-agent -n ${{ env.HELM_NAMESPACE }} --timeout=10m
-            kubectl rollout status deployment/incidentfox-config-service -n ${{ env.HELM_NAMESPACE }} --timeout=10m
-            kubectl rollout status deployment/incidentfox-knowledge-base -n ${{ env.HELM_NAMESPACE }} --timeout=10m
-            kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=10m
-            kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=10m
-            # Optional: wait for ultimate-rag if deployed
-            kubectl rollout status deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} --timeout=10m 2>/dev/null || true
-          elif [ "${{ github.event.inputs.services }}" = "ai-pipeline" ]; then
-            echo "ai-pipeline is a CronJob - no rollout status needed"
-          else
-            kubectl rollout status deployment/incidentfox-${{ github.event.inputs.services }} -n ${{ env.HELM_NAMESPACE }} --timeout=10m
-          fi
+      # Note: rollout restart is NOT needed after helm upgrade --force
+      # The --force flag already recreates pods, and --wait ensures they're ready
+      # Removing the redundant restart avoids double-waiting for slow-starting services
 
       - name: Verify deployment
         run: |

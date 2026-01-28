@@ -102,11 +102,21 @@ spec:
           volumeMounts:
             - name: trees-volume
               mountPath: /app/trees
+          # Startup probe: allows long startup time for S3 download + model loading
+          # Once startup probe passes, liveness/readiness kick in with shorter timeouts
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.knowledgeBase.servicePort }}
+            initialDelaySeconds: {{ .Values.services.knowledgeBase.startupProbe.initialDelaySeconds | default 30 }}
+            periodSeconds: {{ .Values.services.knowledgeBase.startupProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.services.knowledgeBase.startupProbe.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.services.knowledgeBase.startupProbe.failureThreshold | default 30 }}
           readinessProbe:
             httpGet:
               path: /health
               port: {{ .Values.services.knowledgeBase.servicePort }}
-            initialDelaySeconds: {{ .Values.services.knowledgeBase.readinessProbe.initialDelaySeconds | default 120 }}
+            initialDelaySeconds: {{ .Values.services.knowledgeBase.readinessProbe.initialDelaySeconds | default 5 }}
             periodSeconds: {{ .Values.services.knowledgeBase.readinessProbe.periodSeconds | default 10 }}
             timeoutSeconds: {{ .Values.services.knowledgeBase.readinessProbe.timeoutSeconds | default 5 }}
           {{- if .Values.services.knowledgeBase.livenessProbe.enabled }}
@@ -114,7 +124,7 @@ spec:
             httpGet:
               path: {{ .Values.services.knowledgeBase.livenessProbe.path | default "/health" }}
               port: {{ .Values.services.knowledgeBase.servicePort }}
-            initialDelaySeconds: {{ .Values.services.knowledgeBase.livenessProbe.initialDelaySeconds | default 180 }}
+            initialDelaySeconds: {{ .Values.services.knowledgeBase.livenessProbe.initialDelaySeconds | default 10 }}
             periodSeconds: {{ .Values.services.knowledgeBase.livenessProbe.periodSeconds | default 30 }}
             timeoutSeconds: {{ .Values.services.knowledgeBase.livenessProbe.timeoutSeconds | default 10 }}
           {{- end }}
