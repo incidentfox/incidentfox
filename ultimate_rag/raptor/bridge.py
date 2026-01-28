@@ -283,7 +283,9 @@ class RaptorBridge:
             validation_status=ValidationStatus.PROVISIONAL,
             tags=raptor_meta.get("tags", []),
             # Store domain/subject in topics if present
-            topics=[t for t in [raptor_meta.get("domain"), raptor_meta.get("subject")] if t],
+            topics=[
+                t for t in [raptor_meta.get("domain"), raptor_meta.get("subject")] if t
+            ],
         )
 
         # Extract citations if present - add to references field
