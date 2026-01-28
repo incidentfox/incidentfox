@@ -45,7 +45,9 @@ logger = get_logger(__name__)
 
 # Config service URL from environment
 # Use same default as agent_runner.py for k8s service discovery
-CONFIG_SERVICE_URL = os.getenv("CONFIG_SERVICE_URL", "http://incidentfox-config-service:8080")
+CONFIG_SERVICE_URL = os.getenv(
+    "CONFIG_SERVICE_URL", "http://incidentfox-config-service:8080"
+)
 
 
 @dataclass
