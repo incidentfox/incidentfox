@@ -1,6 +1,6 @@
 {
   "$schema": "incidentfox-template-v1",
-  "$template_name": "Tech News Comedian",
+  "$template_name": "News Comedian (Non Production, Demo Only)",
   "$template_slug": "news-comedian",
   "$description": "Multi-agent demo that creates a daily tech comedy digest. The Coordinator orchestrates a News Searcher (using web_search via Tavily API) and Joke Writer (generates witty commentary) to produce an entertaining Slack digest. Demonstrates agent coordination, web search, and creative writing.",
   "$category": "demo",
