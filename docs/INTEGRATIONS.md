@@ -130,6 +130,12 @@ In Slack:
 - Verify bot is invited to channel: `/invite @IncidentFox`
 - Verify Socket Mode is enabled (for self-hosted)
 - Check bot token has correct scopes
+- Check services are running: `docker-compose ps`
+
+**Agent errors:**
+- Check agent logs: `docker-compose logs sre-agent`
+- Verify `ANTHROPIC_API_KEY` is valid and has credits
+- Restart services: `docker-compose restart`
 
 **Permission errors:**
 - Re-install the app to workspace to refresh scopes
@@ -138,6 +144,33 @@ In Slack:
 **Connection issues:**
 - For Socket Mode: Check `SLACK_APP_TOKEN` is correct and has `connections:write` scope
 - For webhooks: Verify request URL is publicly accessible and returns 200 OK
+
+**Performance issues:**
+- Check resource usage: `docker stats`
+- Increase limits in `docker-compose.yml`:
+  ```yaml
+  sre-agent:
+    mem_limit: 4g  # Default is 2g
+    cpus: 4        # Default is 2
+  ```
+
+**Common Commands:**
+```bash
+# View logs
+docker-compose logs -f            # All services
+docker-compose logs -f slack-bot  # Just Slack bot
+docker-compose logs -f sre-agent  # Just SRE agent
+
+# Restart services
+docker-compose restart
+
+# Stop everything
+docker-compose down
+
+# Update and restart
+git pull
+docker-compose up -d --build
+```
 
 ---
 
@@ -587,6 +620,5 @@ CORALOGIX_DOMAIN=...               # Your Coralogix domain
 ## What's Next?
 
 - **[FEATURES.md](FEATURES.md)** - Learn about advanced capabilities
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deploy for your organization
-- **[../INSTALL.md](../INSTALL.md)** - Quick self-hosted setup guide
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deploy for your organization (Docker Compose, Kubernetes, Production)
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Understand the system design

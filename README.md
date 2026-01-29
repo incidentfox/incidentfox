@@ -101,7 +101,7 @@ docker-compose up -d
 
 You should see a streaming response! 🎉
 
-**Full installation guide:** [INSTALL.md](INSTALL.md)
+**Detailed setup:** [Slack Integration Guide](docs/INTEGRATIONS.md#slack-bot-primary-interface) | [Deployment Options](docs/DEPLOYMENT.md)
 
 ---
 
@@ -233,7 +233,8 @@ kubectl get pods -n incidentfox
 ## Documentation
 
 ### Getting Started
-- **[INSTALL.md](INSTALL.md)** - Self-hosted installation (5 min setup)
+- **[Quick Start](#quick-start)** - Try locally or self-host in 5 minutes
+- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Complete deployment guide
 - **[local/claude_code_pack/README.md](local/claude_code_pack/README.md)** - Local CLI for developers
 
 ### Core Documentation
