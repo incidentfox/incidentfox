@@ -39,6 +39,7 @@ from incidentfox_orchestrator.webhooks.signatures import (
     verify_github_signature,
     verify_incidentio_signature,
     verify_pagerduty_signature,
+    verify_recall_signature,
 )
 
 if TYPE_CHECKING:
@@ -1471,5 +1472,350 @@ async def _process_circleback_webhook(
             "circleback_webhook_failed",
             correlation_id=correlation_id,
             meeting_id=meeting_id,
+            error=str(e),
+        )
+
+
+# ============================================================================
+# Recall.ai Webhooks (Real-time Meeting Transcription)
+# ============================================================================
+
+
+@router.post("/recall")
+async def recall_webhook(
+    request: Request,
+    background: BackgroundTasks,
+    x_recall_signature: str = Header(default="", alias="x-recall-signature"),
+):
+    """
+    Handle Recall.ai webhooks for real-time meeting transcription.
+
+    Recall.ai sends real-time transcript events as meetings progress:
+    - bot.status_change: Bot joined, left, or status changed
+    - transcript.data: Finalized transcript utterance
+    - transcript.partial_data: Low-latency partial transcript (optional)
+
+    These events are processed in real-time and fed to the AI agent
+    investigating the associated incident.
+
+    Docs: https://docs.recall.ai/docs/bot-real-time-transcription
+    """
+    webhook_secret = (os.getenv("RECALL_WEBHOOK_SECRET") or "").strip()
+
+    raw_body = (await request.body()).decode("utf-8")
+
+    # Verify signature
+    if webhook_secret:
+        try:
+            verify_recall_signature(
+                webhook_secret=webhook_secret,
+                signature=x_recall_signature or None,
+                raw_body=raw_body,
+            )
+        except SignatureVerificationError as e:
+            _log("recall_webhook_signature_failed", reason=e.reason)
+            raise HTTPException(
+                status_code=401, detail=f"signature_verification_failed: {e.reason}"
+            )
+
+    # Parse payload
+    try:
+        payload = json.loads(raw_body) if raw_body else {}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="invalid_json")
+
+    event_type = payload.get("event", "")
+    bot_id = payload.get("data", {}).get("bot_id", "") or payload.get("bot_id", "")
+
+    _log(
+        "recall_webhook_received",
+        event_type=event_type,
+        bot_id=bot_id,
+    )
+
+    # Process in background
+    if event_type and bot_id:
+        background.add_task(
+            _process_recall_webhook,
+            request=request,
+            event_type=event_type,
+            bot_id=bot_id,
+            payload=payload,
+        )
+
+    return JSONResponse(content={"ok": True})
+
+
+async def _process_recall_webhook(
+    request: Request,
+    event_type: str,
+    bot_id: str,
+    payload: dict,
+) -> None:
+    """
+    Process Recall.ai webhook asynchronously.
+
+    Routes transcript data to the appropriate incident investigation
+    and updates bot status in the database.
+    """
+    from incidentfox_orchestrator.clients import ConfigServiceClient
+
+    correlation_id = __import__("uuid").uuid4().hex
+
+    _log(
+        "recall_webhook_processing",
+        correlation_id=correlation_id,
+        event_type=event_type,
+        bot_id=bot_id,
+    )
+
+    try:
+        cfg: ConfigServiceClient = request.app.state.config_service
+
+        # Get admin token for database operations
+        admin_token = (os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or "").strip()
+        if not admin_token:
+            _log(
+                "recall_webhook_no_admin_token",
+                correlation_id=correlation_id,
+            )
+            return
+
+        # Handle different event types
+        if event_type == "bot.status_change":
+            await _handle_recall_bot_status_change(
+                cfg=cfg,
+                admin_token=admin_token,
+                bot_id=bot_id,
+                payload=payload,
+                correlation_id=correlation_id,
+            )
+
+        elif event_type in ("transcript.data", "transcript.partial_data"):
+            await _handle_recall_transcript_data(
+                request=request,
+                cfg=cfg,
+                admin_token=admin_token,
+                bot_id=bot_id,
+                payload=payload,
+                event_type=event_type,
+                correlation_id=correlation_id,
+            )
+
+        else:
+            _log(
+                "recall_webhook_unknown_event",
+                correlation_id=correlation_id,
+                event_type=event_type,
+            )
+
+    except Exception as e:
+        _log(
+            "recall_webhook_failed",
+            correlation_id=correlation_id,
+            event_type=event_type,
+            bot_id=bot_id,
+            error=str(e),
+        )
+
+
+async def _handle_recall_bot_status_change(
+    cfg: Any,
+    admin_token: str,
+    bot_id: str,
+    payload: dict,
+    correlation_id: str,
+) -> None:
+    """Handle bot status change events from Recall.ai."""
+    data = payload.get("data", {})
+    status = data.get("status", {})
+    status_code = status.get("code", "unknown")
+    status_message = status.get("message", "")
+
+    _log(
+        "recall_bot_status_change",
+        correlation_id=correlation_id,
+        bot_id=bot_id,
+        status_code=status_code,
+        status_message=status_message,
+    )
+
+    # Map Recall.ai status codes to our internal status
+    # Recall statuses: ready, joining, in_waiting_room, in_call_not_recording,
+    #                  in_call_recording, call_ended, done, fatal
+    status_mapping = {
+        "ready": "requested",
+        "joining": "joining",
+        "in_waiting_room": "joining",
+        "in_call_not_recording": "in_call",
+        "in_call_recording": "recording",
+        "call_ended": "done",
+        "done": "done",
+        "fatal": "error",
+    }
+    internal_status = status_mapping.get(status_code, status_code)
+
+    # Update bot status in database
+    try:
+        await asyncio.to_thread(
+            cfg.update_recall_bot_status,
+            admin_token=admin_token,
+            recall_bot_id=bot_id,
+            status=internal_status,
+            status_message=status_message,
+            joined_at=data.get("joined_at") if status_code in ("in_call_not_recording", "in_call_recording") else None,
+            left_at=data.get("left_at") if status_code in ("call_ended", "done") else None,
+        )
+        _log(
+            "recall_bot_status_updated",
+            correlation_id=correlation_id,
+            bot_id=bot_id,
+            internal_status=internal_status,
+        )
+    except Exception as e:
+        _log(
+            "recall_bot_status_update_failed",
+            correlation_id=correlation_id,
+            bot_id=bot_id,
+            error=str(e),
+        )
+
+
+async def _handle_recall_transcript_data(
+    request: Request,
+    cfg: Any,
+    admin_token: str,
+    bot_id: str,
+    payload: dict,
+    event_type: str,
+    correlation_id: str,
+) -> None:
+    """
+    Handle transcript data events from Recall.ai.
+
+    This is the core real-time transcription handler that:
+    1. Stores the transcript segment
+    2. Looks up the associated incident
+    3. Feeds the transcript to the active investigation
+    """
+    from incidentfox_orchestrator.clients import AgentApiClient
+
+    data = payload.get("data", {})
+    transcript = data.get("transcript", {})
+
+    speaker = transcript.get("speaker", "Unknown")
+    text = transcript.get("text", "")
+    timestamp_ms = transcript.get("timestamp_ms")
+    is_partial = event_type == "transcript.partial_data"
+
+    if not text.strip():
+        return  # Skip empty transcripts
+
+    _log(
+        "recall_transcript_received",
+        correlation_id=correlation_id,
+        bot_id=bot_id,
+        speaker=speaker,
+        text_length=len(text),
+        is_partial=is_partial,
+    )
+
+    try:
+        # Look up the bot to find the associated incident
+        bot_info = await asyncio.to_thread(
+            cfg.get_recall_bot,
+            admin_token=admin_token,
+            recall_bot_id=bot_id,
+        )
+
+        if not bot_info:
+            _log(
+                "recall_transcript_bot_not_found",
+                correlation_id=correlation_id,
+                bot_id=bot_id,
+            )
+            return
+
+        org_id = bot_info.get("org_id")
+        team_node_id = bot_info.get("team_node_id")
+        incident_id = bot_info.get("incident_id")
+
+        # Store transcript segment
+        segment_id = __import__("uuid").uuid4().hex
+        await asyncio.to_thread(
+            cfg.store_recall_transcript_segment,
+            admin_token=admin_token,
+            segment_id=segment_id,
+            recall_bot_id=bot_id,
+            org_id=org_id,
+            incident_id=incident_id,
+            speaker=speaker,
+            text=text,
+            timestamp_ms=timestamp_ms,
+            is_partial=is_partial,
+            raw_event=payload,
+        )
+
+        # Update bot transcript count
+        await asyncio.to_thread(
+            cfg.increment_recall_bot_transcript_count,
+            admin_token=admin_token,
+            recall_bot_id=bot_id,
+        )
+
+        # If this is a partial transcript, don't feed to agent (too noisy)
+        if is_partial:
+            return
+
+        # Feed transcript to active investigation if there's an associated incident
+        if incident_id and team_node_id:
+            # Get impersonation token for the team
+            imp = await asyncio.to_thread(
+                cfg.issue_team_impersonation_token,
+                admin_token,
+                org_id=org_id,
+                team_node_id=team_node_id,
+            )
+            team_token = str(imp.get("token") or "")
+
+            if team_token:
+                agent_api: AgentApiClient = request.app.state.agent_api
+
+                # Format transcript for agent context
+                transcript_context = f"[Meeting Transcript] {speaker}: {text}"
+
+                # Send to agent as context update (non-blocking)
+                try:
+                    await asyncio.to_thread(
+                        agent_api.add_investigation_context,
+                        team_token=team_token,
+                        incident_id=incident_id,
+                        context_type="meeting_transcript",
+                        content=transcript_context,
+                        metadata={
+                            "speaker": speaker,
+                            "timestamp_ms": timestamp_ms,
+                            "bot_id": bot_id,
+                        },
+                    )
+                    _log(
+                        "recall_transcript_sent_to_agent",
+                        correlation_id=correlation_id,
+                        incident_id=incident_id,
+                        speaker=speaker,
+                    )
+                except Exception as agent_error:
+                    _log(
+                        "recall_transcript_agent_send_failed",
+                        correlation_id=correlation_id,
+                        incident_id=incident_id,
+                        error=str(agent_error),
+                    )
+
+    except Exception as e:
+        _log(
+            "recall_transcript_processing_failed",
+            correlation_id=correlation_id,
+            bot_id=bot_id,
             error=str(e),
         )

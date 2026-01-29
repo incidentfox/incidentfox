@@ -93,6 +93,22 @@ spec:
                   name: {{ .Values.externalSecrets.contract.incidentio.secretName | quote }}
                   key: {{ .Values.externalSecrets.contract.incidentio.webhookSecretKey | quote }}
             {{- end }}
+            {{- if .Values.externalSecrets.contract.recall.enabled }}
+            - name: RECALL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.recall.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.recall.apiKeyKey | quote }}
+            - name: RECALL_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.recall.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.recall.webhookSecretKey | quote }}
+            - name: RECALL_REGION
+              value: {{ .Values.externalSecrets.awsRegion | quote }}
+            - name: RECALL_WEBHOOK_URL
+              value: "https://orchestrator.incidentfox.ai/webhooks/recall"
+            {{- end }}
             # Slack-triggered agent run parameters (enterprise defaults)
             - name: ORCHESTRATOR_SLACK_AGENT_MAX_TURNS
               value: {{ default 50 .Values.services.orchestrator.slack.agentMaxTurns | quote }}
