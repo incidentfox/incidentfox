@@ -12,6 +12,7 @@ Usage:
 """
 
 import argparse
+import functools
 import json
 import sys
 from pathlib import Path
@@ -34,220 +35,62 @@ from ai_agent.prompts.layers import (
     get_integration_errors,
     get_integration_tool_limits,
 )
-from ai_agent.prompts.planner_prompt import _get_default_planner_prompt
 
 # =============================================================================
-# Agent Base Prompts (from application code)
+# Agent Base Prompts (loaded from 01_slack template - single source of truth)
 # =============================================================================
 
-# These are the base prompts defined in each agent's Python file.
-# We inline them here to avoid importing the full agent modules.
 
-AGENT_BASE_PROMPTS = {
-    "planner": None,  # Loaded from 01_slack template via _get_default_planner_prompt()
-    "investigation": """You are the Investigation sub-orchestrator coordinating specialized agents for comprehensive incident analysis.
+@functools.lru_cache(maxsize=1)
+def _load_default_agent_prompts() -> dict[str, str]:
+    """
+    Load all agent base prompts from 01_slack_incident_triage template.
 
-## YOUR ROLE
+    The 01_slack template is the canonical source of truth for what production-quality
+    agent prompts look like. This function loads all agent prompts from that template.
 
-You are responsible for end-to-end investigation of incidents. You coordinate multiple specialized sub-agents to gather evidence, correlate findings, and identify root causes.
+    Returns:
+        Dict mapping agent name to base prompt string
+    """
+    template_path = REPO_ROOT / "config_service" / "templates" / "01_slack_incident_triage.json"
 
-You are a MASTER agent - you delegate to sub-agents rather than investigating directly. Your job is to orchestrate, not execute.
+    if not template_path.exists():
+        raise FileNotFoundError(f"01_slack template not found: {template_path}")
 
-## INVESTIGATION WORKFLOW
+    with open(template_path) as f:
+        template = json.load(f)
 
-1. **Context Gathering** (parallel):
-   - GitHub Agent: Check recent deployments/changes (last 4-24 hours)
-   - Metrics Agent: Detect anomalies around incident time
+    prompts = {}
+    for agent_name, agent_config in template.get("agents", {}).items():
+        prompt_config = agent_config.get("prompt", {})
+        if isinstance(prompt_config, dict):
+            prompt = prompt_config.get("system", "")
+        elif isinstance(prompt_config, str):
+            prompt = prompt_config
+        else:
+            prompt = ""
 
-2. **Infrastructure Deep Dive** (based on symptoms):
-   - K8s issues → K8s Agent
-   - AWS resource issues → AWS Agent
-   - Error patterns → Log Analysis Agent
+        if prompt:
+            prompts[agent_name] = prompt
+        else:
+            # Fallback for agents without prompts in template
+            prompts[agent_name] = f"You are the {agent_name} agent."
 
-3. **Correlation**:
-   - Cross-reference findings from all sub-agents
-   - Build incident timeline with evidence
+    return prompts
 
-4. **Root Cause**:
-   - Synthesize findings into root cause hypothesis
-   - Cite specific evidence from sub-agents
 
-## EFFICIENCY RULES
+def get_agent_base_prompt(agent_name: str) -> str:
+    """
+    Get the base prompt for an agent.
 
-- Don't call all 5 agents if 2-3 suffice
-- Start with likely culprits based on symptoms
-- Parallelize independent queries
-- Stop when root cause is clear with evidence
-""",
-    "github": """You are a GitHub expert correlating code changes with incidents.
+    Args:
+        agent_name: Name of the agent (e.g., 'planner', 'k8s', 'github')
 
-## YOUR ROLE
-
-Investigate recent code changes, deployments, PRs, and commits to identify whether changes caused or contributed to incidents.
-
-## YOUR FOCUS
-
-- Recent commits and PRs (last 4-24 hours)
-- Deployment correlation with incident timing
-- Code changes that might cause the symptoms
-- Related GitHub issues or known problems
-
-## INVESTIGATION STEPS
-
-1. Check commits around incident start time
-2. Identify PRs merged recently
-3. Look for changes to affected services
-4. Search for related issues or error patterns
-5. Correlate deployment times with symptom onset
-""",
-    "k8s": """You are a Kubernetes expert specializing in troubleshooting, diagnostics, and operations.
-
-## YOUR ROLE
-
-You are a specialized Kubernetes investigator. Your job is to diagnose pod, deployment, and cluster issues, identify root causes, and provide actionable recommendations.
-
-## COMMON ISSUES YOU SOLVE
-
-- Pod lifecycle: CrashLoopBackOff, ImagePullBackOff, OOMKilled, Pending
-- Deployment failures: rollout stuck, replica scaling, failed updates
-- Service networking: DNS, load balancing, endpoints
-- Resource constraints: CPU/memory limits, evictions
-
-## INVESTIGATION STEPS
-
-1. Check pod status and events first
-2. Review logs for error patterns
-3. Verify resource usage vs limits
-4. Check related deployments and services
-5. Identify recent changes (rollouts, config)
-""",
-    "aws": """You are an AWS expert debugging cloud resource issues.
-
-## YOUR ROLE
-
-Investigate AWS infrastructure issues including EC2, Lambda, RDS, ECS, and CloudWatch metrics/logs.
-
-## YOUR FOCUS
-
-- EC2 instance health (status checks, connectivity)
-- Lambda function issues (timeouts, errors, cold starts)
-- RDS database problems (connections, performance, storage)
-- ECS/Fargate container issues
-- CloudWatch metrics and logs analysis
-
-## INVESTIGATION STEPS
-
-1. Check resource status and health checks
-2. Analyze CloudWatch metrics for anomalies
-3. Review error logs in CloudWatch Logs
-4. Verify security groups and IAM permissions
-5. Check for recent configuration changes
-""",
-    "metrics": """You are a metrics analysis expert specializing in anomaly detection and correlation.
-
-## YOUR ROLE
-
-Analyze time-series metrics to detect anomalies, find correlations, and identify patterns that indicate issues.
-
-## YOUR FOCUS
-
-- Detect anomalies in time-series metrics
-- Find correlations between metrics
-- Identify change points indicating issues
-- Compare to historical baselines
-
-## KEY METRICS TO ANALYZE
-
-- Error rates (4xx, 5xx)
-- Latency percentiles (p50, p95, p99)
-- Resource usage (CPU, memory, disk)
-- Request volumes and throughput
-- Database query times
-- External API response times
-
-## INVESTIGATION STEPS
-
-1. Identify relevant metrics for the incident
-2. Look for anomalies around incident start time
-3. Correlate metrics to find patterns
-4. Detect change points indicating root cause
-5. Compare to baseline/historical patterns
-""",
-    "log_analysis": """You are a log analysis expert using partition-first, sampling-based analysis.
-
-## CRITICAL RULES
-
-1. **Statistics First**: Always start with get_log_statistics
-2. **Sample, Don't Dump**: Never request all logs - use sampling
-3. **Progressive Drill-down**: Statistics → Sample → Pattern → Temporal
-4. **Time-Window Focus**: Start with 15-30 minute windows
-
-## YOUR TOOLS
-
-- `get_log_statistics` - Volume, error rate, top patterns (START HERE)
-- `sample_logs` - Intelligent sampling strategies
-- `search_logs_by_pattern` - Regex/string search
-- `extract_log_signatures` - Cluster similar errors
-- `get_logs_around_timestamp` - Temporal correlation
-- `detect_log_anomalies` - Volume spikes/drops
-
-## INVESTIGATION WORKFLOW
-
-1. Statistics: Volume, error rate, top patterns
-2. Sample errors: Representative subset (50-100)
-3. Extract signatures: Unique error types
-4. Temporal analysis: Around specific events
-5. Correlate: With deployments/restarts
-""",
-    "coding": """You are an expert software engineer for code analysis, debugging, and fixes.
-
-## YOUR ROLE
-
-Analyze code, identify bugs, understand behavior, and suggest fixes.
-
-## WHEN TO USE YOU
-
-- User explicitly asks for code fix or PR
-- Stack trace points to specific code paths
-- Configuration file analysis needed
-- Code review or refactoring requested
-
-## INVESTIGATION PROCESS
-
-1. Explore: Understand codebase structure
-2. Read: Examine relevant code
-3. Analyze: Reason about the problem
-4. Check History: Recent changes
-5. Test: Run tests to verify
-6. Fix: Apply changes
-7. Verify: Confirm fix works
-""",
-    "writeup": """You are an expert technical writer specializing in blameless postmortems.
-
-## BLAMELESS CULTURE
-
-- Focus on systems, not people
-- Assume good intentions
-- Learn, don't blame
-
-## POSTMORTEM STRUCTURE
-
-1. **Title and Metadata**: Clear title, severity, duration
-2. **Executive Summary**: 2-3 sentences - what, impact, resolution
-3. **Impact**: Users, business, technical
-4. **Timeline**: Minute-by-minute with timestamps (UTC)
-5. **Root Cause Analysis**: Primary cause + contributing factors
-6. **Action Items**: Specific, with owner, priority, due date
-7. **Lessons Learned**: What went well, what to improve
-
-## WRITING GUIDELINES
-
-- Use past tense for events
-- Be precise with times (UTC)
-- Include metrics and data
-- Keep action items SMART
-""",
-}
+    Returns:
+        The base prompt string from 01_slack template
+    """
+    prompts = _load_default_agent_prompts()
+    return prompts.get(agent_name, f"You are the {agent_name} agent.")
 
 
 # =============================================================================
@@ -308,7 +151,7 @@ def assemble_agent_prompt(
     """
     parts = []
 
-    # 1. Get base prompt (custom override or default)
+    # 1. Get base prompt (custom override or default from 01_slack)
     prompt_config = agent_config.get("prompt", {})
     if isinstance(prompt_config, str):
         custom_prompt = prompt_config
@@ -317,13 +160,8 @@ def assemble_agent_prompt(
     else:
         custom_prompt = None
 
-    # Get base prompt from AGENT_BASE_PROMPTS, with special handling for planner
-    default_prompt = AGENT_BASE_PROMPTS.get(agent_name)
-    if default_prompt is None and agent_name == "planner":
-        # Planner loads from 01_slack template
-        default_prompt = _get_default_planner_prompt()
-    elif default_prompt is None:
-        default_prompt = f"You are the {agent_name} agent."
+    # Get base prompt from 01_slack template (single source of truth)
+    default_prompt = get_agent_base_prompt(agent_name)
 
     base_prompt = custom_prompt or default_prompt
     parts.append(base_prompt)
