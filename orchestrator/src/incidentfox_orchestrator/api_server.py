@@ -1686,9 +1686,13 @@ def create_app() -> FastAPI:
     # ═══════════════════════════════════════════════════════════════════════════
 
     class MeetingBotJoinRequest(BaseModel):
-        meeting_url: str = Field(..., description="Meeting URL (Zoom, Google Meet, Teams, Webex)")
+        meeting_url: str = Field(
+            ..., description="Meeting URL (Zoom, Google Meet, Teams, Webex)"
+        )
         incident_id: Optional[str] = Field(None, description="Associated incident ID")
-        bot_name: Optional[str] = Field(None, description="Custom bot name (default: IncidentFox Notetaker)")
+        bot_name: Optional[str] = Field(
+            None, description="Custom bot name (default: IncidentFox Notetaker)"
+        )
 
     class MeetingBotJoinResponse(BaseModel):
         ok: bool
@@ -1715,7 +1719,9 @@ def create_app() -> FastAPI:
     async def meeting_bot_join(
         body: MeetingBotJoinRequest,
         authorization: str = Header(default=""),
-        x_incidentfox_team_token: str = Header(default="", alias="X-IncidentFox-Team-Token"),
+        x_incidentfox_team_token: str = Header(
+            default="", alias="X-IncidentFox-Team-Token"
+        ),
     ):
         """
         Send an IncidentFox meeting bot to join a meeting for real-time transcription.
@@ -1739,7 +1745,9 @@ def create_app() -> FastAPI:
             org_id = team_info.get("org_id")
             team_node_id = team_info.get("team_node_id")
         except httpx.HTTPError as e:
-            raise HTTPException(status_code=502, detail=f"config_service_unavailable: {e}") from e
+            raise HTTPException(
+                status_code=502, detail=f"config_service_unavailable: {e}"
+            ) from e
 
         # Get Recall.ai configuration
         recall_api_key = os.getenv("RECALL_API_KEY", "").strip()
@@ -1761,11 +1769,7 @@ def create_app() -> FastAPI:
         bot_config = {
             "meeting_url": body.meeting_url,
             "bot_name": bot_name,
-            "recording_config": {
-                "transcript": {
-                    "provider": {"meeting_captions": {}}
-                }
-            },
+            "recording_config": {"transcript": {"provider": {"meeting_captions": {}}}},
         }
 
         # Add webhook for real-time transcripts
@@ -1825,7 +1829,11 @@ def create_app() -> FastAPI:
                         bot_name=bot_name,
                     )
                 except Exception as db_error:
-                    _log("meeting_bot_db_error", error=str(db_error), recall_bot_id=recall_bot_id)
+                    _log(
+                        "meeting_bot_db_error",
+                        error=str(db_error),
+                        recall_bot_id=recall_bot_id,
+                    )
                     # Continue - bot was created in Recall, just failed to record locally
 
                 _log(
@@ -1851,11 +1859,15 @@ def create_app() -> FastAPI:
                 error=f"Failed to connect to Recall.ai: {e}",
             )
 
-    @app.get("/api/v1/teams/me/meeting/bot/{bot_id}", response_model=MeetingBotStatusResponse)
+    @app.get(
+        "/api/v1/teams/me/meeting/bot/{bot_id}", response_model=MeetingBotStatusResponse
+    )
     async def meeting_bot_status(
         bot_id: str,
         authorization: str = Header(default=""),
-        x_incidentfox_team_token: str = Header(default="", alias="X-IncidentFox-Team-Token"),
+        x_incidentfox_team_token: str = Header(
+            default="", alias="X-IncidentFox-Team-Token"
+        ),
     ):
         """
         Get the current status of a meeting bot.
@@ -1870,7 +1882,9 @@ def create_app() -> FastAPI:
             if not team_info.get("valid"):
                 raise HTTPException(status_code=401, detail="Invalid team token")
         except httpx.HTTPError as e:
-            raise HTTPException(status_code=502, detail=f"config_service_unavailable: {e}") from e
+            raise HTTPException(
+                status_code=502, detail=f"config_service_unavailable: {e}"
+            ) from e
 
         recall_api_key = os.getenv("RECALL_API_KEY", "").strip()
         recall_region = os.getenv("RECALL_REGION", "us-west-2").strip()
@@ -1910,11 +1924,16 @@ def create_app() -> FastAPI:
         except httpx.RequestError as e:
             return MeetingBotStatusResponse(ok=False, error=f"Request failed: {e}")
 
-    @app.post("/api/v1/teams/me/meeting/bot/{bot_id}/stop", response_model=MeetingBotStopResponse)
+    @app.post(
+        "/api/v1/teams/me/meeting/bot/{bot_id}/stop",
+        response_model=MeetingBotStopResponse,
+    )
     async def meeting_bot_stop(
         bot_id: str,
         authorization: str = Header(default=""),
-        x_incidentfox_team_token: str = Header(default="", alias="X-IncidentFox-Team-Token"),
+        x_incidentfox_team_token: str = Header(
+            default="", alias="X-IncidentFox-Team-Token"
+        ),
     ):
         """
         Stop a meeting bot and remove it from the meeting.
@@ -1929,7 +1948,9 @@ def create_app() -> FastAPI:
             if not team_info.get("valid"):
                 raise HTTPException(status_code=401, detail="Invalid team token")
         except httpx.HTTPError as e:
-            raise HTTPException(status_code=502, detail=f"config_service_unavailable: {e}") from e
+            raise HTTPException(
+                status_code=502, detail=f"config_service_unavailable: {e}"
+            ) from e
 
         recall_api_key = os.getenv("RECALL_API_KEY", "").strip()
         recall_region = os.getenv("RECALL_REGION", "us-west-2").strip()

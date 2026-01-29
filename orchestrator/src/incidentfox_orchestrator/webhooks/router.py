@@ -1663,8 +1663,14 @@ async def _handle_recall_bot_status_change(
             recall_bot_id=bot_id,
             status=internal_status,
             status_message=status_message,
-            joined_at=data.get("joined_at") if status_code in ("in_call_not_recording", "in_call_recording") else None,
-            left_at=data.get("left_at") if status_code in ("call_ended", "done") else None,
+            joined_at=(
+                data.get("joined_at")
+                if status_code in ("in_call_not_recording", "in_call_recording")
+                else None
+            ),
+            left_at=(
+                data.get("left_at") if status_code in ("call_ended", "done") else None
+            ),
         )
         _log(
             "recall_bot_status_updated",
