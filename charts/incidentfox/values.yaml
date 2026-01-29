@@ -111,7 +111,7 @@ externalSecrets:
       apiKeyRemoteRefKey: incidentfox/prod/newrelic_api_key
     # Recall.ai for real-time meeting transcription
     recall:
-      enabled: false
+      enabled: true
       secretName: incidentfox-recall
       apiKeyKey: RECALL_API_KEY
       webhookSecretKey: RECALL_WEBHOOK_SECRET
