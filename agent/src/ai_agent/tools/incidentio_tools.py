@@ -221,7 +221,7 @@ def incidentio_get_incident_updates(
         headers = _get_incidentio_headers()
 
         response = requests.get(
-            f"https://api.incident.io/v2/incident_updates",
+            "https://api.incident.io/v2/incident_updates",
             headers=headers,
             params={"incident_id": incident_id, "page_size": max_results},
         )
@@ -338,7 +338,9 @@ def incidentio_list_incidents_by_date_range(
                         "severity": incident.get("severity", {}).get("name"),
                         "created_at": incident["created_at"],
                         "resolved_at": resolved_at,
-                        "mttr_minutes": round(mttr_minutes, 2) if mttr_minutes else None,
+                        "mttr_minutes": (
+                            round(mttr_minutes, 2) if mttr_minutes else None
+                        ),
                         "incident_lead": incident.get("incident_lead", {}).get("name"),
                         "url": incident.get("permalink"),
                     }
@@ -381,7 +383,9 @@ def incidentio_list_incidents_by_date_range(
             "summary": {
                 "resolved_count": len(resolved_incidents),
                 "avg_mttr_minutes": (
-                    round(sum(mttr_values) / len(mttr_values), 2) if mttr_values else None
+                    round(sum(mttr_values) / len(mttr_values), 2)
+                    if mttr_values
+                    else None
                 ),
                 "median_mttr_minutes": (
                     round(sorted(mttr_values)[len(mttr_values) // 2], 2)
@@ -577,9 +581,7 @@ def incidentio_get_alert_analytics(
             if alert.get("status") == "acknowledged":
                 stats["acknowledged_count"] += 1
 
-            created = datetime.fromisoformat(
-                alert["created_at"].replace("Z", "+00:00")
-            )
+            created = datetime.fromisoformat(alert["created_at"].replace("Z", "+00:00"))
             stats["hours_distribution"][created.hour] += 1
 
         # Compute analytics per route
@@ -591,7 +593,9 @@ def incidentio_get_alert_analytics(
 
             # Off-hours rate
             hours_dist = dict(stats["hours_distribution"])
-            off_hours_count = sum(hours_dist.get(h, 0) for h in [0, 1, 2, 3, 4, 5, 22, 23])
+            off_hours_count = sum(
+                hours_dist.get(h, 0) for h in [0, 1, 2, 3, 4, 5, 22, 23]
+            )
             off_hours_rate = (
                 round(off_hours_count / fire_count * 100, 1) if fire_count > 0 else 0
             )
@@ -613,7 +617,9 @@ def incidentio_get_alert_analytics(
 
         route_analytics.sort(key=lambda x: x["fire_count"], reverse=True)
 
-        noisy_routes = sum(1 for r in route_analytics if r["classification"]["is_noisy"])
+        noisy_routes = sum(
+            1 for r in route_analytics if r["classification"]["is_noisy"]
+        )
 
         logger.info(
             "incidentio_alert_analytics_computed",
@@ -724,9 +730,7 @@ def incidentio_calculate_mttr(
             e, "incidentio_calculate_mttr", "incidentio"
         )
     except Exception as e:
-        logger.error(
-            "incidentio_mttr_failed", error=str(e), severity_id=severity_id
-        )
+        logger.error("incidentio_mttr_failed", error=str(e), severity_id=severity_id)
         raise ToolExecutionError("incidentio_calculate_mttr", str(e), e)
 
 

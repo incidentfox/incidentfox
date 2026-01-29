@@ -503,12 +503,16 @@ def pagerduty_list_incidents_by_date_range(
                         "created_at": incident["created_at"],
                         "service_id": incident["service"]["id"],
                         "service_name": incident["service"]["summary"],
-                        "escalation_policy_id": incident.get("escalation_policy", {}).get(
-                            "id"
-                        ),
+                        "escalation_policy_id": incident.get(
+                            "escalation_policy", {}
+                        ).get("id"),
                         "acknowledged": len(incident.get("acknowledgements", [])) > 0,
-                        "mtta_minutes": round(mtta_minutes, 2) if mtta_minutes else None,
-                        "mttr_minutes": round(mttr_minutes, 2) if mttr_minutes else None,
+                        "mtta_minutes": (
+                            round(mtta_minutes, 2) if mtta_minutes else None
+                        ),
+                        "mttr_minutes": (
+                            round(mttr_minutes, 2) if mttr_minutes else None
+                        ),
                         "was_escalated": incident.get("last_status_change_by", {}).get(
                             "type"
                         )
@@ -573,10 +577,14 @@ def pagerduty_list_incidents_by_date_range(
                     else 0
                 ),
                 "avg_mtta_minutes": (
-                    round(sum(mtta_values) / len(mtta_values), 2) if mtta_values else None
+                    round(sum(mtta_values) / len(mtta_values), 2)
+                    if mtta_values
+                    else None
                 ),
                 "avg_mttr_minutes": (
-                    round(sum(mttr_values) / len(mttr_values), 2) if mttr_values else None
+                    round(sum(mttr_values) / len(mttr_values), 2)
+                    if mttr_values
+                    else None
                 ),
             },
             "by_service": dict(
@@ -847,7 +855,9 @@ def pagerduty_get_alert_analytics(
 
             # Determine if this is likely noise
             is_noisy = fire_count > 10 and ack_rate < 50
-            is_flapping = fire_count > 20 and avg_mttr and avg_mttr < 10  # Quick auto-resolve
+            is_flapping = (
+                fire_count > 20 and avg_mttr and avg_mttr < 10
+            )  # Quick auto-resolve
 
             # Find peak hours
             hours_dist = dict(stats["hours_distribution"])
@@ -893,7 +903,9 @@ def pagerduty_get_alert_analytics(
 
         # Overall summary
         total_alerts = len(alert_analytics)
-        noisy_alerts = sum(1 for a in alert_analytics if a["classification"]["is_noisy"])
+        noisy_alerts = sum(
+            1 for a in alert_analytics if a["classification"]["is_noisy"]
+        )
         flapping_alerts = sum(
             1 for a in alert_analytics if a["classification"]["is_flapping"]
         )
@@ -916,7 +928,8 @@ def pagerduty_get_alert_analytics(
                 "potential_noise_reduction": sum(
                     a["fire_count"]
                     for a in alert_analytics
-                    if a["classification"]["is_noisy"] or a["classification"]["is_flapping"]
+                    if a["classification"]["is_noisy"]
+                    or a["classification"]["is_flapping"]
                 ),
             },
             "alert_analytics": alert_analytics[:50],  # Top 50
