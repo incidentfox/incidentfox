@@ -210,6 +210,46 @@ jobs:
             --force \
             --timeout 5m
 
+      - name: Restart deployments to pull latest images
+        run: |
+          # Helm upgrade with :latest tags doesn't restart pods even with imagePullPolicy: Always
+          # because existing pods won't re-pull unless recreated.
+          # Explicitly restart deployments that were built to force new image pulls.
+          echo "Restarting deployments to pull latest images..."
+
+          SERVICES="${{ github.event.inputs.services }}"
+          NS="${{ env.HELM_NAMESPACE }}"
+
+          restart_deployment() {
+            local deploy=$1
+            if kubectl get deployment "$deploy" -n "$NS" &>/dev/null; then
+              echo "Restarting $deploy..."
+              kubectl rollout restart deployment/"$deploy" -n "$NS"
+            fi
+          }
+
+          if [ "$SERVICES" = "all" ]; then
+            # Restart all deployments
+            restart_deployment "incidentfox-config-service"
+            restart_deployment "incidentfox-orchestrator"
+            restart_deployment "incidentfox-agent"
+            restart_deployment "incidentfox-web-ui"
+            restart_deployment "incidentfox-knowledge-base"
+            restart_deployment "incidentfox-ultimate-rag"
+            restart_deployment "incidentfox-ai-pipeline"
+          else
+            # Restart only the specific service
+            case "$SERVICES" in
+              agent) restart_deployment "incidentfox-agent" ;;
+              ai-pipeline) restart_deployment "incidentfox-ai-pipeline" ;;
+              config-service) restart_deployment "incidentfox-config-service" ;;
+              knowledge-base) restart_deployment "incidentfox-knowledge-base" ;;
+              orchestrator) restart_deployment "incidentfox-orchestrator" ;;
+              ultimate-rag) restart_deployment "incidentfox-ultimate-rag" ;;
+              web-ui) restart_deployment "incidentfox-web-ui" ;;
+            esac
+          fi
+
       - name: Wait for core services
         run: |
           echo "Waiting for core services to be ready..."
