@@ -46,7 +46,7 @@ claude
 ### Option 2: Teams - Self-Hosted Slack Bot
 
 <p align="center">
-  <video src="https://github.com/user-attachments/assets/0965d78d-3d6a-4fd4-809e-d9ada9d9ce2c" width="700" controls autoplay loop muted></video>
+  <video src="https://github.com/user-attachments/assets/c51c51f2-3e1f-459e-8ce4-1e2a56c92971" width="700" controls autoplay loop muted></video>
 </p>
 
 Get IncidentFox running in your Slack workspace in under 5 minutes.
