@@ -23,8 +23,9 @@ RUN npm run build
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
-# Install security patches
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+# Install security patches and remove npm/corepack (not needed at runtime, fixes CVE-2026-24842)
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* && \
+    rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 ENV NODE_ENV=production
 ENV PORT=3000
