@@ -272,7 +272,7 @@ class RetrievalStrategy(ABC):
 
 class MultiQueryStrategy(RetrievalStrategy):
     """
-    Expand a single query into multiple perspectives.
+    Expand a single query into multiple perspectives using LLM.
 
     Generates query variations to capture different aspects of what
     the user might be looking for, then combines results.
@@ -283,10 +283,21 @@ class MultiQueryStrategy(RetrievalStrategy):
     def __init__(
         self,
         num_variations: int = 3,
-        llm_expander: Optional[Any] = None,  # LLM for query expansion
+        model: str = "gpt-4o-mini",
     ):
         self.num_variations = num_variations
-        self.llm_expander = llm_expander
+        self.model = model
+        self._client = None
+
+    def _get_client(self):
+        """Lazy initialization of OpenAI client."""
+        if self._client is None:
+            try:
+                from openai import AsyncOpenAI
+                self._client = AsyncOpenAI()
+            except ImportError:
+                logger.warning("OpenAI not available for multi-query expansion")
+        return self._client
 
     async def retrieve(
         self,
@@ -322,39 +333,82 @@ class MultiQueryStrategy(RetrievalStrategy):
 
     async def _expand_query(self, query: str) -> List[str]:
         """
-        Expand query into variations.
+        Expand query into variations using LLM.
 
-        If LLM available, use it for intelligent expansion.
-        Otherwise, use simple heuristics.
+        Uses GPT to generate semantically diverse reformulations
+        that capture different aspects of the user's intent.
         """
         variations = [query]  # Always include original
 
-        if self.llm_expander:
-            # Use LLM for expansion (implementation depends on LLM interface)
-            # prompt = f"Generate {self.num_variations} different ways to ask: {query}"
-            # expanded = await self.llm_expander.generate(prompt)
-            pass
+        client = self._get_client()
+        if client:
+            try:
+                response = await client.chat.completions.create(
+                    model=self.model,
+                    temperature=0.7,
+                    max_tokens=300,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": """You are a search query expansion expert. Generate alternative search queries that capture different aspects of the user's information need.
+
+Rules:
+- Generate exactly the requested number of variations
+- Each variation should approach the topic from a different angle
+- Keep variations concise (under 20 words each)
+- Output ONLY the variations, one per line, no numbering or prefixes
+- Variations should be natural language queries, not keywords"""
+                        },
+                        {
+                            "role": "user",
+                            "content": f"Generate {self.num_variations} different ways to search for information about:\n\n{query}"
+                        },
+                    ],
+                )
+
+                content = response.choices[0].message.content
+                if content:
+                    # Parse variations from response
+                    llm_variations = [
+                        line.strip()
+                        for line in content.strip().split("\n")
+                        if line.strip() and len(line.strip()) > 5
+                    ]
+                    variations.extend(llm_variations[:self.num_variations])
+                    logger.debug(f"LLM expanded query into {len(variations)} variations")
+
+            except Exception as e:
+                logger.warning(f"LLM query expansion failed, using heuristics: {e}")
+                # Fall back to heuristic expansion
+                variations.extend(self._heuristic_expansion(query))
         else:
-            # Simple heuristic expansion
-            analysis = self.analyze_query(query)
-
-            # Add keyword-focused version
-            if analysis.keywords:
-                variations.append(" ".join(analysis.keywords))
-
-            # Add intent-specific reformulation
-            if analysis.intent == QueryIntent.PROCEDURAL:
-                variations.append(
-                    f"steps procedure guide {' '.join(analysis.keywords)}"
-                )
-            elif analysis.intent == QueryIntent.TROUBLESHOOTING:
-                variations.append(f"error fix solution {' '.join(analysis.keywords)}")
-            elif analysis.intent == QueryIntent.RELATIONAL:
-                variations.append(
-                    f"owner team responsible {' '.join(analysis.keywords)}"
-                )
+            # No LLM available, use heuristics
+            variations.extend(self._heuristic_expansion(query))
 
         return variations[: self.num_variations + 1]
+
+    def _heuristic_expansion(self, query: str) -> List[str]:
+        """Fallback heuristic-based query expansion."""
+        expansions = []
+        analysis = self.analyze_query(query)
+
+        # Add keyword-focused version
+        if analysis.keywords:
+            expansions.append(" ".join(analysis.keywords))
+
+        # Add intent-specific reformulation
+        if analysis.intent == QueryIntent.PROCEDURAL:
+            expansions.append(
+                f"steps procedure guide {' '.join(analysis.keywords)}"
+            )
+        elif analysis.intent == QueryIntent.TROUBLESHOOTING:
+            expansions.append(f"error fix solution {' '.join(analysis.keywords)}")
+        elif analysis.intent == QueryIntent.RELATIONAL:
+            expansions.append(
+                f"owner team responsible {' '.join(analysis.keywords)}"
+            )
+
+        return expansions
 
     async def _search_trees(
         self,
@@ -368,22 +422,33 @@ class MultiQueryStrategy(RetrievalStrategy):
 
 class HyDEStrategy(RetrievalStrategy):
     """
-    Hypothetical Document Embeddings (HyDE).
+    Hypothetical Document Embeddings (HyDE) with LLM generation.
 
     Instead of searching directly with the query, generate a hypothetical
-    answer document and search with its embedding. This bridges the gap
-    between question embeddings and document embeddings.
+    answer document using LLM and search with its embedding. This bridges
+    the gap between question embeddings and document embeddings.
     """
 
     name = "hyde"
 
     def __init__(
         self,
-        llm: Optional[Any] = None,  # LLM for generating hypothetical documents
-        num_hypotheses: int = 1,
+        num_hypotheses: int = 2,
+        model: str = "gpt-4o-mini",
     ):
-        self.llm = llm
         self.num_hypotheses = num_hypotheses
+        self.model = model
+        self._client = None
+
+    def _get_client(self):
+        """Lazy initialization of OpenAI client."""
+        if self._client is None:
+            try:
+                from openai import AsyncOpenAI
+                self._client = AsyncOpenAI()
+            except ImportError:
+                logger.warning("OpenAI not available for HyDE")
+        return self._client
 
     async def retrieve(
         self,
@@ -425,45 +490,135 @@ class HyDEStrategy(RetrievalStrategy):
 
     async def _generate_hypotheses(self, query: str) -> List[str]:
         """
-        Generate hypothetical answer documents.
+        Generate hypothetical answer documents using LLM.
 
         The hypothesis should look like an ideal document that would
-        answer the query.
+        answer the query - written as if it's documentation, not a response.
         """
-        if not self.llm:
-            # Return simple template-based hypothesis
-            analysis = self.analyze_query(query)
+        client = self._get_client()
+        if client:
+            try:
+                # Analyze query to customize the prompt
+                analysis = self.analyze_query(query)
 
-            if analysis.intent == QueryIntent.PROCEDURAL:
-                template = f"""
-                Procedure for {' '.join(analysis.keywords)}:
-                1. First, you need to...
-                2. Then, perform...
-                3. Finally, verify...
-                This procedure is used when you need to accomplish the task.
-                """
-            elif analysis.intent == QueryIntent.TROUBLESHOOTING:
-                template = f"""
-                Troubleshooting {' '.join(analysis.keywords)}:
-                Common causes include configuration issues and resource constraints.
-                To resolve this issue:
-                1. Check the logs for specific errors
-                2. Verify the configuration
-                3. Restart the affected service
-                """
-            else:
-                template = f"""
-                Information about {' '.join(analysis.keywords)}:
-                This describes the relevant details and context.
-                Key points include the main concepts and their relationships.
-                """
+                if analysis.intent == QueryIntent.PROCEDURAL:
+                    doc_type = "a step-by-step procedure or runbook"
+                elif analysis.intent == QueryIntent.TROUBLESHOOTING:
+                    doc_type = "a troubleshooting guide with root causes and solutions"
+                elif analysis.intent == QueryIntent.RELATIONAL:
+                    doc_type = "documentation about ownership, dependencies, or relationships"
+                else:
+                    doc_type = "technical documentation or reference material"
 
-            return [template.strip()]
+                response = await client.chat.completions.create(
+                    model=self.model,
+                    temperature=0.7,
+                    max_tokens=500,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": f"""You are a technical documentation writer. Generate {self.num_hypotheses} hypothetical documentation excerpts that would perfectly answer the user's question.
 
-        # Use LLM for better hypothesis generation
-        # prompt = f"Write a document that would answer this question: {query}"
-        # return await self.llm.generate(prompt, n=self.num_hypotheses)
-        return []
+Rules:
+- Write as if you're creating {doc_type}
+- Each excerpt should be 50-100 words
+- Use technical language appropriate for infrastructure/DevOps documentation
+- Include specific details, steps, or explanations that would be in real docs
+- Do NOT write a conversational answer - write as documentation
+- Separate each excerpt with "---" on its own line
+- Include relevant technical terms, service names, and concepts"""
+                        },
+                        {
+                            "role": "user",
+                            "content": f"Write hypothetical documentation excerpts that would answer:\n\n{query}"
+                        },
+                    ],
+                )
+
+                content = response.choices[0].message.content
+                if content:
+                    # Parse hypotheses from response
+                    hypotheses = [
+                        h.strip()
+                        for h in content.split("---")
+                        if h.strip() and len(h.strip()) > 20
+                    ]
+                    if hypotheses:
+                        logger.debug(f"LLM generated {len(hypotheses)} hypotheses for HyDE")
+                        return hypotheses[:self.num_hypotheses]
+
+            except Exception as e:
+                logger.warning(f"LLM hypothesis generation failed, using templates: {e}")
+
+        # Fall back to template-based hypothesis
+        return self._template_hypothesis(query)
+
+    def _template_hypothesis(self, query: str) -> List[str]:
+        """Fallback template-based hypothesis generation."""
+        analysis = self.analyze_query(query)
+        keywords = " ".join(analysis.keywords) if analysis.keywords else query
+
+        hypotheses = []
+
+        if analysis.intent == QueryIntent.PROCEDURAL:
+            hypotheses.append(f"""
+## Procedure: {keywords}
+
+### Prerequisites
+- Access to the relevant system
+- Required permissions configured
+
+### Steps
+1. First, verify the current state of {keywords}
+2. Make the necessary configuration changes
+3. Apply and validate the changes
+4. Monitor for any issues
+
+### Troubleshooting
+If issues occur, check the logs and rollback if necessary.
+            """.strip())
+        elif analysis.intent == QueryIntent.TROUBLESHOOTING:
+            hypotheses.append(f"""
+## Troubleshooting: {keywords}
+
+### Symptoms
+- Service degradation or errors related to {keywords}
+- Alert triggered from monitoring
+
+### Root Causes
+1. Configuration drift or misconfiguration
+2. Resource exhaustion (CPU, memory, disk)
+3. Network connectivity issues
+4. Dependency service failures
+
+### Resolution Steps
+1. Check service logs: `kubectl logs` or CloudWatch
+2. Verify configuration matches expected state
+3. Check resource utilization metrics
+4. Restart affected components if needed
+
+### Prevention
+Set up monitoring and alerting for early detection.
+            """.strip())
+        else:
+            hypotheses.append(f"""
+## {keywords}
+
+### Overview
+This documentation covers {keywords} and related concepts.
+
+### Key Information
+- Primary purpose and functionality
+- Integration points with other systems
+- Configuration options and best practices
+
+### Related Topics
+- Dependencies and requirements
+- Monitoring and observability
+- Common operations and maintenance tasks
+            """.strip())
+
+        return hypotheses
 
     async def _search_original(
         self,

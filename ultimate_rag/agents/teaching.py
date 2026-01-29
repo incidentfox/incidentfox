@@ -387,17 +387,14 @@ Resolution: {resolution}
         Check if new content contradicts existing knowledge.
 
         Uses a multi-layered approach:
-        1. Extract key factual claims
-        2. Check for direct negation patterns
-        3. Compare numerical values if present
-        4. Use embedding similarity to detect semantic opposition
+        1. Quick heuristic checks (patterns, numbers, deprecation)
+        2. LLM-based semantic contradiction detection for uncertain cases
         """
         content_lower = content.lower()
         existing_lower = existing_node.text.lower()
 
-        # 1. Direct contradiction patterns
+        # 1. Direct contradiction patterns (fast check)
         contradiction_patterns = [
-            # Pattern: new content negates existing
             ("should", "should not"),
             ("must", "must not"),
             ("always", "never"),
@@ -410,7 +407,6 @@ Resolution: {resolution}
         ]
 
         for positive, negative in contradiction_patterns:
-            # Check if existing has positive and new has negative (or vice versa)
             if positive in existing_lower and negative in content_lower:
                 logger.info(f"Detected contradiction: existing has '{positive}', new has '{negative}'")
                 return True
@@ -424,11 +420,9 @@ Resolution: {resolution}
         new_numbers = re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:seconds?|s|minutes?|m|hours?|h|ms|gb|mb|kb|%)\b', content_lower)
 
         if existing_numbers and new_numbers:
-            # Extract context around numbers to check if they refer to same thing
             for existing_num in existing_numbers:
                 for new_num in new_numbers:
                     if existing_num != new_num:
-                        # Check if similar context words appear near both numbers
                         existing_context = self._get_number_context(existing_lower, existing_num)
                         new_context = self._get_number_context(content_lower, new_num)
                         if existing_context & new_context:
@@ -448,9 +442,85 @@ Resolution: {resolution}
 
         for phrase in deprecation_phrases:
             if phrase in content_lower:
-                # New content suggests existing info is outdated
                 logger.info(f"Detected potential update: new content contains '{phrase}'")
                 return True
+
+        # 4. LLM-based semantic contradiction detection
+        # Only run if texts are similar enough to potentially conflict
+        if self.embedder:
+            try:
+                content_emb = self.embedder.create_embedding(content)
+                existing_emb = existing_node.get_embedding()
+                if existing_emb:
+                    import numpy as np
+                    similarity = np.dot(content_emb, existing_emb) / (
+                        np.linalg.norm(content_emb) * np.linalg.norm(existing_emb) + 1e-9
+                    )
+                    # Only use LLM for moderately similar texts (potential conflicts)
+                    if 0.5 < similarity < 0.9:
+                        llm_result = await self._llm_check_contradiction(content, existing_node.text)
+                        if llm_result:
+                            return True
+            except Exception as e:
+                logger.warning(f"Embedding comparison failed: {e}")
+
+        return False
+
+    async def _llm_check_contradiction(self, text1: str, text2: str) -> bool:
+        """
+        Use LLM to detect semantic contradictions between two texts.
+
+        Returns True if texts contradict each other.
+        """
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI()
+
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0.0,
+                max_tokens=50,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are an expert at detecting contradictions in technical documentation.
+Analyze whether two pieces of text contradict each other.
+
+Respond with ONLY one of:
+- "CONTRADICTION" if the texts make incompatible claims
+- "NO_CONTRADICTION" if the texts are compatible or discuss different topics
+
+Examples of contradictions:
+- Different values for same setting
+- Opposite instructions for same procedure
+- Conflicting requirements or dependencies
+- One text invalidates the other's claims
+
+Do NOT flag as contradiction if:
+- Texts discuss different topics/systems
+- Texts provide complementary information
+- One text is more detailed than the other"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Text 1:
+{text1[:500]}
+
+Text 2:
+{text2[:500]}
+
+Do these texts contradict each other?"""
+                    },
+                ],
+            )
+
+            result = response.choices[0].message.content.strip().upper()
+            if "CONTRADICTION" in result and "NO_CONTRADICTION" not in result:
+                logger.info("LLM detected contradiction between texts")
+                return True
+
+        except Exception as e:
+            logger.warning(f"LLM contradiction check failed: {e}")
 
         return False
 
