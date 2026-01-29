@@ -1,10 +1,161 @@
 # IncidentFox - Deployment Guide
 
-Cross-service deployment procedures.
+Complete deployment guide for all deployment options: Docker Compose (self-hosted), Kubernetes (Helm), and production deployments.
 
 ---
 
-## Prerequisites
+## Deployment Options
+
+| Option | Best For | Time to Deploy |
+|--------|----------|---------------|
+| **Docker Compose** | Quick start, single server, testing | 5 minutes |
+| **Kubernetes (Helm)** | Production, scaling, high availability | 15 minutes |
+| **On-Premise** | Enterprise security requirements | Contact us |
+
+---
+
+## Docker Compose (Self-Hosted)
+
+**Best for:** Quick start, development, single-server deployments
+
+### Prerequisites
+
+- Docker and Docker Compose
+- Slack workspace (you'll create an app)
+- Anthropic API key
+
+### Quick Deploy
+
+```bash
+# Clone repository
+git clone https://github.com/incidentfox/incidentfox.git
+cd incidentfox
+
+# Create configuration
+cp .env.example .env
+
+# Edit .env and add your credentials:
+# - SLACK_BOT_TOKEN=xoxb-...
+# - SLACK_APP_TOKEN=xapp-...
+# - ANTHROPIC_API_KEY=sk-ant-...
+
+# Start services
+docker-compose up -d
+
+# Check status
+docker-compose ps
+```
+
+### What's Running
+
+- **Slack Bot** - Connects to your Slack workspace via Socket Mode
+- **SRE Agent** - Runs AI investigations with Claude
+
+### Common Operations
+
+```bash
+# View logs
+docker-compose logs -f
+
+# Restart
+docker-compose restart
+
+# Stop
+docker-compose down
+
+# Update
+git pull && docker-compose up -d --build
+```
+
+**Full setup guide:** See [Slack Integration](INTEGRATIONS.md#slack-bot-primary-interface) for detailed Slack app configuration.
+
+### Scaling to Production
+
+For production workloads, the SRE agent includes Kubernetes deployment with enhanced isolation:
+
+```bash
+cd sre-agent
+
+# First time: Create cluster with gVisor
+make setup-prod
+
+# Deploy
+make deploy-prod
+```
+
+This provides:
+- Auto-scaling based on load
+- Enhanced isolation (gVisor runtime)
+- Better observability with metrics
+- Multi-tenant support
+
+See `sre-agent/README.md` for details.
+
+### Why Self-Host?
+
+✅ **Simple approval** - No third-party vendor review needed
+✅ **Your infrastructure** - Data never leaves your environment
+✅ **Fully customizable** - Add your own tools and integrations
+✅ **Cost effective** - Pay only for compute + Claude API usage
+✅ **No vendor lock-in** - Full control over your deployment
+
+---
+
+## Kubernetes (Helm)
+
+**Best for:** Production deployments, teams, scaling
+
+### Prerequisites
+
+- Kubernetes cluster (1.24+)
+- PostgreSQL database
+- OpenAI API key
+- Helm 3+
+
+### Deploy with Helm
+
+```bash
+# Create namespace
+kubectl create namespace incidentfox
+
+# Create required secrets
+kubectl create secret generic incidentfox-database-url \
+  --from-literal=DATABASE_URL="postgresql://user:pass@host:5432/incidentfox" \
+  -n incidentfox
+
+kubectl create secret generic incidentfox-openai \
+  --from-literal=api_key="sk-your-openai-key" \
+  -n incidentfox
+
+kubectl create secret generic incidentfox-config-service \
+  --from-literal=ADMIN_TOKEN="your-admin-token" \
+  --from-literal=TOKEN_PEPPER="random-32-char-string" \
+  -n incidentfox
+
+# Deploy
+helm upgrade --install incidentfox ./charts/incidentfox \
+  -n incidentfox \
+  -f charts/incidentfox/values.yaml
+
+# Check status
+kubectl get pods -n incidentfox
+```
+
+### Helm Values Profiles
+
+- **values.yaml** - Default configuration
+- **values.pilot.yaml** - Minimal first-deploy profile (token auth, HTTP)
+- **values.prod.yaml** - Production profile (OIDC, HTTPS, HPA)
+
+See [charts/incidentfox/README.md](../charts/incidentfox/README.md) for full configuration options.
+
+---
+
+## Internal Deployment (IncidentFox Team)
+
+The following sections are specific to the IncidentFox production cluster.
+
+### Prerequisites
 
 - AWS CLI configured for account `103002841599`
 - kubectl context set to `incidentfox-demo`
@@ -12,7 +163,7 @@ Cross-service deployment procedures.
 
 ---
 
-## ECR Login
+### ECR Login
 
 All services require ECR authentication:
 
@@ -24,7 +175,7 @@ aws ecr get-login-password --region us-west-2 | \
 
 ---
 
-## Deploy All Services
+### Deploy All Services
 
 ```bash
 ./scripts/deploy_all.sh
@@ -38,7 +189,7 @@ This script:
 
 ---
 
-## Deploy Individual Service
+### Deploy Individual Service
 
 ### Agent
 
@@ -87,7 +238,7 @@ See: `/web_ui/docs/DEPLOYMENT.md`
 
 ---
 
-## Database Migrations
+### Database Migrations
 
 Before deploying Config Service:
 
@@ -98,7 +249,7 @@ alembic upgrade head
 
 ---
 
-## Verify Deployment
+### Verify Deployment
 
 ### Check All Pods
 
@@ -130,7 +281,7 @@ curl http://localhost:8090/health
 
 ---
 
-## Rollback
+### Rollback
 
 ### Rollback to Previous Version
 
@@ -150,7 +301,7 @@ kubectl rollout undo deployment/incidentfox-agent -n incidentfox --to-revision=3
 
 ---
 
-## Troubleshooting
+### Troubleshooting
 
 ### Pod Won't Start
 
@@ -176,7 +327,7 @@ If Docker build fails with OOM:
 
 ---
 
-## CI/CD Integration
+### CI/CD Integration
 
 For automated deployments:
 1. GitHub Actions can use same build/push/deploy commands

@@ -267,9 +267,74 @@ See: `/docs/TECH_DEBT.md` for scaling improvements.
 
 ---
 
+## Agent Capabilities & Tool Organization
+
+### Agent Capabilities
+
+| Agent | Purpose | Key Tools |
+|-------|---------|-----------|
+| **Planner** | Orchestrates complex multi-step tasks | Routes to specialized agents |
+| **Investigation** | General SRE troubleshooting (primary) | 30+ tools (K8s, AWS, logs, metrics) |
+| **K8s** | Kubernetes debugging | `list_pods`, `get_pod_logs`, `describe_deployment` |
+| **AWS** | AWS resource investigation | `describe_ec2`, `get_cloudwatch_logs`, `list_ecs_tasks` |
+| **Metrics** | Anomaly detection | `prophet_detect_anomalies`, `correlate_metrics` |
+| **Coding** | Code analysis & fixes | `read_file`, `git_diff`, `python_run_tests` |
+| **GitHub** | PR/Issue investigation | `search_code`, `list_pull_requests`, `get_workflow_runs` |
+| **Log Analysis** | Deep log investigation | Log search, pattern analysis, correlation |
+| **CI** | CI/CD debugging | Build logs, deployment history, rollbacks |
+| **Writeup** | Incident documentation | Generates postmortems and summaries |
+
+### Tool Categories
+
+IncidentFox includes 178+ built-in tools organized across these categories:
+
+| Category | Tools | Description |
+|----------|-------|-------------|
+| **Kubernetes** | 9 | Pod logs, events, deployments, services, resource usage |
+| **AWS** | 8 | EC2, Lambda, RDS, ECS, CloudWatch logs/metrics |
+| **Anomaly Detection** | 8 | Prophet forecasting, Z-score detection, correlation, change points |
+| **Grafana** | 6 | Dashboards, Prometheus queries, alerts, annotations |
+| **Datadog** | 3 | Metrics, logs, APM |
+| **New Relic** | 2 | NRQL queries, APM summary |
+| **GitHub** | 16 | Code search, PRs, issues, workflows, file operations |
+| **Git** | 12 | Status, diff, log, blame, branches |
+| **Docker** | 15 | Build, run, logs, exec, compose |
+| **Coding** | 7 | File I/O, tests, linting, search |
+| **Browser** | 4 | Screenshots, scraping, PDF generation |
+| **Slack** | 5 | Messages, channels, threads |
+| **Elasticsearch** | 3 | Log search, aggregations |
+| **Meta** | 2 | `llm_call`, `web_search` (available to all agents) |
+
+**Complete tool reference:** [../agent/docs/TOOLS_CATALOG.md](../agent/docs/TOOLS_CATALOG.md)
+
+### Agent-as-Tool Pattern
+
+Agents can call other agents as tools, enabling complex multi-step investigations:
+
+```
+Planner Agent receives: "Investigate production outage"
+  ↓
+Analyzes request → Multiple services affected
+  ↓
+Delegates to specialists:
+  ├─> K8s Agent: Check pod health
+  │   └─> Returns: Frontend pod restarting
+  ├─> Metrics Agent: Analyze anomalies
+  │   └─> Returns: CPU spike at 10:15am
+  └─> Log Analysis Agent: Search errors
+      └─> Returns: OOM errors in logs
+  ↓
+Planner synthesizes: "Root cause: Memory leak in frontend"
+```
+
+---
+
 ## Related Documentation
 
 - [ROUTING_DESIGN.md](ROUTING_DESIGN.md) - Webhook routing design
 - [MULTI_TENANT_DESIGN.md](MULTI_TENANT_DESIGN.md) - Multi-tenancy patterns (shared vs dedicated)
 - [CONFIG_INHERITANCE.md](CONFIG_INHERITANCE.md) - Config inheritance
 - [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Key ADRs
+- [FEATURES.md](FEATURES.md) - Detailed feature overview
+- [INTEGRATIONS.md](INTEGRATIONS.md) - Integration setup guides
+- [EVALUATION.md](EVALUATION.md) - Evaluation framework
