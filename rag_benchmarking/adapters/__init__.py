@@ -1,12 +1,12 @@
 """RAG Benchmark Adapters."""
 
 from .ultimate_rag_adapter import (
-    UltimateRAGAdapter,
-    RetrievalResult,
     BenchmarkResult,
+    CRAGEvaluator,
     MultiHopRAGEvaluator,
     RAGBenchEvaluator,
-    CRAGEvaluator,
+    RetrievalResult,
+    UltimateRAGAdapter,
 )
 
 __all__ = [

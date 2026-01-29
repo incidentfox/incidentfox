@@ -51,7 +51,11 @@ def main():
     print("Sample entry:")
     sample = dataset[list(dataset.keys())[0]][0]
     for key in list(sample.keys())[:5]:
-        value = str(sample[key])[:100] + "..." if len(str(sample[key])) > 100 else sample[key]
+        value = (
+            str(sample[key])[:100] + "..."
+            if len(str(sample[key])) > 100
+            else sample[key]
+        )
         print(f"  {key}: {value}")
 
 

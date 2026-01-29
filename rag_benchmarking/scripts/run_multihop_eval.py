@@ -21,7 +21,7 @@ from pathlib import Path
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from adapters.ultimate_rag_adapter import UltimateRAGAdapter, MultiHopRAGEvaluator
+from adapters.ultimate_rag_adapter import MultiHopRAGEvaluator, UltimateRAGAdapter
 
 
 def progress_bar(current: int, total: int, width: int = 50):
@@ -34,12 +34,25 @@ def progress_bar(current: int, total: int, width: int = 50):
 
 def main():
     parser = argparse.ArgumentParser(description="Run MultiHop-RAG evaluation")
-    parser.add_argument("--api-url", default="http://localhost:8000", help="Ultimate RAG API URL")
+    parser.add_argument(
+        "--api-url", default="http://localhost:8000", help="Ultimate RAG API URL"
+    )
     parser.add_argument("--data-dir", default=None, help="MultiHop-RAG data directory")
-    parser.add_argument("--top-k", type=int, default=5, help="Number of chunks to retrieve")
-    parser.add_argument("--max-queries", type=int, default=None, help="Max queries to evaluate (for testing)")
-    parser.add_argument("--skip-ingest", action="store_true", help="Skip corpus ingestion")
-    parser.add_argument("--output", default="multihop_results.json", help="Output file for results")
+    parser.add_argument(
+        "--top-k", type=int, default=5, help="Number of chunks to retrieve"
+    )
+    parser.add_argument(
+        "--max-queries",
+        type=int,
+        default=None,
+        help="Max queries to evaluate (for testing)",
+    )
+    parser.add_argument(
+        "--skip-ingest", action="store_true", help="Skip corpus ingestion"
+    )
+    parser.add_argument(
+        "--output", default="multihop_results.json", help="Output file for results"
+    )
     args = parser.parse_args()
 
     # Determine data directory
@@ -48,7 +61,7 @@ def main():
     else:
         data_dir = Path(__file__).parent.parent / "multihop_rag"
 
-    print(f"=== MultiHop-RAG Evaluation ===")
+    print("=== MultiHop-RAG Evaluation ===")
     print(f"API URL: {args.api_url}")
     print(f"Data directory: {data_dir}")
     print(f"Top-K: {args.top_k}")
@@ -90,10 +103,12 @@ def main():
 
             elapsed = time.time() - start_time
             print(f"Ingestion complete in {elapsed:.1f}s")
-            print(f"  Successful: {ingest_results['successful']}/{ingest_results['total']}")
+            print(
+                f"  Successful: {ingest_results['successful']}/{ingest_results['total']}"
+            )
             print(f"  Chunks created: {ingest_results['total_chunks']}")
             print(f"  Entities found: {ingest_results['total_entities']}")
-            if ingest_results['errors']:
+            if ingest_results["errors"]:
                 print(f"  Errors: {len(ingest_results['errors'])}")
             print("")
 
@@ -116,7 +131,7 @@ def main():
 
     # Limit queries if specified
     if args.max_queries:
-        queries = queries[:args.max_queries]
+        queries = queries[: args.max_queries]
         print(f"Limited to {len(queries)} queries for evaluation")
 
     # Run evaluation
