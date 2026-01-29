@@ -29,13 +29,15 @@ interface QuickStartWizardProps {
   onRunAgent: () => void;
   onSkip: () => void;
   initialStep?: number;
+  /** When true, uses localStorage only for onboarding state (for visitors) */
+  isVisitor?: boolean;
 }
 
 const TOTAL_STEPS = 6;
 
-export function QuickStartWizard({ onClose, onRunAgent, onSkip, initialStep = 1 }: QuickStartWizardProps) {
+export function QuickStartWizard({ onClose, onRunAgent, onSkip, initialStep = 1, isVisitor = false }: QuickStartWizardProps) {
   const [currentStep, setCurrentStep] = useState(initialStep);
-  const { setQuickStartStep, clearQuickStartStep, markStep4IntegrationsVisited, markStep4AgentConfigVisited } = useOnboarding();
+  const { setQuickStartStep, clearQuickStartStep, markStep4IntegrationsVisited, markStep4AgentConfigVisited } = useOnboarding({ isVisitor });
 
   // Handle navigation away - save next step so user can resume
   const handleNavigateAway = () => {

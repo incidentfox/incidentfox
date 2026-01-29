@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from './apiClient';
 
 export interface Step4Progress {
@@ -33,13 +33,46 @@ const DEFAULT_STATE: OnboardingState = {
   step4Progress: DEFAULT_STEP4_PROGRESS,
 };
 
-export function useOnboarding() {
+const LOCALSTORAGE_KEY = 'incidentfox_onboarding';
+
+interface UseOnboardingOptions {
+  /** When true, uses localStorage only (no server calls). Used for visitors. */
+  isVisitor?: boolean;
+}
+
+export function useOnboarding(options: UseOnboardingOptions = {}) {
+  const { isVisitor = false } = options;
+  const isVisitorRef = useRef(isVisitor);
+  isVisitorRef.current = isVisitor;
+
   const [state, setState] = useState<OnboardingState>(DEFAULT_STATE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Load onboarding state from localStorage
+  const loadFromLocalStorage = useCallback(() => {
+    const cached = localStorage.getItem(LOCALSTORAGE_KEY);
+    if (cached) {
+      try {
+        setState(JSON.parse(cached));
+      } catch {
+        setState(DEFAULT_STATE);
+      }
+    } else {
+      setState(DEFAULT_STATE);
+    }
+  }, []);
+
   // Load onboarding state
   const loadState = useCallback(async () => {
+    // Visitors use localStorage only - no server calls
+    if (isVisitorRef.current) {
+      setLoading(true);
+      loadFromLocalStorage();
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const res = await apiFetch('/api/team/preferences');
@@ -58,32 +91,31 @@ export function useOnboarding() {
         setState(DEFAULT_STATE);
       } else {
         // On error, use localStorage fallback
-        const cached = localStorage.getItem('incidentfox_onboarding');
-        if (cached) {
-          setState(JSON.parse(cached));
-        }
+        loadFromLocalStorage();
       }
     } catch (e) {
       // Use localStorage fallback
-      const cached = localStorage.getItem('incidentfox_onboarding');
-      if (cached) {
-        setState(JSON.parse(cached));
-      }
+      loadFromLocalStorage();
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadFromLocalStorage]);
 
   // Save onboarding state
   const updateState = useCallback(async (updates: Partial<OnboardingState>) => {
     const newState = { ...state, ...updates };
     setState(newState);
 
-    // Save to localStorage as fallback
-    localStorage.setItem('incidentfox_onboarding', JSON.stringify(newState));
+    // Save to localStorage
+    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(newState));
 
     // Dispatch custom event for same-tab listeners
     window.dispatchEvent(new CustomEvent('onboarding-state-change', { detail: newState }));
+
+    // Visitors don't sync to server - localStorage only
+    if (isVisitorRef.current) {
+      return;
+    }
 
     try {
       await apiFetch('/api/team/preferences', {
@@ -113,8 +145,14 @@ export function useOnboarding() {
 
   // Reset onboarding (for testing)
   const resetOnboarding = useCallback(() => {
-    localStorage.removeItem('incidentfox_onboarding');
+    localStorage.removeItem(LOCALSTORAGE_KEY);
     setState(DEFAULT_STATE);
+
+    // Visitors don't sync to server
+    if (isVisitorRef.current) {
+      return;
+    }
+
     apiFetch('/api/team/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
