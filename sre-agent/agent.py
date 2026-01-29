@@ -609,9 +609,6 @@ Do NOT dump full kubectl output. Synthesize findings.""",
             StreamEvent objects for each agent action
         """
         import asyncio
-        import logging
-
-        logger = logging.getLogger(__name__)
 
         if self.client is None:
             raise RuntimeError("Session not started. Call start() first.")
@@ -665,12 +662,9 @@ Do NOT dump full kubectl output. Synthesize findings.""",
                         "message": {"role": "user", "content": prompt},
                     }
 
-            logger.info(f"[{self.thread_id}] About to call client.query()...")
             await self.client.query(message_generator())
-            logger.info(f"[{self.thread_id}] client.query() completed")
 
             # Receive response with timeout
-            logger.info(f"[{self.thread_id}] About to iterate receive_response()...")
             try:
                 async with asyncio.timeout(RESPONSE_TIMEOUT):
                     async for message in self.client.receive_response():
