@@ -1,0 +1,98 @@
+name: Sync Templates to RDS
+
+# Automatically syncs template JSON files to the RDS database when they change.
+# This ensures the web UI's "Apply Template" feature always has the latest templates.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config_service/templates/*.json'
+
+  # Allow manual trigger for re-syncing all templates
+  workflow_dispatch:
+    inputs:
+      force_update:
+        description: 'Force update all templates regardless of version'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  AWS_REGION: us-west-2
+
+jobs:
+  sync-templates:
+    name: Sync Templates
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get database credentials from Secrets Manager
+        id: secrets
+        run: |
+          # Fetch the RDS connection info from AWS Secrets Manager
+          SECRET_ARN="arn:aws:secretsmanager:us-west-2:103002841599:secret:incidentfox-config-service/rds"
+          SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$SECRET_ARN" --query SecretString --output text)
+
+          # Parse the JSON and construct DATABASE_URL
+          DB_HOST=$(echo "$SECRET_JSON" | jq -r '.host')
+          DB_PORT=$(echo "$SECRET_JSON" | jq -r '.port // "5432"')
+          DB_NAME=$(echo "$SECRET_JSON" | jq -r '.dbname // "incidentfox_config"')
+          DB_USER=$(echo "$SECRET_JSON" | jq -r '.username')
+          DB_PASS=$(echo "$SECRET_JSON" | jq -r '.password')
+
+          # URL-encode the password in case it has special characters
+          DB_PASS_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote_plus('$DB_PASS'))")
+
+          DATABASE_URL="postgresql+psycopg2://${DB_USER}:${DB_PASS_ENCODED}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require"
+
+          # Mask the URL in logs and set as output
+          echo "::add-mask::$DATABASE_URL"
+          echo "database_url=$DATABASE_URL" >> $GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r config_service/requirements.txt
+
+      - name: Sync templates to RDS
+        working-directory: config_service
+        env:
+          DATABASE_URL: ${{ steps.secrets.outputs.database_url }}
+        run: |
+          if [ "${{ github.event.inputs.force_update }}" == "true" ]; then
+            echo "Force updating all templates..."
+            python scripts/seed_templates.py --force
+          else
+            echo "Syncing templates (version-based upsert)..."
+            python scripts/seed_templates.py
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Template Sync Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Templates from \`config_service/templates/\` have been synced to the RDS database." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.force_update }}" == "true" ]; then
+            echo "**Mode:** Force update (all templates updated)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Mode:** Version-based (only changed templates updated)" >> $GITHUB_STEP_SUMMARY
+          fi
