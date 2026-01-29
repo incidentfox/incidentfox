@@ -232,6 +232,7 @@ async def create_investigation_stream(
     """
     Create SSE stream by communicating with background agent task.
     """
+    import datetime
     import json
 
     try:
@@ -263,25 +264,41 @@ async def create_investigation_stream(
                 break
 
             if "error" in response:
-                yield "event: error\n"
-                yield f"data: {json.dumps({'message': response['error']})}\n\n"
+                error_payload = {
+                    "type": "error",
+                    "data": {"message": response["error"]},
+                    "thread_id": thread_id,
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                }
+                yield f"data: {json.dumps(error_payload)}\n\n"
                 break
 
             event_count += 1
             event_type = response["event"]
             data = response["data"]
 
-            # Emit SSE event
+            # Emit SSE event in same format as sandbox mode
+            # Format: data: {"type": "...", "data": {...}, "thread_id": "...", "timestamp": "..."}
             logger.info(f"Yielding event #{event_count}: {event_type}")
-            yield f"event: {event_type}\n"
-            yield f"data: {json.dumps(data)}\n\n"
+            event_payload = {
+                "type": event_type,
+                "data": data,
+                "thread_id": thread_id,
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }
+            yield f"data: {json.dumps(event_payload)}\n\n"
 
         logger.info(f"Stream completed. Total events: {event_count}")
 
     except Exception as e:
         logger.error(f"Stream failed: {e}", exc_info=True)
-        yield "event: error\n"
-        yield f"data: {json.dumps({'message': str(e)})}\n\n"
+        error_payload = {
+            "type": "error",
+            "data": {"message": str(e)},
+            "thread_id": thread_id,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+        yield f"data: {json.dumps(error_payload)}\n\n"
 
 
 @app.post("/investigate")
