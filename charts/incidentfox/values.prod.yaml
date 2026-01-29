@@ -175,6 +175,13 @@ services:
       enabled: true
       bucket: "raptor-kb-trees-103002841599"
       prefix: "trees/"
+    # Extended startup probe for large tree loading (55k nodes takes ~10min)
+    # 60s initial + 60 failures * 10s = up to 10 min 60s startup time
+    startupProbe:
+      initialDelaySeconds: 60
+      periodSeconds: 10
+      timeoutSeconds: 10
+      failureThreshold: 60
 
   webUi:
     enabled: true

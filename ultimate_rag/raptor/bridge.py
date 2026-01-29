@@ -66,19 +66,33 @@ class RaptorBridge:
         self._raptor_trees[tree_name] = raptor_tree
 
         # Create KnowledgeTree
-        knowledge_tree = KnowledgeTree(name=tree_name)
+        knowledge_tree = KnowledgeTree(tree_id=tree_name, name=tree_name)
 
         # Track layer info for importance scoring
         max_layer = raptor_tree.num_layers
+
+        # Pre-build node-to-layer index for O(1) lookup (instead of O(n) per node)
+        # RAPTOR layer_to_nodes can contain either node objects or node indices
+        node_to_layer: Dict[int, int] = {}
+        for layer, nodes in raptor_tree.layer_to_nodes.items():
+            for node in nodes:
+                # Handle both node objects and node indices
+                node_index = node.index if hasattr(node, "index") else node
+                node_to_layer[node_index] = layer
 
         # Convert all nodes
         for raptor_node in raptor_tree.all_nodes.values():
             knowledge_node = self._convert_raptor_node(
                 raptor_node,
-                raptor_tree,
+                node_to_layer,
                 max_layer,
                 infer_types,
             )
+
+            # Update metadata with tree_id now that we have the tree
+            if knowledge_node.metadata:
+                knowledge_node.metadata.tree_id = tree_name
+            knowledge_node.tree_id = tree_name
 
             # Add to tree
             knowledge_tree.all_nodes[knowledge_node.index] = knowledge_node
@@ -88,12 +102,16 @@ class RaptorBridge:
             self._knowledge_to_raptor[knowledge_node.index] = raptor_node.index
 
         # Set root and leaf nodes
+        # Handle both node objects and node indices (RAPTOR may store either)
+        def get_node_index(n):
+            return n.index if hasattr(n, "index") else n
+
         knowledge_tree.root_nodes = [
-            knowledge_tree.all_nodes[self._raptor_to_knowledge[n.index]]
+            knowledge_tree.all_nodes[self._raptor_to_knowledge[get_node_index(n)]]
             for n in raptor_tree.root_nodes
         ]
         knowledge_tree.leaf_nodes = [
-            knowledge_tree.all_nodes[self._raptor_to_knowledge[n.index]]
+            knowledge_tree.all_nodes[self._raptor_to_knowledge[get_node_index(n)]]
             for n in raptor_tree.leaf_nodes
         ]
 
@@ -101,7 +119,7 @@ class RaptorBridge:
         knowledge_tree.layer_to_nodes = {}
         for layer, nodes in raptor_tree.layer_to_nodes.items():
             knowledge_tree.layer_to_nodes[layer] = [
-                knowledge_tree.all_nodes[self._raptor_to_knowledge[n.index]]
+                knowledge_tree.all_nodes[self._raptor_to_knowledge[get_node_index(n)]]
                 for n in nodes
             ]
 
@@ -118,13 +136,13 @@ class RaptorBridge:
     def _convert_raptor_node(
         self,
         raptor_node: "RaptorNode",
-        raptor_tree: "RaptorTree",
+        node_to_layer: Dict[int, int],
         max_layer: int,
         infer_types: bool,
     ) -> KnowledgeNode:
         """Convert a single RAPTOR node to KnowledgeNode."""
-        # Determine layer for this node
-        node_layer = self._get_node_layer(raptor_node, raptor_tree)
+        # Determine layer for this node (O(1) lookup from pre-built index)
+        node_layer = node_to_layer.get(raptor_node.index, 0)
 
         # Infer knowledge type from content
         knowledge_type = KnowledgeType.FACTUAL  # Default
@@ -142,21 +160,31 @@ class RaptorBridge:
         # Extract metadata from RAPTOR node
         metadata = self._extract_metadata(raptor_node)
 
-        # Get parent IDs (RAPTOR stores children, we need to invert)
-        parent_ids = self._find_parents(raptor_node.index, raptor_tree)
-
         # Create KnowledgeNode
+        # Convert children to set if it's a list
+        children = raptor_node.children
+        if isinstance(children, list):
+            children = set(children)
+        elif children is None:
+            children = set()
+
         knowledge_node = KnowledgeNode(
             text=raptor_node.text,
             index=raptor_node.index,  # Preserve original index
-            children_ids=raptor_node.children,
-            parent_ids=parent_ids,
-            embeddings=raptor_node.embeddings,
+            children=children,
+            layer=node_layer,
+            embeddings=dict(raptor_node.embeddings) if raptor_node.embeddings else {},
             knowledge_type=knowledge_type,
             importance=importance,
             metadata=metadata,
             keywords=raptor_node.keywords if hasattr(raptor_node, "keywords") else [],
         )
+
+        # Update metadata with correct node_id and layer now that we know them
+        if knowledge_node.metadata:
+            knowledge_node.metadata.node_id = raptor_node.index
+            knowledge_node.metadata.layer = node_layer
+            knowledge_node.metadata.knowledge_type = knowledge_type.value
 
         return knowledge_node
 
@@ -249,23 +277,31 @@ class RaptorBridge:
             source_info = SourceInfo(
                 source_type="document",
                 source_id=raptor_meta.get("doc_id", ""),
-                url=source_url,
-                title=raptor_meta.get("rel_path", ""),
+                source_url=source_url,
+                file_path=raptor_meta.get("rel_path", ""),
             )
 
-        # Create metadata
+        # Create metadata with required fields
+        # NodeMetadata requires: node_id, tree_id, layer, knowledge_type
+        # We use placeholders here - they'll be updated when the node is fully created
         metadata = NodeMetadata(
+            node_id=0,  # Will be set properly during node conversion
+            tree_id="",  # Will be set when tree context is available
+            layer=0,  # Will be set from node layer detection
+            knowledge_type="factual",  # Default, may be overridden
             source=source_info,
             validation_status=ValidationStatus.PROVISIONAL,
             tags=raptor_meta.get("tags", []),
-            domain=raptor_meta.get("domain"),
-            subject=raptor_meta.get("subject"),
+            # Store domain/subject in topics if present
+            topics=[
+                t for t in [raptor_meta.get("domain"), raptor_meta.get("subject")] if t
+            ],
         )
 
-        # Extract citations if present
+        # Extract citations if present - add to references field
         citations = raptor_meta.get("citations", [])
         if citations:
-            metadata.related_urls = [c.get("ref") for c in citations if c.get("ref")]
+            metadata.references = [c.get("ref") for c in citations if c.get("ref")]
 
         return metadata
 
@@ -319,11 +355,15 @@ class RaptorBridge:
 
         if node.metadata:
             if node.metadata.source:
-                metadata["source_url"] = node.metadata.source.url
+                metadata["source_url"] = node.metadata.source.source_url
                 metadata["doc_id"] = node.metadata.source.source_id
 
-            metadata["domain"] = node.metadata.domain
-            metadata["subject"] = node.metadata.subject
+            # Map topics back to domain/subject for RAPTOR compatibility
+            if node.metadata.topics:
+                if len(node.metadata.topics) > 0:
+                    metadata["domain"] = node.metadata.topics[0]
+                if len(node.metadata.topics) > 1:
+                    metadata["subject"] = node.metadata.topics[1]
             metadata["tags"] = node.metadata.tags
 
         # Add knowledge type info
