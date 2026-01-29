@@ -2,7 +2,6 @@ import copy
 import logging
 import os
 from abc import abstractclassmethod
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import tiktoken
@@ -28,23 +27,6 @@ def _progress_enabled() -> bool:
         "false",
         "False",
     )
-
-
-def _embed_max_workers() -> int:
-    """
-    Control concurrency for embedding creation to avoid API rate limits.
-    Set RAPTOR_EMBED_MAX_WORKERS (e.g. 2, 4, 8).
-    """
-    raw = os.environ.get("RAPTOR_EMBED_MAX_WORKERS", "").strip()
-    if raw:
-        try:
-            v = int(raw)
-            if v >= 1:
-                return v
-        except Exception:
-            pass
-    # Safer default than ThreadPoolExecutor default (often too aggressive for OpenAI rate limits)
-    return 4
 
 
 def _summary_max_workers() -> int:
@@ -342,7 +324,10 @@ class TreeBuilder:
     def multithreaded_create_leaf_nodes(
         self, chunks: List[Union[str, dict]]
     ) -> Dict[int, Node]:
-        """Creates leaf nodes using multithreading from the given list of text chunks.
+        """Creates leaf nodes using batch embedding from the given list of text chunks.
+
+        Uses batch embedding API for efficiency (single API call for multiple texts)
+        instead of individual calls per chunk.
 
         Args:
             chunks (List[str]): A list of text chunks to be turned into leaf nodes.
@@ -352,18 +337,6 @@ class TreeBuilder:
         """
         total = len(chunks)
         use_progress = _progress_enabled()
-        pbar = None
-        if use_progress:
-            try:
-                from tqdm.auto import tqdm  # type: ignore
-
-                pbar = tqdm(total=total, desc="RAPTOR leaf embeddings", unit="chunk")
-            except Exception:
-                pbar = None
-
-        max_workers = _embed_max_workers()
-        if _progress_enabled():
-            logging.info(f"Leaf embedding concurrency: max_workers={max_workers}")
 
         def _coerce_leaf_chunk(
             item: Union[str, dict],
@@ -379,32 +352,49 @@ class TreeBuilder:
                 return text, meta, ref
             return str(item), None, None
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_nodes = {
-                executor.submit(
-                    self.create_node,
-                    index,
-                    _coerce_leaf_chunk(item)[0],
-                    None,
-                    metadata=_coerce_leaf_chunk(item)[1],
-                    original_content_ref=_coerce_leaf_chunk(item)[2],
-                ): (index, item)
-                for index, item in enumerate(chunks)
+        # Extract texts and metadata from chunks
+        chunk_data = [_coerce_leaf_chunk(item) for item in chunks]
+        texts = [cd[0] for cd in chunk_data]
+
+        if use_progress:
+            logging.info(f"Creating batch embeddings for {total} chunks...")
+
+        # Batch embed all texts for each embedding model
+        all_model_embeddings: Dict[str, List] = {}
+        for model_name, model in self.embedding_models.items():
+            if use_progress:
+                logging.info(f"  Embedding with model: {model_name}")
+            # Use batch embedding if available
+            if hasattr(model, "create_embeddings_batch"):
+                all_model_embeddings[model_name] = model.create_embeddings_batch(texts)
+            else:
+                # Fallback to individual calls for models without batch support
+                all_model_embeddings[model_name] = [
+                    model.create_embedding(t) for t in texts
+                ]
+
+        if use_progress:
+            logging.info(f"Batch embedding complete. Creating {total} nodes...")
+
+        # Create nodes with pre-computed embeddings
+        leaf_nodes = {}
+        for index, (text, meta, ref) in enumerate(chunk_data):
+            embeddings = {
+                model_name: all_model_embeddings[model_name][index]
+                for model_name in self.embedding_models
             }
+            node = Node(
+                text,
+                index,
+                set(),  # children_indices
+                embeddings,
+                metadata=meta,
+                original_content_ref=ref,
+            )
+            leaf_nodes[index] = node
 
-            leaf_nodes = {}
-            done = 0
-            for future in as_completed(future_nodes):
-                index, node = future.result()
-                leaf_nodes[index] = node
-                done += 1
-                if pbar is not None:
-                    pbar.update(1)
-                elif use_progress and done % 250 == 0:
-                    logging.info(f"Leaf embeddings progress: {done}/{total}")
-
-        if pbar is not None:
-            pbar.close()
+        if use_progress:
+            logging.info(f"Created {len(leaf_nodes)} leaf nodes")
 
         return leaf_nodes
 
