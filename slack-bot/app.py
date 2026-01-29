@@ -206,7 +206,9 @@ def save_investigation_snapshot(state: MessageState):
         return None
 
 
-def parse_sse_event(event_type: Optional[str], line: str) -> tuple[Optional[str], Optional[dict]]:
+def parse_sse_event(
+    event_type: Optional[str], line: str
+) -> tuple[Optional[str], Optional[dict]]:
     """Parse SSE lines and return (event_type, data_dict)."""
     # Parse event type line
     if line.startswith("event: "):
@@ -2118,7 +2120,9 @@ Use all available tools to gather context about this issue."""
         current_event_type = None
         for line in response.iter_lines(decode_unicode=True):
             if line:
-                current_event_type, sse_event = parse_sse_event(current_event_type, line)
+                current_event_type, sse_event = parse_sse_event(
+                    current_event_type, line
+                )
                 if sse_event:
                     event_count += 1
                     handle_stream_event(state, sse_event, client, team_id)
@@ -2787,7 +2791,9 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
         current_event_type = None
         for line in response.iter_lines(decode_unicode=True):
             if line:
-                current_event_type, sse_event = parse_sse_event(current_event_type, line)
+                current_event_type, sse_event = parse_sse_event(
+                    current_event_type, line
+                )
                 if sse_event:
                     event_count += 1
                     handle_stream_event(state, sse_event, client, team_id)
