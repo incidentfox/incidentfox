@@ -6,9 +6,15 @@ Usage:
     python scripts/seed_templates.py
 """
 
+import sys
+from pathlib import Path
+
+# Ensure repo root is on sys.path so `import src.*` works when running as a script.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
+
 import json
 import uuid
-from pathlib import Path
 
 from sqlalchemy.orm import Session
 from src.db.models import Template
