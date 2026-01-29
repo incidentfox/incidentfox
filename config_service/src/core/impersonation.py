@@ -120,7 +120,7 @@ def verify_team_impersonation_token(token: str) -> Dict[str, Any]:
     if claims is None:
         raise ValueError(f"Invalid impersonation token: {last_err}")
 
-    if claims.get("ifx_kind") != "team_impersonation":
+    if claims.get("ifx_kind") not in ("team_impersonation", "visitor"):
         raise ValueError("Invalid token kind")
     scope = claims.get("scope") or []
     if isinstance(scope, str):
@@ -128,3 +128,145 @@ def verify_team_impersonation_token(token: str) -> Dict[str, Any]:
     if "team:read" not in set(scope or []):
         raise ValueError("Missing required scope 'team:read'")
     return dict(claims)
+
+
+# =============================================================================
+# Visitor Token (for public playground)
+# =============================================================================
+
+
+def get_visitor_token_ttl_seconds() -> int:
+    """Get TTL for visitor tokens (default 30 minutes)."""
+    try:
+        return int(os.getenv("VISITOR_TOKEN_TTL_SECONDS", "1800"))
+    except Exception:
+        return 1800  # 30 minutes
+
+
+def create_visitor_token(
+    *,
+    session_id: str,
+    email: str,
+    org_id: str,
+    team_node_id: str,
+    ttl_seconds: Optional[int] = None,
+) -> str:
+    """
+    Create a JWT token for a visitor session.
+
+    This token grants limited access to the playground team:
+    - Can read team configuration
+    - Can invoke agents
+    - Cannot write configuration (routing, destinations, etc.)
+
+    Args:
+        session_id: The visitor session ID (used as subject)
+        email: Visitor's email address
+        org_id: Playground org ID (typically "playground")
+        team_node_id: Playground team node ID (typically "visitor-playground")
+        ttl_seconds: Optional custom TTL (default: 30 minutes)
+
+    Returns:
+        JWT token string
+    """
+    try:
+        import jwt  # PyJWT
+    except Exception as e:
+        raise RuntimeError("Visitor tokens require PyJWT to be installed") from e
+
+    now = int(time.time())
+    ttl = ttl_seconds if ttl_seconds is not None else get_visitor_token_ttl_seconds()
+    exp = now + max(60, int(ttl))
+    jti = __import__("uuid").uuid4().hex
+
+    claims: Dict[str, Any] = {
+        "iss": "incidentfox-config-service",
+        "aud": get_impersonation_jwt_audience(),
+        "sub": f"visitor:{session_id}",
+        "email": email,
+        "org_id": org_id,
+        "team_node_id": team_node_id,
+        "ifx_kind": "visitor",
+        "visitor_session_id": session_id,
+        "scope": ["team:read", "agent:invoke"],  # Limited scope - no write
+        "iat": now,
+        "exp": exp,
+        "jti": jti,
+    }
+
+    token = jwt.encode(claims, get_impersonation_jwt_secret(), algorithm="HS256")
+    return str(token)
+
+
+def verify_visitor_token(token: str) -> Dict[str, Any]:
+    """
+    Verify a visitor JWT and return claims.
+
+    Raises:
+        ValueError: If token is invalid or expired
+    """
+    try:
+        import jwt  # PyJWT
+    except Exception as e:
+        raise RuntimeError("Visitor tokens require PyJWT to be installed") from e
+
+    audiences = [get_impersonation_jwt_audience()]
+    if accept_legacy_impersonation_jwt_audience():
+        audiences.append(LEGACY_IMPERSONATION_JWT_AUDIENCE)
+
+    last_err: Optional[Exception] = None
+    claims = None
+    for aud in audiences:
+        try:
+            claims = jwt.decode(
+                token,
+                key=get_impersonation_jwt_secret(),
+                algorithms=["HS256"],
+                audience=aud,
+                issuer="incidentfox-config-service",
+                options={
+                    "require": [
+                        "exp",
+                        "iat",
+                        "sub",
+                        "org_id",
+                        "team_node_id",
+                        "ifx_kind",
+                        "scope",
+                        "jti",
+                    ]
+                },
+            )
+            break
+        except Exception as e:
+            last_err = e
+            continue
+
+    if claims is None:
+        raise ValueError(f"Invalid visitor token: {last_err}")
+
+    if claims.get("ifx_kind") != "visitor":
+        raise ValueError("Not a visitor token")
+
+    return dict(claims)
+
+
+def extract_visitor_session_id(token: str) -> Optional[str]:
+    """
+    Extract the visitor session ID from a token without full verification.
+
+    Used for heartbeat endpoint where we need the session ID before
+    full authentication.
+
+    Returns None if not a valid visitor token format.
+    """
+    try:
+        import jwt  # PyJWT
+
+        # Decode without verification to get claims
+        unverified = jwt.decode(token, options={"verify_signature": False})
+        if unverified.get("ifx_kind") == "visitor":
+            return unverified.get("visitor_session_id")
+    except Exception:
+        pass
+    return None

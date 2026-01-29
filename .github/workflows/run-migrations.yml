@@ -1,0 +1,176 @@
+name: Run Database Migrations
+
+# Runs Alembic migrations for config_service against RDS
+# Triggers automatically when migration files change on main, or manually
+#
+# Note: Helm hooks in charts/incidentfox/templates/migrations.yaml also run
+# migrations on helm upgrade, but deploy-eks.yml uses --no-hooks to skip them.
+# This workflow provides explicit control over when migrations run.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config_service/alembic/**'
+      - 'config_service/src/db/models.py'
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Alembic command to run'
+        required: true
+        default: 'upgrade head'
+        type: choice
+        options:
+          - upgrade head
+          - current
+          - history
+          - downgrade -1
+      dry_run:
+        description: 'Dry run (show SQL without executing)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REGISTRY: 103002841599.dkr.ecr.us-west-2.amazonaws.com
+  EKS_CLUSTER: incidentfox-demo
+  HELM_NAMESPACE: incidentfox
+
+jobs:
+  run-migrations:
+    name: Run Migrations
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      - name: Verify cluster access
+        run: |
+          kubectl cluster-info
+          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -l app.kubernetes.io/component=config-service --no-headers | head -1
+
+      - name: Determine migration command
+        id: cmd
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            CMD="${{ github.event.inputs.command }}"
+            DRY_RUN="${{ github.event.inputs.dry_run }}"
+          else
+            # Automatic trigger: always upgrade head
+            CMD="upgrade head"
+            DRY_RUN="false"
+          fi
+
+          if [ "$DRY_RUN" = "true" ]; then
+            CMD="$CMD --sql"
+          fi
+
+          echo "command=$CMD" >> $GITHUB_OUTPUT
+          echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
+          echo "Migration command: alembic $CMD"
+
+      - name: Get current config-service image
+        id: image
+        run: |
+          # Use the currently deployed config-service image (has alembic + migrations)
+          IMAGE=$(kubectl get deployment incidentfox-config-service -n ${{ env.HELM_NAMESPACE }} \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "Using image: $IMAGE"
+
+      - name: Run migrations via Kubernetes Job
+        run: |
+          # Generate unique job name
+          JOB_NAME="config-migrate-$(date +%s)"
+
+          # Create the migration job using the same image as config-service
+          cat <<EOF | kubectl apply -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: $JOB_NAME
+            namespace: ${{ env.HELM_NAMESPACE }}
+            labels:
+              app.kubernetes.io/name: config-service-migration
+              app.kubernetes.io/instance: $JOB_NAME
+          spec:
+            ttlSecondsAfterFinished: 300
+            backoffLimit: 0
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: migrate
+                    image: ${{ steps.image.outputs.image }}
+                    command: ["sh", "-lc", "alembic ${{ steps.cmd.outputs.command }}"]
+                    env:
+                      - name: DATABASE_URL
+                        valueFrom:
+                          secretKeyRef:
+                            name: incidentfox-database-url
+                            key: DATABASE_URL
+                    resources:
+                      requests:
+                        memory: "128Mi"
+                        cpu: "100m"
+                      limits:
+                        memory: "256Mi"
+                        cpu: "500m"
+          EOF
+
+          echo "job_name=$JOB_NAME" >> $GITHUB_ENV
+          echo "Created migration job: $JOB_NAME"
+
+      - name: Wait for migration to complete
+        run: |
+          echo "Waiting for migration job to complete..."
+          kubectl wait --for=condition=complete job/${{ env.job_name }} \
+            -n ${{ env.HELM_NAMESPACE }} \
+            --timeout=300s || {
+            echo "::error::Migration job failed or timed out"
+            kubectl logs job/${{ env.job_name }} -n ${{ env.HELM_NAMESPACE }}
+            exit 1
+          }
+
+      - name: Get migration logs
+        run: |
+          echo "## Migration Output" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl logs job/${{ env.job_name }} -n ${{ env.HELM_NAMESPACE }} >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+          # Also print to console
+          kubectl logs job/${{ env.job_name }} -n ${{ env.HELM_NAMESPACE }}
+
+      - name: Cleanup migration job
+        if: always()
+        run: |
+          kubectl delete job/${{ env.job_name }} -n ${{ env.HELM_NAMESPACE }} --ignore-not-found=true
+
+      - name: Summary
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "**Command**: \`alembic ${{ steps.cmd.outputs.command }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Dry Run**: ${{ steps.cmd.outputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Cluster**: \`${{ env.EKS_CLUSTER }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

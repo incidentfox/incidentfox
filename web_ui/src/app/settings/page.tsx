@@ -208,6 +208,8 @@ export default function SettingsPage() {
   const [newRoutingValue, setNewRoutingValue] = useState('');
 
   const isAdmin = identity?.role === 'admin';
+  const isVisitor = identity?.auth_kind === 'visitor';
+  const canWrite = !isVisitor;
 
   // Theme toggle
   useEffect(() => {
@@ -554,10 +556,30 @@ export default function SettingsPage() {
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
+      {/* Visitor Read-Only Banner */}
+      {isVisitor && (
+        <div className="mb-6 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+              <Info className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div>
+              <h3 className="font-medium text-orange-800 dark:text-orange-200">Visitor Mode</h3>
+              <p className="text-sm text-orange-700 dark:text-orange-300">
+                You&apos;re exploring the playground in read-only mode. Configuration changes are disabled.
+                <a href="mailto:hello@incidentfox.io?subject=IncidentFox Demo Interest" className="ml-1 underline hover:no-underline">
+                  Contact us
+                </a> to set up your own team.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Settings</h1>
         <p className="text-sm text-gray-500 mt-1">
-          {isAdmin ? 'Manage preferences and run ad-hoc agents.' : 'Manage your preferences.'}
+          {isAdmin ? 'Manage preferences and run ad-hoc agents.' : isVisitor ? 'Explore settings (read-only in visitor mode).' : 'Manage your preferences.'}
         </p>
       </div>
 
@@ -822,8 +844,9 @@ export default function SettingsPage() {
                     <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
                       <button
                         onClick={saveRoutingConfig}
-                        disabled={routingSaving}
-                        className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
+                        disabled={routingSaving || !canWrite}
+                        title={!canWrite ? 'Visitors cannot modify routing configuration' : undefined}
+                        className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {routingSaving ? (
                           <>
@@ -837,6 +860,11 @@ export default function SettingsPage() {
                           </>
                         )}
                       </button>
+                      {!canWrite && (
+                        <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
+                          Configuration changes are disabled in visitor mode.
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1075,11 +1103,17 @@ export default function SettingsPage() {
                   <div className="border-t border-gray-200 dark:border-gray-800 pt-4 mt-6">
                     <button
                       onClick={saveOutputConfig}
-                      disabled={outputConfigLoading}
-                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                      disabled={outputConfigLoading || !canWrite}
+                      title={!canWrite ? 'Visitors cannot modify output configuration' : undefined}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {outputConfigLoading ? 'Saving...' : 'Save Configuration'}
                     </button>
+                    {!canWrite && (
+                      <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
+                        Configuration changes are disabled in visitor mode.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1659,8 +1693,9 @@ export default function SettingsPage() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={saveFeatureConfigs}
-                  disabled={featuresSaving}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
+                  disabled={featuresSaving || !canWrite}
+                  title={!canWrite ? 'Visitors cannot modify feature configuration' : undefined}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {featuresSaving ? (
                     <>
@@ -1676,8 +1711,9 @@ export default function SettingsPage() {
                 </button>
                 <button
                   onClick={syncCronJobs}
-                  disabled={syncingCronJobs}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
+                  disabled={syncingCronJobs || !canWrite}
+                  title={!canWrite ? 'Visitors cannot sync scheduled jobs' : undefined}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {syncingCronJobs ? (
                     <>
@@ -1692,7 +1728,7 @@ export default function SettingsPage() {
                   )}
                 </button>
                 <span className="text-xs text-gray-500">
-                  Save config first, then apply to activate scheduled jobs
+                  {!canWrite ? 'Configuration changes are disabled in visitor mode.' : 'Save config first, then apply to activate scheduled jobs'}
                 </span>
               </div>
 
