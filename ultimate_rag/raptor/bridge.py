@@ -72,10 +72,13 @@ class RaptorBridge:
         max_layer = raptor_tree.num_layers
 
         # Pre-build node-to-layer index for O(1) lookup (instead of O(n) per node)
+        # RAPTOR layer_to_nodes can contain either node objects or node indices
         node_to_layer: Dict[int, int] = {}
         for layer, nodes in raptor_tree.layer_to_nodes.items():
             for node in nodes:
-                node_to_layer[node.index] = layer
+                # Handle both node objects and node indices
+                node_index = node.index if hasattr(node, "index") else node
+                node_to_layer[node_index] = layer
 
         # Convert all nodes
         for raptor_node in raptor_tree.all_nodes.values():
