@@ -365,21 +365,29 @@ def confluence_search_cql(
                 "id": content.get("id"),
                 "title": content.get("title"),
                 "type": content.get("type"),
-                "space": content.get("space", {}).get("key") if content.get("space") else None,
+                "space": (
+                    content.get("space", {}).get("key")
+                    if content.get("space")
+                    else None
+                ),
                 "url": result.get("url") or content.get("_links", {}).get("webui"),
                 "excerpt": result.get("excerpt", ""),
-                "last_modified": result.get("lastModified") or content.get("history", {}).get("lastUpdated", {}).get("when"),
+                "last_modified": result.get("lastModified")
+                or content.get("history", {}).get("lastUpdated", {}).get("when"),
             }
 
             # Include labels if available
             if "metadata" in content and "labels" in content["metadata"]:
                 page_data["labels"] = [
-                    label["name"] for label in content["metadata"]["labels"].get("results", [])
+                    label["name"]
+                    for label in content["metadata"]["labels"].get("results", [])
                 ]
 
             pages.append(page_data)
 
-        logger.info("confluence_cql_search_completed", cql=cql[:100], results=len(pages))
+        logger.info(
+            "confluence_cql_search_completed", cql=cql[:100], results=len(pages)
+        )
 
         return {
             "success": True,
@@ -452,10 +460,19 @@ def confluence_find_runbooks(
                 {
                     "id": content.get("id"),
                     "title": content.get("title"),
-                    "space": content.get("space", {}).get("key") if content.get("space") else None,
+                    "space": (
+                        content.get("space", {}).get("key")
+                        if content.get("space")
+                        else None
+                    ),
                     "url": result.get("url"),
                     "excerpt": result.get("excerpt", "")[:300],
-                    "relevance": "high" if service and service.lower() in content.get("title", "").lower() else "medium",
+                    "relevance": (
+                        "high"
+                        if service
+                        and service.lower() in content.get("title", "").lower()
+                        else "medium"
+                    ),
                 }
             )
 
@@ -514,7 +531,7 @@ def confluence_find_postmortems(
         # Build CQL query
         cql_parts = [
             f'lastModified >= now("-{since_days}d")',
-            'type = page',
+            "type = page",
             '(label = "postmortem" OR label = "post-mortem" OR label = "incident-review" OR title ~ "Post-mortem" OR title ~ "Postmortem" OR title ~ "Incident Review")',
         ]
 
@@ -535,7 +552,11 @@ def confluence_find_postmortems(
                 {
                     "id": content.get("id"),
                     "title": content.get("title"),
-                    "space": content.get("space", {}).get("key") if content.get("space") else None,
+                    "space": (
+                        content.get("space", {}).get("key")
+                        if content.get("space")
+                        else None
+                    ),
                     "url": result.get("url"),
                     "last_modified": result.get("lastModified"),
                     "excerpt": result.get("excerpt", "")[:300],

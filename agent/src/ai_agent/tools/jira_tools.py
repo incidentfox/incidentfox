@@ -428,7 +428,9 @@ def jira_search_issues(
                 "key": issue.key,
                 "summary": getattr(issue.fields, "summary", None),
                 "status": (
-                    issue.fields.status.name if hasattr(issue.fields, "status") else None
+                    issue.fields.status.name
+                    if hasattr(issue.fields, "status")
+                    else None
                 ),
                 "issue_type": (
                     issue.fields.issuetype.name
@@ -461,9 +463,7 @@ def jira_search_issues(
                     else None
                 ),
                 "labels": (
-                    list(issue.fields.labels)
-                    if hasattr(issue.fields, "labels")
-                    else []
+                    list(issue.fields.labels) if hasattr(issue.fields, "labels") else []
                 ),
                 "resolution": (
                     issue.fields.resolution.name
@@ -516,7 +516,9 @@ def jira_search_issues(
                 "by_status": status_counts,
                 "by_priority": priority_counts,
                 "by_assignee": dict(
-                    sorted(assignee_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+                    sorted(assignee_counts.items(), key=lambda x: x[1], reverse=True)[
+                        :10
+                    ]
                 ),
             },
             "issues": issue_list,

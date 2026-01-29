@@ -153,7 +153,10 @@ class UltimateRAGAdapter:
 
                 if result.get("success"):
                     results["successful"] += 1
-                    results["total_chunks"] += result.get("chunks_created", 0)
+                    # Handle both old (chunks_created) and new (nodes_created) response fields
+                    results["total_chunks"] += result.get(
+                        "nodes_created", result.get("chunks_created", 0)
+                    )
                     results["total_entities"] += len(result.get("entities_found", []))
                 else:
                     results["failed"] += 1

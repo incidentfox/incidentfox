@@ -154,9 +154,7 @@ def opsgenie_list_alerts(
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(
-            e, "opsgenie_list_alerts", "opsgenie"
-        )
+        return handle_integration_not_configured(e, "opsgenie_list_alerts", "opsgenie")
     except Exception as e:
         logger.error("opsgenie_list_alerts_failed", error=str(e))
         raise ToolExecutionError("opsgenie_list_alerts", str(e), e)
@@ -216,9 +214,7 @@ def opsgenie_get_alert(alert_id: str) -> dict[str, Any]:
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(
-            e, "opsgenie_get_alert", "opsgenie"
-        )
+        return handle_integration_not_configured(e, "opsgenie_get_alert", "opsgenie")
     except Exception as e:
         logger.error("opsgenie_get_alert_failed", error=str(e), alert_id=alert_id)
         raise ToolExecutionError("opsgenie_get_alert", str(e), e)
@@ -264,9 +260,7 @@ def opsgenie_get_alert_logs(
                 }
             )
 
-        logger.info(
-            "opsgenie_alert_logs_fetched", alert_id=alert_id, count=len(result)
-        )
+        logger.info("opsgenie_alert_logs_fetched", alert_id=alert_id, count=len(result))
 
         return result
 
@@ -275,9 +269,7 @@ def opsgenie_get_alert_logs(
             e, "opsgenie_get_alert_logs", "opsgenie"
         )
     except Exception as e:
-        logger.error(
-            "opsgenie_get_alert_logs_failed", error=str(e), alert_id=alert_id
-        )
+        logger.error("opsgenie_get_alert_logs_failed", error=str(e), alert_id=alert_id)
         raise ToolExecutionError("opsgenie_get_alert_logs", str(e), e)
 
 
@@ -368,8 +360,12 @@ def opsgenie_list_alerts_by_date_range(
                         "priority": alert.get("priority"),
                         "source": alert.get("source"),
                         "created_at": alert["createdAt"],
-                        "mtta_minutes": round(mtta_minutes, 2) if mtta_minutes else None,
-                        "mttr_minutes": round(mttr_minutes, 2) if mttr_minutes else None,
+                        "mtta_minutes": (
+                            round(mtta_minutes, 2) if mtta_minutes else None
+                        ),
+                        "mttr_minutes": (
+                            round(mttr_minutes, 2) if mttr_minutes else None
+                        ),
                         "count": alert.get("count", 1),
                         "tags": alert.get("tags", []),
                         "teams": [t.get("name") for t in alert.get("teams", [])],
@@ -424,10 +420,14 @@ def opsgenie_list_alerts_by_date_range(
                     round(acknowledged_count / total * 100, 1) if total > 0 else 0
                 ),
                 "avg_mtta_minutes": (
-                    round(sum(mtta_values) / len(mtta_values), 2) if mtta_values else None
+                    round(sum(mtta_values) / len(mtta_values), 2)
+                    if mtta_values
+                    else None
                 ),
                 "avg_mttr_minutes": (
-                    round(sum(mttr_values) / len(mttr_values), 2) if mttr_values else None
+                    round(sum(mttr_values) / len(mttr_values), 2)
+                    if mttr_values
+                    else None
                 ),
             },
             "by_priority": by_priority,
@@ -547,9 +547,7 @@ def opsgenie_list_teams() -> list[dict[str, Any]]:
         return result
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(
-            e, "opsgenie_list_teams", "opsgenie"
-        )
+        return handle_integration_not_configured(e, "opsgenie_list_teams", "opsgenie")
     except Exception as e:
         logger.error("opsgenie_list_teams_failed", error=str(e))
         raise ToolExecutionError("opsgenie_list_teams", str(e), e)
@@ -637,9 +635,7 @@ def opsgenie_get_on_call(
         return result
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(
-            e, "opsgenie_get_on_call", "opsgenie"
-        )
+        return handle_integration_not_configured(e, "opsgenie_get_on_call", "opsgenie")
     except Exception as e:
         logger.error("opsgenie_get_on_call_failed", error=str(e))
         raise ToolExecutionError("opsgenie_get_on_call", str(e), e)
@@ -718,9 +714,7 @@ def opsgenie_get_alert_analytics(
                 stats["mttr_values"].append(alert["mttr_minutes"])
 
             # Time distribution
-            created = datetime.fromisoformat(
-                alert["created_at"].replace("Z", "+00:00")
-            )
+            created = datetime.fromisoformat(alert["created_at"].replace("Z", "+00:00"))
             stats["hours_distribution"][created.hour] += 1
 
         # Compute final metrics per alert
@@ -741,7 +735,9 @@ def opsgenie_get_alert_analytics(
 
             # Off-hours rate
             hours_dist = dict(stats["hours_distribution"])
-            off_hours_count = sum(hours_dist.get(h, 0) for h in [0, 1, 2, 3, 4, 5, 22, 23])
+            off_hours_count = sum(
+                hours_dist.get(h, 0) for h in [0, 1, 2, 3, 4, 5, 22, 23]
+            )
             off_hours_rate = (
                 round(off_hours_count / fire_count * 100, 1) if fire_count > 0 else 0
             )
@@ -778,7 +774,9 @@ def opsgenie_get_alert_analytics(
 
         # Overall summary
         total_alerts = len(alert_analytics)
-        noisy_alerts = sum(1 for a in alert_analytics if a["classification"]["is_noisy"])
+        noisy_alerts = sum(
+            1 for a in alert_analytics if a["classification"]["is_noisy"]
+        )
         flapping_alerts = sum(
             1 for a in alert_analytics if a["classification"]["is_flapping"]
         )
@@ -801,7 +799,8 @@ def opsgenie_get_alert_analytics(
                 "potential_noise_reduction": sum(
                     a["fire_count"]
                     for a in alert_analytics
-                    if a["classification"]["is_noisy"] or a["classification"]["is_flapping"]
+                    if a["classification"]["is_noisy"]
+                    or a["classification"]["is_flapping"]
                 ),
             },
             "alert_analytics": alert_analytics[:50],
@@ -899,9 +898,7 @@ def opsgenie_calculate_mttr(
             e, "opsgenie_calculate_mttr", "opsgenie"
         )
     except Exception as e:
-        logger.error(
-            "opsgenie_mttr_failed", error=str(e), team_id=team_id
-        )
+        logger.error("opsgenie_mttr_failed", error=str(e), team_id=team_id)
         raise ToolExecutionError("opsgenie_calculate_mttr", str(e), e)
 
 
