@@ -20,6 +20,11 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 
 **Claude Code plugin with ~100 DevOps & SRE tools** to investigate incidents, analyze costs, and debug CI/CD from your terminal.
 
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/0965d78d-3d6a-4fd4-809e-d9ada9d9ce2c" width="700" controls autoplay loop muted></video>
+</p>
+
+
 ```bash
 cd local/claude_code_pack
 ./install.sh
@@ -34,22 +39,15 @@ claude
 > Find AWS costs and explore reduction opportunities
 ```
 
-<details>
-<summary><strong>See it in action</strong></summary>
-
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/0965d78d-3d6a-4fd4-809e-d9ada9d9ce2c" width="700" controls autoplay loop muted></video>
-  <br>
-  <em>Investigating a PagerDuty alert with IncidentFox</em>
-</p>
-
-</details>
-
 **Full docs:** [local/claude_code_pack/README.md](local/claude_code_pack/README.md)
 
 ---
 
 ### Option 2: Teams - Self-Hosted Slack Bot
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/c51c51f2-3e1f-459e-8ce4-1e2a56c92971" width="700" controls autoplay loop muted></video>
+</p>
 
 Get IncidentFox running in your Slack workspace in under 5 minutes.
 
@@ -57,21 +55,78 @@ Get IncidentFox running in your Slack workspace in under 5 minutes.
 
 #### 1. Create Slack App (2 min)
 
-1. **[Click here to create your app](https://api.slack.com/apps?new_app=1)** → Choose "From an app manifest"
+1. **<a href="https://api.slack.com/apps?new_app=1" target="_blank" rel="noopener noreferrer">
+   Click here to create your app
+   </a>** → Choose "From an app manifest"
+
+   <img width="1355" height="923" alt="image" src="https://github.com/user-attachments/assets/dfeadd58-a6c2-4b13-8df3-e7b8ac69c886" />
+
+
 2. Select your workspace
-3. Copy the entire contents of [`slack-bot/slack-manifest.yaml`](./slack-bot/slack-manifest.yaml)
+   
+   <img width="550" height="380" alt="image" src="https://github.com/user-attachments/assets/0eb2ee77-deb8-4959-841b-8e7d0ede91b2" />
+
+3. Copy
+```yaml
+display_information:
+  name: IncidentFox
+  description: AI-powered SRE agent for incident investigation
+  background_color: "#4A154B"
+features:
+  bot_user:
+    display_name: IncidentFox
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read
+      - channels:history
+      - channels:read
+      - chat:write
+      - files:read
+      - files:write
+      - users:read
+      - reactions:write
+      - im:history
+      - groups:history
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+      - message.im
+  interactivity:
+    is_enabled: true
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false
+
+```
 4. Paste into the YAML field
-5. Click "Create" → "Install to Workspace" → "Allow"
+   
+   <img width="532" height="1007" alt="image" src="https://github.com/user-attachments/assets/2b926f88-9f2d-4f66-bb50-cc539b888353" />
+
+5. Click "Create" → "Install App" → "Install to Workspace" → "Allow"
+   
+<img width="989" height="343" alt="image" src="https://github.com/user-attachments/assets/54cdb087-497c-498a-86f9-31d133ec18c4" />
+
 
 #### 2. Get Your Tokens (1 min)
 
 **Bot Token:**
 - Click **OAuth & Permissions** → Copy "Bot User OAuth Token" (starts with `xoxb-`)
+<img width="744" height="559" alt="image" src="https://github.com/user-attachments/assets/0d7ea70c-394d-4787-a3b4-e32f395d44e1" />
+
 
 **App Token:**
 - Click **Basic Information** → **App-Level Tokens**
 - Generate token with `connections:write` scope
 - Copy token (starts with `xapp-`)
+<img width="697" height="747" alt="image" src="https://github.com/user-attachments/assets/620bb92b-db49-4d50-8c22-70682ba008d2" />
+
+**Anthropic API Key**
+- [Go to Anthropic console to generate an API Key](https://platform.claude.com/settings/keys)
 
 #### 3. Configure & Run (2 min)
 
