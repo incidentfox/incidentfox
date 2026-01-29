@@ -98,6 +98,9 @@ def _resolve_team_identity(
             elif auth_kind == "oidc" and oidc_principal:
                 if oidc_principal.org_id and oidc_principal.team_node_id:
                     return oidc_principal.org_id, oidc_principal.team_node_id
+            elif auth_kind == "visitor" and oidc_principal:
+                if oidc_principal.org_id and oidc_principal.team_node_id:
+                    return oidc_principal.org_id, oidc_principal.team_node_id
         except Exception as e:
             logger.debug("bearer_token_auth_failed", error=str(e))
 
