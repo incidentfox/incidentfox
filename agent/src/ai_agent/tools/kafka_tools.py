@@ -150,18 +150,22 @@ def kafka_list_topics(include_internal: bool = False) -> dict[str, Any]:
 
             partitions = []
             for partition_id, partition_metadata in topic_metadata.partitions.items():
-                partitions.append({
-                    "id": partition_id,
-                    "leader": partition_metadata.leader,
-                    "replicas": list(partition_metadata.replicas),
-                    "isrs": list(partition_metadata.isrs),
-                })
+                partitions.append(
+                    {
+                        "id": partition_id,
+                        "leader": partition_metadata.leader,
+                        "replicas": list(partition_metadata.replicas),
+                        "isrs": list(partition_metadata.isrs),
+                    }
+                )
 
-            topics.append({
-                "name": topic_name,
-                "partition_count": len(topic_metadata.partitions),
-                "partitions": partitions,
-            })
+            topics.append(
+                {
+                    "name": topic_name,
+                    "partition_count": len(topic_metadata.partitions),
+                    "partitions": partitions,
+                }
+            )
 
         # Sort by name
         topics.sort(key=lambda t: t["name"])
@@ -217,13 +221,16 @@ def kafka_describe_topic(topic_name: str) -> dict[str, Any]:
 
         partitions = []
         for partition_id, partition_metadata in topic_metadata.partitions.items():
-            partitions.append({
-                "id": partition_id,
-                "leader": partition_metadata.leader,
-                "replicas": list(partition_metadata.replicas),
-                "isrs": list(partition_metadata.isrs),
-                "in_sync": len(partition_metadata.isrs) == len(partition_metadata.replicas),
-            })
+            partitions.append(
+                {
+                    "id": partition_id,
+                    "leader": partition_metadata.leader,
+                    "replicas": list(partition_metadata.replicas),
+                    "isrs": list(partition_metadata.isrs),
+                    "in_sync": len(partition_metadata.isrs)
+                    == len(partition_metadata.replicas),
+                }
+            )
 
         # Get topic config
         config_resource = ConfigResource(ResourceType.TOPIC, topic_name)
@@ -256,12 +263,14 @@ def kafka_describe_topic(topic_name: str) -> dict[str, Any]:
                 # Get low and high watermarks
                 low, high = consumer.get_watermark_offsets(tp, timeout=5)
 
-                partition_offsets.append({
-                    "partition": partition["id"],
-                    "low_offset": low,
-                    "high_offset": high,
-                    "message_count": high - low,
-                })
+                partition_offsets.append(
+                    {
+                        "partition": partition["id"],
+                        "low_offset": low,
+                        "high_offset": high,
+                        "message_count": high - low,
+                    }
+                )
 
             consumer.close()
 
@@ -318,11 +327,13 @@ def kafka_list_consumer_groups() -> dict[str, Any]:
 
         groups = []
         for group in groups_result.valid:
-            groups.append({
-                "group_id": group.group_id,
-                "is_simple": group.is_simple_consumer_group,
-                "state": str(group.state) if hasattr(group, "state") else None,
-            })
+            groups.append(
+                {
+                    "group_id": group.group_id,
+                    "is_simple": group.is_simple_consumer_group,
+                    "state": str(group.state) if hasattr(group, "state") else None,
+                }
+            )
 
         # Sort by group_id
         groups.sort(key=lambda g: g["group_id"])
@@ -382,17 +393,21 @@ def kafka_describe_consumer_group(group_id: str) -> dict[str, Any]:
             assignment = []
             if hasattr(member, "assignment") and member.assignment:
                 for tp in member.assignment.topic_partitions:
-                    assignment.append({
-                        "topic": tp.topic,
-                        "partition": tp.partition,
-                    })
+                    assignment.append(
+                        {
+                            "topic": tp.topic,
+                            "partition": tp.partition,
+                        }
+                    )
 
-            members.append({
-                "member_id": member.member_id,
-                "client_id": member.client_id,
-                "host": member.host,
-                "assignment": assignment,
-            })
+            members.append(
+                {
+                    "member_id": member.member_id,
+                    "client_id": member.client_id,
+                    "host": member.host,
+                    "assignment": assignment,
+                }
+            )
 
         logger.info(
             "kafka_consumer_group_described",
@@ -490,14 +505,16 @@ def kafka_get_consumer_lag(group_id: str, topic: str | None = None) -> dict[str,
                 if lag < 0:
                     lag = 0
 
-                partitions.append({
-                    "topic": topic_name,
-                    "partition": partition,
-                    "committed_offset": committed,
-                    "high_watermark": high,
-                    "low_watermark": low,
-                    "lag": lag,
-                })
+                partitions.append(
+                    {
+                        "topic": topic_name,
+                        "partition": partition,
+                        "committed_offset": committed,
+                        "high_watermark": high,
+                        "low_watermark": low,
+                        "lag": lag,
+                    }
+                )
 
                 total_lag += lag
                 topics_set.add(topic_name)
@@ -542,9 +559,7 @@ def kafka_get_consumer_lag(group_id: str, topic: str | None = None) -> dict[str,
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(
-            e, "kafka_get_consumer_lag", "kafka"
-        )
+        return handle_integration_not_configured(e, "kafka_get_consumer_lag", "kafka")
     except Exception as e:
         logger.error("kafka_get_consumer_lag_failed", error=str(e), group=group_id)
         raise ToolExecutionError("kafka_get_consumer_lag", str(e), e)
@@ -565,11 +580,13 @@ def kafka_get_broker_info() -> dict[str, Any]:
 
         brokers = []
         for broker_id, broker in metadata.brokers.items():
-            brokers.append({
-                "id": broker_id,
-                "host": broker.host,
-                "port": broker.port,
-            })
+            brokers.append(
+                {
+                    "id": broker_id,
+                    "host": broker.host,
+                    "port": broker.port,
+                }
+            )
 
         # Sort by ID
         brokers.sort(key=lambda b: b["id"])

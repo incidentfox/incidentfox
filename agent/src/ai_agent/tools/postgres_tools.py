@@ -677,19 +677,21 @@ def postgres_get_locks() -> dict[str, Any]:
 
         locks = []
         for row in lock_rows:
-            locks.append({
-                "lock_type": row[0],
-                "table_name": str(row[1]) if row[1] else None,
-                "mode": row[2],
-                "granted": row[3],
-                "pid": row[4],
-                "user": row[5],
-                "query": row[6][:200] if row[6] else None,
-                "state": row[7],
-                "duration": str(row[8]) if row[8] else None,
-                "wait_event_type": row[9],
-                "wait_event": row[10],
-            })
+            locks.append(
+                {
+                    "lock_type": row[0],
+                    "table_name": str(row[1]) if row[1] else None,
+                    "mode": row[2],
+                    "granted": row[3],
+                    "pid": row[4],
+                    "user": row[5],
+                    "query": row[6][:200] if row[6] else None,
+                    "state": row[7],
+                    "duration": str(row[8]) if row[8] else None,
+                    "wait_event_type": row[9],
+                    "wait_event": row[10],
+                }
+            )
 
         # Get blocking queries
         blocking_query = """
@@ -726,15 +728,17 @@ def postgres_get_locks() -> dict[str, Any]:
 
         blocking = []
         for row in blocking_rows:
-            blocking.append({
-                "blocked_pid": row[0],
-                "blocked_user": row[1],
-                "blocked_query": row[2][:200] if row[2] else None,
-                "blocking_pid": row[3],
-                "blocking_user": row[4],
-                "blocking_query": row[5][:200] if row[5] else None,
-                "blocked_duration": str(row[6]) if row[6] else None,
-            })
+            blocking.append(
+                {
+                    "blocked_pid": row[0],
+                    "blocked_user": row[1],
+                    "blocked_query": row[2][:200] if row[2] else None,
+                    "blocking_pid": row[3],
+                    "blocking_user": row[4],
+                    "blocking_query": row[5][:200] if row[5] else None,
+                    "blocked_duration": str(row[6]) if row[6] else None,
+                }
+            )
 
         cursor.close()
         conn.close()
@@ -846,17 +850,19 @@ def postgres_get_replication_status() -> dict[str, Any]:
 
             replicas = []
             for row in repl_rows:
-                replicas.append({
-                    "client_addr": str(row[0]) if row[0] else None,
-                    "state": row[1],
-                    "sent_lsn": str(row[2]) if row[2] else None,
-                    "write_lsn": str(row[3]) if row[3] else None,
-                    "flush_lsn": str(row[4]) if row[4] else None,
-                    "replay_lsn": str(row[5]) if row[5] else None,
-                    "lag_bytes": row[6],
-                    "sync_state": row[7],
-                    "application_name": row[8],
-                })
+                replicas.append(
+                    {
+                        "client_addr": str(row[0]) if row[0] else None,
+                        "state": row[1],
+                        "sent_lsn": str(row[2]) if row[2] else None,
+                        "write_lsn": str(row[3]) if row[3] else None,
+                        "flush_lsn": str(row[4]) if row[4] else None,
+                        "replay_lsn": str(row[5]) if row[5] else None,
+                        "lag_bytes": row[6],
+                        "sync_state": row[7],
+                        "application_name": row[8],
+                    }
+                )
 
             result["replicas"] = replicas
             result["replica_count"] = len(replicas)
@@ -876,12 +882,14 @@ def postgres_get_replication_status() -> dict[str, Any]:
 
             slots = []
             for row in slot_rows:
-                slots.append({
-                    "slot_name": row[0],
-                    "slot_type": row[1],
-                    "active": row[2],
-                    "lag_bytes": row[3],
-                })
+                slots.append(
+                    {
+                        "slot_name": row[0],
+                        "slot_type": row[1],
+                        "active": row[2],
+                        "lag_bytes": row[3],
+                    }
+                )
 
             result["replication_slots"] = slots
             result["slot_count"] = len(slots)
@@ -957,19 +965,21 @@ def postgres_get_long_running_queries(min_duration_seconds: int = 60) -> dict[st
 
         queries = []
         for row in rows:
-            queries.append({
-                "pid": row[0],
-                "user": row[1],
-                "database": row[2],
-                "state": row[3],
-                "query": row[4][:500] if row[4] else None,
-                "query_start": row[5].isoformat() if row[5] else None,
-                "duration_seconds": round(row[6], 1) if row[6] else None,
-                "wait_event_type": row[7],
-                "wait_event": row[8],
-                "client_addr": str(row[9]) if row[9] else None,
-                "application_name": row[10],
-            })
+            queries.append(
+                {
+                    "pid": row[0],
+                    "user": row[1],
+                    "database": row[2],
+                    "state": row[3],
+                    "query": row[4][:500] if row[4] else None,
+                    "query_start": row[5].isoformat() if row[5] else None,
+                    "duration_seconds": round(row[6], 1) if row[6] else None,
+                    "wait_event_type": row[7],
+                    "wait_event": row[8],
+                    "client_addr": str(row[9]) if row[9] else None,
+                    "application_name": row[10],
+                }
+            )
 
         cursor.close()
         conn.close()

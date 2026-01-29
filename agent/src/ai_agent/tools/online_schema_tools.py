@@ -126,11 +126,13 @@ def gh_ost_run(
     cmd.append(f"--panic-flag-file={panic_file}")
 
     # Other useful defaults
-    cmd.extend([
-        "--verbose",
-        "--stack",  # Stack trace on errors
-        "--ok-to-drop-table",  # Drop old table after swap
-    ])
+    cmd.extend(
+        [
+            "--verbose",
+            "--stack",  # Stack trace on errors
+            "--ok-to-drop-table",  # Drop old table after swap
+        ]
+    )
 
     if execute:
         cmd.append("--execute")
@@ -166,11 +168,16 @@ def gh_ost_run(
             progress = {
                 "copied": int(progress_match.group(1)),
                 "total": int(progress_match.group(2)),
-                "percent": round(
-                    int(progress_match.group(1)) / int(progress_match.group(2)) * 100, 2
-                )
-                if int(progress_match.group(2)) > 0
-                else 0,
+                "percent": (
+                    round(
+                        int(progress_match.group(1))
+                        / int(progress_match.group(2))
+                        * 100,
+                        2,
+                    )
+                    if int(progress_match.group(2)) > 0
+                    else 0
+                ),
             }
 
         logger.info(
@@ -190,7 +197,9 @@ def gh_ost_run(
             "progress": progress,
             "output": output[-5000:] if len(output) > 5000 else output,
             "error": error[-2000:] if error and len(error) > 2000 else error,
-            "postpone_file": config.get("ghost_postpone_file") if postpone_cut_over else None,
+            "postpone_file": (
+                config.get("ghost_postpone_file") if postpone_cut_over else None
+            ),
             "panic_file": panic_file,
         }
 
@@ -220,7 +229,9 @@ def gh_ost_cut_over(postpone_file: str | None = None) -> dict[str, Any]:
         Dict with result
     """
     config = _get_osc_config()
-    file_path = postpone_file or config.get("ghost_postpone_file", "/tmp/ghost.postpone")
+    file_path = postpone_file or config.get(
+        "ghost_postpone_file", "/tmp/ghost.postpone"
+    )
 
     try:
         if os.path.exists(file_path):
@@ -344,11 +355,13 @@ def pt_online_schema_change(
         cmd.append("--no-drop-old-table")
 
     # Safety options
-    cmd.extend([
-        "--progress=percentage,10",  # Progress every 10%
-        "--print",  # Print SQL
-        "--statistics",  # Print statistics
-    ])
+    cmd.extend(
+        [
+            "--progress=percentage,10",  # Progress every 10%
+            "--print",  # Print SQL
+            "--statistics",  # Print statistics
+        ]
+    )
 
     if execute:
         cmd.append("--execute")
@@ -459,7 +472,7 @@ def osc_estimate_time(
 
         # Get table size
         cursor.execute(
-            f"""
+            """
             SELECT
                 DATA_LENGTH + INDEX_LENGTH as total_bytes
             FROM information_schema.TABLES
@@ -496,14 +509,16 @@ def osc_estimate_time(
                 "seconds": round(estimated_seconds),
                 "formatted": f"{hours}h {minutes}m {seconds}s",
             },
-            "recommendations": [
-                "Run during low-traffic period if possible",
-                "Monitor replica lag during migration",
-                "Have rollback plan ready",
-                "Test on staging first",
-            ]
-            if row_count > 1000000
-            else [],
+            "recommendations": (
+                [
+                    "Run during low-traffic period if possible",
+                    "Monitor replica lag during migration",
+                    "Have rollback plan ready",
+                    "Test on staging first",
+                ]
+                if row_count > 1000000
+                else []
+            ),
         }
 
     except Exception as e:

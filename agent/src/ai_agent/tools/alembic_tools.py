@@ -129,13 +129,17 @@ def _parse_alembic_history(output: str) -> list[dict]:
         )
 
         if match:
-            migrations.append({
-                "revision": match.group(1),
-                "down_revision": match.group(2) if match.group(2) != "<base>" else None,
-                "is_head": "head" in (match.group(3) or ""),
-                "is_current": "current" in (match.group(3) or ""),
-                "description": match.group(4).strip() if match.group(4) else "",
-            })
+            migrations.append(
+                {
+                    "revision": match.group(1),
+                    "down_revision": (
+                        match.group(2) if match.group(2) != "<base>" else None
+                    ),
+                    "is_head": "head" in (match.group(3) or ""),
+                    "is_current": "current" in (match.group(3) or ""),
+                    "description": match.group(4).strip() if match.group(4) else "",
+                }
+            )
 
     return migrations
 
@@ -234,10 +238,12 @@ def alembic_heads() -> dict[str, Any]:
             if line.strip():
                 match = re.match(r"([a-f0-9]+)", line.strip())
                 if match:
-                    heads.append({
-                        "revision": match.group(1),
-                        "description": line.strip(),
-                    })
+                    heads.append(
+                        {
+                            "revision": match.group(1),
+                            "description": line.strip(),
+                        }
+                    )
 
         return {
             "success": True,
@@ -428,9 +434,11 @@ def alembic_check() -> dict[str, Any]:
             "success": True,
             "is_up_to_date": is_up_to_date,
             "output": result["output"],
-            "message": "Database is up to date"
-            if is_up_to_date
-            else "Pending migrations detected",
+            "message": (
+                "Database is up to date"
+                if is_up_to_date
+                else "Pending migrations detected"
+            ),
         }
 
     except Exception as e:

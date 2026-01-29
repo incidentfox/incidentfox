@@ -150,11 +150,13 @@ def prisma_migrate_status() -> dict[str, Any]:
             if "_" in line and any(c.isdigit() for c in line[:8]):
                 parts = line.strip().split()
                 if parts:
-                    migrations.append({
-                        "name": parts[0],
-                        "applied": "applied" in line.lower() or "✔" in line,
-                        "pending": "pending" in line.lower() or "..." in line,
-                    })
+                    migrations.append(
+                        {
+                            "name": parts[0],
+                            "applied": "applied" in line.lower() or "✔" in line,
+                            "pending": "pending" in line.lower() or "..." in line,
+                        }
+                    )
 
         return {
             "success": True,
@@ -202,7 +204,9 @@ def prisma_migrate_deploy() -> dict[str, Any]:
         raise
 
 
-def prisma_migrate_reset(confirm: bool = False, skip_seed: bool = False) -> dict[str, Any]:
+def prisma_migrate_reset(
+    confirm: bool = False, skip_seed: bool = False
+) -> dict[str, Any]:
     """
     Reset the database by dropping all data and reapplying migrations.
 

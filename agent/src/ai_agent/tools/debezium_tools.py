@@ -98,9 +98,7 @@ def debezium_list_connectors() -> dict[str, Any]:
             e, "debezium_list_connectors", "kafka_connect"
         )
     except httpx.HTTPStatusError as e:
-        logger.error(
-            "debezium_list_connectors_failed", status=e.response.status_code
-        )
+        logger.error("debezium_list_connectors_failed", status=e.response.status_code)
         raise ToolExecutionError(
             "debezium_list_connectors",
             f"HTTP {e.response.status_code}: {e.response.text}",
@@ -152,10 +150,12 @@ def debezium_get_connector_status(connector_name: str) -> dict[str, Any]:
         errors = []
         for task in failed_tasks:
             if task.get("trace"):
-                errors.append({
-                    "task_id": task.get("id"),
-                    "trace": task.get("trace", "")[:500],
-                })
+                errors.append(
+                    {
+                        "task_id": task.get("id"),
+                        "trace": task.get("trace", "")[:500],
+                    }
+                )
 
         logger.info(
             "debezium_connector_status_retrieved",
