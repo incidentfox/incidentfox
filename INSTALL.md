@@ -78,13 +78,12 @@ You should see a streaming response!
 
 ## What's Running?
 
-Three services work together:
+Two services work together:
 
 - **Slack Bot** - Connects to your Slack workspace
 - **SRE Agent** - Runs the AI investigations
-- **Proxy** - Routes network traffic securely
 
-All services are configured with container isolation, resource limits, and network controls.
+All services are configured with container isolation and resource limits.
 
 ---
 
@@ -98,7 +97,6 @@ docker-compose logs -f
 # Just one service
 docker-compose logs -f sre-agent
 docker-compose logs -f slack-bot
-docker-compose logs -f proxy
 ```
 
 **Restart services:**
@@ -134,36 +132,6 @@ Edit `.env` to customize:
 | `CORALOGIX_API_KEY` | Optional | If using Coralogix integration |
 | `CORALOGIX_DOMAIN` | Optional | Your Coralogix domain |
 
-### Adding Allowed Domains
-
-The proxy controls what external services the agent can reach. To add new domains, edit `proxy-config.yaml`:
-
-```yaml
-# Add a new route
-- match:
-    prefix: "/"
-    headers:
-    - name: ":authority"
-      string_match:
-        suffix: ".yourcompany.com"
-  route:
-    cluster: yourcompany
-
-# Add corresponding cluster (see existing examples)
-- name: yourcompany
-  type: LOGICAL_DNS
-  # ...
-```
-
-Then restart: `docker-compose restart proxy`
-
-**Default allowed domains:**
-- `api.anthropic.com` (Claude API)
-- `api.github.com` (GitHub)
-- `*.npmjs.org` (npm packages)
-- `*.pypi.org` (Python packages)
-- `*.coralogix.com` (Coralogix observability)
-
 ---
 
 ## Troubleshooting
@@ -176,11 +144,7 @@ Then restart: `docker-compose restart proxy`
 **Agent errors:**
 - Check logs: `docker-compose logs sre-agent`
 - Verify `ANTHROPIC_API_KEY` is valid
-- Check proxy is running: `docker-compose ps`
-
-**Network blocked:**
-- Check proxy logs: `docker-compose logs proxy`
-- Domain might need to be added to `proxy-config.yaml`
+- Check services are running: `docker-compose ps`
 
 **Need more resources:**
 Edit `docker-compose.yml` to increase limits:
