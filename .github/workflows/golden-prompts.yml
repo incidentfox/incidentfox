@@ -1,0 +1,56 @@
+name: golden-prompts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      # Trigger when templates change
+      - 'config_service/templates/*.json'
+      # Trigger when prompt layers change
+      - 'agent/src/ai_agent/prompts/*.py'
+      # Trigger when the generator script changes
+      - 'config_service/scripts/generate_golden_prompts.py'
+  push:
+    branches: [main]
+    paths:
+      - 'config_service/templates/*.json'
+      - 'agent/src/ai_agent/prompts/*.py'
+      - 'config_service/scripts/generate_golden_prompts.py'
+
+permissions:
+  contents: write  # required for git-auto-commit-action to push updates
+
+jobs:
+  update-golden-prompts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml
+
+      - name: Regenerate golden prompts
+        run: |
+          python3 config_service/scripts/generate_golden_prompts.py
+
+      - name: Commit updated golden files
+        if: github.event_name == 'pull_request'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: Regenerate golden prompt files (auto-update)"
+          file_pattern: "config_service/golden_templates/**/*.md"
+
+      - name: Verify golden files are up-to-date
+        run: |
+          python3 config_service/scripts/generate_golden_prompts.py --check

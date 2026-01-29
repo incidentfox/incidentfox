@@ -17,13 +17,15 @@ import json
 import uuid
 
 from sqlalchemy.orm import Session
+from src.core.tools_catalog import BUILT_IN_TOOLS_METADATA
 from src.db.models import Template
 from src.db.session import get_session_maker
 
-# Template metadata mapping
+# Template metadata mapping (with fake usage stats for demo)
 TEMPLATE_METADATA = {
     "01_slack_incident_triage.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/incident-triage.svg",
+        "usage_count": 47,  # Most popular - incident triage
         "detailed_description": """# Slack Incident Triage
 
 Fast root cause analysis optimized for production incidents triggered via Slack.
@@ -47,6 +49,7 @@ Fast root cause analysis optimized for production incidents triggered via Slack.
     },
     "02_git_ci_auto_fix.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/ci-autofix.svg",
+        "usage_count": 23,  # Popular for CI teams
         "detailed_description": """# Git CI Issue Triage & Auto-Fix
 
 Analyzes GitHub Actions and CodePipeline failures and can automatically fix common issues.
@@ -71,6 +74,7 @@ Analyzes GitHub Actions and CodePipeline failures and can automatically fix comm
     },
     "03_aws_cost_reduction.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/finops.svg",
+        "usage_count": 12,  # FinOps growing
         "detailed_description": """# AWS Cost Reduction
 
 FinOps agent that finds cost savings opportunities across your AWS infrastructure.
@@ -93,57 +97,9 @@ FinOps agent that finds cost savings opportunities across your AWS infrastructur
 - "Analyze S3 storage costs and optimization opportunities"
         """,
     },
-    "09_incident_postmortem.json": {
-        "icon_url": "https://cdn.incidentfox.ai/icons/postmortem.svg",
-        "detailed_description": """# Incident Postmortem Generator
-
-Automatically creates blameless postmortem reports by analyzing incident data.
-
-## What It Does
-- Scrapes Slack war room conversations for timeline
-- Correlates PagerDuty alerts, logs, and metrics
-- Generates minute-by-minute timeline with evidence
-- Identifies root cause and contributing factors
-- Creates actionable follow-up items
-- Posts as GitHub issue or Slack summary
-
-## Best For
-- Teams required to write postmortems
-- Organizations with incident response processes
-- Learning and continuous improvement focus
-
-## Example Scenarios
-- "Generate postmortem for yesterday's outage"
-- "Create incident report for P0 incident INC-1234"
-- "Write postmortem from Slack channel #incident-2024-01-10"
-        """,
-    },
-    "10_universal_telemetry.json": {
-        "icon_url": "https://cdn.incidentfox.ai/icons/telemetry.svg",
-        "detailed_description": """# Universal Telemetry Agent
-
-Works with ANY observability platform - auto-detects your telemetry stack.
-
-## What It Does
-- Auto-detects Coralogix, Grafana, Datadog, New Relic
-- Uses unified 3-layer approach: Metrics → Logs → Traces
-- Correlates findings across platforms
-- Cross-validates data if multiple platforms configured
-- Presents platform-agnostic analysis
-
-## Best For
-- Teams using multiple observability tools
-- Organizations migrating between platforms
-- Platform-agnostic incident response
-
-## Example Scenarios
-- Works the same regardless of your observability stack
-- "Investigate high error rate" (uses whatever platform you have)
-- "Compare metrics between Grafana and Datadog"
-        """,
-    },
     "04_coding_assistant.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/coding.svg",
+        "usage_count": 31,  # Very popular for devs
         "detailed_description": """# Coding Assistant
 
 AI senior software engineer for code reviews, refactoring, and test generation.
@@ -169,6 +125,7 @@ AI senior software engineer for code reviews, refactoring, and test generation.
     },
     "05_data_migration.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/data-migration.svg",
+        "usage_count": 8,  # Specialized use case
         "detailed_description": """# Data Migration Assistant
 
 Plans and executes database migrations with validation and rollback procedures.
@@ -178,7 +135,7 @@ Plans and executes database migrations with validation and rollback procedures.
 - Generates migration scripts (export, transform, load)
 - Creates validation queries to ensure data integrity
 - Produces detailed migration plans with rollback steps
-- Supports multiple databases (Postgres, Snowflake, Elasticsearch)
+- Supports multiple databases (Postgres, MySQL, Snowflake)
 
 ## Best For
 - Database migrations between platforms
@@ -195,12 +152,13 @@ Plans and executes database migrations with validation and rollback procedures.
     },
     "06_news_comedian.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/comedy.svg",
-        "detailed_description": """# News Comedian (Demo)
+        "usage_count": 5,  # Demo template
+        "detailed_description": """# Tech News Comedian (Demo)
 
 Fun demo agent that turns tech news into witty jokes.
 
 ## What It Does
-- Searches for latest tech news
+- Searches for latest tech news using web search
 - Writes clever jokes about each story
 - Posts daily digest to Slack
 - Uses tech terminology for humor
@@ -220,16 +178,17 @@ Fun demo agent that turns tech news into witty jokes.
     },
     "07_alert_fatigue.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/alert-optimization.svg",
-        "detailed_description": """# Alert Fatigue Reduction
+        "usage_count": 19,  # Popular for SRE teams
+        "detailed_description": """# Alert Fatigue Analyzer
 
-Analyzes alerting patterns to reduce noise and improve signal.
+Data-driven alert optimization using multi-source analysis (PagerDuty, Prometheus, Datadog, Opsgenie).
 
 ## What It Does
+- Analyzes historical alert data across multiple platforms
 - Identifies high-frequency low-value alerts
-- Detects flapping and redundant alerts
-- Recommends threshold tuning
-- Calculates potential alert reduction (30-50%)
-- Generates implementation plan with PRs
+- Detects flapping, redundant, and stale alerts
+- Calculates statistical baselines and recommends threshold tuning
+- Generates prioritized remediation plan with estimated noise reduction
 
 ## Best For
 - Teams drowning in alerts
@@ -238,36 +197,37 @@ Analyzes alerting patterns to reduce noise and improve signal.
 - Platform teams managing monitoring
 
 ## Example Scenarios
-- "Analyze our alerts for noise"
+- "Analyze our alerts for the last 30 days"
 - "Which alerts should we delete or tune?"
 - "Reduce alert volume by 40%"
 - "Find redundant alerts that can be consolidated"
         """,
     },
-    "08_dr_validator.json": {
-        "icon_url": "https://cdn.incidentfox.ai/icons/dr-testing.svg",
-        "detailed_description": """# Disaster Recovery Validator
+    "10_observability_advisor.json": {
+        "icon_url": "https://cdn.incidentfox.ai/icons/observability.svg",
+        "usage_count": 14,  # SRE teams adopting
+        "detailed_description": """# Observability Advisor
 
-Tests backup restorability and validates DR procedures.
+Enterprise-grade observability setup and optimization using SRE best practices.
 
 ## What It Does
-- Actually tests that backups are restorable (not just exist!)
-- Measures real RTO/RPO vs targets
-- Validates multi-region failover
-- Tests runbook accuracy
-- Generates comprehensive DR report with PASS/FAIL
+- Analyzes historical metrics to compute statistical baselines
+- Generates data-driven alert thresholds (not arbitrary numbers)
+- Uses RED/USE/Golden Signals methodology
+- Outputs Prometheus, Datadog, or CloudWatch configurations
+- Creates proposal documents for review
 
 ## Best For
-- Quarterly DR compliance testing
-- SOC2/ISO27001 audit preparation
-- Infrastructure teams
-- Ensuring DR readiness
+- Teams building observability from scratch
+- Organizations with noisy or insensitive alerts
+- SRE teams implementing data-driven alerting
+- Platform teams managing monitoring
 
 ## Example Scenarios
-- "Test RDS backup restore to staging"
-- "Validate multi-region failover works"
-- "Measure actual RTO for all critical systems"
-- "Check if our DR runbooks are up to date"
+- "Set up alerting for our checkout service"
+- "Optimize our current alert thresholds based on actual data"
+- "Generate Prometheus alerting rules for the API gateway"
+- "Create an observability proposal for the new microservice"
         """,
     },
 }
@@ -292,22 +252,116 @@ def extract_metadata(template_json: dict) -> dict:
 
 def extract_requirements(template_json: dict) -> tuple:
     """Extract required MCPs and tools from template JSON."""
-    mcps = template_json.get("mcps", {})
-    required_mcps = [
-        mcp_name
-        for mcp_name, config in mcps.items()
-        if config.get("required", False) or config.get("enabled", False)
-    ]
-
     # Extract tools from all agents
+    # Tools are defined as {"tool_name": true/false} in agent config
     all_tools = set()
     agents = template_json.get("agents", {})
     for agent in agents.values():
         tools_config = agent.get("tools", {})
-        enabled_tools = tools_config.get("enabled", [])
-        all_tools.update(enabled_tools)
+        # Tools are defined as dict with tool_name: true/false
+        if isinstance(tools_config, dict):
+            enabled_tools = [
+                tool_name
+                for tool_name, enabled in tools_config.items()
+                if enabled is True
+            ]
+            all_tools.update(enabled_tools)
+
+    # Derive required MCPs/integrations from tool names
+    # Map tool prefixes to integration names
+    required_mcps = derive_integrations_from_tools(all_tools)
 
     return required_mcps, list(all_tools)
+
+
+def derive_integrations_from_tools(tools: set) -> list:
+    """
+    Derive required integrations from tool names using the tools catalog.
+
+    Uses the authoritative BUILT_IN_TOOLS_METADATA to look up each tool's
+    required_integrations, then maps integration IDs to display names.
+    """
+    # Build lookup dict from tools catalog: tool_id -> required_integrations
+    tool_to_integrations = {
+        tool["id"]: tool.get("required_integrations", [])
+        for tool in BUILT_IN_TOOLS_METADATA
+    }
+
+    # Map integration IDs to human-readable display names
+    integration_display_names = {
+        "kubernetes": "Kubernetes",
+        "aws": "AWS",
+        "github": "GitHub",
+        "gitlab": "GitLab",
+        "slack": "Slack",
+        "pagerduty": "PagerDuty",
+        "opsgenie": "Opsgenie",
+        "incidentio": "Incident.io",
+        "datadog": "Datadog",
+        "prometheus": "Prometheus",
+        "grafana": "Grafana",
+        "newrelic": "New Relic",
+        "sentry": "Sentry",
+        "splunk": "Splunk",
+        "elasticsearch": "Elasticsearch",
+        "coralogix": "Coralogix",
+        "snowflake": "Snowflake",
+        "bigquery": "BigQuery",
+        "postgresql": "PostgreSQL",
+        "mysql": "MySQL",
+        "kafka": "Kafka",
+        "schema_registry": "Schema Registry",
+        "kafka_connect": "Kafka Connect",
+        "confluence": "Confluence",
+        "jira": "Jira",
+        "linear": "Linear",
+        "notion": "Notion",
+        "google_docs": "Google Docs",
+        "msteams": "Microsoft Teams",
+        "gcp": "GCP",
+        "sourcegraph": "Sourcegraph",
+    }
+
+    # Collect all integration IDs from the tools
+    integration_ids = set()
+    for tool in tools:
+        if tool in tool_to_integrations:
+            integration_ids.update(tool_to_integrations[tool])
+
+    # Convert to display names
+    integrations = set()
+    for integration_id in integration_ids:
+        display_name = integration_display_names.get(
+            integration_id, integration_id.title()
+        )
+        integrations.add(display_name)
+
+    # Sort for consistent display order (most relevant first)
+    priority_order = [
+        "Slack",
+        "GitHub",
+        "Kubernetes",
+        "AWS",
+        "Datadog",
+        "Prometheus",
+        "PagerDuty",
+        "Grafana",
+    ]
+    sorted_integrations = []
+    for integration in priority_order:
+        if integration in integrations:
+            sorted_integrations.append(integration)
+            integrations.remove(integration)
+    # Add remaining integrations alphabetically
+    sorted_integrations.extend(sorted(integrations))
+
+    return sorted_integrations
+
+
+def count_agents(template_json: dict) -> int:
+    """Count enabled agents in a template."""
+    agents = template_json.get("agents", {})
+    return sum(1 for agent in agents.values() if agent.get("enabled", True))
 
 
 def extract_example_scenarios(template_json: dict, filename: str) -> list:
@@ -418,8 +472,12 @@ def seed_template(db: Session, file_path: Path, force_update: bool = False) -> N
         existing.version = new_version
         existing.required_mcps = required_mcps
         existing.required_tools = required_tools[:50]
+        # Note: Don't update usage_count on existing templates - preserve real usage data
         print(f"  ✅ Updated template '{metadata['name']}' to v{new_version}")
         return
+
+    # Get fake usage count for demo purposes
+    fake_usage_count = file_metadata.get("usage_count", 0)
 
     # Create new template record
     template = Template(
@@ -439,20 +497,50 @@ def seed_template(db: Session, file_path: Path, force_update: bool = False) -> N
         required_mcps=required_mcps,
         required_tools=required_tools[:50],  # Limit to first 50 tools
         created_by="system",
-        usage_count=0,
+        usage_count=fake_usage_count,
     )
 
     db.add(template)
-    print(f"  ✅ Created template '{metadata['name']}' v{metadata['version']}")
+    agent_count = count_agents(template_json)
+    tool_count = len(required_tools)
+    print(
+        f"  ✅ Created template '{metadata['name']}' v{metadata['version']} "
+        f"({agent_count} agents, {tool_count} tools, {fake_usage_count} teams)"
+    )
 
 
-def seed_all_templates(force_update: bool = False):
+def cleanup_deleted_templates(db: Session, valid_slugs: set) -> int:
+    """
+    Remove templates from database that no longer exist in the filesystem.
+
+    Args:
+        db: Database session
+        valid_slugs: Set of slugs that exist in the templates directory
+
+    Returns:
+        Number of templates deleted
+    """
+    # Find templates in DB that don't have corresponding files
+    all_templates = db.query(Template).filter(Template.is_system_template == True).all()
+    deleted_count = 0
+
+    for template in all_templates:
+        if template.slug not in valid_slugs:
+            print(f"  🗑️  Removing deleted template: {template.name} ({template.slug})")
+            db.delete(template)
+            deleted_count += 1
+
+    return deleted_count
+
+
+def seed_all_templates(force_update: bool = False, cleanup: bool = True):
     """
     Seed all templates from the templates directory.
 
     Args:
         force_update: If True, update all templates regardless of version.
                       If False (default), only update if version changed.
+        cleanup: If True (default), remove templates from DB that don't exist in filesystem.
     """
     print("=" * 60)
     print("Seeding Templates")
@@ -460,6 +548,8 @@ def seed_all_templates(force_update: bool = False):
         print("Mode: FORCE UPDATE (will update all templates)")
     else:
         print("Mode: Version-based (will skip unchanged templates)")
+    if cleanup:
+        print("Cleanup: ENABLED (will remove deleted templates from DB)")
     print("=" * 60)
 
     # Find templates directory
@@ -483,9 +573,30 @@ def seed_all_templates(force_update: bool = False):
     db = SessionLocal()
 
     # Statistics tracking
-    stats = {"created": 0, "updated": 0, "skipped": 0, "errors": 0}
+    stats = {"created": 0, "updated": 0, "skipped": 0, "errors": 0, "deleted": 0}
 
     try:
+        # Collect valid slugs from filesystem
+        valid_slugs = set()
+        for file_path in template_files:
+            try:
+                template_json = load_template_json(file_path)
+                slug = template_json.get("$template_slug", "")
+                if slug:
+                    valid_slugs.add(slug)
+            except Exception:
+                pass
+
+        # Cleanup deleted templates first
+        if cleanup:
+            print("Cleaning up deleted templates...")
+            stats["deleted"] = cleanup_deleted_templates(db, valid_slugs)
+            if stats["deleted"] > 0:
+                print(f"  Removed {stats['deleted']} template(s)\n")
+            else:
+                print("  No templates to remove\n")
+
+        # Seed templates
         for file_path in template_files:
             try:
                 seed_template(db, file_path, force_update=force_update)
@@ -505,6 +616,8 @@ def seed_all_templates(force_update: bool = False):
         # Print summary
         total_templates = db.query(Template).count()
         print(f"\nTotal templates in database: {total_templates}")
+        if stats["deleted"] > 0:
+            print(f"Templates removed: {stats['deleted']}")
 
     except Exception as e:
         db.rollback()
@@ -526,6 +639,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Force update all templates regardless of version",
     )
+    parser.add_argument(
+        "--no-cleanup",
+        action="store_true",
+        help="Don't remove templates that no longer exist in filesystem",
+    )
     args = parser.parse_args()
 
-    seed_all_templates(force_update=args.force)
+    seed_all_templates(force_update=args.force, cleanup=not args.no_cleanup)
