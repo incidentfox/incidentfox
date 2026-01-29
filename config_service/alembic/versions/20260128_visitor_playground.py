@@ -40,9 +40,7 @@ def upgrade() -> None:
         sa.Column("source", sa.String(64), nullable=True),
     )
 
-    op.create_index(
-        "ix_visitor_emails_last_seen", "visitor_emails", ["last_seen_at"]
-    )
+    op.create_index("ix_visitor_emails_last_seen", "visitor_emails", ["last_seen_at"])
 
     # Create visitor_sessions table
     op.create_table(
@@ -82,12 +80,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Drop visitor_sessions
-    op.drop_index(
-        "ix_visitor_sessions_last_heartbeat", table_name="visitor_sessions"
-    )
-    op.drop_index(
-        "ix_visitor_sessions_status_created", table_name="visitor_sessions"
-    )
+    op.drop_index("ix_visitor_sessions_last_heartbeat", table_name="visitor_sessions")
+    op.drop_index("ix_visitor_sessions_status_created", table_name="visitor_sessions")
     op.drop_index("ix_visitor_sessions_status", table_name="visitor_sessions")
     op.drop_index("ix_visitor_sessions_email", table_name="visitor_sessions")
     op.drop_table("visitor_sessions")

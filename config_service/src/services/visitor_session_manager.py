@@ -346,7 +346,9 @@ class VisitorSessionManager:
         if session.status == "warned" and session.warned_at:
             elapsed = datetime.utcnow() - session.warned_at
             remaining = WARNING_DURATION - elapsed
-            response["warning_seconds_remaining"] = max(0, int(remaining.total_seconds()))
+            response["warning_seconds_remaining"] = max(
+                0, int(remaining.total_seconds())
+            )
 
         return response
 
@@ -375,7 +377,9 @@ class VisitorSessionManager:
         elif session.status == "warned" and session.warned_at:
             elapsed = datetime.utcnow() - session.warned_at
             remaining = WARNING_DURATION - elapsed
-            response["warning_seconds_remaining"] = max(0, int(remaining.total_seconds()))
+            response["warning_seconds_remaining"] = max(
+                0, int(remaining.total_seconds())
+            )
 
         return response
 

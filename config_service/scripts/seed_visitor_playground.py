@@ -39,7 +39,6 @@ from src.db.models import (
 )
 from src.db.session import db_session
 
-
 # Playground configuration constants
 PLAYGROUND_ORG_ID = "playground"
 PLAYGROUND_TEAM_NODE_ID = "visitor-playground"
@@ -51,9 +50,11 @@ def main() -> None:
 
     # Allow overriding Slack config via environment
     slack_channel_id = os.getenv("PLAYGROUND_SLACK_CHANNEL_ID", "C0ABE64UXQB")
-    slack_channel_name = os.getenv("PLAYGROUND_SLACK_CHANNEL_NAME", "#visitor-playground")
+    slack_channel_name = os.getenv(
+        "PLAYGROUND_SLACK_CHANNEL_NAME", "#visitor-playground"
+    )
 
-    print(f"Seeding visitor playground...")
+    print("Seeding visitor playground...")
     print(f"  Organization: {PLAYGROUND_ORG_ID}")
     print(f"  Team: {PLAYGROUND_TEAM_NODE_ID}")
     print(f"  Slack channel: {slack_channel_id} ({slack_channel_name})")
