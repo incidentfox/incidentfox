@@ -1,5 +1,6 @@
 """Prompt building utilities for AI SRE agents."""
 
+from .default_prompts import get_default_agent_prompt
 from .layers import (
     # Tool-specific prompt guidance
     ASK_HUMAN_TOOL_PROMPT,
@@ -42,7 +43,6 @@ from .layers import (
     get_integration_errors,
     get_integration_tool_limits,
 )
-from .default_prompts import get_default_agent_prompt
 from .planner_prompt import build_planner_system_prompt
 
 
