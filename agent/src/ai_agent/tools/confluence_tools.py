@@ -325,6 +325,249 @@ def confluence_get_page(
         raise ToolExecutionError("confluence_get_page", str(e), e)
 
 
+def confluence_search_cql(
+    cql: str,
+    limit: int = 25,
+    expand: str | None = None,
+) -> dict[str, Any]:
+    """
+    Search Confluence using CQL (Confluence Query Language).
+
+    More powerful than text search - supports filtering by space, type,
+    labels, dates, etc. Useful for finding runbooks, post-mortems, and
+    incident documentation.
+
+    Common CQL patterns:
+    - Find runbooks: 'type = page AND label = "runbook"'
+    - Find post-mortems: 'type = page AND (label = "postmortem" OR title ~ "Post-mortem")'
+    - Find by space: 'space = "OPS" AND type = page'
+    - Find recent: 'lastModified >= now("-30d") AND type = page'
+    - Combined: 'space = "SRE" AND label = "incident" AND lastModified >= now("-90d")'
+
+    Args:
+        cql: CQL query string
+        limit: Maximum results to return
+        expand: Optional fields to expand (e.g., "body.storage")
+
+    Returns:
+        Dict with search results and metadata
+    """
+    try:
+        confluence = _get_confluence_client()
+
+        results = confluence.cql(cql, limit=limit, expand=expand)
+
+        pages = []
+        for result in results.get("results", []):
+            content = result.get("content", result)  # Handle different response formats
+
+            page_data = {
+                "id": content.get("id"),
+                "title": content.get("title"),
+                "type": content.get("type"),
+                "space": content.get("space", {}).get("key") if content.get("space") else None,
+                "url": result.get("url") or content.get("_links", {}).get("webui"),
+                "excerpt": result.get("excerpt", ""),
+                "last_modified": result.get("lastModified") or content.get("history", {}).get("lastUpdated", {}).get("when"),
+            }
+
+            # Include labels if available
+            if "metadata" in content and "labels" in content["metadata"]:
+                page_data["labels"] = [
+                    label["name"] for label in content["metadata"]["labels"].get("results", [])
+                ]
+
+            pages.append(page_data)
+
+        logger.info("confluence_cql_search_completed", cql=cql[:100], results=len(pages))
+
+        return {
+            "success": True,
+            "cql": cql,
+            "total_results": results.get("totalSize", len(pages)),
+            "returned_results": len(pages),
+            "pages": pages,
+        }
+
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "confluence_search_cql", "confluence"
+        )
+    except Exception as e:
+        logger.error("confluence_cql_search_failed", error=str(e), cql=cql[:100])
+        raise ToolExecutionError("confluence_search_cql", str(e), e)
+
+
+def confluence_find_runbooks(
+    service: str | None = None,
+    alert_name: str | None = None,
+    space: str | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """
+    Find runbooks in Confluence for a service or alert.
+
+    Searches for runbook documentation using common labeling and naming
+    conventions. Useful for incident response and alert fatigue analysis
+    to understand if alerts have proper runbooks.
+
+    Args:
+        service: Service name to search for
+        alert_name: Alert name to search for
+        space: Optional space to limit search
+        limit: Maximum results
+
+    Returns:
+        Dict with matching runbooks
+    """
+    try:
+        confluence = _get_confluence_client()
+
+        # Build search query
+        search_terms = []
+
+        if service:
+            search_terms.append(f'(title ~ "{service}" OR text ~ "{service}")')
+        if alert_name:
+            search_terms.append(f'(title ~ "{alert_name}" OR text ~ "{alert_name}")')
+
+        # Look for runbook labels/titles
+        runbook_filter = '(label = "runbook" OR label = "playbook" OR label = "sop" OR title ~ "runbook" OR title ~ "playbook")'
+
+        cql_parts = [runbook_filter]
+        if search_terms:
+            cql_parts.append(f"({' OR '.join(search_terms)})")
+        if space:
+            cql_parts.append(f'space = "{space}"')
+
+        cql = " AND ".join(cql_parts) + " AND type = page"
+
+        results = confluence.cql(cql, limit=limit, expand="metadata.labels")
+
+        runbooks = []
+        for result in results.get("results", []):
+            content = result.get("content", result)
+
+            runbooks.append(
+                {
+                    "id": content.get("id"),
+                    "title": content.get("title"),
+                    "space": content.get("space", {}).get("key") if content.get("space") else None,
+                    "url": result.get("url"),
+                    "excerpt": result.get("excerpt", "")[:300],
+                    "relevance": "high" if service and service.lower() in content.get("title", "").lower() else "medium",
+                }
+            )
+
+        logger.info(
+            "confluence_runbooks_found",
+            service=service,
+            alert=alert_name,
+            count=len(runbooks),
+        )
+
+        return {
+            "success": True,
+            "search": {"service": service, "alert_name": alert_name, "space": space},
+            "runbooks_found": len(runbooks),
+            "runbooks": runbooks,
+            "has_runbook": len(runbooks) > 0,
+        }
+
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "confluence_find_runbooks", "confluence"
+        )
+    except Exception as e:
+        logger.error(
+            "confluence_find_runbooks_failed",
+            error=str(e),
+            service=service,
+        )
+        raise ToolExecutionError("confluence_find_runbooks", str(e), e)
+
+
+def confluence_find_postmortems(
+    service: str | None = None,
+    since_days: int = 90,
+    space: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """
+    Find post-mortem documents in Confluence.
+
+    Searches for incident post-mortems to understand historical incident
+    patterns. Useful for alert fatigue analysis to identify recurring issues.
+
+    Args:
+        service: Service name to filter by
+        since_days: Look back this many days (default 90)
+        space: Optional space to limit search
+        limit: Maximum results
+
+    Returns:
+        Dict with post-mortem documents
+    """
+    try:
+        confluence = _get_confluence_client()
+
+        # Build CQL query
+        cql_parts = [
+            f'lastModified >= now("-{since_days}d")',
+            'type = page',
+            '(label = "postmortem" OR label = "post-mortem" OR label = "incident-review" OR title ~ "Post-mortem" OR title ~ "Postmortem" OR title ~ "Incident Review")',
+        ]
+
+        if service:
+            cql_parts.append(f'(title ~ "{service}" OR text ~ "{service}")')
+        if space:
+            cql_parts.append(f'space = "{space}"')
+
+        cql = " AND ".join(cql_parts)
+
+        results = confluence.cql(cql, limit=limit)
+
+        postmortems = []
+        for result in results.get("results", []):
+            content = result.get("content", result)
+
+            postmortems.append(
+                {
+                    "id": content.get("id"),
+                    "title": content.get("title"),
+                    "space": content.get("space", {}).get("key") if content.get("space") else None,
+                    "url": result.get("url"),
+                    "last_modified": result.get("lastModified"),
+                    "excerpt": result.get("excerpt", "")[:300],
+                }
+            )
+
+        logger.info(
+            "confluence_postmortems_found",
+            service=service,
+            count=len(postmortems),
+        )
+
+        return {
+            "success": True,
+            "search": {"service": service, "since_days": since_days, "space": space},
+            "postmortems_found": len(postmortems),
+            "postmortems": postmortems,
+        }
+
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "confluence_find_postmortems", "confluence"
+        )
+    except Exception as e:
+        logger.error(
+            "confluence_find_postmortems_failed",
+            error=str(e),
+            service=service,
+        )
+        raise ToolExecutionError("confluence_find_postmortems", str(e), e)
+
+
 # List of all Confluence tools for registration
 CONFLUENCE_TOOLS = [
     search_confluence,
@@ -332,4 +575,7 @@ CONFLUENCE_TOOLS = [
     list_space_pages,
     confluence_create_page,
     confluence_write_content,
+    confluence_search_cql,
+    confluence_find_runbooks,
+    confluence_find_postmortems,
 ]
