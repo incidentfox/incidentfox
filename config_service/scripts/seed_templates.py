@@ -251,13 +251,6 @@ def extract_metadata(template_json: dict) -> dict:
 
 def extract_requirements(template_json: dict) -> tuple:
     """Extract required MCPs and tools from template JSON."""
-    mcps = template_json.get("mcps", {})
-    required_mcps = [
-        mcp_name
-        for mcp_name, config in mcps.items()
-        if config.get("required", False) or config.get("enabled", False)
-    ]
-
     # Extract tools from all agents
     # Tools are defined as {"tool_name": true/false} in agent config
     all_tools = set()
@@ -273,7 +266,114 @@ def extract_requirements(template_json: dict) -> tuple:
             ]
             all_tools.update(enabled_tools)
 
+    # Derive required MCPs/integrations from tool names
+    # Map tool prefixes to integration names
+    required_mcps = derive_integrations_from_tools(all_tools)
+
     return required_mcps, list(all_tools)
+
+
+def derive_integrations_from_tools(tools: set) -> list:
+    """
+    Derive required integrations from tool names.
+
+    Uses both prefix matching and keyword detection to map tools to integrations.
+    """
+    # Prefix-based mappings (tool starts with this)
+    prefix_mappings = {
+        "slack_": "Slack",
+        "post_slack": "Slack",
+        "github_": "GitHub",
+        "pagerduty_": "PagerDuty",
+        "datadog_": "Datadog",
+        "query_datadog": "Datadog",
+        "prometheus_": "Prometheus",
+        "query_prometheus": "Prometheus",
+        "cloudwatch_": "AWS",
+        "get_cloudwatch": "AWS",
+        "query_cloudwatch": "AWS",
+        "ec2_": "AWS",
+        "describe_ec2": "AWS",
+        "rds_": "AWS",
+        "get_rds": "AWS",
+        "s3_": "AWS",
+        "lambda_": "AWS",
+        "get_lambda": "AWS",
+        "describe_lambda": "AWS",
+        "ecs_": "AWS",
+        "list_ecs": "AWS",
+        "describe_alb": "AWS",
+        "jira_": "Jira",
+        "confluence_": "Confluence",
+        "opsgenie_": "Opsgenie",
+        "grafana_": "Grafana",
+        "sentry_": "Sentry",
+        "newrelic_": "New Relic",
+        "query_newrelic": "New Relic",
+        "snowflake_": "Snowflake",
+        "postgres_": "PostgreSQL",
+        "pg_": "PostgreSQL",
+        "mysql_": "MySQL",
+        "kafka_": "Kafka",
+        "docker_": "Docker",
+        # Kubernetes tools
+        "list_pods": "Kubernetes",
+        "get_pod": "Kubernetes",
+        "describe_pod": "Kubernetes",
+        "describe_deployment": "Kubernetes",
+        "get_deployment": "Kubernetes",
+        "describe_node": "Kubernetes",
+        "describe_service": "Kubernetes",
+        "list_namespaces": "Kubernetes",
+    }
+
+    # Keyword-based mappings (tool contains this keyword)
+    keyword_mappings = {
+        "github": "GitHub",
+        "slack": "Slack",
+        "kubernetes": "Kubernetes",
+        "k8s": "Kubernetes",
+    }
+
+    integrations = set()
+    for tool in tools:
+        tool_lower = tool.lower()
+
+        # Check prefix mappings first
+        matched = False
+        for prefix, integration_name in prefix_mappings.items():
+            if tool_lower.startswith(prefix):
+                integrations.add(integration_name)
+                matched = True
+                break
+
+        # If no prefix match, check keyword mappings
+        if not matched:
+            for keyword, integration_name in keyword_mappings.items():
+                if keyword in tool_lower:
+                    integrations.add(integration_name)
+                    break
+
+    # Sort for consistent display order (most relevant first)
+    priority_order = [
+        "Slack",
+        "GitHub",
+        "Kubernetes",
+        "AWS",
+        "Datadog",
+        "Prometheus",
+        "PagerDuty",
+        "Grafana",
+    ]
+    sorted_integrations = []
+    for integration in priority_order:
+        if integration in integrations:
+            sorted_integrations.append(integration)
+            integrations.remove(integration)
+    # Add remaining integrations alphabetically
+    sorted_integrations.extend(sorted(integrations))
+
+    return sorted_integrations
 
 
 def count_agents(template_json: dict) -> int:
@@ -390,6 +490,10 @@ def seed_template(db: Session, file_path: Path, force_update: bool = False) -> N
         existing.version = new_version
         existing.required_mcps = required_mcps
         existing.required_tools = required_tools[:50]
+        # Update usage_count for demo purposes (only if we have fake data configured)
+        fake_usage_count = file_metadata.get("usage_count")
+        if fake_usage_count is not None:
+            existing.usage_count = fake_usage_count
         print(f"  ✅ Updated template '{metadata['name']}' to v{new_version}")
         return
 
