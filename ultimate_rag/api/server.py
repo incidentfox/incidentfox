@@ -488,12 +488,50 @@ class V1AddDocumentsRequest(BaseModel):
     tree: Optional[str] = Field(None, description="Tree name")
 
 
-class V1AddDocumentsResponse(BaseModel):
-    """v1 API add documents response."""
+# ==================== Persistence Models ====================
 
-    tree: str
+
+class SaveTreeRequest(BaseModel):
+    """Request to save a tree."""
+
+    tree: Optional[str] = Field(None, description="Tree name (default: all trees)")
+    to_local: bool = Field(True, description="Save to local disk")
+    to_s3: bool = Field(False, description="Save to S3")
+    format: str = Field("pickle", description="Format: 'pickle' or 'json'")
+
+
+class SaveTreeResponse(BaseModel):
+    """Response from save operation."""
+
+    success: bool
+    trees_saved: List[str]
+    paths: Dict[str, Dict[str, str]]  # tree_id -> {local: path, s3: uri}
     message: str
-    chunks_added: int
+
+
+class LoadTreeRequest(BaseModel):
+    """Request to load a tree."""
+
+    tree: str = Field(..., description="Tree name to load")
+    from_s3: bool = Field(False, description="Load from S3 (default: local)")
+
+
+class LoadTreeResponse(BaseModel):
+    """Response from load operation."""
+
+    success: bool
+    tree: str
+    source: str  # "local" or "s3"
+    node_count: int
+    message: str
+
+
+class ListTreesResponse(BaseModel):
+    """Response listing available trees."""
+
+    local_trees: List[str]
+    s3_trees: List[str]
+    loaded_trees: List[str]
 
 
 # ==================== API Server ====================
@@ -518,6 +556,7 @@ class UltimateRAGServer:
         self.teaching = None
         self.maintenance = None
         self.observations = None
+        self.persistence = None
 
         # Stats
         self._start_time = datetime.utcnow()
@@ -541,11 +580,23 @@ class UltimateRAGServer:
         from ..agents.observations import ObservationCollector
         from ..agents.teaching import TeachingInterface
         from ..core.node import TreeForest
+        from ..core.persistence import TreePersistence
         from ..graph.graph import KnowledgeGraph
         from ..ingestion.processor import DocumentProcessor, ProcessingConfig
         from ..retrieval.retriever import RetrievalConfig, UltimateRetriever
 
         logger.info("Initializing Ultimate RAG server...")
+
+        # Initialize persistence layer
+        local_trees_dir = os.environ.get("TREES_LOCAL_DIR", "./trees")
+        s3_bucket = os.environ.get("TREES_S3_BUCKET")
+        self.persistence = TreePersistence(
+            local_dir=local_trees_dir,
+            s3_bucket=s3_bucket,
+        )
+        logger.info(
+            f"Persistence initialized: local_dir={local_trees_dir}, s3_bucket={s3_bucket or 'disabled'}"
+        )
 
         # Initialize forest
         self.forest = TreeForest(
@@ -1303,6 +1354,161 @@ class UltimateRAGServer:
                 raise HTTPException(
                     status_code=500, detail=f"Failed to create tree: {e}"
                 )
+
+        # ==================== Persistence Endpoints ====================
+
+        @app.post("/persist/save", response_model=SaveTreeResponse, tags=["Persist"])
+        async def save_trees(request: SaveTreeRequest):
+            """
+            Save trees to disk and/or S3.
+
+            Use this to persist changes made via /teach, /ingest, etc.
+            By default saves to local disk only. Set to_s3=true to also
+            save to S3 for production durability.
+            """
+            if not self.forest or not self.persistence:
+                raise HTTPException(503, "Server not initialized")
+
+            try:
+                trees_to_save = []
+                if request.tree:
+                    # Save specific tree
+                    tree = self.forest.get_tree(request.tree)
+                    if not tree:
+                        raise HTTPException(404, f"Tree '{request.tree}' not found")
+                    trees_to_save = [tree]
+                else:
+                    # Save all trees
+                    trees_to_save = list(self.forest.trees.values())
+
+                all_paths = {}
+                for tree in trees_to_save:
+                    paths = self.persistence.save_tree(
+                        tree,
+                        to_local=request.to_local,
+                        to_s3=request.to_s3,
+                    )
+                    all_paths[tree.tree_id] = paths
+
+                saved_trees = list(all_paths.keys())
+                return SaveTreeResponse(
+                    success=True,
+                    trees_saved=saved_trees,
+                    paths=all_paths,
+                    message=f"Successfully saved {len(saved_trees)} tree(s)",
+                )
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Save failed: {e}")
+                raise HTTPException(500, str(e))
+
+        @app.post("/persist/load", response_model=LoadTreeResponse, tags=["Persist"])
+        async def load_tree(request: LoadTreeRequest):
+            """
+            Load a tree from disk or S3.
+
+            Loads a previously saved tree into memory. Use from_s3=true
+            to load from S3 instead of local disk.
+            """
+            if not self.forest or not self.persistence:
+                raise HTTPException(503, "Server not initialized")
+
+            try:
+                tree = self.persistence.load_tree(
+                    request.tree,
+                    prefer_s3=request.from_s3,
+                )
+
+                if not tree:
+                    raise HTTPException(
+                        404,
+                        f"Tree '{request.tree}' not found in "
+                        + ("S3" if request.from_s3 else "local storage"),
+                    )
+
+                # Add to forest (replaces if exists)
+                self.forest.add_tree(tree)
+
+                return LoadTreeResponse(
+                    success=True,
+                    tree=tree.tree_id,
+                    source="s3" if request.from_s3 else "local",
+                    node_count=len(tree.all_nodes),
+                    message=f"Successfully loaded tree '{tree.tree_id}' with {len(tree.all_nodes)} nodes",
+                )
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Load failed: {e}")
+                raise HTTPException(500, str(e))
+
+        @app.get(
+            "/persist/available", response_model=ListTreesResponse, tags=["Persist"]
+        )
+        async def list_available_trees():
+            """
+            List trees available for loading.
+
+            Shows trees available locally, in S3, and currently loaded in memory.
+            """
+            if not self.persistence:
+                raise HTTPException(503, "Server not initialized")
+
+            try:
+                local_trees = self.persistence.list_local_trees()
+                s3_trees = (
+                    self.persistence.list_s3_trees()
+                    if self.persistence.s3_bucket
+                    else []
+                )
+                loaded_trees = list(self.forest.trees.keys()) if self.forest else []
+
+                return ListTreesResponse(
+                    local_trees=local_trees,
+                    s3_trees=s3_trees,
+                    loaded_trees=loaded_trees,
+                )
+
+            except Exception as e:
+                logger.error(f"List failed: {e}")
+                raise HTTPException(500, str(e))
+
+        @app.post("/persist/export-raptor", tags=["Persist"])
+        async def export_raptor_format(tree: str, output_path: Optional[str] = None):
+            """
+            Export a tree in RAPTOR-compatible pickle format.
+
+            Creates a .pkl file that can be loaded by the original RAPTOR
+            RetrievalAugmentation class. Useful for sharing with other systems.
+            """
+            if not self.forest or not self.persistence:
+                raise HTTPException(503, "Server not initialized")
+
+            knowledge_tree = self.forest.get_tree(tree)
+            if not knowledge_tree:
+                raise HTTPException(404, f"Tree '{tree}' not found")
+
+            try:
+                if not output_path:
+                    output_path = str(self.persistence.local_dir / f"{tree}_raptor.pkl")
+
+                saved_path = self.persistence.export_to_raptor_format(
+                    knowledge_tree, output_path
+                )
+
+                return {
+                    "success": True,
+                    "tree": tree,
+                    "output_path": saved_path,
+                    "message": f"Exported RAPTOR-compatible tree to {saved_path}",
+                }
+
+            except Exception as e:
+                logger.error(f"Export failed: {e}")
+                raise HTTPException(500, str(e))
 
         @app.get(
             "/api/v1/tree/stats", response_model=V1TreeStatsResponse, tags=["v1-compat"]
