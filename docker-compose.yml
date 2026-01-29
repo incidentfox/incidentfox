@@ -1,0 +1,125 @@
+version: '3.8'
+
+# Hardened Docker Compose setup for IncidentFox
+# Provides container isolation, network controls, and resource limits
+
+services:
+  # Network proxy - controls all external traffic
+  # Enforces domain allowlist and logs all requests
+  # OPTIONAL: Comment out for quick testing
+  proxy:
+    image: envoyproxy/envoy:v1.31-latest
+    container_name: incidentfox-proxy
+    volumes:
+      - ./proxy-config.yaml:/etc/envoy/envoy.yaml:ro
+    ports:
+      - "9901:9901"  # Admin interface (optional, for debugging)
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN  # Needed for Envoy entrypoint
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=100m
+    mem_limit: 256m
+    cpus: 0.5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - proxy_network
+    profiles:
+      - proxy  # Optional profile - enable with: docker-compose --profile proxy up
+
+  # SRE Agent - runs investigations
+  sre-agent:
+    build:
+      context: ./sre-agent
+      dockerfile: Dockerfile.simple
+    container_name: incidentfox-sre-agent
+    restart: unless-stopped
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LMNR_PROJECT_API_KEY=${LMNR_PROJECT_API_KEY:-}
+      - CORALOGIX_API_KEY=${CORALOGIX_API_KEY:-}
+      - CORALOGIX_DOMAIN=${CORALOGIX_DOMAIN:-}
+      # Proxy config (only if proxy profile is enabled)
+      # - HTTP_PROXY=http://proxy:8080
+      # - HTTPS_PROXY=http://proxy:8080
+      # - NO_PROXY=localhost,127.0.0.1
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Note: Cannot use read_only:true because Claude Code CLI needs to write
+    # But we limit writable locations with tmpfs
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=500m
+      - /home/agent/.cache:rw,noexec,nosuid,size=200m
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 100
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - app_network
+      - default  # Needs external access for API calls
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Slack Bot - connects Slack to SRE Agent
+  slack-bot:
+    build:
+      context: ./slack-bot
+      dockerfile: Dockerfile
+    container_name: incidentfox-slack-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - SRE_AGENT_URL=http://sre-agent:8000
+    depends_on:
+      - sre-agent
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Cannot use read_only because app may write logs/temp files
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=100m
+    volumes:
+      # Mount assets read-only
+      - ./slack-bot/assets:/app/assets:ro
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 50
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - app_network
+      - default  # Needs external access to connect to Slack
+
+networks:
+  proxy_network:
+    driver: bridge
+    internal: false  # Proxy needs external access
+  app_network:
+    driver: bridge
+    internal: true  # Internal network for inter-service communication
+  default:
+    driver: bridge  # Default network with external access
