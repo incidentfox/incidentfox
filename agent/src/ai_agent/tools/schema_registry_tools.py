@@ -99,7 +99,9 @@ def schema_registry_list_subjects() -> dict[str, Any]:
             e, "schema_registry_list_subjects", "schema_registry"
         )
     except httpx.HTTPStatusError as e:
-        logger.error("schema_registry_list_subjects_failed", status=e.response.status_code)
+        logger.error(
+            "schema_registry_list_subjects_failed", status=e.response.status_code
+        )
         raise ToolExecutionError(
             "schema_registry_list_subjects",
             f"HTTP {e.response.status_code}: {e.response.text}",
@@ -421,7 +423,9 @@ def schema_registry_register_schema(
         raise ToolExecutionError("schema_registry_register_schema", str(e), e)
 
 
-def schema_registry_get_compatibility_level(subject: str | None = None) -> dict[str, Any]:
+def schema_registry_get_compatibility_level(
+    subject: str | None = None,
+) -> dict[str, Any]:
     """
     Get the compatibility level for a subject or global default.
 

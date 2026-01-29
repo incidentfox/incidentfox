@@ -139,14 +139,16 @@ def _parse_flyway_info_output(output: str) -> list[dict]:
         if in_table and "|" in line:
             parts = [p.strip() for p in line.split("|")]
             if len(parts) >= 7 and parts[1] not in ("Category", ""):
-                migrations.append({
-                    "category": parts[1] if len(parts) > 1 else "",
-                    "version": parts[2] if len(parts) > 2 else "",
-                    "description": parts[3] if len(parts) > 3 else "",
-                    "type": parts[4] if len(parts) > 4 else "",
-                    "installed_on": parts[5] if len(parts) > 5 else "",
-                    "state": parts[6] if len(parts) > 6 else "",
-                })
+                migrations.append(
+                    {
+                        "category": parts[1] if len(parts) > 1 else "",
+                        "version": parts[2] if len(parts) > 2 else "",
+                        "description": parts[3] if len(parts) > 3 else "",
+                        "type": parts[4] if len(parts) > 4 else "",
+                        "installed_on": parts[5] if len(parts) > 5 else "",
+                        "state": parts[6] if len(parts) > 6 else "",
+                    }
+                )
 
     return migrations
 
@@ -303,7 +305,9 @@ def flyway_repair() -> dict[str, Any]:
         raise
 
 
-def flyway_baseline(version: str = "1", description: str = "Baseline") -> dict[str, Any]:
+def flyway_baseline(
+    version: str = "1", description: str = "Baseline"
+) -> dict[str, Any]:
     """
     Baseline an existing database.
 

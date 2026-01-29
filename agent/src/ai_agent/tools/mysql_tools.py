@@ -124,16 +124,22 @@ def mysql_list_tables(database: str | None = None) -> dict[str, Any]:
 
         result = []
         for table in tables:
-            result.append({
-                "table_name": table["table_name"],
-                "engine": table["engine"],
-                "estimated_rows": table["estimated_rows"],
-                "data_mb": round((table["data_bytes"] or 0) / (1024 * 1024), 2),
-                "index_mb": round((table["index_bytes"] or 0) / (1024 * 1024), 2),
-                "total_mb": round((table["total_bytes"] or 0) / (1024 * 1024), 2),
-                "created_at": table["created_at"].isoformat() if table["created_at"] else None,
-                "updated_at": table["updated_at"].isoformat() if table["updated_at"] else None,
-            })
+            result.append(
+                {
+                    "table_name": table["table_name"],
+                    "engine": table["engine"],
+                    "estimated_rows": table["estimated_rows"],
+                    "data_mb": round((table["data_bytes"] or 0) / (1024 * 1024), 2),
+                    "index_mb": round((table["index_bytes"] or 0) / (1024 * 1024), 2),
+                    "total_mb": round((table["total_bytes"] or 0) / (1024 * 1024), 2),
+                    "created_at": (
+                        table["created_at"].isoformat() if table["created_at"] else None
+                    ),
+                    "updated_at": (
+                        table["updated_at"].isoformat() if table["updated_at"] else None
+                    ),
+                }
+            )
 
         cursor.close()
         conn.close()
@@ -258,19 +264,21 @@ def mysql_describe_table(
 
         result = []
         for col in columns:
-            result.append({
-                "name": col["name"],
-                "type": col["data_type"],
-                "full_type": col["full_type"],
-                "max_length": col["max_length"],
-                "nullable": col["nullable"] == "YES",
-                "default": col["default_value"],
-                "primary_key": col["key_type"] == "PRI",
-                "unique": col["key_type"] == "UNI",
-                "auto_increment": "auto_increment" in (col["extra"] or "").lower(),
-                "foreign_key": foreign_keys.get(col["name"]),
-                "comment": col["comment"] if col["comment"] else None,
-            })
+            result.append(
+                {
+                    "name": col["name"],
+                    "type": col["data_type"],
+                    "full_type": col["full_type"],
+                    "max_length": col["max_length"],
+                    "nullable": col["nullable"] == "YES",
+                    "default": col["default_value"],
+                    "primary_key": col["key_type"] == "PRI",
+                    "unique": col["key_type"] == "UNI",
+                    "auto_increment": "auto_increment" in (col["extra"] or "").lower(),
+                    "foreign_key": foreign_keys.get(col["name"]),
+                    "comment": col["comment"] if col["comment"] else None,
+                }
+            )
 
         cursor.close()
         conn.close()
@@ -350,9 +358,7 @@ def mysql_execute_query(
             cursor.close()
             conn.close()
 
-            logger.info(
-                "mysql_query_executed", rows=len(results), query_type="SELECT"
-            )
+            logger.info("mysql_query_executed", rows=len(results), query_type="SELECT")
 
             return {
                 "success": True,
@@ -406,21 +412,25 @@ def mysql_show_processlist(full: bool = False) -> dict[str, Any]:
 
         result = []
         for proc in processes:
-            result.append({
-                "id": proc["Id"],
-                "user": proc["User"],
-                "host": proc["Host"],
-                "database": proc["db"],
-                "command": proc["Command"],
-                "time_seconds": proc["Time"],
-                "state": proc["State"],
-                "info": proc["Info"],  # Query text
-            })
+            result.append(
+                {
+                    "id": proc["Id"],
+                    "user": proc["User"],
+                    "host": proc["Host"],
+                    "database": proc["db"],
+                    "command": proc["Command"],
+                    "time_seconds": proc["Time"],
+                    "state": proc["State"],
+                    "info": proc["Info"],  # Query text
+                }
+            )
 
         # Separate into categories
         active_queries = [p for p in result if p["command"] == "Query" and p["info"]]
         sleeping = [p for p in result if p["command"] == "Sleep"]
-        long_running = [p for p in result if p["time_seconds"] and p["time_seconds"] > 60]
+        long_running = [
+            p for p in result if p["time_seconds"] and p["time_seconds"] > 60
+        ]
 
         cursor.close()
         conn.close()
@@ -487,25 +497,29 @@ def mysql_show_slave_status() -> dict[str, Any]:
             "master_host": status.get("Master_Host") or status.get("Source_Host"),
             "master_port": status.get("Master_Port") or status.get("Source_Port"),
             "master_user": status.get("Master_User") or status.get("Source_User"),
-
             # Replication status
-            "io_running": status.get("Slave_IO_Running") or status.get("Replica_IO_Running"),
-            "sql_running": status.get("Slave_SQL_Running") or status.get("Replica_SQL_Running"),
-            "seconds_behind_master": status.get("Seconds_Behind_Master") or status.get("Seconds_Behind_Source"),
-
+            "io_running": status.get("Slave_IO_Running")
+            or status.get("Replica_IO_Running"),
+            "sql_running": status.get("Slave_SQL_Running")
+            or status.get("Replica_SQL_Running"),
+            "seconds_behind_master": status.get("Seconds_Behind_Master")
+            or status.get("Seconds_Behind_Source"),
             # Position info
-            "master_log_file": status.get("Master_Log_File") or status.get("Source_Log_File"),
-            "read_master_log_pos": status.get("Read_Master_Log_Pos") or status.get("Read_Source_Log_Pos"),
+            "master_log_file": status.get("Master_Log_File")
+            or status.get("Source_Log_File"),
+            "read_master_log_pos": status.get("Read_Master_Log_Pos")
+            or status.get("Read_Source_Log_Pos"),
             "relay_log_file": status.get("Relay_Log_File"),
             "relay_log_pos": status.get("Relay_Log_Pos"),
-            "exec_master_log_pos": status.get("Exec_Master_Log_Pos") or status.get("Exec_Source_Log_Pos"),
-
+            "exec_master_log_pos": status.get("Exec_Master_Log_Pos")
+            or status.get("Exec_Source_Log_Pos"),
             # Errors
-            "last_io_error": status.get("Last_IO_Error") or status.get("Last_IO_Error_Message"),
-            "last_sql_error": status.get("Last_SQL_Error") or status.get("Last_SQL_Error_Message"),
+            "last_io_error": status.get("Last_IO_Error")
+            or status.get("Last_IO_Error_Message"),
+            "last_sql_error": status.get("Last_SQL_Error")
+            or status.get("Last_SQL_Error_Message"),
             "last_io_errno": status.get("Last_IO_Errno"),
             "last_sql_errno": status.get("Last_SQL_Errno"),
-
             # GTID (if enabled)
             "gtid_mode": status.get("Retrieved_Gtid_Set") is not None,
             "retrieved_gtid_set": status.get("Retrieved_Gtid_Set"),
@@ -587,7 +601,11 @@ def mysql_show_engine_status(engine: str = "innodb") -> dict[str, Any]:
         if "LATEST DETECTED DEADLOCK" in raw_status:
             start = raw_status.find("LATEST DETECTED DEADLOCK")
             end = raw_status.find("---", start + 100)
-            result["deadlock_info"] = raw_status[start:end] if end > start else raw_status[start:start+2000]
+            result["deadlock_info"] = (
+                raw_status[start:end]
+                if end > start
+                else raw_status[start : start + 2000]
+            )
             result["has_recent_deadlock"] = True
         else:
             result["has_recent_deadlock"] = False
@@ -596,7 +614,11 @@ def mysql_show_engine_status(engine: str = "innodb") -> dict[str, Any]:
         if "TRANSACTIONS" in raw_status:
             start = raw_status.find("TRANSACTIONS")
             end = raw_status.find("---", start + 50)
-            result["transactions_section"] = raw_status[start:end] if end > start else raw_status[start:start+1000]
+            result["transactions_section"] = (
+                raw_status[start:end]
+                if end > start
+                else raw_status[start : start + 1000]
+            )
 
         # Extract lock waits
         if "LOCK WAIT" in raw_status:
