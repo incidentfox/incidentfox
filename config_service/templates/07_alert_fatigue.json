@@ -2,9 +2,9 @@
   "$schema": "incidentfox-template-v1",
   "$template_name": "Alert Fatigue Analyst",
   "$template_slug": "alert-fatigue-analyst",
-  "$description": "Enterprise-grade alert fatigue reduction specialist. Analyzes incident data from PagerDuty, correlates with Slack discussions and Jira tickets, checks for runbooks in Confluence, and produces data-driven recommendations for reducing on-call burden. Computes real metrics: MTTA, MTTR, acknowledgment rates, escalation patterns, and time-of-day distributions.",
+  "$description": "Enterprise-grade alert fatigue reduction specialist. Analyzes incident data from PagerDuty, Incident.io, or Opsgenie, correlates with Slack discussions and Jira tickets, checks for runbooks in Confluence, and produces data-driven recommendations for reducing on-call burden. Computes real metrics: MTTA, MTTR, acknowledgment rates, escalation patterns, and time-of-day distributions.",
   "$category": "observability",
-  "$version": "3.0.0",
+  "$version": "3.1.0",
   "agents": {
     "alert_fatigue_analyst": {
       "enabled": true,
@@ -35,6 +35,25 @@
         "pagerduty_list_services": true,
         "pagerduty_get_on_call": true,
         "pagerduty_get_alert_analytics": true,
+
+        "incidentio_list_incidents": true,
+        "incidentio_get_incident": true,
+        "incidentio_get_incident_updates": true,
+        "incidentio_list_incidents_by_date_range": true,
+        "incidentio_list_severities": true,
+        "incidentio_list_incident_types": true,
+        "incidentio_get_alert_analytics": true,
+        "incidentio_calculate_mttr": true,
+
+        "opsgenie_list_alerts": true,
+        "opsgenie_get_alert": true,
+        "opsgenie_get_alert_logs": true,
+        "opsgenie_list_alerts_by_date_range": true,
+        "opsgenie_list_services": true,
+        "opsgenie_list_teams": true,
+        "opsgenie_get_on_call": true,
+        "opsgenie_get_alert_analytics": true,
+        "opsgenie_calculate_mttr": true,
 
         "slack_search_messages": true,
         "slack_get_channel_history": true,
