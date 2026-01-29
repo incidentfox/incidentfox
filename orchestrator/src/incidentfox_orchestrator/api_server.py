@@ -1681,6 +1681,291 @@ def create_app() -> FastAPI:
             errors=errors,
         )
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Meeting Bot API (Recall.ai Integration)
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    class MeetingBotJoinRequest(BaseModel):
+        meeting_url: str = Field(..., description="Meeting URL (Zoom, Google Meet, Teams, Webex)")
+        incident_id: Optional[str] = Field(None, description="Associated incident ID")
+        bot_name: Optional[str] = Field(None, description="Custom bot name (default: IncidentFox Notetaker)")
+
+    class MeetingBotJoinResponse(BaseModel):
+        ok: bool
+        bot_id: Optional[str] = None
+        status: Optional[str] = None
+        meeting_url: Optional[str] = None
+        error: Optional[str] = None
+
+    class MeetingBotStatusResponse(BaseModel):
+        ok: bool
+        bot_id: Optional[str] = None
+        status_code: Optional[str] = None
+        status_message: Optional[str] = None
+        meeting_url: Optional[str] = None
+        error: Optional[str] = None
+
+    class MeetingBotStopResponse(BaseModel):
+        ok: bool
+        bot_id: Optional[str] = None
+        status: Optional[str] = None
+        error: Optional[str] = None
+
+    @app.post("/api/v1/teams/me/meeting/join", response_model=MeetingBotJoinResponse)
+    async def meeting_bot_join(
+        body: MeetingBotJoinRequest,
+        authorization: str = Header(default=""),
+        x_incidentfox_team_token: str = Header(default="", alias="X-IncidentFox-Team-Token"),
+    ):
+        """
+        Send an IncidentFox meeting bot to join a meeting for real-time transcription.
+
+        The bot will join the specified meeting (Zoom, Google Meet, Teams, etc.) and
+        stream real-time transcripts to the associated incident investigation.
+
+        Requires Recall.ai to be configured in team settings.
+        """
+        import uuid
+
+        raw = _extract_token(authorization, x_incidentfox_team_token)
+        if not raw:
+            raise HTTPException(status_code=401, detail="Missing team token")
+
+        # Validate team token and get team info
+        try:
+            team_info = app.state.config_service.validate_team_token(raw)
+            if not team_info.get("valid"):
+                raise HTTPException(status_code=401, detail="Invalid team token")
+            org_id = team_info.get("org_id")
+            team_node_id = team_info.get("team_node_id")
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"config_service_unavailable: {e}") from e
+
+        # Get Recall.ai configuration
+        recall_api_key = os.getenv("RECALL_API_KEY", "").strip()
+        recall_region = os.getenv("RECALL_REGION", "us-west-2").strip()
+        recall_webhook_url = os.getenv("RECALL_WEBHOOK_URL", "").strip()
+
+        if not recall_api_key:
+            return MeetingBotJoinResponse(
+                ok=False,
+                error="Recall.ai not configured. Please contact your administrator.",
+            )
+
+        # Get custom bot name from team config or use default
+        bot_name = body.bot_name or "IncidentFox Notetaker"
+
+        # Create bot via Recall.ai API
+        recall_api_base = f"https://{recall_region}.recall.ai/api/v1"
+
+        bot_config = {
+            "meeting_url": body.meeting_url,
+            "bot_name": bot_name,
+            "recording_config": {
+                "transcript": {
+                    "provider": {"meeting_captions": {}}
+                }
+            },
+        }
+
+        # Add webhook for real-time transcripts
+        if recall_webhook_url:
+            bot_config["real_time_endpoints"] = [
+                {
+                    "type": "webhook",
+                    "url": recall_webhook_url,
+                    "events": ["bot.status_change", "transcript.data"],
+                }
+            ]
+
+        # Add metadata for routing
+        bot_config["metadata"] = {
+            "org_id": org_id,
+            "team_node_id": team_node_id,
+            "incident_id": body.incident_id,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{recall_api_base}/bot",
+                    headers={
+                        "Authorization": f"Token {recall_api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=bot_config,
+                )
+
+                if response.status_code == 401:
+                    return MeetingBotJoinResponse(
+                        ok=False,
+                        error="Recall.ai authentication failed. Please check API key.",
+                    )
+
+                if response.status_code >= 400:
+                    return MeetingBotJoinResponse(
+                        ok=False,
+                        error=f"Recall.ai error: {response.text[:200]}",
+                    )
+
+                result = response.json()
+                recall_bot_id = result.get("id")
+
+                # Store bot record in our database
+                internal_id = uuid.uuid4().hex
+                try:
+                    app.state.config_service.create_recall_bot(
+                        admin_token=os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN", ""),
+                        id=internal_id,
+                        org_id=org_id,
+                        team_node_id=team_node_id,
+                        incident_id=body.incident_id,
+                        recall_bot_id=recall_bot_id,
+                        meeting_url=body.meeting_url,
+                        bot_name=bot_name,
+                    )
+                except Exception as db_error:
+                    _log("meeting_bot_db_error", error=str(db_error), recall_bot_id=recall_bot_id)
+                    # Continue - bot was created in Recall, just failed to record locally
+
+                _log(
+                    "meeting_bot_created",
+                    org_id=org_id,
+                    team_node_id=team_node_id,
+                    incident_id=body.incident_id,
+                    recall_bot_id=recall_bot_id,
+                    meeting_url=body.meeting_url,
+                )
+
+                return MeetingBotJoinResponse(
+                    ok=True,
+                    bot_id=recall_bot_id,
+                    status=result.get("status", {}).get("code", "unknown"),
+                    meeting_url=body.meeting_url,
+                )
+
+        except httpx.RequestError as e:
+            _log("meeting_bot_request_error", error=str(e))
+            return MeetingBotJoinResponse(
+                ok=False,
+                error=f"Failed to connect to Recall.ai: {e}",
+            )
+
+    @app.get("/api/v1/teams/me/meeting/bot/{bot_id}", response_model=MeetingBotStatusResponse)
+    async def meeting_bot_status(
+        bot_id: str,
+        authorization: str = Header(default=""),
+        x_incidentfox_team_token: str = Header(default="", alias="X-IncidentFox-Team-Token"),
+    ):
+        """
+        Get the current status of a meeting bot.
+        """
+        raw = _extract_token(authorization, x_incidentfox_team_token)
+        if not raw:
+            raise HTTPException(status_code=401, detail="Missing team token")
+
+        # Validate team token
+        try:
+            team_info = app.state.config_service.validate_team_token(raw)
+            if not team_info.get("valid"):
+                raise HTTPException(status_code=401, detail="Invalid team token")
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"config_service_unavailable: {e}") from e
+
+        recall_api_key = os.getenv("RECALL_API_KEY", "").strip()
+        recall_region = os.getenv("RECALL_REGION", "us-west-2").strip()
+
+        if not recall_api_key:
+            return MeetingBotStatusResponse(ok=False, error="Recall.ai not configured")
+
+        recall_api_base = f"https://{recall_region}.recall.ai/api/v1"
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{recall_api_base}/bot/{bot_id}",
+                    headers={"Authorization": f"Token {recall_api_key}"},
+                )
+
+                if response.status_code == 404:
+                    return MeetingBotStatusResponse(ok=False, error="Bot not found")
+
+                if response.status_code >= 400:
+                    return MeetingBotStatusResponse(
+                        ok=False,
+                        error=f"Recall.ai error: {response.text[:200]}",
+                    )
+
+                result = response.json()
+                status = result.get("status", {})
+
+                return MeetingBotStatusResponse(
+                    ok=True,
+                    bot_id=bot_id,
+                    status_code=status.get("code", "unknown"),
+                    status_message=status.get("message", ""),
+                    meeting_url=result.get("meeting_url"),
+                )
+
+        except httpx.RequestError as e:
+            return MeetingBotStatusResponse(ok=False, error=f"Request failed: {e}")
+
+    @app.post("/api/v1/teams/me/meeting/bot/{bot_id}/stop", response_model=MeetingBotStopResponse)
+    async def meeting_bot_stop(
+        bot_id: str,
+        authorization: str = Header(default=""),
+        x_incidentfox_team_token: str = Header(default="", alias="X-IncidentFox-Team-Token"),
+    ):
+        """
+        Stop a meeting bot and remove it from the meeting.
+        """
+        raw = _extract_token(authorization, x_incidentfox_team_token)
+        if not raw:
+            raise HTTPException(status_code=401, detail="Missing team token")
+
+        # Validate team token
+        try:
+            team_info = app.state.config_service.validate_team_token(raw)
+            if not team_info.get("valid"):
+                raise HTTPException(status_code=401, detail="Invalid team token")
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"config_service_unavailable: {e}") from e
+
+        recall_api_key = os.getenv("RECALL_API_KEY", "").strip()
+        recall_region = os.getenv("RECALL_REGION", "us-west-2").strip()
+
+        if not recall_api_key:
+            return MeetingBotStopResponse(ok=False, error="Recall.ai not configured")
+
+        recall_api_base = f"https://{recall_region}.recall.ai/api/v1"
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{recall_api_base}/bot/{bot_id}/leave_call",
+                    headers={"Authorization": f"Token {recall_api_key}"},
+                )
+
+                if response.status_code == 404:
+                    return MeetingBotStopResponse(ok=False, error="Bot not found")
+
+                if response.status_code >= 400:
+                    return MeetingBotStopResponse(
+                        ok=False,
+                        error=f"Recall.ai error: {response.text[:200]}",
+                    )
+
+                _log("meeting_bot_stopped", bot_id=bot_id)
+
+                return MeetingBotStopResponse(
+                    ok=True,
+                    bot_id=bot_id,
+                    status="stopped",
+                )
+
+        except httpx.RequestError as e:
+            return MeetingBotStopResponse(ok=False, error=f"Request failed: {e}")
+
     return app
 
 

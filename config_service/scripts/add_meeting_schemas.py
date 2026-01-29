@@ -123,6 +123,68 @@ MEETING_SCHEMAS = [
             }
         ],
     },
+    {
+        "id": "recall",
+        "name": "Recall.ai",
+        "category": "meeting",
+        "description": "Real-time meeting transcription for incident war rooms. White-label bot joins Zoom, Google Meet, Teams, and Webex meetings to stream live transcripts to your investigation. SOC 2, HIPAA, GDPR compliant.",
+        "docs_url": "https://docs.recall.ai/",
+        "icon_url": "https://cdn.incidentfox.ai/icons/recall.svg",
+        "display_order": 99,  # Featured, show first
+        "featured": True,
+        "fields": [
+            {
+                "name": "api_key",
+                "type": "secret",
+                "required": True,
+                "level": "org",
+                "description": "Recall.ai API key from dashboard",
+                "placeholder": "your_recall_api_key",
+            },
+            {
+                "name": "region",
+                "type": "select",
+                "required": True,
+                "level": "org",
+                "description": "Recall.ai region (choose closest to your infrastructure)",
+                "options": ["us-east-1", "us-west-2", "eu-central-1", "ap-northeast-1"],
+                "default_value": "us-west-2",
+            },
+            {
+                "name": "webhook_secret",
+                "type": "secret",
+                "required": False,
+                "level": "org",
+                "description": "Webhook signing secret for verifying Recall.ai webhooks (recommended for production)",
+                "placeholder": "whsec_...",
+            },
+            {
+                "name": "bot_name",
+                "type": "string",
+                "required": False,
+                "level": "org",
+                "description": "Custom name for the meeting bot (default: IncidentFox Notetaker)",
+                "default_value": "IncidentFox Notetaker",
+                "placeholder": "IncidentFox Notetaker",
+            },
+            {
+                "name": "bot_image_url",
+                "type": "url",
+                "required": False,
+                "level": "org",
+                "description": "Custom avatar image URL for the meeting bot (256x256 PNG recommended)",
+                "placeholder": "https://your-cdn.com/bot-avatar.png",
+            },
+            {
+                "name": "webhook_url",
+                "type": "readonly",
+                "required": False,
+                "level": "org",
+                "description": "Webhook URL to configure in Recall.ai dashboard for real-time transcripts",
+                "default_value": "https://orchestrator.incidentfox.ai/webhooks/recall",
+            },
+        ],
+    },
 ]
 
 
@@ -150,7 +212,7 @@ def main():
                             display_order, featured, fields, created_at, updated_at
                         ) VALUES (
                             :id, :name, :category, :description, :docs_url, :icon_url,
-                            :display_order, :featured, :fields::jsonb, NOW(), NOW()
+                            :display_order, :featured, CAST(:fields AS jsonb), NOW(), NOW()
                         )
                     """),
                     {

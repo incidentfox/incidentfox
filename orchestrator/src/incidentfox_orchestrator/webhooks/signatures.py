@@ -296,3 +296,46 @@ def verify_circleback_signature(
 
     if not _constant_time_compare(expected_digest, signature):
         raise SignatureVerificationError("bad_signature", "circleback")
+
+
+def verify_recall_signature(
+    *,
+    webhook_secret: str,
+    signature: Optional[str],
+    raw_body: str,
+) -> None:
+    """
+    Verify Recall.ai webhook signature.
+
+    Recall.ai uses HMAC-SHA256:
+    - Signature header (x-recall-signature): sha256={hex_digest}
+
+    Args:
+        webhook_secret: Recall.ai webhook secret
+        signature: x-recall-signature header
+        raw_body: Raw request body as string
+
+    Raises:
+        SignatureVerificationError: If verification fails
+    """
+    if not webhook_secret:
+        raise SignatureVerificationError("missing_webhook_secret", "recall")
+    if not signature:
+        raise SignatureVerificationError("missing_signature_header", "recall")
+
+    # Recall signature format: sha256=<hex>
+    if signature.startswith("sha256="):
+        provided_digest = signature[7:]  # Remove "sha256=" prefix
+    else:
+        # Some versions may not have prefix
+        provided_digest = signature
+
+    # Compute expected digest
+    expected_digest = hmac.new(
+        webhook_secret.encode("utf-8"),
+        raw_body.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not _constant_time_compare(expected_digest, provided_digest):
+        raise SignatureVerificationError("bad_signature", "recall")
