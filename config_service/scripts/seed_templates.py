@@ -19,6 +19,7 @@ import uuid
 from sqlalchemy.orm import Session
 from src.db.models import Template
 from src.db.session import get_session_maker
+from src.core.tools_catalog import BUILT_IN_TOOLS_METADATA
 
 # Template metadata mapping (with fake usage stats for demo)
 TEMPLATE_METADATA = {
@@ -275,84 +276,65 @@ def extract_requirements(template_json: dict) -> tuple:
 
 def derive_integrations_from_tools(tools: set) -> list:
     """
-    Derive required integrations from tool names.
+    Derive required integrations from tool names using the tools catalog.
 
-    Uses both prefix matching and keyword detection to map tools to integrations.
+    Uses the authoritative BUILT_IN_TOOLS_METADATA to look up each tool's
+    required_integrations, then maps integration IDs to display names.
     """
-    # Prefix-based mappings (tool starts with this)
-    prefix_mappings = {
-        "slack_": "Slack",
-        "post_slack": "Slack",
-        "github_": "GitHub",
-        "pagerduty_": "PagerDuty",
-        "datadog_": "Datadog",
-        "query_datadog": "Datadog",
-        "prometheus_": "Prometheus",
-        "query_prometheus": "Prometheus",
-        "cloudwatch_": "AWS",
-        "get_cloudwatch": "AWS",
-        "query_cloudwatch": "AWS",
-        "ec2_": "AWS",
-        "describe_ec2": "AWS",
-        "rds_": "AWS",
-        "get_rds": "AWS",
-        "s3_": "AWS",
-        "lambda_": "AWS",
-        "get_lambda": "AWS",
-        "describe_lambda": "AWS",
-        "ecs_": "AWS",
-        "list_ecs": "AWS",
-        "describe_alb": "AWS",
-        "jira_": "Jira",
-        "confluence_": "Confluence",
-        "opsgenie_": "Opsgenie",
-        "grafana_": "Grafana",
-        "sentry_": "Sentry",
-        "newrelic_": "New Relic",
-        "query_newrelic": "New Relic",
-        "snowflake_": "Snowflake",
-        "postgres_": "PostgreSQL",
-        "pg_": "PostgreSQL",
-        "mysql_": "MySQL",
-        "kafka_": "Kafka",
-        "docker_": "Docker",
-        # Kubernetes tools
-        "list_pods": "Kubernetes",
-        "get_pod": "Kubernetes",
-        "describe_pod": "Kubernetes",
-        "describe_deployment": "Kubernetes",
-        "get_deployment": "Kubernetes",
-        "describe_node": "Kubernetes",
-        "describe_service": "Kubernetes",
-        "list_namespaces": "Kubernetes",
+    # Build lookup dict from tools catalog: tool_id -> required_integrations
+    tool_to_integrations = {
+        tool["id"]: tool.get("required_integrations", [])
+        for tool in BUILT_IN_TOOLS_METADATA
     }
 
-    # Keyword-based mappings (tool contains this keyword)
-    keyword_mappings = {
-        "github": "GitHub",
-        "slack": "Slack",
+    # Map integration IDs to human-readable display names
+    integration_display_names = {
         "kubernetes": "Kubernetes",
-        "k8s": "Kubernetes",
+        "aws": "AWS",
+        "github": "GitHub",
+        "gitlab": "GitLab",
+        "slack": "Slack",
+        "pagerduty": "PagerDuty",
+        "opsgenie": "Opsgenie",
+        "incidentio": "Incident.io",
+        "datadog": "Datadog",
+        "prometheus": "Prometheus",
+        "grafana": "Grafana",
+        "newrelic": "New Relic",
+        "sentry": "Sentry",
+        "splunk": "Splunk",
+        "elasticsearch": "Elasticsearch",
+        "coralogix": "Coralogix",
+        "snowflake": "Snowflake",
+        "bigquery": "BigQuery",
+        "postgresql": "PostgreSQL",
+        "mysql": "MySQL",
+        "kafka": "Kafka",
+        "schema_registry": "Schema Registry",
+        "kafka_connect": "Kafka Connect",
+        "confluence": "Confluence",
+        "jira": "Jira",
+        "linear": "Linear",
+        "notion": "Notion",
+        "google_docs": "Google Docs",
+        "msteams": "Microsoft Teams",
+        "gcp": "GCP",
+        "sourcegraph": "Sourcegraph",
     }
 
-    integrations = set()
+    # Collect all integration IDs from the tools
+    integration_ids = set()
     for tool in tools:
-        tool_lower = tool.lower()
+        if tool in tool_to_integrations:
+            integration_ids.update(tool_to_integrations[tool])
 
-        # Check prefix mappings first
-        matched = False
-        for prefix, integration_name in prefix_mappings.items():
-            if tool_lower.startswith(prefix):
-                integrations.add(integration_name)
-                matched = True
-                break
-
-        # If no prefix match, check keyword mappings
-        if not matched:
-            for keyword, integration_name in keyword_mappings.items():
-                if keyword in tool_lower:
-                    integrations.add(integration_name)
-                    break
+    # Convert to display names
+    integrations = set()
+    for integration_id in integration_ids:
+        display_name = integration_display_names.get(
+            integration_id, integration_id.title()
+        )
+        integrations.add(display_name)
 
     # Sort for consistent display order (most relevant first)
     priority_order = [

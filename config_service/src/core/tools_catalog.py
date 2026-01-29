@@ -84,12 +84,26 @@ def _infer_tool_category(tool_name: str) -> str:
 # Static list of all built-in tools with integration dependencies
 # This mirrors the tools loaded in agent/src/ai_agent/tools/tool_loader.py
 BUILT_IN_TOOLS_METADATA = [
-    # Core agent tool (no integration required)
+    # Core agent tools (no integration required)
     {
         "id": "think",
         "name": "Think",
         "description": "Internal reasoning and planning tool",
         "category": "agent",
+        "required_integrations": [],
+    },
+    {
+        "id": "llm_call",
+        "name": "LLM Call",
+        "description": "Make a call to an LLM for text generation",
+        "category": "agent",
+        "required_integrations": [],
+    },
+    {
+        "id": "web_search",
+        "name": "Web Search",
+        "description": "Search the web using Tavily API",
+        "category": "other",
         "required_integrations": [],
     },
     # Kubernetes tools
@@ -201,30 +215,38 @@ BUILT_IN_TOOLS_METADATA = [
     },
     # Slack tools
     {
-        "id": "search_slack_messages",
+        "id": "slack_search_messages",
         "name": "Search Slack Messages",
         "description": "Search for messages in Slack",
         "category": "communication",
         "required_integrations": ["slack"],
     },
     {
-        "id": "get_channel_history",
+        "id": "slack_get_channel_history",
         "name": "Get Channel History",
         "description": "Get message history from a Slack channel",
         "category": "communication",
         "required_integrations": ["slack"],
     },
     {
-        "id": "get_thread_replies",
+        "id": "slack_get_thread_replies",
         "name": "Get Thread Replies",
         "description": "Get replies in a Slack thread",
         "category": "communication",
         "required_integrations": ["slack"],
     },
     {
-        "id": "post_slack_message",
+        "id": "slack_post_message",
         "name": "Post Slack Message",
         "description": "Post a message to Slack",
+        "category": "communication",
+        "required_integrations": ["slack"],
+    },
+    # Alias for backward compatibility
+    {
+        "id": "post_slack_message",
+        "name": "Post Slack Message",
+        "description": "Post a message to Slack (alias)",
         "category": "communication",
         "required_integrations": ["slack"],
     },
@@ -398,6 +420,56 @@ BUILT_IN_TOOLS_METADATA = [
         "description": "Aggregate errors by field in Elasticsearch",
         "category": "observability",
         "required_integrations": ["elasticsearch"],
+    },
+    # Log Analysis tools (no integration - analyze provided log data)
+    {
+        "id": "get_log_statistics",
+        "name": "Get Log Statistics",
+        "description": "Compute statistics from log data",
+        "category": "observability",
+        "required_integrations": [],
+    },
+    {
+        "id": "sample_logs",
+        "name": "Sample Logs",
+        "description": "Sample representative logs from a dataset",
+        "category": "observability",
+        "required_integrations": [],
+    },
+    {
+        "id": "search_logs_by_pattern",
+        "name": "Search Logs By Pattern",
+        "description": "Search logs using regex patterns",
+        "category": "observability",
+        "required_integrations": [],
+    },
+    {
+        "id": "get_logs_around_timestamp",
+        "name": "Get Logs Around Timestamp",
+        "description": "Get logs around a specific timestamp",
+        "category": "observability",
+        "required_integrations": [],
+    },
+    {
+        "id": "correlate_logs_with_events",
+        "name": "Correlate Logs With Events",
+        "description": "Correlate logs with other events",
+        "category": "observability",
+        "required_integrations": [],
+    },
+    {
+        "id": "extract_log_signatures",
+        "name": "Extract Log Signatures",
+        "description": "Extract common log signatures",
+        "category": "observability",
+        "required_integrations": [],
+    },
+    {
+        "id": "detect_log_anomalies",
+        "name": "Detect Log Anomalies",
+        "description": "Detect anomalies in log patterns",
+        "category": "observability",
+        "required_integrations": [],
     },
     # Confluence tools
     {
@@ -657,6 +729,55 @@ BUILT_IN_TOOLS_METADATA = [
         "name": "Run Linter",
         "description": "Run code linter",
         "category": "other",
+        "required_integrations": [],
+    },
+    {
+        "id": "run_eslint",
+        "name": "Run ESLint",
+        "description": "Run ESLint JavaScript linter",
+        "category": "other",
+        "required_integrations": [],
+    },
+    {
+        "id": "run_prettier",
+        "name": "Run Prettier",
+        "description": "Run Prettier code formatter",
+        "category": "other",
+        "required_integrations": [],
+    },
+    {
+        "id": "run_black",
+        "name": "Run Black",
+        "description": "Run Black Python formatter",
+        "category": "other",
+        "required_integrations": [],
+    },
+    {
+        "id": "run_jest",
+        "name": "Run Jest",
+        "description": "Run Jest JavaScript tests",
+        "category": "other",
+        "required_integrations": [],
+    },
+    {
+        "id": "npm_run",
+        "name": "NPM Run",
+        "description": "Run npm scripts",
+        "category": "other",
+        "required_integrations": [],
+    },
+    {
+        "id": "bash_run",
+        "name": "Bash Run",
+        "description": "Execute bash commands",
+        "category": "other",
+        "required_integrations": [],
+    },
+    {
+        "id": "edit_file",
+        "name": "Edit File",
+        "description": "Edit a file in the filesystem",
+        "category": "filesystem",
         "required_integrations": [],
     },
     # Browser tools (no integration required)
