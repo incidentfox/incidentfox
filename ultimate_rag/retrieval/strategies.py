@@ -125,8 +125,99 @@ class RetrievalStrategy(ABC):
         """
         Analyze a query to understand intent and extract entities.
 
-        In production, use an LLM or NER model for better analysis.
+        Uses LLM for sophisticated analysis with heuristic fallback.
         """
+        # Try LLM-based analysis first
+        try:
+            import asyncio
+
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're already in an async context, use heuristics
+                return self._analyze_query_heuristic(query)
+            else:
+                return loop.run_until_complete(self._analyze_query_llm(query))
+        except RuntimeError:
+            # No event loop, try to create one
+            try:
+                return asyncio.run(self._analyze_query_llm(query))
+            except Exception:
+                return self._analyze_query_heuristic(query)
+
+    async def _analyze_query_llm(self, query: str) -> QueryAnalysis:
+        """LLM-based query analysis for intent and entity extraction."""
+        try:
+            from openai import AsyncOpenAI
+
+            client = AsyncOpenAI()
+
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0.0,
+                max_tokens=200,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """Analyze this search query and return JSON with:
+{
+  "intent": one of ["factual", "procedural", "troubleshooting", "comparative", "relational", "temporal"],
+  "entities": list of service/system/team names mentioned,
+  "keywords": list of important search terms,
+  "urgency": number 0.0-1.0 (1.0 = critical incident)
+}
+
+Intent definitions:
+- factual: Looking for facts or information
+- procedural: How to do something, steps, procedures
+- troubleshooting: Fixing errors, debugging, resolving issues
+- comparative: Comparing options
+- relational: Who owns/manages something
+- temporal: When something happened or changed""",
+                    },
+                    {"role": "user", "content": query},
+                ],
+            )
+
+            content = response.choices[0].message.content.strip()
+            import json
+
+            # Parse JSON response
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError:
+                import re
+
+                json_match = re.search(r"\{.*\}", content, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group())
+                else:
+                    return self._analyze_query_heuristic(query)
+
+            # Map intent string to enum
+            intent_map = {
+                "factual": QueryIntent.FACTUAL,
+                "procedural": QueryIntent.PROCEDURAL,
+                "troubleshooting": QueryIntent.TROUBLESHOOTING,
+                "comparative": QueryIntent.COMPARATIVE,
+                "relational": QueryIntent.RELATIONAL,
+                "temporal": QueryIntent.TEMPORAL,
+            }
+            intent = intent_map.get(data.get("intent", "factual"), QueryIntent.FACTUAL)
+
+            return QueryAnalysis(
+                original_query=query,
+                intent=intent,
+                entities_mentioned=data.get("entities", []),
+                keywords=data.get("keywords", []),
+                urgency=float(data.get("urgency", 0.5)),
+            )
+
+        except Exception as e:
+            logger.debug(f"LLM query analysis failed, using heuristics: {e}")
+            return self._analyze_query_heuristic(query)
+
+    def _analyze_query_heuristic(self, query: str) -> QueryAnalysis:
+        """Fallback heuristic-based query analysis."""
         query_lower = query.lower()
 
         # Detect intent based on keywords
@@ -166,6 +257,10 @@ class RetrievalStrategy(ABC):
             "why",
             "where",
             "when",
+            "can",
+            "could",
+            "would",
+            "should",
         }
         words = query_lower.split()
         keywords = [w for w in words if w not in stop_words and len(w) > 2]
@@ -182,15 +277,101 @@ class RetrievalStrategy(ABC):
         return QueryAnalysis(
             original_query=query,
             intent=intent,
-            entities_mentioned=[],  # Would use NER in production
+            entities_mentioned=[],
             keywords=keywords,
             urgency=urgency,
         )
 
+    async def search_trees(
+        self,
+        query: str,
+        forest: "TreeForest",
+        top_k: int = 10,
+    ) -> List[RetrievedChunk]:
+        """
+        Shared tree search implementation using RAPTOR's similarity functions.
+
+        This is the core semantic search that all strategies can use.
+        """
+        try:
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from knowledge_base.raptor.utils import distances_from_embeddings
+        except ImportError as e:
+            logger.error(f"Failed to import RAPTOR modules: {e}")
+            logger.error(
+                "Ensure knowledge_base is in PYTHONPATH and dependencies are installed"
+            )
+            return []
+
+        chunks = []
+        embedding_model = OpenAIEmbeddingModel()
+
+        try:
+            query_embedding = embedding_model.create_embedding(query)
+        except Exception as e:
+            logger.error(f"Failed to create query embedding: {e}")
+            return []
+
+        for tree in forest.trees.values():
+            node_list = list(tree.all_nodes.values())
+            if not node_list:
+                continue
+
+            # Extract embeddings
+            embeddings = []
+            valid_nodes = []
+            embedding_key = getattr(tree, "embedding_model", "OpenAI") or "OpenAI"
+
+            for node in node_list:
+                node_embedding = node.embeddings.get(embedding_key)
+                if node_embedding:
+                    embeddings.append(node_embedding)
+                    valid_nodes.append(node)
+
+            if not embeddings:
+                continue
+
+            try:
+                distances = distances_from_embeddings(
+                    query_embedding, embeddings, distance_metric="cosine"
+                )
+                scores = [1.0 - d for d in distances]
+                sorted_indices = sorted(
+                    range(len(scores)), key=lambda i: scores[i], reverse=True
+                )
+
+                for idx in sorted_indices[:top_k]:
+                    node = valid_nodes[idx]
+                    chunks.append(
+                        RetrievedChunk(
+                            text=node.text,
+                            node_id=node.index,
+                            tree_id=tree.tree_id,
+                            score=scores[idx],
+                            importance=node.get_importance(),
+                            layer=getattr(node, "layer", 0),
+                            strategy=self.name,
+                            metadata={
+                                "source_url": getattr(node, "source_url", None),
+                                "knowledge_type": (
+                                    node.knowledge_type.value
+                                    if hasattr(node, "knowledge_type")
+                                    else "factual"
+                                ),
+                            },
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"Search failed for tree {tree.tree_id}: {e}")
+                continue
+
+        chunks.sort(key=lambda c: c.score, reverse=True)
+        return chunks[:top_k]
+
 
 class MultiQueryStrategy(RetrievalStrategy):
     """
-    Expand a single query into multiple perspectives.
+    Expand a single query into multiple perspectives using LLM.
 
     Generates query variations to capture different aspects of what
     the user might be looking for, then combines results.
@@ -201,10 +382,22 @@ class MultiQueryStrategy(RetrievalStrategy):
     def __init__(
         self,
         num_variations: int = 3,
-        llm_expander: Optional[Any] = None,  # LLM for query expansion
+        model: str = "gpt-4o-mini",
     ):
         self.num_variations = num_variations
-        self.llm_expander = llm_expander
+        self.model = model
+        self._client = None
+
+    def _get_client(self):
+        """Lazy initialization of OpenAI client."""
+        if self._client is None:
+            try:
+                from openai import AsyncOpenAI
+
+                self._client = AsyncOpenAI()
+            except ImportError:
+                logger.warning("OpenAI not available for multi-query expansion")
+        return self._client
 
     async def retrieve(
         self,
@@ -240,39 +433,80 @@ class MultiQueryStrategy(RetrievalStrategy):
 
     async def _expand_query(self, query: str) -> List[str]:
         """
-        Expand query into variations.
+        Expand query into variations using LLM.
 
-        If LLM available, use it for intelligent expansion.
-        Otherwise, use simple heuristics.
+        Uses GPT to generate semantically diverse reformulations
+        that capture different aspects of the user's intent.
         """
         variations = [query]  # Always include original
 
-        if self.llm_expander:
-            # Use LLM for expansion (implementation depends on LLM interface)
-            # prompt = f"Generate {self.num_variations} different ways to ask: {query}"
-            # expanded = await self.llm_expander.generate(prompt)
-            pass
+        client = self._get_client()
+        if client:
+            try:
+                response = await client.chat.completions.create(
+                    model=self.model,
+                    temperature=0.7,
+                    max_tokens=300,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": """You are a search query expansion expert. Generate alternative search queries that capture different aspects of the user's information need.
+
+Rules:
+- Generate exactly the requested number of variations
+- Each variation should approach the topic from a different angle
+- Keep variations concise (under 20 words each)
+- Output ONLY the variations, one per line, no numbering or prefixes
+- Variations should be natural language queries, not keywords""",
+                        },
+                        {
+                            "role": "user",
+                            "content": f"Generate {self.num_variations} different ways to search for information about:\n\n{query}",
+                        },
+                    ],
+                )
+
+                content = response.choices[0].message.content
+                if content:
+                    # Parse variations from response
+                    llm_variations = [
+                        line.strip()
+                        for line in content.strip().split("\n")
+                        if line.strip() and len(line.strip()) > 5
+                    ]
+                    variations.extend(llm_variations[: self.num_variations])
+                    logger.debug(
+                        f"LLM expanded query into {len(variations)} variations"
+                    )
+
+            except Exception as e:
+                logger.warning(f"LLM query expansion failed, using heuristics: {e}")
+                # Fall back to heuristic expansion
+                variations.extend(self._heuristic_expansion(query))
         else:
-            # Simple heuristic expansion
-            analysis = self.analyze_query(query)
-
-            # Add keyword-focused version
-            if analysis.keywords:
-                variations.append(" ".join(analysis.keywords))
-
-            # Add intent-specific reformulation
-            if analysis.intent == QueryIntent.PROCEDURAL:
-                variations.append(
-                    f"steps procedure guide {' '.join(analysis.keywords)}"
-                )
-            elif analysis.intent == QueryIntent.TROUBLESHOOTING:
-                variations.append(f"error fix solution {' '.join(analysis.keywords)}")
-            elif analysis.intent == QueryIntent.RELATIONAL:
-                variations.append(
-                    f"owner team responsible {' '.join(analysis.keywords)}"
-                )
+            # No LLM available, use heuristics
+            variations.extend(self._heuristic_expansion(query))
 
         return variations[: self.num_variations + 1]
+
+    def _heuristic_expansion(self, query: str) -> List[str]:
+        """Fallback heuristic-based query expansion."""
+        expansions = []
+        analysis = self.analyze_query(query)
+
+        # Add keyword-focused version
+        if analysis.keywords:
+            expansions.append(" ".join(analysis.keywords))
+
+        # Add intent-specific reformulation
+        if analysis.intent == QueryIntent.PROCEDURAL:
+            expansions.append(f"steps procedure guide {' '.join(analysis.keywords)}")
+        elif analysis.intent == QueryIntent.TROUBLESHOOTING:
+            expansions.append(f"error fix solution {' '.join(analysis.keywords)}")
+        elif analysis.intent == QueryIntent.RELATIONAL:
+            expansions.append(f"owner team responsible {' '.join(analysis.keywords)}")
+
+        return expansions
 
     async def _search_trees(
         self,
@@ -280,37 +514,40 @@ class MultiQueryStrategy(RetrievalStrategy):
         forest: "TreeForest",
         top_k: int,
     ) -> List[RetrievedChunk]:
-        """Search across all trees in the forest."""
-        results = []
-
-        # This would use the actual embedding search
-        # For now, return placeholder
-        for tree in forest.trees.values():
-            # In production: use tree's vector index for similarity search
-            # tree_results = await tree.search(query, top_k=top_k)
-            pass
-
-        return results
+        """Search across all trees in the forest using shared semantic search."""
+        return await self.search_trees(query, forest, top_k)
 
 
 class HyDEStrategy(RetrievalStrategy):
     """
-    Hypothetical Document Embeddings (HyDE).
+    Hypothetical Document Embeddings (HyDE) with LLM generation.
 
     Instead of searching directly with the query, generate a hypothetical
-    answer document and search with its embedding. This bridges the gap
-    between question embeddings and document embeddings.
+    answer document using LLM and search with its embedding. This bridges
+    the gap between question embeddings and document embeddings.
     """
 
     name = "hyde"
 
     def __init__(
         self,
-        llm: Optional[Any] = None,  # LLM for generating hypothetical documents
-        num_hypotheses: int = 1,
+        num_hypotheses: int = 2,
+        model: str = "gpt-4o-mini",
     ):
-        self.llm = llm
         self.num_hypotheses = num_hypotheses
+        self.model = model
+        self._client = None
+
+    def _get_client(self):
+        """Lazy initialization of OpenAI client."""
+        if self._client is None:
+            try:
+                from openai import AsyncOpenAI
+
+                self._client = AsyncOpenAI()
+            except ImportError:
+                logger.warning("OpenAI not available for HyDE")
+        return self._client
 
     async def retrieve(
         self,
@@ -326,11 +563,19 @@ class HyDEStrategy(RetrievalStrategy):
 
         all_chunks: Dict[int, RetrievedChunk] = {}
 
-        # Search with each hypothesis
+        # Search with each hypothesis (they act as expanded queries)
         for hypothesis in hypotheses:
-            # In production: embed hypothesis and search
-            # chunks = await self._search_with_embedding(hypothesis, forest, top_k)
-            pass
+            chunks = await self.search_trees(hypothesis, forest, top_k)
+            for chunk in chunks:
+                if chunk.node_id not in all_chunks:
+                    # Slightly reduce score for hypothesis-based results
+                    chunk.score *= 0.9
+                    all_chunks[chunk.node_id] = chunk
+                else:
+                    # Boost score if found by multiple hypotheses
+                    all_chunks[chunk.node_id].score = min(
+                        1.0, all_chunks[chunk.node_id].score + 0.1
+                    )
 
         # Also search with original query
         original_chunks = await self._search_original(query, forest, top_k)
@@ -344,45 +589,141 @@ class HyDEStrategy(RetrievalStrategy):
 
     async def _generate_hypotheses(self, query: str) -> List[str]:
         """
-        Generate hypothetical answer documents.
+        Generate hypothetical answer documents using LLM.
 
         The hypothesis should look like an ideal document that would
-        answer the query.
+        answer the query - written as if it's documentation, not a response.
         """
-        if not self.llm:
-            # Return simple template-based hypothesis
-            analysis = self.analyze_query(query)
+        client = self._get_client()
+        if client:
+            try:
+                # Analyze query to customize the prompt
+                analysis = self.analyze_query(query)
 
-            if analysis.intent == QueryIntent.PROCEDURAL:
-                template = f"""
-                Procedure for {' '.join(analysis.keywords)}:
-                1. First, you need to...
-                2. Then, perform...
-                3. Finally, verify...
-                This procedure is used when you need to accomplish the task.
-                """
-            elif analysis.intent == QueryIntent.TROUBLESHOOTING:
-                template = f"""
-                Troubleshooting {' '.join(analysis.keywords)}:
-                Common causes include configuration issues and resource constraints.
-                To resolve this issue:
-                1. Check the logs for specific errors
-                2. Verify the configuration
-                3. Restart the affected service
-                """
-            else:
-                template = f"""
-                Information about {' '.join(analysis.keywords)}:
-                This describes the relevant details and context.
-                Key points include the main concepts and their relationships.
-                """
+                if analysis.intent == QueryIntent.PROCEDURAL:
+                    doc_type = "a step-by-step procedure or runbook"
+                elif analysis.intent == QueryIntent.TROUBLESHOOTING:
+                    doc_type = "a troubleshooting guide with root causes and solutions"
+                elif analysis.intent == QueryIntent.RELATIONAL:
+                    doc_type = (
+                        "documentation about ownership, dependencies, or relationships"
+                    )
+                else:
+                    doc_type = "technical documentation or reference material"
 
-            return [template.strip()]
+                response = await client.chat.completions.create(
+                    model=self.model,
+                    temperature=0.7,
+                    max_tokens=500,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": f"""You are a technical documentation writer. Generate {self.num_hypotheses} hypothetical documentation excerpts that would perfectly answer the user's question.
 
-        # Use LLM for better hypothesis generation
-        # prompt = f"Write a document that would answer this question: {query}"
-        # return await self.llm.generate(prompt, n=self.num_hypotheses)
-        return []
+Rules:
+- Write as if you're creating {doc_type}
+- Each excerpt should be 50-100 words
+- Use technical language appropriate for infrastructure/DevOps documentation
+- Include specific details, steps, or explanations that would be in real docs
+- Do NOT write a conversational answer - write as documentation
+- Separate each excerpt with "---" on its own line
+- Include relevant technical terms, service names, and concepts""",
+                        },
+                        {
+                            "role": "user",
+                            "content": f"Write hypothetical documentation excerpts that would answer:\n\n{query}",
+                        },
+                    ],
+                )
+
+                content = response.choices[0].message.content
+                if content:
+                    # Parse hypotheses from response
+                    hypotheses = [
+                        h.strip()
+                        for h in content.split("---")
+                        if h.strip() and len(h.strip()) > 20
+                    ]
+                    if hypotheses:
+                        logger.debug(
+                            f"LLM generated {len(hypotheses)} hypotheses for HyDE"
+                        )
+                        return hypotheses[: self.num_hypotheses]
+
+            except Exception as e:
+                logger.warning(
+                    f"LLM hypothesis generation failed, using templates: {e}"
+                )
+
+        # Fall back to template-based hypothesis
+        return self._template_hypothesis(query)
+
+    def _template_hypothesis(self, query: str) -> List[str]:
+        """Fallback template-based hypothesis generation."""
+        analysis = self.analyze_query(query)
+        keywords = " ".join(analysis.keywords) if analysis.keywords else query
+
+        hypotheses = []
+
+        if analysis.intent == QueryIntent.PROCEDURAL:
+            hypotheses.append(f"""
+## Procedure: {keywords}
+
+### Prerequisites
+- Access to the relevant system
+- Required permissions configured
+
+### Steps
+1. First, verify the current state of {keywords}
+2. Make the necessary configuration changes
+3. Apply and validate the changes
+4. Monitor for any issues
+
+### Troubleshooting
+If issues occur, check the logs and rollback if necessary.
+            """.strip())
+        elif analysis.intent == QueryIntent.TROUBLESHOOTING:
+            hypotheses.append(f"""
+## Troubleshooting: {keywords}
+
+### Symptoms
+- Service degradation or errors related to {keywords}
+- Alert triggered from monitoring
+
+### Root Causes
+1. Configuration drift or misconfiguration
+2. Resource exhaustion (CPU, memory, disk)
+3. Network connectivity issues
+4. Dependency service failures
+
+### Resolution Steps
+1. Check service logs: `kubectl logs` or CloudWatch
+2. Verify configuration matches expected state
+3. Check resource utilization metrics
+4. Restart affected components if needed
+
+### Prevention
+Set up monitoring and alerting for early detection.
+            """.strip())
+        else:
+            hypotheses.append(f"""
+## {keywords}
+
+### Overview
+This documentation covers {keywords} and related concepts.
+
+### Key Information
+- Primary purpose and functionality
+- Integration points with other systems
+- Configuration options and best practices
+
+### Related Topics
+- Dependencies and requirements
+- Monitoring and observability
+- Common operations and maintenance tasks
+            """.strip())
+
+        return hypotheses
 
     async def _search_original(
         self,
@@ -391,8 +732,7 @@ class HyDEStrategy(RetrievalStrategy):
         top_k: int,
     ) -> List[RetrievedChunk]:
         """Fallback search with original query."""
-        # Implementation would use actual embedding search
-        return []
+        return await self.search_trees(query, forest, top_k)
 
 
 class AdaptiveDepthStrategy(RetrievalStrategy):
@@ -491,32 +831,83 @@ class AdaptiveDepthStrategy(RetrievalStrategy):
         depth: int,
         top_k: int,
     ) -> List[RetrievedChunk]:
-        """Retrieve nodes at a specific tree depth."""
+        """Retrieve nodes at a specific tree depth using semantic search."""
+        try:
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from knowledge_base.raptor.utils import distances_from_embeddings
+        except ImportError as e:
+            logger.error(f"Failed to import RAPTOR modules: {e}")
+            return []
+
         chunks = []
+        embedding_model = OpenAIEmbeddingModel()
+
+        try:
+            query_embedding = embedding_model.create_embedding(query)
+        except Exception as e:
+            logger.error(f"Failed to create query embedding: {e}")
+            return []
 
         for tree in forest.trees.values():
-            # Filter nodes at target depth
+            # Filter nodes at target depth (using layer as proxy for depth)
             nodes_at_depth = [
                 node
                 for node in tree.all_nodes.values()
-                if node.is_active and self._get_node_depth(node, tree) == depth
+                if getattr(node, "is_active", True)
+                and getattr(node, "layer", 0) == depth
             ]
 
-            # In production: embed query and compute similarity with filtered nodes
-            # For now, return placeholder
-            for node in nodes_at_depth[:top_k]:
-                chunks.append(
-                    RetrievedChunk(
-                        node_id=node.index,
-                        text=node.text,
-                        score=0.5,  # Would be actual similarity
-                        importance=node.get_importance(),
-                        strategy=self.name,
-                        tree_level=depth,
-                    )
+            if not nodes_at_depth:
+                continue
+
+            # Extract embeddings for filtered nodes
+            embeddings = []
+            valid_nodes = []
+            embedding_key = getattr(tree, "embedding_model", "OpenAI") or "OpenAI"
+
+            for node in nodes_at_depth:
+                node_embedding = node.embeddings.get(embedding_key)
+                if node_embedding:
+                    embeddings.append(node_embedding)
+                    valid_nodes.append(node)
+
+            if not embeddings:
+                continue
+
+            try:
+                # Compute similarity scores
+                distances = distances_from_embeddings(
+                    query_embedding, embeddings, distance_metric="cosine"
+                )
+                scores = [1.0 - d for d in distances]
+                sorted_indices = sorted(
+                    range(len(scores)), key=lambda i: scores[i], reverse=True
                 )
 
-        return chunks
+                for idx in sorted_indices[:top_k]:
+                    node = valid_nodes[idx]
+                    chunks.append(
+                        RetrievedChunk(
+                            node_id=node.index,
+                            text=node.text,
+                            tree_id=tree.tree_id,
+                            score=scores[idx],
+                            importance=node.get_importance(),
+                            strategy=self.name,
+                            layer=depth,
+                            metadata={
+                                "source_url": getattr(node, "source_url", None),
+                                "depth": depth,
+                            },
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"Depth search failed for tree {tree.tree_id}: {e}")
+                continue
+
+        # Sort by score and return top_k
+        chunks.sort(key=lambda c: c.score, reverse=True)
+        return chunks[:top_k]
 
     def _get_node_depth(self, node: "KnowledgeNode", tree: "KnowledgeTree") -> int:
         """Get the depth of a node in the tree."""
@@ -568,12 +959,21 @@ class HybridGraphTreeStrategy(RetrievalStrategy):
         """Retrieve using hybrid graph + tree approach."""
         all_chunks: Dict[int, RetrievedChunk] = {}
 
-        # Step 1: Graph-based retrieval
+        # Step 1: Graph-based retrieval (with error handling)
         if graph:
-            graph_chunks = await self._retrieve_via_graph(query, forest, graph, top_k)
-            for chunk in graph_chunks:
-                chunk.score *= self.graph_weight
-                all_chunks[chunk.node_id] = chunk
+            try:
+                graph_chunks = await self._retrieve_via_graph(
+                    query, forest, graph, top_k
+                )
+                for chunk in graph_chunks:
+                    chunk.score *= self.graph_weight
+                    all_chunks[chunk.node_id] = chunk
+            except Exception as e:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    f"Graph retrieval failed, falling back to tree: {e}"
+                )
 
         # Step 2: Tree-based retrieval
         tree_chunks = await self._retrieve_via_tree(query, forest, top_k)
@@ -652,16 +1052,16 @@ class HybridGraphTreeStrategy(RetrievalStrategy):
         forest: "TreeForest",
         top_k: int,
     ) -> List[RetrievedChunk]:
-        """Direct tree-based semantic search."""
-        # In production: use embedding similarity search
-        # This would call the RAPTOR tree's search method
-        chunks = []
+        """
+        Direct tree-based semantic search using shared helper.
 
-        for tree in forest.trees.values():
-            # Would use actual embedding search
-            # tree_results = await tree.similarity_search(query, top_k)
-            pass
-
+        Uses cosine similarity between query embedding and node embeddings
+        to find the most relevant nodes across all trees in the forest.
+        """
+        chunks = await self.search_trees(query, forest, top_k)
+        # Update strategy name to indicate tree source
+        for chunk in chunks:
+            chunk.strategy = f"{self.name}_tree"
         return chunks
 
     def _find_entities_in_query(
@@ -775,17 +1175,81 @@ class IncidentAwareStrategy(RetrievalStrategy):
         forest: "TreeForest",
         graph: "KnowledgeGraph",
     ) -> List[RetrievedChunk]:
-        """Find runbooks matching the symptoms in the query."""
+        """Find runbooks matching the symptoms in the query using semantic similarity."""
         from ..graph.entities import EntityType
 
+        try:
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from knowledge_base.raptor.utils import distances_from_embeddings
+        except ImportError:
+            logger.warning("RAPTOR not available, falling back to keyword matching")
+            return await self._find_runbooks_keyword(query, forest, graph)
+
         chunks = []
+        embedding_model = OpenAIEmbeddingModel()
+
+        try:
+            query_embedding = embedding_model.create_embedding(query)
+        except Exception as e:
+            logger.error(f"Failed to embed query: {e}")
+            return await self._find_runbooks_keyword(query, forest, graph)
 
         # Find all runbook entities
         runbooks = graph.get_entities_by_type(EntityType.RUNBOOK)
 
         for runbook in runbooks:
-            # Check if symptoms match (simple keyword matching)
-            # In production: use embedding similarity
+            # Compute semantic similarity with runbook content
+            runbook_text = f"{runbook.name} {runbook.description}"
+            symptoms = runbook.properties.get("symptoms", [])
+            if symptoms:
+                runbook_text += " " + " ".join(symptoms)
+
+            try:
+                runbook_embedding = embedding_model.create_embedding(runbook_text)
+                distances = distances_from_embeddings(
+                    query_embedding, [runbook_embedding], distance_metric="cosine"
+                )
+                similarity_score = 1.0 - distances[0]
+
+                if similarity_score > 0.4:  # Threshold for relevance
+                    # Get linked RAPTOR nodes
+                    for node_id in runbook.raptor_node_ids:
+                        node = self._find_node_in_forest(node_id, forest)
+                        if node:
+                            chunks.append(
+                                RetrievedChunk(
+                                    node_id=node_id,
+                                    text=node.text,
+                                    tree_id=getattr(node, "tree_id", None),
+                                    score=similarity_score,
+                                    importance=node.get_importance(),
+                                    strategy=f"{self.name}_runbook",
+                                    metadata={
+                                        "runbook_id": runbook.entity_id,
+                                        "runbook_name": runbook.name,
+                                    },
+                                )
+                            )
+            except Exception as e:
+                logger.warning(f"Failed to embed runbook {runbook.name}: {e}")
+                continue
+
+        chunks.sort(key=lambda c: c.score, reverse=True)
+        return chunks
+
+    async def _find_runbooks_keyword(
+        self,
+        query: str,
+        forest: "TreeForest",
+        graph: "KnowledgeGraph",
+    ) -> List[RetrievedChunk]:
+        """Fallback keyword-based runbook search."""
+        from ..graph.entities import EntityType
+
+        chunks = []
+        runbooks = graph.get_entities_by_type(EntityType.RUNBOOK)
+
+        for runbook in runbooks:
             symptoms = runbook.properties.get("symptoms", [])
             query_lower = query.lower()
 
@@ -795,7 +1259,6 @@ class IncidentAwareStrategy(RetrievalStrategy):
                     match_score += 1
 
             if match_score > 0:
-                # Get linked RAPTOR nodes
                 for node_id in runbook.raptor_node_ids:
                     node = self._find_node_in_forest(node_id, forest)
                     if node:
@@ -821,20 +1284,85 @@ class IncidentAwareStrategy(RetrievalStrategy):
         forest: "TreeForest",
         graph: "KnowledgeGraph",
     ) -> List[RetrievedChunk]:
-        """Find similar past incidents."""
+        """Find similar past incidents using semantic similarity."""
         from ..graph.entities import EntityType
-        from ..graph.relationships import RelationshipType
+
+        try:
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from knowledge_base.raptor.utils import distances_from_embeddings
+        except ImportError:
+            logger.warning("RAPTOR not available, falling back to keyword matching")
+            return await self._find_similar_incidents_keyword(query, forest, graph)
 
         chunks = []
+        embedding_model = OpenAIEmbeddingModel()
 
-        # Find resolved incidents with SIMILAR_TO relationships
+        try:
+            query_embedding = embedding_model.create_embedding(query)
+        except Exception as e:
+            logger.error(f"Failed to embed query: {e}")
+            return await self._find_similar_incidents_keyword(query, forest, graph)
+
+        # Find resolved incidents
         incidents = graph.get_entities_by_type(EntityType.INCIDENT)
 
         for incident in incidents:
             if incident.properties.get("status") != "resolved":
                 continue
 
-            # Check for keyword overlap
+            # Compute semantic similarity
+            incident_text = f"{incident.name} {incident.description}"
+
+            try:
+                incident_embedding = embedding_model.create_embedding(incident_text)
+                distances = distances_from_embeddings(
+                    query_embedding, [incident_embedding], distance_metric="cosine"
+                )
+                similarity_score = 1.0 - distances[0]
+
+                if similarity_score > 0.5:  # Threshold for relevance
+                    for node_id in incident.raptor_node_ids:
+                        node = self._find_node_in_forest(node_id, forest)
+                        if node:
+                            chunks.append(
+                                RetrievedChunk(
+                                    node_id=node_id,
+                                    text=node.text,
+                                    tree_id=getattr(node, "tree_id", None),
+                                    score=similarity_score,
+                                    importance=node.get_importance(),
+                                    strategy=f"{self.name}_incident",
+                                    metadata={
+                                        "incident_id": incident.entity_id,
+                                        "resolution": incident.properties.get(
+                                            "resolution"
+                                        ),
+                                    },
+                                )
+                            )
+            except Exception as e:
+                logger.warning(f"Failed to embed incident {incident.name}: {e}")
+                continue
+
+        chunks.sort(key=lambda c: c.score, reverse=True)
+        return chunks
+
+    async def _find_similar_incidents_keyword(
+        self,
+        query: str,
+        forest: "TreeForest",
+        graph: "KnowledgeGraph",
+    ) -> List[RetrievedChunk]:
+        """Fallback keyword-based incident search."""
+        from ..graph.entities import EntityType
+
+        chunks = []
+        incidents = graph.get_entities_by_type(EntityType.INCIDENT)
+
+        for incident in incidents:
+            if incident.properties.get("status") != "resolved":
+                continue
+
             incident_text = f"{incident.name} {incident.description}"
             query_words = set(query.lower().split())
             incident_words = set(incident_text.lower().split())
@@ -866,10 +1394,108 @@ class IncidentAwareStrategy(RetrievalStrategy):
         forest: "TreeForest",
         graph: "KnowledgeGraph",
     ) -> List[RetrievedChunk]:
-        """Get context about affected services."""
-        # Would use entity linking to find services mentioned
-        # Then get their dependencies, owners, etc.
-        return []
+        """
+        Get context about affected services using LLM-based entity extraction
+        and graph traversal for dependencies.
+        """
+        from ..graph.entities import EntityType
+
+        chunks = []
+
+        # Extract service names from query using LLM
+        service_names = await self._extract_services_from_query(query)
+
+        if not service_names:
+            # Fall back to keyword matching against known services
+            services = graph.get_entities_by_type(EntityType.SERVICE)
+            query_lower = query.lower()
+            for service in services:
+                if service.name.lower() in query_lower or any(
+                    alias.lower() in query_lower for alias in service.aliases
+                ):
+                    service_names.append(service.name)
+
+        # Get context for each identified service
+        for service_name in service_names:
+            service = graph.get_entity_by_name(service_name)
+            if not service:
+                continue
+
+            # Get service's RAPTOR nodes
+            for node_id in service.raptor_node_ids:
+                node = self._find_node_in_forest(node_id, forest)
+                if node:
+                    chunks.append(
+                        RetrievedChunk(
+                            node_id=node_id,
+                            text=node.text,
+                            tree_id=getattr(node, "tree_id", None),
+                            score=0.7,  # Base score for direct service match
+                            importance=node.get_importance(),
+                            strategy=f"{self.name}_service",
+                            metadata={
+                                "service_id": service.entity_id,
+                                "service_name": service.name,
+                            },
+                        )
+                    )
+
+            # Get dependencies and their context
+            dependencies = graph.get_related_entities(
+                service.entity_id, relationship_type="depends_on"
+            )
+            for dep in dependencies[:3]:  # Limit to top 3 dependencies
+                for node_id in dep.raptor_node_ids:
+                    node = self._find_node_in_forest(node_id, forest)
+                    if node:
+                        chunks.append(
+                            RetrievedChunk(
+                                node_id=node_id,
+                                text=node.text,
+                                tree_id=getattr(node, "tree_id", None),
+                                score=0.5,  # Lower score for dependency context
+                                importance=node.get_importance(),
+                                strategy=f"{self.name}_dependency",
+                                metadata={
+                                    "dependency_of": service.name,
+                                    "dependency_name": dep.name,
+                                },
+                            )
+                        )
+
+        chunks.sort(key=lambda c: c.score, reverse=True)
+        return chunks
+
+    async def _extract_services_from_query(self, query: str) -> List[str]:
+        """Extract service names from query using LLM."""
+        try:
+            from openai import AsyncOpenAI
+
+            client = AsyncOpenAI()
+
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0.0,
+                max_tokens=100,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """Extract service/system names mentioned in the query.
+Return ONLY a JSON array of service names, e.g. ["api-gateway", "postgres", "redis"]
+If no services are mentioned, return an empty array: []
+Focus on infrastructure components, databases, APIs, microservices, etc.""",
+                    },
+                    {"role": "user", "content": query},
+                ],
+            )
+
+            content = response.choices[0].message.content.strip()
+            import json
+
+            return json.loads(content)
+        except Exception as e:
+            logger.warning(f"LLM service extraction failed: {e}")
+            return []
 
     async def _tree_search(
         self,
@@ -877,8 +1503,8 @@ class IncidentAwareStrategy(RetrievalStrategy):
         forest: "TreeForest",
         top_k: int,
     ) -> List[RetrievedChunk]:
-        """Standard tree-based search."""
-        return []
+        """Standard tree-based semantic search using shared helper."""
+        return await self.search_trees(query, forest, top_k)
 
     def _find_node_in_forest(
         self,

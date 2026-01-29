@@ -143,30 +143,120 @@ class LLMEntityExtractor(EntityExtractor):
     """
     LLM-based entity extractor.
 
-    Uses a language model for more flexible entity extraction.
+    Uses GPT-4o-mini for flexible entity extraction.
     Better at handling variations and context.
     """
 
-    def __init__(self, llm: Any):
-        self.llm = llm
-        self.prompt_template = """
-Extract entities from the following text. For each entity, provide:
-- name: The entity name
-- type: One of (service, team, person, technology, endpoint, metric)
-- attributes: Any relevant attributes
+    def __init__(
+        self,
+        model: str = "gpt-4o-mini",
+    ):
+        self.model = model
+        self._client = None
 
-Text:
-{text}
+    def _get_client(self):
+        """Lazy initialization of OpenAI client."""
+        if self._client is None:
+            try:
+                from openai import OpenAI
 
-Return as JSON array.
-"""
+                self._client = OpenAI()
+            except ImportError:
+                logger.warning("OpenAI not available for LLM entity extraction")
+        return self._client
 
     def extract(self, text: str) -> List[ExtractedEntity]:
-        """Extract entities using LLM."""
-        # Would call LLM here
-        # response = self.llm.generate(self.prompt_template.format(text=text))
-        # return self._parse_response(response)
-        return []
+        """Extract entities using LLM with structured output."""
+        client = self._get_client()
+        if not client:
+            return []
+
+        # Truncate very long text
+        text = text[:4000] if len(text) > 4000 else text
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                temperature=0.0,
+                max_tokens=1000,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are an expert at extracting technical entities from documentation.
+
+Extract all named entities from the text. For each entity, provide:
+- name: The exact entity name as mentioned
+- type: One of: service, team, person, technology, endpoint, metric, config, database, queue, api
+- context: A brief phrase describing what this entity does or its role (10 words max)
+- aliases: Alternative names for this entity (if any)
+
+Return as a JSON array. Example:
+[
+  {"name": "api-gateway", "type": "service", "context": "Routes incoming HTTP requests", "aliases": ["gateway", "apigw"]},
+  {"name": "PostgreSQL", "type": "database", "context": "Primary data store", "aliases": ["postgres", "pg"]}
+]
+
+Only extract entities that are specific named things, not generic concepts.
+Return an empty array [] if no entities found.""",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Extract entities from this text:\n\n{text}",
+                    },
+                ],
+            )
+
+            content = response.choices[0].message.content.strip()
+
+            # Parse JSON response
+            import json
+
+            try:
+                entities_data = json.loads(content)
+            except json.JSONDecodeError:
+                # Try to extract JSON from response
+                import re
+
+                json_match = re.search(r"\[.*\]", content, re.DOTALL)
+                if json_match:
+                    entities_data = json.loads(json_match.group())
+                else:
+                    return []
+
+            # Convert to ExtractedEntity objects
+            entities = []
+            type_mapping = {
+                "service": EntityType.SERVICE,
+                "team": EntityType.TEAM,
+                "person": EntityType.PERSON,
+                "technology": EntityType.TECHNOLOGY,
+                "endpoint": EntityType.ENDPOINT,
+                "metric": EntityType.METRIC,
+                "config": EntityType.TECHNOLOGY,
+                "database": EntityType.SERVICE,
+                "queue": EntityType.SERVICE,
+                "api": EntityType.ENDPOINT,
+            }
+
+            for item in entities_data:
+                entity_type_str = item.get("type", "technology").lower()
+                entity_type = type_mapping.get(entity_type_str, EntityType.TECHNOLOGY)
+
+                entities.append(
+                    ExtractedEntity(
+                        name=item.get("name", ""),
+                        entity_type=entity_type,
+                        context=item.get("context", ""),
+                        aliases=item.get("aliases", []),
+                        confidence=0.85,  # LLM extraction confidence
+                    )
+                )
+
+            return entities
+
+        except Exception as e:
+            logger.warning(f"LLM entity extraction failed: {e}")
+            return []
 
 
 class RelationshipExtractor(ABC):

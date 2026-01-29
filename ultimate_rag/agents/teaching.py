@@ -89,7 +89,7 @@ class TeachingInterface:
         graph: Optional["KnowledgeGraph"] = None,
         embedder=None,
         similarity_threshold: float = 0.85,
-        auto_approve_threshold: float = 0.9,
+        auto_approve_threshold: float = 0.6,  # Lowered to allow auto-approval of confident teachings
     ):
         self.tree = tree
         self.graph = graph
@@ -116,7 +116,7 @@ class TeachingInterface:
         content: str,
         knowledge_type: str,
         source: str,
-        confidence: float = 0.5,
+        confidence: float = 0.7,  # Default confidence allows auto-approval
         related_entities: Optional[List[str]] = None,
         learned_from: str = "agent",
         agent_id: Optional[str] = None,
@@ -386,33 +386,181 @@ Resolution: {resolution}
         """
         Check if new content contradicts existing knowledge.
 
-        This is a simplified check - in production, use NLI model
-        or LLM to detect contradictions.
+        Uses a multi-layered approach:
+        1. Quick heuristic checks (patterns, numbers, deprecation)
+        2. LLM-based semantic contradiction detection for uncertain cases
         """
-        # Simple heuristic: check for negation words near similar content
-        negation_indicators = [
-            "not",
-            "don't",
-            "doesn't",
-            "shouldn't",
-            "never",
-            "incorrect",
-            "wrong",
-            "false",
-            "outdated",
-            "deprecated",
-        ]
-
         content_lower = content.lower()
         existing_lower = existing_node.text.lower()
 
-        # If content has negations about similar topics, might be contradiction
-        for neg in negation_indicators:
-            if neg in content_lower:
-                # Very basic check - in production use proper NLI
+        # 1. Direct contradiction patterns (fast check)
+        contradiction_patterns = [
+            ("should", "should not"),
+            ("must", "must not"),
+            ("always", "never"),
+            ("enabled", "disabled"),
+            ("true", "false"),
+            ("yes", "no"),
+            ("increase", "decrease"),
+            ("start", "stop"),
+            ("add", "remove"),
+        ]
+
+        for positive, negative in contradiction_patterns:
+            if positive in existing_lower and negative in content_lower:
+                logger.info(
+                    f"Detected contradiction: existing has '{positive}', new has '{negative}'"
+                )
+                return True
+            if negative in existing_lower and positive in content_lower:
+                logger.info(
+                    f"Detected contradiction: existing has '{negative}', new has '{positive}'"
+                )
                 return True
 
+        # 2. Numerical contradiction (e.g., "timeout is 30s" vs "timeout is 60s")
+        import re
+
+        existing_numbers = re.findall(
+            r"\b(\d+(?:\.\d+)?)\s*(?:seconds?|s|minutes?|m|hours?|h|ms|gb|mb|kb|%)\b",
+            existing_lower,
+        )
+        new_numbers = re.findall(
+            r"\b(\d+(?:\.\d+)?)\s*(?:seconds?|s|minutes?|m|hours?|h|ms|gb|mb|kb|%)\b",
+            content_lower,
+        )
+
+        if existing_numbers and new_numbers:
+            for existing_num in existing_numbers:
+                for new_num in new_numbers:
+                    if existing_num != new_num:
+                        existing_context = self._get_number_context(
+                            existing_lower, existing_num
+                        )
+                        new_context = self._get_number_context(content_lower, new_num)
+                        if existing_context & new_context:
+                            logger.info(
+                                f"Detected numerical contradiction: {existing_num} vs {new_num} for {existing_context & new_context}"
+                            )
+                            return True
+
+        # 3. Update/deprecation indicators
+        deprecation_phrases = [
+            "is deprecated",
+            "no longer",
+            "has been replaced",
+            "instead use",
+            "was changed to",
+            "updated to",
+            "is now",
+        ]
+
+        for phrase in deprecation_phrases:
+            if phrase in content_lower:
+                logger.info(
+                    f"Detected potential update: new content contains '{phrase}'"
+                )
+                return True
+
+        # 4. LLM-based semantic contradiction detection
+        # Only run if texts are similar enough to potentially conflict
+        if self.embedder:
+            try:
+                content_emb = self.embedder.create_embedding(content)
+                existing_emb = existing_node.get_embedding()
+                if existing_emb:
+                    import numpy as np
+
+                    similarity = np.dot(content_emb, existing_emb) / (
+                        np.linalg.norm(content_emb) * np.linalg.norm(existing_emb)
+                        + 1e-9
+                    )
+                    # Only use LLM for moderately similar texts (potential conflicts)
+                    if 0.5 < similarity < 0.9:
+                        llm_result = await self._llm_check_contradiction(
+                            content, existing_node.text
+                        )
+                        if llm_result:
+                            return True
+            except Exception as e:
+                logger.warning(f"Embedding comparison failed: {e}")
+
         return False
+
+    async def _llm_check_contradiction(self, text1: str, text2: str) -> bool:
+        """
+        Use LLM to detect semantic contradictions between two texts.
+
+        Returns True if texts contradict each other.
+        """
+        try:
+            from openai import AsyncOpenAI
+
+            client = AsyncOpenAI()
+
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0.0,
+                max_tokens=50,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are an expert at detecting contradictions in technical documentation.
+Analyze whether two pieces of text contradict each other.
+
+Respond with ONLY one of:
+- "CONTRADICTION" if the texts make incompatible claims
+- "NO_CONTRADICTION" if the texts are compatible or discuss different topics
+
+Examples of contradictions:
+- Different values for same setting
+- Opposite instructions for same procedure
+- Conflicting requirements or dependencies
+- One text invalidates the other's claims
+
+Do NOT flag as contradiction if:
+- Texts discuss different topics/systems
+- Texts provide complementary information
+- One text is more detailed than the other""",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Text 1:
+{text1[:500]}
+
+Text 2:
+{text2[:500]}
+
+Do these texts contradict each other?""",
+                    },
+                ],
+            )
+
+            result = response.choices[0].message.content.strip().upper()
+            if "CONTRADICTION" in result and "NO_CONTRADICTION" not in result:
+                logger.info("LLM detected contradiction between texts")
+                return True
+
+        except Exception as e:
+            logger.warning(f"LLM contradiction check failed: {e}")
+
+        return False
+
+    def _get_number_context(self, text: str, number: str, window: int = 5) -> set:
+        """Get context words around a number in text."""
+        import re
+
+        words = text.split()
+        context = set()
+        for i, word in enumerate(words):
+            if number in word:
+                start = max(0, i - window)
+                end = min(len(words), i + window + 1)
+                for w in words[start:end]:
+                    clean_w = re.sub(r"[^a-z]", "", w)
+                    if clean_w and len(clean_w) > 2:
+                        context.add(clean_w)
+        return context
 
     async def _merge_with_existing(
         self,
