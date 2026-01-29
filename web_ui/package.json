@@ -13,7 +13,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.25",
     "lucide-react": "^0.555.0",
-    "next": "16.0.10",
+    "next": "16.0.11",
     "next-auth": "^5.0.0-beta.30",
     "react": "19.2.0",
     "react-dom": "19.2.0",
@@ -28,10 +28,10 @@
     "@types/react-dom": "^19",
     "cross-spawn": "^7.0.6",
     "eslint": "^9",
-    "eslint-config-next": "16.0.10",
+    "eslint-config-next": "16.0.11",
     "glob": "^10.5.0",
     "tailwindcss": "^4",
-    "tar": "^7.5.4",
+    "tar": "^7.5.7",
     "typescript": "5.9.3"
   }
 }
