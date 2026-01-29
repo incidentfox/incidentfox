@@ -560,6 +560,18 @@ class UltimateRAGServer:
             except Exception as e:
                 logger.error(f"Failed to load tree: {e}")
 
+        # If no trees were loaded, create a default empty tree
+        if not self.forest.trees:
+            from ..core.node import KnowledgeTree
+
+            default_tree = KnowledgeTree(
+                tree_id="default",
+                name="Default Knowledge Tree",
+                description="Auto-created tree for ingested content",
+            )
+            self.forest.add_tree(default_tree)
+            logger.info("Created default empty tree for ingestion")
+
         logger.info(
             f"Forest initialized with {len(self.forest.trees)} trees: {list(self.forest.trees.keys())}"
         )
@@ -587,10 +599,20 @@ class UltimateRAGServer:
         default_tree = None
         if self.forest.default_tree:
             default_tree = self.forest.get_tree(self.forest.default_tree)
+        # Initialize embedder for teaching interface
+        embedder = None
+        try:
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            embedder = OpenAIEmbeddingModel()
+            logger.info("Initialized OpenAI embedder for TeachingInterface")
+        except ImportError:
+            logger.warning("OpenAI embedder not available, nodes will not have embeddings")
+
         self.teaching = (
             TeachingInterface(
                 tree=default_tree,
                 graph=self.graph,
+                embedder=embedder,
             )
             if default_tree
             else None
@@ -1888,22 +1910,25 @@ class UltimateRAGServer:
 
     def _get_content_type(self, type_str: Optional[str]):
         """Convert string to ContentType."""
-        if not type_str:
-            return None
-
         from ..ingestion.processor import ContentType
+
+        if not type_str:
+            return ContentType.TEXT  # Default to TEXT
 
         try:
             return ContentType(type_str)
         except ValueError:
-            return None
+            return ContentType.TEXT  # Default to TEXT on invalid values
 
     async def _add_chunk_to_tree(self, chunk):
         """Add a processed chunk to the tree."""
         if self.teaching:
             await self.teaching.teach(
-                knowledge=chunk.text,
+                content=chunk.text,
+                knowledge_type="factual",
                 source=chunk.source_path,
+                confidence=0.95,  # Auto-approve ingested documents
+                learned_from="document_ingestion",
             )
 
 
