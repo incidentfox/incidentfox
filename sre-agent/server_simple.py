@@ -167,6 +167,7 @@ async def agent_background_task(thread_id: str):
     Processes messages from queue and sends responses back.
     """
     import json
+
     from agent import InteractiveAgentSession
 
     logger.info(f"[BG] Starting background agent task for thread {thread_id}")
@@ -189,7 +190,9 @@ async def agent_background_task(thread_id: str):
                 break
 
             prompt = message.get("prompt")
-            logger.info(f"[BG] Processing message for thread {thread_id}: {prompt[:50]}...")
+            logger.info(
+                f"[BG] Processing message for thread {thread_id}: {prompt[:50]}..."
+            )
 
             # Execute and stream events to response queue
             event_count = 0
@@ -199,17 +202,18 @@ async def agent_background_task(thread_id: str):
                 data = event.data
 
                 # Send event to response queue
-                await response_queue.put({
-                    "event": event_type,
-                    "data": data
-                })
+                await response_queue.put({"event": event_type, "data": data})
 
             # Signal completion
             await response_queue.put(None)
-            logger.info(f"[BG] Completed message processing. Total events: {event_count}")
+            logger.info(
+                f"[BG] Completed message processing. Total events: {event_count}"
+            )
 
     except Exception as e:
-        logger.error(f"[BG] Background task failed for thread {thread_id}: {e}", exc_info=True)
+        logger.error(
+            f"[BG] Background task failed for thread {thread_id}: {e}", exc_info=True
+        )
         await response_queue.put({"error": str(e)})
     finally:
         # Cleanup
@@ -259,7 +263,7 @@ async def create_investigation_stream(
                 break
 
             if "error" in response:
-                yield f"event: error\n"
+                yield "event: error\n"
                 yield f"data: {json.dumps({'message': response['error']})}\n\n"
                 break
 
@@ -276,7 +280,7 @@ async def create_investigation_stream(
 
     except Exception as e:
         logger.error(f"Stream failed: {e}", exc_info=True)
-        yield f"event: error\n"
+        yield "event: error\n"
         yield f"data: {json.dumps({'message': str(e)})}\n\n"
 
 
@@ -311,12 +315,14 @@ async def investigate(request: InvestigateRequest):
                 "created_at": time.time(),
             }
 
-            file_downloads.append({
-                "token": token,
-                "filename": attachment.filename,
-                "size": attachment.size,
-                "proxy_url": f"{proxy_base_url}/proxy/files/{token}",
-            })
+            file_downloads.append(
+                {
+                    "token": token,
+                    "filename": attachment.filename,
+                    "size": attachment.size,
+                    "proxy_url": f"{proxy_base_url}/proxy/files/{token}",
+                }
+            )
 
     # Convert images
     images = None
@@ -366,11 +372,11 @@ async def interrupt(request: InterruptRequest):
             session = _active_sessions[request.thread_id]
             session.interrupt()
 
-            yield f"event: interrupted\n"
+            yield "event: interrupted\n"
             yield f"data: {json.dumps({'thread_id': request.thread_id})}\n\n"
         except Exception as e:
             logger.error(f"Interrupt failed: {e}", exc_info=True)
-            yield f"event: error\n"
+            yield "event: error\n"
             yield f"data: {json.dumps({'message': str(e)})}\n\n"
 
     return StreamingResponse(
