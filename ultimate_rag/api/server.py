@@ -1464,9 +1464,7 @@ class UltimateRAGServer:
                     if self.persistence.s3_bucket
                     else []
                 )
-                loaded_trees = (
-                    list(self.forest.trees.keys()) if self.forest else []
-                )
+                loaded_trees = list(self.forest.trees.keys()) if self.forest else []
 
                 return ListTreesResponse(
                     local_trees=local_trees,
@@ -1495,9 +1493,7 @@ class UltimateRAGServer:
 
             try:
                 if not output_path:
-                    output_path = str(
-                        self.persistence.local_dir / f"{tree}_raptor.pkl"
-                    )
+                    output_path = str(self.persistence.local_dir / f"{tree}_raptor.pkl")
 
                 saved_path = self.persistence.export_to_raptor_format(
                     knowledge_tree, output_path
