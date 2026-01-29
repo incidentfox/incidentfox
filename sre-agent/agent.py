@@ -532,13 +532,29 @@ Do NOT dump full kubectl output. Synthesize findings.""",
         }
 
         # Build options for streaming input mode
-        # Use thread-specific working directory for session persistence
-        thread_workspace = f"/tmp/sessions/{self.thread_id}"
-        os.makedirs(thread_workspace, exist_ok=True)
+        # Determine working directory based on mode
+        # - Sandbox mode: Use /app (each sandbox is isolated, has .claude/ skills)
+        # - Simple mode: Use per-thread workspace for session persistence
+        if os.path.exists("/workspace"):
+            # Sandbox mode - use canonical /app directory where .claude/ lives
+            cwd = "/app"
+        else:
+            # Simple mode - use per-thread workspace for multi-turn conversations
+            thread_workspace = f"/tmp/sessions/{self.thread_id}"
+            os.makedirs(thread_workspace, exist_ok=True)
+
+            # Copy .claude/ skills to thread workspace if it doesn't exist yet
+            import shutil
+            thread_claude_dir = os.path.join(thread_workspace, ".claude")
+            if not os.path.exists(thread_claude_dir):
+                source_claude_dir = "/app/.claude"
+                if os.path.exists(source_claude_dir):
+                    shutil.copytree(source_claude_dir, thread_claude_dir)
+
+            cwd = thread_workspace
 
         self.options = ClaudeAgentOptions(
-            # Each thread gets its own workspace for session persistence
-            cwd=thread_workspace,
+            cwd=cwd,
             # Core tools for file operations and script execution
             allowed_tools=[
                 "Skill",
