@@ -5,7 +5,7 @@ visitor playground feature where users can try IncidentFox without
 a paid account.
 
 Revision ID: 20260128_visitor_playground
-Revises: 20260127_teachings, 20260125_agent_feedback
+Revises: 20260127_teachings, 20260125_agent_feedback, 20260119_tool_calls
 Create Date: 2026-01-28
 """
 
@@ -14,7 +14,11 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "20260128_visitor_playground"
-down_revision = ("20260127_teachings", "20260125_agent_feedback")
+# Merge all three existing heads into one:
+# - 20260127_teachings (from 20260122_agent_tracking)
+# - 20260125_agent_feedback (from 20260122_agent_tracking)
+# - 20260119_tool_calls (orphan branch from 20260118_service_dependencies)
+down_revision = ("20260127_teachings", "20260125_agent_feedback", "20260119_tool_calls")
 branch_labels = None
 depends_on = None
 
