@@ -17,9 +17,9 @@ import json
 import uuid
 
 from sqlalchemy.orm import Session
+from src.core.tools_catalog import BUILT_IN_TOOLS_METADATA
 from src.db.models import Template
 from src.db.session import get_session_maker
-from src.core.tools_catalog import BUILT_IN_TOOLS_METADATA
 
 # Template metadata mapping (with fake usage stats for demo)
 TEMPLATE_METADATA = {
