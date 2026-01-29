@@ -21,11 +21,10 @@ from src.core.tools_catalog import BUILT_IN_TOOLS_METADATA
 from src.db.models import Template
 from src.db.session import get_session_maker
 
-# Template metadata mapping (with fake usage stats for demo)
+# Template metadata mapping (icons and detailed descriptions)
 TEMPLATE_METADATA = {
     "01_slack_incident_triage.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/incident-triage.svg",
-        "usage_count": 47,  # Most popular - incident triage
         "detailed_description": """# Slack Incident Triage
 
 Fast root cause analysis optimized for production incidents triggered via Slack.
@@ -49,7 +48,6 @@ Fast root cause analysis optimized for production incidents triggered via Slack.
     },
     "02_git_ci_auto_fix.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/ci-autofix.svg",
-        "usage_count": 23,  # Popular for CI teams
         "detailed_description": """# Git CI Issue Triage & Auto-Fix
 
 Analyzes GitHub Actions and CodePipeline failures and can automatically fix common issues.
@@ -74,10 +72,9 @@ Analyzes GitHub Actions and CodePipeline failures and can automatically fix comm
     },
     "03_aws_cost_reduction.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/finops.svg",
-        "usage_count": 12,  # FinOps growing
-        "detailed_description": """# AWS Cost Reduction
+        "detailed_description": """# Cloud Cost Optimization
 
-FinOps agent that finds cost savings opportunities across your AWS infrastructure.
+FinOps agent that finds cost savings opportunities across your cloud infrastructure.
 
 ## What It Does
 - Identifies idle resources (EC2, RDS, EBS)
@@ -99,7 +96,6 @@ FinOps agent that finds cost savings opportunities across your AWS infrastructur
     },
     "04_coding_assistant.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/coding.svg",
-        "usage_count": 31,  # Very popular for devs
         "detailed_description": """# Coding Assistant
 
 AI senior software engineer for code reviews, refactoring, and test generation.
@@ -125,7 +121,6 @@ AI senior software engineer for code reviews, refactoring, and test generation.
     },
     "05_data_migration.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/data-migration.svg",
-        "usage_count": 8,  # Specialized use case
         "detailed_description": """# Data Migration Assistant
 
 Plans and executes database migrations with validation and rollback procedures.
@@ -152,8 +147,7 @@ Plans and executes database migrations with validation and rollback procedures.
     },
     "06_news_comedian.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/comedy.svg",
-        "usage_count": 5,  # Demo template
-        "detailed_description": """# Tech News Comedian (Demo)
+        "detailed_description": """# News Comedian (Non Production, Demo Only)
 
 Fun demo agent that turns tech news into witty jokes.
 
@@ -178,7 +172,6 @@ Fun demo agent that turns tech news into witty jokes.
     },
     "07_alert_fatigue.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/alert-optimization.svg",
-        "usage_count": 19,  # Popular for SRE teams
         "detailed_description": """# Alert Fatigue Analyzer
 
 Data-driven alert optimization using multi-source analysis (PagerDuty, Prometheus, Datadog, Opsgenie).
@@ -205,7 +198,6 @@ Data-driven alert optimization using multi-source analysis (PagerDuty, Prometheu
     },
     "10_observability_advisor.json": {
         "icon_url": "https://cdn.incidentfox.ai/icons/observability.svg",
-        "usage_count": 14,  # SRE teams adopting
         "detailed_description": """# Observability Advisor
 
 Enterprise-grade observability setup and optimization using SRE best practices.
@@ -472,14 +464,10 @@ def seed_template(db: Session, file_path: Path, force_update: bool = False) -> N
         existing.version = new_version
         existing.required_mcps = required_mcps
         existing.required_tools = required_tools[:50]
-        # Note: Don't update usage_count on existing templates - preserve real usage data
         print(f"  ✅ Updated template '{metadata['name']}' to v{new_version}")
         return
 
-    # Get fake usage count for demo purposes
-    fake_usage_count = file_metadata.get("usage_count", 0)
-
-    # Create new template record
+    # Create new template record (usage_count defaults to 0)
     template = Template(
         id=f"tmpl_{uuid.uuid4().hex[:12]}",
         name=metadata["name"],
@@ -497,7 +485,6 @@ def seed_template(db: Session, file_path: Path, force_update: bool = False) -> N
         required_mcps=required_mcps,
         required_tools=required_tools[:50],  # Limit to first 50 tools
         created_by="system",
-        usage_count=fake_usage_count,
     )
 
     db.add(template)
@@ -505,7 +492,7 @@ def seed_template(db: Session, file_path: Path, force_update: bool = False) -> N
     tool_count = len(required_tools)
     print(
         f"  ✅ Created template '{metadata['name']}' v{metadata['version']} "
-        f"({agent_count} agents, {tool_count} tools, {fake_usage_count} teams)"
+        f"({agent_count} agents, {tool_count} tools)"
     )
 
 
