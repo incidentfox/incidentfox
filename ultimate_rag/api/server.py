@@ -1050,10 +1050,10 @@ class UltimateRAGServer:
                 )
 
                 return TeachResponse(
-                    success=result.status.value in ["added", "updated"],
+                    success=result.status.value in ["created", "merged"],
                     node_id=result.node_id,
                     status=result.status.value,
-                    message=result.message,
+                    message=result.action,
                 )
 
             except Exception as e:
@@ -1083,10 +1083,10 @@ class UltimateRAGServer:
             )
 
             return TeachResponse(
-                success=result.status.value in ["added", "updated"],
+                success=result.status.value in ["created", "merged"],
                 node_id=result.node_id,
                 status=result.status.value,
-                message=result.message,
+                message=result.action,
             )
 
         # ==================== Graph Routes ====================
@@ -2096,11 +2096,11 @@ class UltimateRAGServer:
 
                 # Map status to v1 format
                 status = result.status.value
-                message = result.message
+                message = result.action
 
-                if status == "added":
+                if status == "created":
                     message = "New knowledge successfully added to the knowledge base."
-                elif status == "updated":
+                elif status == "merged":
                     message = "Knowledge merged with existing similar content."
                 elif status == "duplicate":
                     message = "This knowledge already exists in the knowledge base."
