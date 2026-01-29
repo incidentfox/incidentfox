@@ -983,6 +983,264 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
     except Exception as e:
         logger.warning("msteams_tools_load_failed", error=str(e))
 
+    # MySQL tools (if mysql-connector-python available)
+    if is_integration_available("mysql.connector"):
+        try:
+            from .mysql_tools import (
+                mysql_describe_table,
+                mysql_execute_query,
+                mysql_get_table_locks,
+                mysql_list_tables,
+                mysql_show_engine_status,
+                mysql_show_processlist,
+                mysql_show_slave_status,
+            )
+
+            tools.extend(
+                [
+                    mysql_list_tables,
+                    mysql_describe_table,
+                    mysql_execute_query,
+                    mysql_show_processlist,
+                    mysql_show_slave_status,
+                    mysql_show_engine_status,
+                    mysql_get_table_locks,
+                ]
+            )
+            logger.debug("mysql_tools_loaded", count=7)
+        except Exception as e:
+            logger.warning("mysql_tools_load_failed", error=str(e))
+
+    # Extended PostgreSQL tools (already have basic ones loaded above)
+    if is_integration_available("psycopg2"):
+        try:
+            from .postgres_tools import (
+                postgres_get_locks,
+                postgres_get_long_running_queries,
+                postgres_get_replication_status,
+                postgres_get_table_size,
+                postgres_list_constraints,
+                postgres_list_indexes,
+            )
+
+            tools.extend(
+                [
+                    postgres_list_indexes,
+                    postgres_list_constraints,
+                    postgres_get_table_size,
+                    postgres_get_locks,
+                    postgres_get_replication_status,
+                    postgres_get_long_running_queries,
+                ]
+            )
+            logger.debug("postgres_extended_tools_loaded", count=6)
+        except Exception as e:
+            logger.warning("postgres_extended_tools_load_failed", error=str(e))
+
+    # Kafka tools (if confluent-kafka available)
+    if is_integration_available("confluent_kafka"):
+        try:
+            from .kafka_tools import (
+                kafka_describe_consumer_group,
+                kafka_describe_topic,
+                kafka_get_broker_info,
+                kafka_get_consumer_lag,
+                kafka_list_consumer_groups,
+                kafka_list_topics,
+            )
+
+            tools.extend(
+                [
+                    kafka_list_topics,
+                    kafka_describe_topic,
+                    kafka_list_consumer_groups,
+                    kafka_describe_consumer_group,
+                    kafka_get_consumer_lag,
+                    kafka_get_broker_info,
+                ]
+            )
+            logger.debug("kafka_tools_loaded", count=6)
+        except Exception as e:
+            logger.warning("kafka_tools_load_failed", error=str(e))
+
+    # Schema Registry tools (uses httpx - already a dependency)
+    if is_integration_available("httpx"):
+        try:
+            from .schema_registry_tools import (
+                schema_registry_check_compatibility,
+                schema_registry_delete_subject,
+                schema_registry_get_compatibility_level,
+                schema_registry_get_schema,
+                schema_registry_get_versions,
+                schema_registry_list_subjects,
+                schema_registry_register_schema,
+                schema_registry_set_compatibility_level,
+            )
+
+            tools.extend(
+                [
+                    schema_registry_list_subjects,
+                    schema_registry_get_schema,
+                    schema_registry_get_versions,
+                    schema_registry_check_compatibility,
+                    schema_registry_register_schema,
+                    schema_registry_get_compatibility_level,
+                    schema_registry_set_compatibility_level,
+                    schema_registry_delete_subject,
+                ]
+            )
+            logger.debug("schema_registry_tools_loaded", count=8)
+        except Exception as e:
+            logger.warning("schema_registry_tools_load_failed", error=str(e))
+
+    # Debezium/Kafka Connect tools (uses httpx - already a dependency)
+    if is_integration_available("httpx"):
+        try:
+            from .debezium_tools import (
+                debezium_create_connector,
+                debezium_delete_connector,
+                debezium_get_connector_config,
+                debezium_get_connector_plugins,
+                debezium_get_connector_status,
+                debezium_list_connectors,
+                debezium_pause_connector,
+                debezium_restart_connector,
+                debezium_restart_task,
+                debezium_resume_connector,
+                debezium_update_connector,
+            )
+
+            tools.extend(
+                [
+                    debezium_list_connectors,
+                    debezium_get_connector_status,
+                    debezium_get_connector_config,
+                    debezium_create_connector,
+                    debezium_update_connector,
+                    debezium_restart_connector,
+                    debezium_restart_task,
+                    debezium_pause_connector,
+                    debezium_resume_connector,
+                    debezium_delete_connector,
+                    debezium_get_connector_plugins,
+                ]
+            )
+            logger.debug("debezium_tools_loaded", count=11)
+        except Exception as e:
+            logger.warning("debezium_tools_load_failed", error=str(e))
+
+    # Flyway migration tools (CLI wrapper - always try to load)
+    try:
+        from .flyway_tools import (
+            flyway_baseline,
+            flyway_clean,
+            flyway_info,
+            flyway_migrate,
+            flyway_repair,
+            flyway_undo,
+            flyway_validate,
+        )
+
+        tools.extend(
+            [
+                flyway_info,
+                flyway_validate,
+                flyway_migrate,
+                flyway_repair,
+                flyway_baseline,
+                flyway_clean,
+                flyway_undo,
+            ]
+        )
+        logger.debug("flyway_tools_loaded", count=7)
+    except Exception as e:
+        logger.warning("flyway_tools_load_failed", error=str(e))
+
+    # Alembic migration tools (CLI wrapper - always try to load)
+    try:
+        from .alembic_tools import (
+            alembic_branches,
+            alembic_check,
+            alembic_current,
+            alembic_downgrade,
+            alembic_heads,
+            alembic_history,
+            alembic_show,
+            alembic_stamp,
+            alembic_upgrade,
+        )
+
+        tools.extend(
+            [
+                alembic_current,
+                alembic_history,
+                alembic_heads,
+                alembic_branches,
+                alembic_upgrade,
+                alembic_downgrade,
+                alembic_stamp,
+                alembic_check,
+                alembic_show,
+            ]
+        )
+        logger.debug("alembic_tools_loaded", count=9)
+    except Exception as e:
+        logger.warning("alembic_tools_load_failed", error=str(e))
+
+    # Prisma migration tools (CLI wrapper - always try to load)
+    try:
+        from .prisma_tools import (
+            prisma_db_pull,
+            prisma_db_push,
+            prisma_format,
+            prisma_migrate_deploy,
+            prisma_migrate_diff,
+            prisma_migrate_reset,
+            prisma_migrate_resolve,
+            prisma_migrate_status,
+            prisma_validate,
+        )
+
+        tools.extend(
+            [
+                prisma_migrate_status,
+                prisma_migrate_deploy,
+                prisma_migrate_reset,
+                prisma_migrate_resolve,
+                prisma_migrate_diff,
+                prisma_db_push,
+                prisma_db_pull,
+                prisma_validate,
+                prisma_format,
+            ]
+        )
+        logger.debug("prisma_tools_loaded", count=9)
+    except Exception as e:
+        logger.warning("prisma_tools_load_failed", error=str(e))
+
+    # Online schema change tools (gh-ost, pt-osc - CLI wrappers)
+    try:
+        from .online_schema_tools import (
+            gh_ost_cut_over,
+            gh_ost_panic,
+            gh_ost_run,
+            osc_estimate_time,
+            pt_online_schema_change,
+        )
+
+        tools.extend(
+            [
+                gh_ost_run,
+                gh_ost_cut_over,
+                gh_ost_panic,
+                pt_online_schema_change,
+                osc_estimate_time,
+            ]
+        )
+        logger.debug("online_schema_tools_loaded", count=5)
+    except Exception as e:
+        logger.warning("online_schema_tools_load_failed", error=str(e))
+
     # Load MCP tools (dynamically discovered from configured MCP servers)
     try:
         from ..core.mcp_client import get_mcp_tools_for_agent
