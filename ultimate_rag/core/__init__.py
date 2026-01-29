@@ -14,6 +14,10 @@ from .node import (
     KnowledgeTree,
     TreeForest,
 )
+from .persistence import (
+    TreePersistence,
+    get_persistence,
+)
 from .types import (
     DEFAULT_IMPORTANCE_WEIGHTS,
     ImportanceScore,
@@ -35,4 +39,7 @@ __all__ = [
     "NodeMetadata",
     "SourceInfo",
     "ValidationStatus",
+    # Persistence
+    "TreePersistence",
+    "get_persistence",
 ]
