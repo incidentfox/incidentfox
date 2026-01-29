@@ -373,6 +373,162 @@ def jira_list_issues(
         raise ToolExecutionError("jira_list_issues", str(e), e)
 
 
+def jira_search_issues(
+    jql: str,
+    max_results: int = 100,
+    fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Search Jira issues using JQL (Jira Query Language).
+
+    Powerful search for finding incident tickets, post-mortems, action items.
+    Useful for alert fatigue analysis to find patterns in incident handling.
+
+    Common JQL patterns:
+    - Find incidents: 'type = Incident AND created >= -30d'
+    - Find by label: 'labels = "alert-tuning" OR labels = "incident"'
+    - Find open action items: 'type = Task AND labels = "action-item" AND status != Done'
+    - Find by text: 'summary ~ "high CPU" OR description ~ "alert fatigue"'
+    - Find stale issues: 'updated <= -90d AND status != Done'
+
+    Args:
+        jql: JQL query string
+        max_results: Maximum issues to return (default 100)
+        fields: Specific fields to return (default: key, summary, status, etc.)
+
+    Returns:
+        Dict with issues and search metadata
+    """
+    try:
+        jira = _get_jira_client()
+
+        # Default fields if not specified
+        if not fields:
+            fields = [
+                "key",
+                "summary",
+                "status",
+                "issuetype",
+                "priority",
+                "assignee",
+                "reporter",
+                "created",
+                "updated",
+                "labels",
+                "description",
+                "resolution",
+                "resolutiondate",
+            ]
+
+        issues = jira.search_issues(jql, maxResults=max_results, fields=fields)
+
+        issue_list = []
+        for issue in issues:
+            issue_data = {
+                "key": issue.key,
+                "summary": getattr(issue.fields, "summary", None),
+                "status": (
+                    issue.fields.status.name if hasattr(issue.fields, "status") else None
+                ),
+                "issue_type": (
+                    issue.fields.issuetype.name
+                    if hasattr(issue.fields, "issuetype")
+                    else None
+                ),
+                "priority": (
+                    issue.fields.priority.name
+                    if hasattr(issue.fields, "priority") and issue.fields.priority
+                    else None
+                ),
+                "assignee": (
+                    issue.fields.assignee.displayName
+                    if hasattr(issue.fields, "assignee") and issue.fields.assignee
+                    else None
+                ),
+                "reporter": (
+                    issue.fields.reporter.displayName
+                    if hasattr(issue.fields, "reporter") and issue.fields.reporter
+                    else None
+                ),
+                "created": (
+                    str(issue.fields.created)
+                    if hasattr(issue.fields, "created")
+                    else None
+                ),
+                "updated": (
+                    str(issue.fields.updated)
+                    if hasattr(issue.fields, "updated")
+                    else None
+                ),
+                "labels": (
+                    list(issue.fields.labels)
+                    if hasattr(issue.fields, "labels")
+                    else []
+                ),
+                "resolution": (
+                    issue.fields.resolution.name
+                    if hasattr(issue.fields, "resolution") and issue.fields.resolution
+                    else None
+                ),
+                "resolution_date": (
+                    str(issue.fields.resolutiondate)
+                    if hasattr(issue.fields, "resolutiondate")
+                    and issue.fields.resolutiondate
+                    else None
+                ),
+                "url": f"{jira._options['server']}/browse/{issue.key}",
+            }
+
+            # Include description snippet
+            if hasattr(issue.fields, "description") and issue.fields.description:
+                desc = issue.fields.description
+                issue_data["description_snippet"] = (
+                    desc[:500] + "..." if len(desc) > 500 else desc
+                )
+
+            issue_list.append(issue_data)
+
+        # Compute summary stats
+        status_counts = {}
+        priority_counts = {}
+        assignee_counts = {}
+
+        for issue in issue_list:
+            status = issue["status"]
+            if status:
+                status_counts[status] = status_counts.get(status, 0) + 1
+
+            priority = issue["priority"]
+            if priority:
+                priority_counts[priority] = priority_counts.get(priority, 0) + 1
+
+            assignee = issue["assignee"]
+            if assignee:
+                assignee_counts[assignee] = assignee_counts.get(assignee, 0) + 1
+
+        logger.info("jira_search_completed", jql=jql[:100], count=len(issue_list))
+
+        return {
+            "success": True,
+            "jql": jql,
+            "total_results": len(issue_list),
+            "summary": {
+                "by_status": status_counts,
+                "by_priority": priority_counts,
+                "by_assignee": dict(
+                    sorted(assignee_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+                ),
+            },
+            "issues": issue_list,
+        }
+
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "jira_search_issues", "jira")
+    except Exception as e:
+        logger.error("jira_search_issues_failed", error=str(e), jql=jql[:100])
+        raise ToolExecutionError("jira_search_issues", str(e), e)
+
+
 # List of all Jira tools for registration
 JIRA_TOOLS = [
     jira_create_issue,
@@ -381,4 +537,5 @@ JIRA_TOOLS = [
     jira_add_comment,
     jira_update_issue,
     jira_list_issues,
+    jira_search_issues,
 ]

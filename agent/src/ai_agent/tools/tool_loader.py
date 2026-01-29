@@ -262,6 +262,9 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
     if is_integration_available("atlassian"):
         try:
             from .confluence_tools import (
+                confluence_find_postmortems,
+                confluence_find_runbooks,
+                confluence_search_cql,
                 get_confluence_page,
                 list_space_pages,
                 search_confluence,
@@ -272,9 +275,12 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
                     search_confluence,
                     get_confluence_page,
                     list_space_pages,
+                    confluence_search_cql,
+                    confluence_find_runbooks,
+                    confluence_find_postmortems,
                 ]
             )
-            logger.debug("confluence_tools_loaded", count=3)
+            logger.debug("confluence_tools_loaded", count=6)
         except Exception as e:
             logger.warning("confluence_tools_load_failed", error=str(e))
 
@@ -807,10 +813,14 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
     try:
         from .pagerduty_tools import (
             pagerduty_calculate_mttr,
+            pagerduty_get_alert_analytics,
             pagerduty_get_escalation_policy,
             pagerduty_get_incident,
             pagerduty_get_incident_log_entries,
+            pagerduty_get_on_call,
             pagerduty_list_incidents,
+            pagerduty_list_incidents_by_date_range,
+            pagerduty_list_services,
         )
 
         tools.extend(
@@ -820,11 +830,75 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
                 pagerduty_list_incidents,
                 pagerduty_get_escalation_policy,
                 pagerduty_calculate_mttr,
+                pagerduty_list_incidents_by_date_range,
+                pagerduty_list_services,
+                pagerduty_get_on_call,
+                pagerduty_get_alert_analytics,
             ]
         )
-        logger.debug("pagerduty_tools_loaded", count=5)
+        logger.debug("pagerduty_tools_loaded", count=9)
     except Exception as e:
         logger.warning("pagerduty_tools_load_failed", error=str(e))
+
+    # Incident.io tools (uses requests - core dependency)
+    try:
+        from .incidentio_tools import (
+            incidentio_calculate_mttr,
+            incidentio_get_alert_analytics,
+            incidentio_get_incident,
+            incidentio_get_incident_updates,
+            incidentio_list_incident_types,
+            incidentio_list_incidents,
+            incidentio_list_incidents_by_date_range,
+            incidentio_list_severities,
+        )
+
+        tools.extend(
+            [
+                incidentio_list_incidents,
+                incidentio_get_incident,
+                incidentio_get_incident_updates,
+                incidentio_list_incidents_by_date_range,
+                incidentio_list_severities,
+                incidentio_list_incident_types,
+                incidentio_get_alert_analytics,
+                incidentio_calculate_mttr,
+            ]
+        )
+        logger.debug("incidentio_tools_loaded", count=8)
+    except Exception as e:
+        logger.warning("incidentio_tools_load_failed", error=str(e))
+
+    # Opsgenie tools (uses requests - core dependency)
+    try:
+        from .opsgenie_tools import (
+            opsgenie_calculate_mttr,
+            opsgenie_get_alert,
+            opsgenie_get_alert_analytics,
+            opsgenie_get_alert_logs,
+            opsgenie_get_on_call,
+            opsgenie_list_alerts,
+            opsgenie_list_alerts_by_date_range,
+            opsgenie_list_services,
+            opsgenie_list_teams,
+        )
+
+        tools.extend(
+            [
+                opsgenie_list_alerts,
+                opsgenie_get_alert,
+                opsgenie_get_alert_logs,
+                opsgenie_list_alerts_by_date_range,
+                opsgenie_list_services,
+                opsgenie_list_teams,
+                opsgenie_get_on_call,
+                opsgenie_get_alert_analytics,
+                opsgenie_calculate_mttr,
+            ]
+        )
+        logger.debug("opsgenie_tools_loaded", count=9)
+    except Exception as e:
+        logger.warning("opsgenie_tools_load_failed", error=str(e))
 
     # Sentry tools (uses requests - core dependency)
     try:
@@ -882,6 +956,7 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
                 jira_create_issue,
                 jira_get_issue,
                 jira_list_issues,
+                jira_search_issues,
                 jira_update_issue,
             )
 
@@ -893,9 +968,10 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
                     jira_add_comment,
                     jira_update_issue,
                     jira_list_issues,
+                    jira_search_issues,
                 ]
             )
-            logger.debug("jira_tools_loaded", count=6)
+            logger.debug("jira_tools_loaded", count=7)
         except Exception as e:
             logger.warning("jira_tools_load_failed", error=str(e))
 
@@ -1240,6 +1316,25 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
         logger.debug("online_schema_tools_loaded", count=5)
     except Exception as e:
         logger.warning("online_schema_tools_load_failed", error=str(e))
+
+    # Observability Advisor tools (always available - pure Python)
+    try:
+        from .observability_advisor_tools import (
+            compute_metric_baseline,
+            generate_alert_rules,
+            suggest_alert_thresholds,
+        )
+
+        tools.extend(
+            [
+                compute_metric_baseline,
+                suggest_alert_thresholds,
+                generate_alert_rules,
+            ]
+        )
+        logger.debug("observability_advisor_tools_loaded", count=3)
+    except Exception as e:
+        logger.warning("observability_advisor_tools_load_failed", error=str(e))
 
     # Load MCP tools (dynamically discovered from configured MCP servers)
     try:
