@@ -472,10 +472,7 @@ def seed_template(db: Session, file_path: Path, force_update: bool = False) -> N
         existing.version = new_version
         existing.required_mcps = required_mcps
         existing.required_tools = required_tools[:50]
-        # Update usage_count for demo purposes (only if we have fake data configured)
-        fake_usage_count = file_metadata.get("usage_count")
-        if fake_usage_count is not None:
-            existing.usage_count = fake_usage_count
+        # Note: Don't update usage_count on existing templates - preserve real usage data
         print(f"  ✅ Updated template '{metadata['name']}' to v{new_version}")
         return
 
