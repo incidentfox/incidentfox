@@ -52,7 +52,9 @@ def _load_default_agent_prompts() -> dict[str, str]:
     Returns:
         Dict mapping agent name to base prompt string
     """
-    template_path = REPO_ROOT / "config_service" / "templates" / "01_slack_incident_triage.json"
+    template_path = (
+        REPO_ROOT / "config_service" / "templates" / "01_slack_incident_triage.json"
+    )
 
     if not template_path.exists():
         raise FileNotFoundError(f"01_slack template not found: {template_path}")
