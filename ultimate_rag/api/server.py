@@ -892,7 +892,9 @@ class UltimateRAGServer:
                 texts = [chunk.text for chunk in all_chunks]
 
                 try:
-                    from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+                    from knowledge_base.raptor.EmbeddingModels import (
+                        OpenAIEmbeddingModel,
+                    )
 
                     embedding_model = OpenAIEmbeddingModel()
                     embeddings = embedding_model.create_embeddings_batch(texts)
