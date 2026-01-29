@@ -3,7 +3,7 @@ Planner Agent System Prompt Builder.
 
 This module builds the planner system prompt following the standard agent pattern:
 
-    base_prompt = custom_prompt or _get_default_planner_prompt()
+    base_prompt = custom_prompt or get_default_agent_prompt("planner")
     system_prompt = base_prompt
     system_prompt += build_capabilities_section(...)  # Dynamic capabilities
     system_prompt = apply_role_based_prompt(...)      # Role sections
@@ -17,103 +17,35 @@ When no custom prompt is configured, we load from 01_slack_incident_triage
 template as the canonical default.
 """
 
-import json
-from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
 from .agent_capabilities import AGENT_CAPABILITIES, get_enabled_agent_keys
+from .default_prompts import get_default_agent_prompt
 from .layers import (
     apply_role_based_prompt,
     build_agent_prompt_sections,
     build_capabilities_section,
 )
 
-# =============================================================================
-# Default Planner Prompt (loaded from 01_slack template)
-# =============================================================================
 
-
-@lru_cache(maxsize=1)
+# Backwards compatibility wrapper
 def _get_default_planner_prompt() -> str:
     """
     Load the default planner prompt from 01_slack_incident_triage template.
 
-    This is the canonical default - 01_slack is the source of truth for what
-    a production-quality planner prompt looks like. New teams automatically
-    get this prompt until they customize it.
-
-    Returns:
-        The planner system prompt from 01_slack template
-
-    Note:
-        Result is cached to avoid repeated file I/O.
+    This is a convenience wrapper around get_default_agent_prompt("planner").
     """
-    # Find the template file relative to this module
-    # agent/src/ai_agent/prompts/planner_prompt.py -> config_service/templates/
-    module_dir = Path(__file__).parent
-    repo_root = module_dir.parent.parent.parent.parent  # Up to repo root
-    template_path = (
-        repo_root / "config_service" / "templates" / "01_slack_incident_triage.json"
-    )
-
-    if not template_path.exists():
-        # Fallback for when running from different locations or in tests
-        # Try relative to current working directory
-        template_path = Path("config_service/templates/01_slack_incident_triage.json")
-
-    if template_path.exists():
-        with open(template_path) as f:
-            template = json.load(f)
-            prompt_config = (
-                template.get("agents", {}).get("planner", {}).get("prompt", {})
-            )
-            if isinstance(prompt_config, dict):
-                prompt = prompt_config.get("system", "")
-                if prompt:
-                    return prompt
-
-    # Ultimate fallback if template can't be loaded (e.g., in isolated tests)
-    # This should rarely be used in practice
-    return """You are an expert AI SRE (Site Reliability Engineer) responsible for investigating incidents, diagnosing issues, and providing actionable recommendations.
-
-## YOUR ROLE
-
-You are the primary orchestrator for incident investigation. Your responsibilities:
-
-1. **Understand the problem** - Analyze the issue, clarify scope, identify affected systems
-2. **Investigate systematically** - Delegate to specialized agents, gather evidence, correlate findings
-3. **Synthesize insights** - Combine findings from multiple sources into a coherent diagnosis
-4. **Provide actionable recommendations** - Give specific, prioritized next steps
-
-## REASONING FRAMEWORK
-
-For every investigation:
-
-1. **UNDERSTAND**: What's the problem? What systems? Business impact? When did it start?
-2. **HYPOTHESIZE**: Top 3 likely causes? What evidence confirms/rules out each?
-3. **INVESTIGATE**: Delegate to agents, start with most likely hypothesis, pivot if needed
-4. **SYNTHESIZE**: Combine findings, build timeline, identify root cause
-5. **RECOMMEND**: Immediate actions, prevention, who to notify
-
-## DELEGATION RULES
-
-- Delegate with GOALS, not commands - tell agents WHAT you need, not HOW to find it
-- Provide context: symptoms, timing, findings from other agents
-- Don't repeat: never call same agent twice for same question
-- Trust specialists: agents are domain experts
-- Parallelize when independent
-"""
+    return get_default_agent_prompt("planner")
 
 
 # Backwards compatibility: expose as a constant (loaded lazily on first access)
-# Deprecated: Use _get_default_planner_prompt() instead
+# Deprecated: Use get_default_agent_prompt("planner") instead
 def __getattr__(name: str) -> Any:
     if name == "DEFAULT_PLANNER_PROMPT":
-        return _get_default_planner_prompt()
+        return get_default_agent_prompt("planner")
     if name == "PLANNER_SYSTEM_PROMPT":
         # Legacy alias
-        return _get_default_planner_prompt()
+        return get_default_agent_prompt("planner")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

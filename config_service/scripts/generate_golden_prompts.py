@@ -12,7 +12,6 @@ Usage:
 """
 
 import argparse
-import functools
 import json
 import sys
 from pathlib import Path
@@ -22,6 +21,7 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "agent" / "src"))
 
 from ai_agent.prompts.agent_capabilities import AGENT_CAPABILITIES
+from ai_agent.prompts.default_prompts import get_default_agent_prompt
 from ai_agent.prompts.layers import (
     BEHAVIORAL_PRINCIPLES,
     DELEGATION_GUIDANCE,
@@ -35,64 +35,6 @@ from ai_agent.prompts.layers import (
     get_integration_errors,
     get_integration_tool_limits,
 )
-
-# =============================================================================
-# Agent Base Prompts (loaded from 01_slack template - single source of truth)
-# =============================================================================
-
-
-@functools.lru_cache(maxsize=1)
-def _load_default_agent_prompts() -> dict[str, str]:
-    """
-    Load all agent base prompts from 01_slack_incident_triage template.
-
-    The 01_slack template is the canonical source of truth for what production-quality
-    agent prompts look like. This function loads all agent prompts from that template.
-
-    Returns:
-        Dict mapping agent name to base prompt string
-    """
-    template_path = (
-        REPO_ROOT / "config_service" / "templates" / "01_slack_incident_triage.json"
-    )
-
-    if not template_path.exists():
-        raise FileNotFoundError(f"01_slack template not found: {template_path}")
-
-    with open(template_path) as f:
-        template = json.load(f)
-
-    prompts = {}
-    for agent_name, agent_config in template.get("agents", {}).items():
-        prompt_config = agent_config.get("prompt", {})
-        if isinstance(prompt_config, dict):
-            prompt = prompt_config.get("system", "")
-        elif isinstance(prompt_config, str):
-            prompt = prompt_config
-        else:
-            prompt = ""
-
-        if prompt:
-            prompts[agent_name] = prompt
-        else:
-            # Fallback for agents without prompts in template
-            prompts[agent_name] = f"You are the {agent_name} agent."
-
-    return prompts
-
-
-def get_agent_base_prompt(agent_name: str) -> str:
-    """
-    Get the base prompt for an agent.
-
-    Args:
-        agent_name: Name of the agent (e.g., 'planner', 'k8s', 'github')
-
-    Returns:
-        The base prompt string from 01_slack template
-    """
-    prompts = _load_default_agent_prompts()
-    return prompts.get(agent_name, f"You are the {agent_name} agent.")
 
 
 # =============================================================================
@@ -163,7 +105,7 @@ def assemble_agent_prompt(
         custom_prompt = None
 
     # Get base prompt from 01_slack template (single source of truth)
-    default_prompt = get_agent_base_prompt(agent_name)
+    default_prompt = get_default_agent_prompt(agent_name)
 
     base_prompt = custom_prompt or default_prompt
     parts.append(base_prompt)
