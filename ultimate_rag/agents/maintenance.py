@@ -257,7 +257,7 @@ class MaintenanceAgent:
         """
         Analyze failed queries to identify knowledge gaps.
 
-        Clusters similar failed queries to find patterns.
+        Uses semantic clustering with embeddings to find patterns.
         """
         if not self.observations:
             return []
@@ -267,57 +267,142 @@ class MaintenanceAgent:
         if len(failed_queries) < self.gap_detection_min_frequency:
             return []
 
-        # Simple clustering: group by similar words
-        # In production, use proper clustering algorithm
-        clusters: Dict[str, List] = {}
-
-        for obs in failed_queries:
-            # Extract key words
-            words = set(obs.query.lower().split())
-            # Remove common words
-            stop_words = {
-                "how",
-                "do",
-                "i",
-                "the",
-                "a",
-                "an",
-                "to",
-                "for",
-                "in",
-                "is",
-                "what",
-                "why",
-            }
-            key_words = words - stop_words
-
-            # Find or create cluster
-            cluster_key = "_".join(sorted(list(key_words)[:3]))
-            if cluster_key not in clusters:
-                clusters[cluster_key] = []
-            clusters[cluster_key].append(obs)
+        # Use semantic clustering with embeddings
+        clusters = await self._cluster_queries_by_embedding(failed_queries)
 
         # Convert clusters to gaps
         gaps = []
         import uuid
 
-        for cluster_key, observations in clusters.items():
-            if len(observations) >= self.gap_detection_min_frequency:
+        for cluster_queries in clusters:
+            if len(cluster_queries) >= self.gap_detection_min_frequency:
+                # Extract common topics from the cluster
+                all_words: Dict[str, int] = {}
+                stop_words = {
+                    "how", "do", "i", "the", "a", "an", "to", "for", "in", "is",
+                    "what", "why", "when", "where", "can", "could", "would", "should",
+                    "does", "did", "are", "was", "were", "be", "been", "being",
+                }
+                for obs in cluster_queries:
+                    words = set(obs.query.lower().split()) - stop_words
+                    for word in words:
+                        all_words[word] = all_words.get(word, 0) + 1
+
+                # Get top keywords that appear in most queries
+                sorted_words = sorted(all_words.items(), key=lambda x: x[1], reverse=True)
+                top_topics = [w[0] for w in sorted_words[:5] if w[1] >= 2]
+
+                if not top_topics:
+                    top_topics = [w[0] for w in sorted_words[:3]]
+
+                description = f"Missing knowledge about: {', '.join(top_topics)}"
+
                 gap = KnowledgeGap(
                     gap_id=str(uuid.uuid4()),
-                    description=f"Missing knowledge about: {cluster_key.replace('_', ', ')}",
-                    frequency=len(observations),
-                    example_queries=[obs.query for obs in observations[:5]],
-                    suggested_sources=[],  # Could use web search to suggest
-                    affected_topics=cluster_key.split("_"),
+                    description=description,
+                    frequency=len(cluster_queries),
+                    example_queries=[obs.query for obs in cluster_queries[:5]],
+                    suggested_sources=[],
+                    affected_topics=top_topics,
                     detected_at=datetime.utcnow(),
-                    priority=min(1.0, len(observations) / 10),
+                    priority=min(1.0, len(cluster_queries) / 10),
                 )
                 gaps.append(gap)
                 self._gaps[gap.gap_id] = gap
 
         logger.info(f"Detected {len(gaps)} knowledge gaps")
         return gaps
+
+    async def _cluster_queries_by_embedding(
+        self,
+        failed_queries: List[Any],
+        similarity_threshold: float = 0.7,
+    ) -> List[List[Any]]:
+        """
+        Cluster failed queries using embedding similarity.
+
+        Uses agglomerative clustering based on cosine similarity.
+        """
+        if not failed_queries:
+            return []
+
+        try:
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from knowledge_base.raptor.utils import distances_from_embeddings
+        except ImportError as e:
+            logger.warning(f"RAPTOR imports failed, falling back to keyword clustering: {e}")
+            return self._fallback_keyword_clustering(failed_queries)
+
+        # Get embeddings for all queries
+        embedding_model = OpenAIEmbeddingModel()
+        queries = [obs.query for obs in failed_queries]
+
+        try:
+            embeddings = [embedding_model.create_embedding(q) for q in queries]
+        except Exception as e:
+            logger.warning(f"Embedding failed, falling back to keyword clustering: {e}")
+            return self._fallback_keyword_clustering(failed_queries)
+
+        # Simple agglomerative clustering
+        clusters: List[List[int]] = []  # List of query indices per cluster
+        assigned = set()
+
+        for i in range(len(failed_queries)):
+            if i in assigned:
+                continue
+
+            # Start a new cluster with this query
+            cluster = [i]
+            assigned.add(i)
+
+            # Find similar queries
+            query_embedding = embeddings[i]
+            other_embeddings = []
+            other_indices = []
+
+            for j in range(len(failed_queries)):
+                if j not in assigned:
+                    other_embeddings.append(embeddings[j])
+                    other_indices.append(j)
+
+            if other_embeddings:
+                distances = distances_from_embeddings(
+                    query_embedding, other_embeddings, distance_metric="cosine"
+                )
+
+                for idx, distance in enumerate(distances):
+                    similarity = 1.0 - distance
+                    if similarity >= similarity_threshold:
+                        j = other_indices[idx]
+                        cluster.append(j)
+                        assigned.add(j)
+
+            clusters.append(cluster)
+
+        # Convert indices back to observation objects
+        return [[failed_queries[i] for i in cluster] for cluster in clusters]
+
+    def _fallback_keyword_clustering(
+        self,
+        failed_queries: List[Any],
+    ) -> List[List[Any]]:
+        """
+        Fallback clustering using keyword overlap when embeddings unavailable.
+        """
+        clusters: Dict[str, List] = {}
+        stop_words = {
+            "how", "do", "i", "the", "a", "an", "to", "for", "in", "is",
+            "what", "why", "when", "where", "can", "could", "would", "should",
+        }
+
+        for obs in failed_queries:
+            words = set(obs.query.lower().split()) - stop_words
+            cluster_key = "_".join(sorted(list(words)[:3]))
+            if cluster_key not in clusters:
+                clusters[cluster_key] = []
+            clusters[cluster_key].append(obs)
+
+        return list(clusters.values())
 
     async def find_contradictions(self) -> List[Contradiction]:
         """
