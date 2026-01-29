@@ -360,12 +360,12 @@ class MaintenanceAgent:
             )
             return self._fallback_keyword_clustering(failed_queries)
 
-        # Get embeddings for all queries
+        # Get embeddings for all queries using batch API
         embedding_model = OpenAIEmbeddingModel()
         queries = [obs.query for obs in failed_queries]
 
         try:
-            embeddings = [embedding_model.create_embedding(q) for q in queries]
+            embeddings = embedding_model.create_embeddings_batch(queries)
         except Exception as e:
             logger.warning(f"Embedding failed, falling back to keyword clustering: {e}")
             return self._fallback_keyword_clustering(failed_queries)
