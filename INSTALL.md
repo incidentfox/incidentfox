@@ -2,6 +2,8 @@
 
 Get IncidentFox running in your Slack workspace in under 5 minutes.
 
+> **Quick overview?** See the [Quick Start section in README.md](README.md#quick-start) for a condensed version. This guide provides detailed step-by-step instructions.
+
 ## Prerequisites
 
 - Docker and Docker Compose
