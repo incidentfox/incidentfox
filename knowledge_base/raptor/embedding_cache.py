@@ -156,6 +156,4 @@ class CachedEmbeddingModel(BaseEmbeddingModel):
                 results[idx] = emb_arr
 
         # Convert to list format (numpy arrays -> lists)
-        return [
-            r.tolist() if isinstance(r, np.ndarray) else list(r) for r in results
-        ]
+        return [r.tolist() if isinstance(r, np.ndarray) else list(r) for r in results]
