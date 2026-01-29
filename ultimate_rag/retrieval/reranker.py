@@ -227,17 +227,29 @@ class CrossEncoderReranker(Reranker):
         # Prepare pairs for cross-encoder
         pairs = [(query, chunk.text) for chunk in chunks]
 
-        # Score in batches
+        # Score in batches using cross-encoder model
         scores = []
         for i in range(0, len(pairs), self.batch_size):
             batch = pairs[i : i + self.batch_size]
-            # In production: batch_scores = self.model.predict(batch)
-            batch_scores = [0.5] * len(batch)  # Placeholder
+            try:
+                # Use the cross-encoder model to score query-document pairs
+                batch_scores = self.model.predict(batch)
+                # Ensure scores are in [0, 1] range (some models return logits)
+                if hasattr(batch_scores, "tolist"):
+                    batch_scores = batch_scores.tolist()
+                # Normalize if scores are outside [0, 1]
+                batch_scores = [max(0.0, min(1.0, float(s))) for s in batch_scores]
+            except Exception as e:
+                logger.warning(
+                    f"Cross-encoder scoring failed: {e}, preserving original scores"
+                )
+                # Fall back to original scores for this batch
+                batch_scores = [chunks[i + j].score for j in range(len(batch))]
             scores.extend(batch_scores)
 
         # Update chunk scores
         for chunk, score in zip(chunks, scores):
-            # Combine cross-encoder score with original
+            # Combine cross-encoder score with original (cross-encoder weighted higher)
             chunk.score = 0.7 * score + 0.3 * chunk.score
 
         # Sort and return

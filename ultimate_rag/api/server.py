@@ -805,11 +805,13 @@ class UltimateRAGServer:
                     knowledge_type = KnowledgeType(request.knowledge_type)
 
                 result = await self.teaching.teach(
-                    knowledge=request.knowledge,
-                    knowledge_type=knowledge_type,
-                    source=request.source,
-                    entity_ids=request.entities,
-                    importance=request.importance,
+                    content=request.knowledge,
+                    knowledge_type=(
+                        knowledge_type.value if knowledge_type else "factual"
+                    ),
+                    source=request.source or "api",
+                    confidence=request.importance or 0.8,
+                    related_entities=request.entities,
                 )
 
                 return TeachResponse(
@@ -1854,9 +1856,12 @@ class UltimateRAGServer:
 
             try:
                 # Process the content
+                from ..ingestion.processor import ContentType
+
                 result = self.processor.process_content(
                     content=request.content,
                     source_path="api_upload",
+                    content_type=ContentType.TEXT,
                 )
 
                 # Add chunks via teaching

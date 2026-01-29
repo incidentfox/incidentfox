@@ -386,15 +386,16 @@ class UltimateRetriever:
         success = len(result.chunks) > 0 and result.chunks[0].score > 0.5
 
         if success:
-            self.observations.record_query_success(
+            self.observations.record_success(
                 query=result.query,
-                node_ids=[c.node_id for c in result.chunks],
-                top_score=result.chunks[0].score if result.chunks else 0,
+                retrieved_nodes=[c.node_id for c in result.chunks if c.node_id],
+                success_score=result.chunks[0].score if result.chunks else 0.5,
             )
         else:
-            self.observations.record_query_failure(
+            self.observations.record_failure(
                 query=result.query,
-                partial_matches=[c.node_id for c in result.chunks],
+                gap_description="No relevant results found",
+                retrieved_nodes=[c.node_id for c in result.chunks if c.node_id],
             )
 
     # ==================== Specialized Retrieval Methods ====================
