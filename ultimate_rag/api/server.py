@@ -919,20 +919,27 @@ class UltimateRAGServer:
             if request.documents:
                 # Multiple documents provided
                 for doc in request.documents:
-                    docs_to_process.append({
-                        "content": doc.content,
-                        "source_url": doc.source_url or request.source_url,
-                        "content_type": doc.content_type or request.content_type,
-                        "metadata": {**(request.metadata or {}), **(doc.metadata or {})},
-                    })
+                    docs_to_process.append(
+                        {
+                            "content": doc.content,
+                            "source_url": doc.source_url or request.source_url,
+                            "content_type": doc.content_type or request.content_type,
+                            "metadata": {
+                                **(request.metadata or {}),
+                                **(doc.metadata or {}),
+                            },
+                        }
+                    )
             elif request.content:
                 # Single document content
-                docs_to_process.append({
-                    "content": request.content,
-                    "source_url": request.source_url or "direct_input",
-                    "content_type": request.content_type,
-                    "metadata": request.metadata,
-                })
+                docs_to_process.append(
+                    {
+                        "content": request.content,
+                        "source_url": request.source_url or "direct_input",
+                        "content_type": request.content_type,
+                        "metadata": request.metadata,
+                    }
+                )
             elif request.file_path:
                 # File path - read and process
                 try:
@@ -943,18 +950,18 @@ class UltimateRAGServer:
                     )
                     # Convert file result to document format
                     for chunk in result.chunks:
-                        docs_to_process.append({
-                            "content": chunk.text,
-                            "source_url": request.file_path,
-                            "content_type": request.content_type,
-                            "metadata": request.metadata,
-                        })
+                        docs_to_process.append(
+                            {
+                                "content": chunk.text,
+                                "source_url": request.file_path,
+                                "content_type": request.content_type,
+                                "metadata": request.metadata,
+                            }
+                        )
                 except Exception as e:
                     raise HTTPException(400, f"Failed to read file: {e}")
             else:
-                raise HTTPException(
-                    400, "Provide content, documents, or file_path"
-                )
+                raise HTTPException(400, "Provide content, documents, or file_path")
 
             self._ingest_count += len(docs_to_process)
 
@@ -1028,10 +1035,16 @@ class UltimateRAGServer:
                 max_index = max(tree.all_nodes.keys()) if tree.all_nodes else -1
 
                 for i, chunk in enumerate(all_chunks):
-                    chunk_embedding = embeddings[i] if embeddings and i < len(embeddings) else None
+                    chunk_embedding = (
+                        embeddings[i] if embeddings and i < len(embeddings) else None
+                    )
 
                     # Validation checks (if enabled)
-                    if request.check_duplicates or request.check_contradictions or request.merge_similar:
+                    if (
+                        request.check_duplicates
+                        or request.check_contradictions
+                        or request.merge_similar
+                    ):
                         validation_result = await self._validate_chunk(
                             chunk_text=chunk.text,
                             chunk_embedding=chunk_embedding,
@@ -1050,12 +1063,18 @@ class UltimateRAGServer:
                             continue
 
                         if validation_result["contradiction"]:
-                            contradictions.append(ContradictionInfo(
-                                new_text=chunk.text[:200],
-                                existing_node_id=validation_result["contradiction"]["node_id"],
-                                existing_text=validation_result["contradiction"]["text"][:200],
-                                reason=validation_result["contradiction"]["reason"],
-                            ))
+                            contradictions.append(
+                                ContradictionInfo(
+                                    new_text=chunk.text[:200],
+                                    existing_node_id=validation_result["contradiction"][
+                                        "node_id"
+                                    ],
+                                    existing_text=validation_result["contradiction"][
+                                        "text"
+                                    ][:200],
+                                    reason=validation_result["contradiction"]["reason"],
+                                )
+                            )
                             # Still add the node but record the contradiction
 
                     # Create node
@@ -2554,7 +2573,9 @@ class UltimateRAGServer:
             for new_key, new_val in new_numbers:
                 # Same key but different value
                 if exist_key == new_key and exist_val != new_val:
-                    return f"Different values for '{exist_key}': {exist_val} vs {new_val}"
+                    return (
+                        f"Different values for '{exist_key}': {exist_val} vs {new_val}"
+                    )
 
         # Check for deprecation/update indicators
         deprecation_phrases = [
