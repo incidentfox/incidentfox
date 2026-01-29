@@ -42,10 +42,15 @@ from .layers import (
     get_integration_errors,
     get_integration_tool_limits,
 )
-from .planner_prompt import DEFAULT_PLANNER_PROMPT, build_planner_system_prompt
+from .planner_prompt import build_planner_system_prompt
 
-# Backwards compatibility alias (deprecated - use DEFAULT_PLANNER_PROMPT)
-PLANNER_SYSTEM_PROMPT = DEFAULT_PLANNER_PROMPT
+# Lazy-loaded attributes for backwards compatibility
+# These load from 01_slack template at runtime
+def __getattr__(name: str):
+    if name in ("DEFAULT_PLANNER_PROMPT", "PLANNER_SYSTEM_PROMPT"):
+        from .planner_prompt import _get_default_planner_prompt
+        return _get_default_planner_prompt()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     # Planner prompt

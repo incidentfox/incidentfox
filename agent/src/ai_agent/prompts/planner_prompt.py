@@ -3,7 +3,7 @@ Planner Agent System Prompt Builder.
 
 This module builds the planner system prompt following the standard agent pattern:
 
-    base_prompt = custom_prompt or DEFAULT_PLANNER_PROMPT
+    base_prompt = custom_prompt or _get_default_planner_prompt()
     system_prompt = base_prompt
     system_prompt += build_capabilities_section(...)  # Dynamic capabilities
     system_prompt = apply_role_based_prompt(...)      # Role sections
@@ -13,9 +13,13 @@ Context (runtime metadata, team config) is now passed in the user message,
 not the system prompt. This allows context to flow naturally to sub-agents.
 
 NOTE: The custom_prompt from team config / templates is the source of truth.
-DEFAULT_PLANNER_PROMPT is only used as a fallback when no template is configured.
+When no custom prompt is configured, we load from 01_slack_incident_triage
+template as the canonical default.
 """
 
+import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from .agent_capabilities import AGENT_CAPABILITIES, get_enabled_agent_keys
@@ -25,16 +29,50 @@ from .layers import (
     build_capabilities_section,
 )
 
-# =============================================================================
-# Default Planner Prompt (Fallback)
-# =============================================================================
-# This is a minimal fallback prompt used ONLY when no template custom prompt
-# is configured. In production, templates define the planner prompt.
-#
-# Behavioral principles, error handling, tool limits, evidence format, and
-# transparency are added via build_agent_prompt_sections() from layers.py.
 
-DEFAULT_PLANNER_PROMPT = """You are an expert AI SRE (Site Reliability Engineer) responsible for investigating incidents, diagnosing issues, and providing actionable recommendations.
+# =============================================================================
+# Default Planner Prompt (loaded from 01_slack template)
+# =============================================================================
+
+
+@lru_cache(maxsize=1)
+def _get_default_planner_prompt() -> str:
+    """
+    Load the default planner prompt from 01_slack_incident_triage template.
+
+    This is the canonical default - 01_slack is the source of truth for what
+    a production-quality planner prompt looks like. New teams automatically
+    get this prompt until they customize it.
+
+    Returns:
+        The planner system prompt from 01_slack template
+
+    Note:
+        Result is cached to avoid repeated file I/O.
+    """
+    # Find the template file relative to this module
+    # agent/src/ai_agent/prompts/planner_prompt.py -> config_service/templates/
+    module_dir = Path(__file__).parent
+    repo_root = module_dir.parent.parent.parent.parent  # Up to repo root
+    template_path = repo_root / "config_service" / "templates" / "01_slack_incident_triage.json"
+
+    if not template_path.exists():
+        # Fallback for when running from different locations or in tests
+        # Try relative to current working directory
+        template_path = Path("config_service/templates/01_slack_incident_triage.json")
+
+    if template_path.exists():
+        with open(template_path) as f:
+            template = json.load(f)
+            prompt_config = template.get("agents", {}).get("planner", {}).get("prompt", {})
+            if isinstance(prompt_config, dict):
+                prompt = prompt_config.get("system", "")
+                if prompt:
+                    return prompt
+
+    # Ultimate fallback if template can't be loaded (e.g., in isolated tests)
+    # This should rarely be used in practice
+    return """You are an expert AI SRE (Site Reliability Engineer) responsible for investigating incidents, diagnosing issues, and providing actionable recommendations.
 
 ## YOUR ROLE
 
@@ -45,13 +83,11 @@ You are the primary orchestrator for incident investigation. Your responsibiliti
 3. **Synthesize insights** - Combine findings from multiple sources into a coherent diagnosis
 4. **Provide actionable recommendations** - Give specific, prioritized next steps
 
-You are NOT a simple router. You are an expert who thinks before acting, asks clarifying questions when needed, and provides confident conclusions backed by evidence.
-
 ## REASONING FRAMEWORK
 
 For every investigation:
 
-1. **UNDERSTAND**: What's the problem? What systems? What's the business impact? When did it start?
+1. **UNDERSTAND**: What's the problem? What systems? Business impact? When did it start?
 2. **HYPOTHESIZE**: Top 3 likely causes? What evidence confirms/rules out each?
 3. **INVESTIGATE**: Delegate to agents, start with most likely hypothesis, pivot if needed
 4. **SYNTHESIZE**: Combine findings, build timeline, identify root cause
@@ -64,9 +100,18 @@ For every investigation:
 - Don't repeat: never call same agent twice for same question
 - Trust specialists: agents are domain experts
 - Parallelize when independent
-
-Remember: You are an expert SRE. Think systematically, investigate thoroughly, provide actionable insights.
 """
+
+
+# Backwards compatibility: expose as a constant (loaded lazily on first access)
+# Deprecated: Use _get_default_planner_prompt() instead
+def __getattr__(name: str) -> Any:
+    if name == "DEFAULT_PLANNER_PROMPT":
+        return _get_default_planner_prompt()
+    if name == "PLANNER_SYSTEM_PROMPT":
+        # Legacy alias
+        return _get_default_planner_prompt()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def build_planner_system_prompt(
@@ -83,7 +128,7 @@ def build_planner_system_prompt(
     Build the planner system prompt following the standard agent pattern.
 
     Pattern:
-        base_prompt = custom_prompt or DEFAULT_PLANNER_PROMPT
+        base_prompt = custom_prompt or _get_default_planner_prompt()
         system_prompt = base_prompt + capabilities
         system_prompt = apply_role_based_prompt(...)  # Add delegation guidance
         system_prompt += shared_sections (behavioral principles, error handling, etc.)
@@ -96,7 +141,7 @@ def build_planner_system_prompt(
         agent_capabilities: Custom capability descriptors (uses defaults if not provided)
         remote_agents: Dict of remote A2A agent configs
         team_config: Team configuration dict (used for custom prompt override)
-        custom_prompt: Custom base prompt to use instead of DEFAULT_PLANNER_PROMPT
+        custom_prompt: Custom base prompt to use instead of default
 
     Returns:
         Complete system prompt string
@@ -109,7 +154,7 @@ def build_planner_system_prompt(
         agent_capabilities = AGENT_CAPABILITIES
 
     # 1. Base prompt (can be overridden from config or parameter)
-    # Template custom prompt is the source of truth; DEFAULT_PLANNER_PROMPT is fallback
+    # Template custom prompt is the source of truth; 01_slack is the fallback
     if custom_prompt:
         base_prompt = custom_prompt
     elif team_config:
@@ -122,9 +167,9 @@ def build_planner_system_prompt(
             config_prompt = prompt_cfg
         elif isinstance(prompt_cfg, dict):
             config_prompt = prompt_cfg.get("system")
-        base_prompt = config_prompt if config_prompt else DEFAULT_PLANNER_PROMPT
+        base_prompt = config_prompt if config_prompt else _get_default_planner_prompt()
     else:
-        base_prompt = DEFAULT_PLANNER_PROMPT
+        base_prompt = _get_default_planner_prompt()
 
     # 2. Capabilities section (dynamic based on enabled agents)
     capabilities = build_capabilities_section(

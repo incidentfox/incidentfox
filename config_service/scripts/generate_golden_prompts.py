@@ -21,6 +21,7 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "agent" / "src"))
 
 from ai_agent.prompts.agent_capabilities import AGENT_CAPABILITIES
+from ai_agent.prompts.planner_prompt import _get_default_planner_prompt
 from ai_agent.prompts.layers import (
     BEHAVIORAL_PRINCIPLES,
     DELEGATION_GUIDANCE,
@@ -34,7 +35,6 @@ from ai_agent.prompts.layers import (
     get_integration_errors,
     get_integration_tool_limits,
 )
-from ai_agent.prompts.planner_prompt import DEFAULT_PLANNER_PROMPT
 
 # =============================================================================
 # Agent Base Prompts (from application code)
@@ -44,7 +44,8 @@ from ai_agent.prompts.planner_prompt import DEFAULT_PLANNER_PROMPT
 # We inline them here to avoid importing the full agent modules.
 
 AGENT_BASE_PROMPTS = {
-    "planner": DEFAULT_PLANNER_PROMPT,
+    "planner": None,  # Loaded from 01_slack template via _get_default_planner_prompt()
+
     "investigation": """You are the Investigation sub-orchestrator coordinating specialized agents for comprehensive incident analysis.
 
 ## YOUR ROLE
@@ -317,9 +318,15 @@ def assemble_agent_prompt(
     else:
         custom_prompt = None
 
-    base_prompt = custom_prompt or AGENT_BASE_PROMPTS.get(
-        agent_name, f"You are the {agent_name} agent."
-    )
+    # Get base prompt from AGENT_BASE_PROMPTS, with special handling for planner
+    default_prompt = AGENT_BASE_PROMPTS.get(agent_name)
+    if default_prompt is None and agent_name == "planner":
+        # Planner loads from 01_slack template
+        default_prompt = _get_default_planner_prompt()
+    elif default_prompt is None:
+        default_prompt = f"You are the {agent_name} agent."
+
+    base_prompt = custom_prompt or default_prompt
     parts.append(base_prompt)
 
     # 2. Add capabilities section (for orchestrators)
