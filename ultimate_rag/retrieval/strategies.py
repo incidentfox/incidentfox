@@ -70,7 +70,9 @@ class RetrievedChunk:
     score: float  # Base similarity score
     importance: float  # Importance score from node
     strategy: str  # Which strategy found this
+    tree_id: str = ""  # Tree this chunk came from
     tree_level: int = 0  # Level in RAPTOR tree (0 = leaf)
+    layer: int = 0  # Alias for tree_level
     path: List[int] = field(default_factory=list)  # Path from root to this node
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -886,14 +888,14 @@ class AdaptiveDepthStrategy(RetrievalStrategy):
 
                 for idx in sorted_indices[:top_k]:
                     node = valid_nodes[idx]
-                    chunks.append(
-                        RetrievedChunk(
-                            node_id=node.index,
-                            text=node.text,
+                chunks.append(
+                    RetrievedChunk(
+                        node_id=node.index,
+                        text=node.text,
                             tree_id=tree.tree_id,
                             score=scores[idx],
-                            importance=node.get_importance(),
-                            strategy=self.name,
+                        importance=node.get_importance(),
+                        strategy=self.name,
                             layer=depth,
                             metadata={
                                 "source_url": getattr(node, "source_url", None),
@@ -1495,7 +1497,7 @@ Focus on infrastructure components, databases, APIs, microservices, etc.""",
             return json.loads(content)
         except Exception as e:
             logger.warning(f"LLM service extraction failed: {e}")
-            return []
+        return []
 
     async def _tree_search(
         self,
