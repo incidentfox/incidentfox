@@ -8,9 +8,10 @@ This module provides:
 - Shared templates (error handling, tool limits, evidence format)
 - Integration-specific error definitions
 
-Agent prompts are now defined inline per agent (e.g., PLANNER_SYSTEM_PROMPT
-in planner_prompt.py). Context flows through the user message via
-build_user_context() to allow natural propagation to sub-agents.
+Agent prompts can be defined per-agent (e.g., DEFAULT_PLANNER_PROMPT in
+planner_prompt.py) or via templates. Templates are the source of truth when
+configured. Context flows through the user message via build_user_context()
+to allow natural propagation to sub-agents.
 """
 
 from typing import Any
@@ -548,76 +549,40 @@ SUBAGENT_RESPONSE_GUIDANCE = SUBAGENT_GUIDANCE
 
 DELEGATION_GUIDANCE = """## DELEGATING TO SUB-AGENTS
 
-When calling sub-agents, your job is to set them up for success by providing ALL the context they need.
+When calling sub-agents, provide ALL the context they need to succeed.
 
 ### ⚠️ CRITICAL: Sub-agents are BLIND to Your Context
 
-**Sub-agents have ZERO visibility into:**
-- Your system prompt
-- The original user request you received
+Sub-agents have ZERO visibility into:
+- Your system prompt or the original user request
 - Any context, identifiers, or instructions given to you
-- Team-specific configurations, naming conventions, or patterns
+- Team-specific configurations or naming conventions
 
-**They ONLY see what you explicitly pass to them.**
+**They ONLY see what you explicitly pass to them.** If you have context about namespaces, label selectors, regions, time windows, or service naming - the sub-agent won't know unless YOU include it.
 
-This means: If you received context about namespaces, label selectors, regions, time windows, service naming conventions, resource identifiers, or ANY other details - the sub-agent does NOT know about them unless YOU include them in your delegation.
+### Context Categories
 
-### Context Categories - Use These Sections
-
-When passing context to sub-agents, organize it into these distinct sections. Each serves a different purpose:
+Organize context into these sections:
 
 #### 1. Environment (Static Identifiers)
-Infrastructure identifiers, naming conventions, and URLs that don't change during investigation.
-
-**Include:**
-- Cluster names, namespaces, regions
-- Label selectors and naming conventions (e.g., `app.kubernetes.io/name=payment` NOT `paymentservice`)
-- Dashboard URLs (Coralogix, Grafana, etc.)
-- GitHub repo URLs
-- Time window for investigation
-
-**Source:** Team config, `.incidentfox.yaml`, your system prompt
+Cluster names, namespaces, regions, label selectors, dashboard URLs, GitHub repos, time window.
+*Source: Team config, your system prompt*
 
 #### 2. System Context (Architecture)
-Service dependencies and relationships that help understand blast radius and impact.
+Service dependencies, critical paths (e.g., `frontend → checkout → payment → redis`), known SLAs.
+*Source: `get_service_dependencies()`, `get_blast_radius()`, or service catalog*
 
-**Include:**
-- What services this service depends on (calls)
-- What services depend on this service (callers)
-- Critical paths (e.g., `frontend → checkout → payment → redis`)
-- Known SLAs or performance requirements
-
-**Source:** Use `get_service_dependencies()`, `get_blast_radius()`, or service catalog. If you don't have this, query it first.
-
-#### 3. Prior Patterns (Historical Learning)
-Similar past incidents and their resolutions. This helps avoid re-investigating known issues.
-
-**Include:**
-- Similar incidents in the past and what caused them
-- Known issues for this service (from knowledge base)
-- Previous mitigations that worked
-
-**Source:** Use `search_incidents_by_service()` (Snowflake), knowledge base queries, or known_issues from service catalog. If you don't have this, query it first.
+#### 3. Prior Patterns (Historical)
+Similar past incidents and resolutions, known issues for this service.
+*Source: `search_incidents_by_service()`, knowledge base*
 
 #### 4. Current Findings (This Investigation)
-What you or other agents have discovered during THIS investigation session.
+Findings from other sub-agents, timestamps of anomalies, hypotheses being tested.
+*Source: Results from previous tool calls*
 
-**Include:**
-- Findings from other sub-agents you've already called
-- Timestamps of anomalies or events found
-- Hypotheses you're testing
-
-**Source:** Results from previous tool calls in this session
-
-#### 5. Concurrent Issues (Other Active Incidents)
-Other ongoing incidents that might be related or causing cascading effects.
-
-**Include:**
-- Other active incidents (from incident.io, PagerDuty, alerts)
-- Ongoing maintenance windows
-- Known external issues (e.g., "AWS us-east-1 elevated latency")
-
-**Source:** Incident management tools, alert systems
+#### 5. Concurrent Issues
+Other active incidents, ongoing maintenance windows, known external issues.
+*Source: Incident management tools, active alerts*
 
 ### Example - CORRECT Context Passing
 
@@ -629,28 +594,21 @@ call_log_analysis_agent(
     context="## Environment\\n"
             "Cluster: incidentfox-demo (AWS EKS). Namespace: otel-demo.\\n"
             "Label: app.kubernetes.io/name=payment (NOT paymentservice).\\n"
-            "Coralogix: cx498.coralogix.com (US2 region).\\n"
-            "GitHub: https://github.com/incidentfox/aws-playground.\\n"
             "Time window: 10:00-11:00 UTC today.\\n"
             "\\n"
             "## System Context\\n"
             "Critical path: frontend -> checkoutservice -> paymentservice -> redis.\\n"
-            "Dependents: checkoutservice, frontend (both would fail if payment fails).\\n"
             "\\n"
             "## Prior Patterns\\n"
-            "INC-234 (3 weeks ago): payment 5xx errors caused by Redis pool exhaustion. Fix: REDIS_POOL_SIZE=50.\\n"
-            "Known issue: payment service has memory leaks under sustained load.\\n"
+            "INC-234 (3 weeks ago): payment 5xx caused by Redis pool exhaustion.\\n"
             "\\n"
             "## Current Findings\\n"
-            "K8s agent: All pods running, no OOMKills, no restarts in last 2 hours.\\n"
-            "Metrics agent: Error rate spike from 0.1% to 5% starting 10:32 UTC.\\n"
-            "\\n"
-            "## Concurrent Issues\\n"
-            "INC-789: AWS us-east-1 elevated API latency (ongoing, unrelated region)."
+            "K8s agent: All pods running, no OOMKills.\\n"
+            "Metrics agent: Error rate spike 0.1% → 5% at 10:32 UTC.\\n"
 )
 ```
 
-### Example - WRONG Context Passing (too sparse)
+### Example - WRONG Context Passing
 
 ```
 call_log_analysis_agent(
@@ -659,89 +617,63 @@ call_log_analysis_agent(
     context=""
 )
 ```
-❌ Sub-agent doesn't know: The time window, what other agents found, historical patterns, system dependencies
-❌ Result: Unfocused investigation, missed correlations, repeated work
+❌ Sub-agent doesn't know: time window, other agents' findings, historical patterns, dependencies
 
-### Gathering Context Before Delegation
+### Before Delegating
 
-Before calling a sub-agent, ask yourself:
+Ask yourself: Do I have Environment, System Context, Prior Patterns, Current Findings?
 
-| Section | Do I have it? | If not, query: |
-|---------|---------------|----------------|
-| Environment | Usually in your system prompt | Team config |
-| System Context | Often missing | `get_service_dependencies()`, `get_blast_radius()` |
-| Prior Patterns | Often missing | `search_incidents_by_service()`, knowledge base |
-| Current Findings | From your previous tool calls | N/A - track as you go |
-| Concurrent Issues | Often missing | Incident management tools, active alerts |
-
-**Proactively gather missing context** - don't delegate blindly. If you don't know the service's dependencies or past incidents, query for them first.
+If missing System Context or Prior Patterns, **query for them first** (`get_service_dependencies()`, `search_incidents_by_service()`). Don't delegate blindly.
 
 ### What NOT to Include
 
-- Information irrelevant to the sub-agent's domain (e.g., don't pass GitHub context to K8s agent unless relevant)
-- Step-by-step instructions on how to investigate (trust the expert)
-- Excessive raw data (summarize findings, don't paste full JSON responses)
-
-**Trust your sub-agents.** They are domain experts. Give them structured context and a clear goal - let them decide how to investigate.
+- Information irrelevant to the sub-agent's domain
+- Step-by-step instructions on HOW to investigate (trust the expert)
+- Excessive raw data (summarize, don't paste full JSON)
 
 ---
 
 ## ⚠️ CRITICAL: Handling Sub-Agent `ask_human` Requests
 
-**When a sub-agent uses `ask_human`, you MUST stop and bubble up the request.**
+When a sub-agent uses `ask_human`, you MUST stop and bubble up the request.
 
-Sub-agents may encounter situations where they cannot proceed without human intervention (e.g., credential issues, permission errors, clarification needed). When this happens:
+### How to Detect
 
-### How to detect `ask_human` from a sub-agent
-
-The sub-agent's response will contain `"human_input_required": true` in its output. This signals that:
-1. The sub-agent has stopped working
-2. Human intervention is needed before continuing
+The sub-agent's response contains `"human_input_required": true`. This means:
+1. The sub-agent has stopped
+2. Human intervention is needed
 3. The entire investigation must pause
 
-### What you MUST do
+### What You MUST Do
 
-When you see a sub-agent output containing `"human_input_required": true`:
+1. **STOP IMMEDIATELY** - Do NOT continue with other sub-agents
+2. **Preserve findings** - Include their partial results in your response
+3. **Bubble up** - Use `ask_human` yourself to relay the request
+4. **End session** - Your session is complete until the human responds
 
-1. **STOP IMMEDIATELY** - Do NOT continue with other sub-agents or tasks
-2. **Preserve the sub-agent's findings** - Include their partial results in your response
-3. **Bubble up the request** - Use `ask_human` yourself to relay the request to the human
-4. **End your session** - Your session is also complete until the human responds
-
-### Example - CORRECT handling:
+### Example - CORRECT
 
 ```
 Sub-agent (aws_agent) response:
-"I found elevated error rates on the API Gateway (5% → 40% since 10:30 AM).
-However, I cannot access CloudWatch logs due to 403 Forbidden error.
+"Found elevated API Gateway errors (5% → 40%).
+Cannot access CloudWatch logs - 403 Forbidden.
 {"human_input_required": true, "question": "Please grant CloudWatch read permissions"}"
 
 Master agent (you) should:
-1. Note the findings: "AWS agent found elevated API Gateway errors (5% → 40%)"
-2. Recognize the blocker: "AWS agent needs CloudWatch permissions"
-3. Call ask_human: "The AWS agent needs CloudWatch read permissions to access logs.
-   Please grant logs:GetLogEvents permission and type 'done' when ready."
-4. STOP - do not call other agents or continue investigating
+1. Note findings: "AWS agent found elevated API Gateway errors"
+2. Call ask_human: "AWS agent needs CloudWatch read permissions. Please grant and type 'done'."
+3. STOP - do not call other agents
 ```
 
-### Example - WRONG handling:
+### Example - WRONG
 
 ```
-Sub-agent response contains "human_input_required": true
-
 ❌ "Let me try the metrics agent instead..."     - WRONG: should stop
 ❌ "Let me ask the K8s agent to check pods..."   - WRONG: should stop
-❌ Continuing investigation without addressing   - WRONG: must bubble up
+❌ Continuing without addressing the blocker     - WRONG: must bubble up
 ```
 
-### Why this matters
-
-The investigation cannot meaningfully proceed if a critical path is blocked. Continuing with other agents:
-- Wastes resources on potentially irrelevant work
-- May lead to incomplete or misleading conclusions
-- Delays getting the human intervention that's actually needed
-
-**When a sub-agent asks for human help, the entire investigation pauses until the human responds.**
+The investigation cannot proceed if a critical path is blocked. Continuing wastes resources and delays getting the human intervention needed.
 """
 
 
@@ -1121,6 +1053,22 @@ def build_tool_guidance(tools: list) -> str:
 # =============================================================================
 # These templates provide consistent guidance across all agents.
 # Import and use these in agent prompts instead of duplicating text.
+
+
+# -----------------------------------------------------------------------------
+# Behavioral Principles (Universal for ALL agents)
+# -----------------------------------------------------------------------------
+
+BEHAVIORAL_PRINCIPLES = """## BEHAVIORAL PRINCIPLES
+
+**Intellectual Honesty:** Never fabricate information. If a tool fails, say so. Distinguish facts (direct observations) from hypotheses (interpretations). Say "I don't know" rather than guessing.
+
+**Thoroughness Over Speed:** Find root cause, not just symptoms. Keep asking "why?" until you reach something actionable. Stop when: you've identified a specific cause, exhausted available tools, or need access you don't have.
+
+**Evidence & Efficiency:** Quote log lines, include timestamps, explain reasoning. Report negative results - what's ruled out is valuable. Don't repeat tool calls with identical parameters.
+
+**Human-Centric:** Respect human input and corrections. Ask clarifying questions when genuinely needed, but don't over-ask.
+"""
 
 
 # -----------------------------------------------------------------------------
@@ -1665,6 +1613,7 @@ def build_agent_shared_sections(
     include_evidence_format: bool = True,
     include_synthesis: bool = False,
     include_transparency: bool = True,
+    include_behavioral_principles: bool = True,
     # Customization
     integration_name: str | None = None,
     integration_errors: list[dict[str, str]] | None = None,
@@ -1687,6 +1636,7 @@ def build_agent_shared_sections(
         include_evidence_format: Include evidence presentation guidance
         include_synthesis: Include multi-source synthesis guidance
         include_transparency: Include transparency/auditability guidance (default True)
+        include_behavioral_principles: Include universal behavioral principles (default True)
         integration_name: Name for integration-specific errors
         integration_errors: Integration-specific error patterns
         max_tool_calls: Maximum tool calls allowed
@@ -1710,6 +1660,10 @@ def build_agent_shared_sections(
         system_prompt = base_prompt + "\\n\\n" + shared
     """
     sections = []
+
+    # Behavioral principles come first as foundational guidance
+    if include_behavioral_principles:
+        sections.append(BEHAVIORAL_PRINCIPLES)
 
     if include_error_handling:
         if integration_name and integration_errors:
@@ -1996,6 +1950,7 @@ def build_agent_prompt_sections(
     include_tool_limits: bool = True,
     include_evidence_format: bool = True,
     include_transparency: bool = True,
+    include_behavioral_principles: bool = True,
     custom_errors: list[dict[str, str]] | None = None,
     custom_max_calls: int | None = None,
     custom_synthesize_after: int | None = None,
@@ -2016,6 +1971,7 @@ def build_agent_prompt_sections(
         include_tool_limits: Include tool call limits section
         include_evidence_format: Include evidence formatting section
         include_transparency: Include transparency/auditability guidance (default True)
+        include_behavioral_principles: Include universal behavioral principles (default True)
         custom_errors: Override default errors for this integration
         custom_max_calls: Override default max tool calls
         custom_synthesize_after: Override default synthesize threshold
@@ -2056,6 +2012,7 @@ def build_agent_prompt_sections(
         include_evidence_format=include_evidence_format,
         include_synthesis=False,
         include_transparency=include_transparency,
+        include_behavioral_principles=include_behavioral_principles,
         integration_name=integration_name,
         integration_errors=errors,
         max_tool_calls=max_calls,

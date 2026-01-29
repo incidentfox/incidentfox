@@ -20,10 +20,10 @@ Architecture (Starship Topology):
 Uses Agent-as-Tool pattern for true multi-agent orchestration with control retention.
 
 System Prompt Architecture (Standard Pattern):
-    base_prompt = custom_prompt or PLANNER_SYSTEM_PROMPT
+    base_prompt = custom_prompt or DEFAULT_PLANNER_PROMPT
     system_prompt = base_prompt + capabilities
     system_prompt = apply_role_based_prompt(...)  # Role sections
-    system_prompt += shared_sections              # Error handling, tool limits, etc.
+    system_prompt += shared_sections              # Behavioral principles, error handling, etc.
 
 Context (runtime metadata, team config) is passed in the USER MESSAGE, not the
 system prompt. This allows context to flow naturally to sub-agents when delegating.

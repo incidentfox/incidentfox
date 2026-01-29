@@ -1,5 +1,6 @@
 """Prompt building utilities for AI SRE agents."""
 
+from .default_prompts import get_default_agent_prompt
 from .layers import (
     # Tool-specific prompt guidance
     ASK_HUMAN_TOOL_PROMPT,
@@ -42,12 +43,26 @@ from .layers import (
     get_integration_errors,
     get_integration_tool_limits,
 )
-from .planner_prompt import PLANNER_SYSTEM_PROMPT, build_planner_system_prompt
+from .planner_prompt import build_planner_system_prompt
+
+
+# Lazy-loaded attributes for backwards compatibility
+# These load from 01_slack template at runtime
+def __getattr__(name: str):
+    if name in ("DEFAULT_PLANNER_PROMPT", "PLANNER_SYSTEM_PROMPT"):
+        from .default_prompts import get_default_agent_prompt
+
+        return get_default_agent_prompt("planner")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
+    # Default prompts from 01_slack template
+    "get_default_agent_prompt",
     # Planner prompt
     "build_planner_system_prompt",
-    "PLANNER_SYSTEM_PROMPT",
+    "DEFAULT_PLANNER_PROMPT",
+    "PLANNER_SYSTEM_PROMPT",  # Deprecated alias for backwards compatibility
     # User context builder (for user/task message)
     "build_user_context",
     # Role-based and delegation guidance
