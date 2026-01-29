@@ -125,6 +125,8 @@ settings:
 - Copy token (starts with `xapp-`)
 <img width="697" height="747" alt="image" src="https://github.com/user-attachments/assets/620bb92b-db49-4d50-8c22-70682ba008d2" />
 
+**Anthropic API Key**
+- [Go to Anthropic console to generate an API Key](https://platform.claude.com/settings/keys)
 
 #### 3. Configure & Run (2 min)
 
