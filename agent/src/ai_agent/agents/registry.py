@@ -20,6 +20,7 @@ from .coding_agent import create_coding_agent
 from .investigation_agent import create_investigation_agent
 from .k8s_agent import create_k8s_agent
 from .log_analysis_agent import create_log_analysis_agent
+from .metrics_advisor_agent import create_metrics_advisor_agent
 from .metrics_agent import create_metrics_agent
 from .planner import create_planner_agent
 
@@ -451,6 +452,7 @@ def initialize_all_agents() -> None:
         "aws_agent": create_aws_agent,
         "coding_agent": create_coding_agent,
         "metrics_agent": create_metrics_agent,
+        "metrics_advisor_agent": create_metrics_advisor_agent,
         "investigation_agent": create_investigation_agent,
         "ci_agent": create_ci_agent,
         "log_analysis_agent": create_log_analysis_agent,

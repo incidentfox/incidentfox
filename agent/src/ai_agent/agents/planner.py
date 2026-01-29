@@ -5,6 +5,7 @@ The planner is the main entry point for complex requests. It routes to:
 1. Investigation Agent - For incident investigation (the main workhorse)
 2. Coding Agent - For code analysis and fixes (explicit requests only)
 3. Writeup Agent - For postmortems and documentation (explicit requests only)
+4. Metrics Advisor Agent - For observability setup and alert recommendations
 
 Architecture (Starship Topology):
     Planner (this file)
@@ -15,7 +16,8 @@ Architecture (Starship Topology):
     │   ├── Metrics Agent
     │   └── Log Analysis Agent
     ├── Coding Agent [is_subagent=True]
-    └── Writeup Agent [is_subagent=True]
+    ├── Writeup Agent [is_subagent=True]
+    └── Metrics Advisor Agent [is_subagent=True]
 
 Uses Agent-as-Tool pattern for true multi-agent orchestration with control retention.
 
@@ -68,9 +70,10 @@ from ..prompts.planner_prompt import build_planner_system_prompt
 from ..tools.agent_tools import get_agent_tools
 from .base import TaskContext
 
-# Import agent factories for the 3 top-level agents
+# Import agent factories for the 4 top-level agents
 from .coding_agent import create_coding_agent
 from .investigation_agent import create_investigation_agent
+from .metrics_advisor_agent import create_metrics_advisor_agent
 from .writeup_agent import create_writeup_agent
 
 logger = get_logger(__name__)
@@ -81,7 +84,7 @@ logger = get_logger(__name__)
 # =============================================================================
 
 # Default agents available to planner (Starship topology)
-DEFAULT_PLANNER_AGENTS = ["investigation", "coding", "writeup"]
+DEFAULT_PLANNER_AGENTS = ["investigation", "coding", "writeup", "metrics_advisor"]
 
 
 # =============================================================================
@@ -682,17 +685,18 @@ def _get_enabled_agents_from_config(team_cfg) -> list[str]:
 
 def create_agent_tools(team_config=None):
     """
-    Create wrapper tools that call the 3 top-level agents.
+    Create wrapper tools that call the 4 top-level agents.
 
     This implements the Agent-as-Tool pattern where:
     - Each agent is wrapped as a callable tool
     - The planner calls the tool, agent runs, result returns to planner
     - Planner retains control and can call multiple agents
 
-    The 3 top-level agents (Starship topology) are:
+    The 4 top-level agents (Starship topology) are:
     - Investigation Agent: Main workhorse for SRE tasks (delegates to sub-agents)
     - Coding Agent: For explicit code fix/analysis requests
     - Writeup Agent: For postmortem/documentation requests
+    - Metrics Advisor Agent: For observability setup and alert recommendations
 
     Remote A2A agents can be added dynamically from config.
     """
@@ -910,6 +914,85 @@ def create_agent_tools(team_config=None):
 
         tools.append(call_writeup_agent)
 
+    if "metrics_advisor" in enabled_agents:
+        metrics_advisor_agent = create_metrics_advisor_agent(
+            team_config=team_config, is_subagent=True
+        )
+
+        @function_tool
+        def call_metrics_advisor_agent(
+            query: str,
+            context: str = "",
+            instructions: str = "",
+            output_format: str = "auto",
+        ) -> str:
+            """
+            Delegate metrics/observability setup to the Metrics Advisor Agent.
+
+            The Metrics Advisor is an expert in SRE observability best practices.
+            It can analyze services and propose metrics and alerts based on
+            industry-standard frameworks (RED, USE, Golden Signals).
+
+            USE THIS AGENT FOR:
+            - Setting up metrics for new or under-monitored services
+            - Generating alert rules (Prometheus, Datadog)
+            - Assessing observability coverage gaps
+            - SLI/SLO design and recommendations
+            - Onboarding new services with proper monitoring
+
+            DO NOT USE FOR:
+            - Active incident investigation (use investigation_agent)
+            - Querying existing metrics values (use investigation_agent)
+            - Writing application code (use coding_agent)
+
+            The agent will autonomously:
+            - Navigate K8s/AWS to discover service details
+            - Query existing metrics backends
+            - Classify service types (HTTP API, worker, database, etc.)
+            - Generate recommendations based on SRE best practices
+
+            Args:
+                query: What to analyze or generate
+                context: Additional context about the services
+                instructions: Specific requirements or constraints
+                output_format: "code" for YAML/JSON, "doc" for markdown, "auto" to let agent decide
+
+            Returns:
+                JSON with service analysis and recommendations, or generated rules/monitors
+                If max turns exceeded, returns partial findings with status="incomplete"
+            """
+            try:
+                logger.info("calling_metrics_advisor_agent", query=query[:100])
+                parts = [query]
+                if context:
+                    parts.append(f"\n\n## Context\n{context}")
+                if instructions:
+                    parts.append(f"\n\n## Requirements\n{instructions}")
+                if output_format != "auto":
+                    parts.append(
+                        f"\n\n## Output Format\nPlease provide output as: {output_format}"
+                    )
+                full_query = "".join(parts)
+                result = _run_agent_in_thread(
+                    metrics_advisor_agent, full_query, timeout=180, max_turns=20
+                )
+                # Check if result is a partial work summary (dict with status="incomplete")
+                if isinstance(result, dict) and result.get("status") == "incomplete":
+                    logger.info(
+                        "metrics_advisor_agent_partial_results",
+                        findings=len(result.get("findings", [])),
+                    )
+                    return json.dumps(result)
+                output = getattr(result, "final_output", None) or getattr(
+                    result, "output", None
+                )
+                return _serialize_agent_output(output)
+            except Exception as e:
+                logger.error("metrics_advisor_agent_failed", error=str(e))
+                return json.dumps({"error": str(e), "agent": "metrics_advisor_agent"})
+
+        tools.append(call_metrics_advisor_agent)
+
     # Add remote A2A agent tools dynamically from config
     if team_config:
         try:
@@ -933,7 +1016,7 @@ def create_planner_agent(
     team_config=None,
 ) -> Agent[TaskContext]:
     """
-    Create and configure the Planner Agent with 3 top-level agents as tools.
+    Create and configure the Planner Agent with 4 top-level agents as tools.
 
     The planner acts as a meta-agent that can:
     - Use tools for reasoning (think, web_search, llm_call)
@@ -945,7 +1028,8 @@ def create_planner_agent(
         Planner
         ├── Investigation Agent (main workhorse, has sub-agents)
         ├── Coding Agent (explicit code requests only)
-        └── Writeup Agent (explicit documentation requests only)
+        ├── Writeup Agent (explicit documentation requests only)
+        └── Metrics Advisor Agent (observability setup and alerts)
 
     System prompt follows the standard pattern:
         base_prompt = custom_prompt or PLANNER_SYSTEM_PROMPT
