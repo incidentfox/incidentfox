@@ -89,7 +89,7 @@ class TeachingInterface:
         graph: Optional["KnowledgeGraph"] = None,
         embedder=None,
         similarity_threshold: float = 0.85,
-        auto_approve_threshold: float = 0.9,
+        auto_approve_threshold: float = 0.6,  # Lowered to allow auto-approval of confident teachings
     ):
         self.tree = tree
         self.graph = graph
@@ -116,7 +116,7 @@ class TeachingInterface:
         content: str,
         knowledge_type: str,
         source: str,
-        confidence: float = 0.5,
+        confidence: float = 0.7,  # Default confidence allows auto-approval
         related_entities: Optional[List[str]] = None,
         learned_from: str = "agent",
         agent_id: Optional[str] = None,

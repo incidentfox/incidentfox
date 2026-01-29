@@ -187,6 +187,88 @@ class RetrievalStrategy(ABC):
             urgency=urgency,
         )
 
+    async def search_trees(
+        self,
+        query: str,
+        forest: "TreeForest",
+        top_k: int = 10,
+    ) -> List[RetrievedChunk]:
+        """
+        Shared tree search implementation using RAPTOR's similarity functions.
+
+        This is the core semantic search that all strategies can use.
+        """
+        try:
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from knowledge_base.raptor.utils import distances_from_embeddings
+        except ImportError as e:
+            logger.error(f"Failed to import RAPTOR modules: {e}")
+            logger.error("Ensure knowledge_base is in PYTHONPATH and dependencies are installed")
+            return []
+
+        chunks = []
+        embedding_model = OpenAIEmbeddingModel()
+
+        try:
+            query_embedding = embedding_model.create_embedding(query)
+        except Exception as e:
+            logger.error(f"Failed to create query embedding: {e}")
+            return []
+
+        for tree in forest.trees.values():
+            node_list = list(tree.all_nodes.values())
+            if not node_list:
+                continue
+
+            # Extract embeddings
+            embeddings = []
+            valid_nodes = []
+            embedding_key = getattr(tree, "embedding_model", "OpenAI") or "OpenAI"
+
+            for node in node_list:
+                node_embedding = node.embeddings.get(embedding_key)
+                if node_embedding:
+                    embeddings.append(node_embedding)
+                    valid_nodes.append(node)
+
+            if not embeddings:
+                continue
+
+            try:
+                distances = distances_from_embeddings(
+                    query_embedding, embeddings, distance_metric="cosine"
+                )
+                scores = [1.0 - d for d in distances]
+                sorted_indices = sorted(
+                    range(len(scores)), key=lambda i: scores[i], reverse=True
+                )
+
+                for idx in sorted_indices[:top_k]:
+                    node = valid_nodes[idx]
+                    chunks.append(
+                        RetrievedChunk(
+                            text=node.text,
+                            node_id=node.index,
+                            tree_id=tree.tree_id,
+                            score=scores[idx],
+                            importance=node.get_importance(),
+                            layer=getattr(node, "layer", 0),
+                            strategy=self.name,
+                            metadata={
+                                "source_url": getattr(node, "source_url", None),
+                                "knowledge_type": node.knowledge_type.value
+                                if hasattr(node, "knowledge_type")
+                                else "factual",
+                            },
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"Search failed for tree {tree.tree_id}: {e}")
+                continue
+
+        chunks.sort(key=lambda c: c.score, reverse=True)
+        return chunks[:top_k]
+
 
 class MultiQueryStrategy(RetrievalStrategy):
     """
@@ -280,17 +362,8 @@ class MultiQueryStrategy(RetrievalStrategy):
         forest: "TreeForest",
         top_k: int,
     ) -> List[RetrievedChunk]:
-        """Search across all trees in the forest."""
-        results = []
-
-        # This would use the actual embedding search
-        # For now, return placeholder
-        for tree in forest.trees.values():
-            # In production: use tree's vector index for similarity search
-            # tree_results = await tree.search(query, top_k=top_k)
-            pass
-
-        return results
+        """Search across all trees in the forest using shared semantic search."""
+        return await self.search_trees(query, forest, top_k)
 
 
 class HyDEStrategy(RetrievalStrategy):
@@ -326,11 +399,19 @@ class HyDEStrategy(RetrievalStrategy):
 
         all_chunks: Dict[int, RetrievedChunk] = {}
 
-        # Search with each hypothesis
+        # Search with each hypothesis (they act as expanded queries)
         for hypothesis in hypotheses:
-            # In production: embed hypothesis and search
-            # chunks = await self._search_with_embedding(hypothesis, forest, top_k)
-            pass
+            chunks = await self.search_trees(hypothesis, forest, top_k)
+            for chunk in chunks:
+                if chunk.node_id not in all_chunks:
+                    # Slightly reduce score for hypothesis-based results
+                    chunk.score *= 0.9
+                    all_chunks[chunk.node_id] = chunk
+                else:
+                    # Boost score if found by multiple hypotheses
+                    all_chunks[chunk.node_id].score = min(
+                        1.0, all_chunks[chunk.node_id].score + 0.1
+                    )
 
         # Also search with original query
         original_chunks = await self._search_original(query, forest, top_k)
@@ -391,8 +472,7 @@ class HyDEStrategy(RetrievalStrategy):
         top_k: int,
     ) -> List[RetrievedChunk]:
         """Fallback search with original query."""
-        # Implementation would use actual embedding search
-        return []
+        return await self.search_trees(query, forest, top_k)
 
 
 class AdaptiveDepthStrategy(RetrievalStrategy):
@@ -568,12 +648,16 @@ class HybridGraphTreeStrategy(RetrievalStrategy):
         """Retrieve using hybrid graph + tree approach."""
         all_chunks: Dict[int, RetrievedChunk] = {}
 
-        # Step 1: Graph-based retrieval
+        # Step 1: Graph-based retrieval (with error handling)
         if graph:
-            graph_chunks = await self._retrieve_via_graph(query, forest, graph, top_k)
-            for chunk in graph_chunks:
-                chunk.score *= self.graph_weight
-                all_chunks[chunk.node_id] = chunk
+            try:
+                graph_chunks = await self._retrieve_via_graph(query, forest, graph, top_k)
+                for chunk in graph_chunks:
+                    chunk.score *= self.graph_weight
+                    all_chunks[chunk.node_id] = chunk
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Graph retrieval failed, falling back to tree: {e}")
 
         # Step 2: Tree-based retrieval
         tree_chunks = await self._retrieve_via_tree(query, forest, top_k)
@@ -652,16 +736,16 @@ class HybridGraphTreeStrategy(RetrievalStrategy):
         forest: "TreeForest",
         top_k: int,
     ) -> List[RetrievedChunk]:
-        """Direct tree-based semantic search."""
-        # In production: use embedding similarity search
-        # This would call the RAPTOR tree's search method
-        chunks = []
+        """
+        Direct tree-based semantic search using shared helper.
 
-        for tree in forest.trees.values():
-            # Would use actual embedding search
-            # tree_results = await tree.similarity_search(query, top_k)
-            pass
-
+        Uses cosine similarity between query embedding and node embeddings
+        to find the most relevant nodes across all trees in the forest.
+        """
+        chunks = await self.search_trees(query, forest, top_k)
+        # Update strategy name to indicate tree source
+        for chunk in chunks:
+            chunk.strategy = f"{self.name}_tree"
         return chunks
 
     def _find_entities_in_query(
