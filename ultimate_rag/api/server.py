@@ -99,6 +99,35 @@ class IngestResponse(BaseModel):
     warnings: List[str] = []
 
 
+class BatchDocument(BaseModel):
+    """A single document in a batch ingest request."""
+
+    content: str = Field(..., description="Document content")
+    source_url: Optional[str] = Field(None, description="Source URL")
+    content_type: Optional[str] = Field(None, description="Content type")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Document metadata")
+
+
+class BatchIngestRequest(BaseModel):
+    """Request for batch document ingestion."""
+
+    documents: List[BatchDocument] = Field(..., description="Documents to ingest")
+    tree: Optional[str] = Field(None, description="Target tree name")
+
+
+class BatchIngestResponse(BaseModel):
+    """Response for batch document ingestion."""
+
+    success: bool
+    documents_processed: int
+    total_chunks: int
+    total_nodes_created: int
+    entities_found: List[str]
+    processing_time_ms: float
+    embedding_time_ms: float
+    warnings: List[str] = []
+
+
 class TeachRequest(BaseModel):
     """Request for teaching the knowledge base."""
 
@@ -807,6 +836,136 @@ class UltimateRAGServer:
 
             except Exception as e:
                 logger.error(f"Ingest failed: {e}")
+                raise HTTPException(500, str(e))
+
+        @app.post("/ingest/batch", response_model=BatchIngestResponse, tags=["Ingest"])
+        async def ingest_batch(request: BatchIngestRequest):
+            """
+            Batch ingest multiple documents efficiently.
+
+            This endpoint uses batch embedding to process all document chunks
+            in a single API call, significantly faster than ingesting one at a time.
+            Use this when you have multiple documents to add at once.
+            """
+            import time
+
+            if not self.processor or not self.forest:
+                raise HTTPException(503, "Server not initialized")
+
+            start_time = time.time()
+            self._ingest_count += len(request.documents)
+
+            try:
+                # Step 1: Process all documents into chunks
+                all_chunks = []
+                all_entities = []
+                warnings = []
+
+                for doc in request.documents:
+                    try:
+                        result = self.processor.process_content(
+                            content=doc.content,
+                            source_path=doc.source_url or "batch_input",
+                            content_type=self._get_content_type(doc.content_type),
+                            extra_metadata=doc.metadata,
+                        )
+                        all_chunks.extend(result.chunks)
+                        all_entities.extend(result.entities_found)
+                        warnings.extend(result.warnings)
+                    except Exception as e:
+                        warnings.append(f"Failed to process document: {e}")
+
+                if not all_chunks:
+                    return BatchIngestResponse(
+                        success=False,
+                        documents_processed=len(request.documents),
+                        total_chunks=0,
+                        total_nodes_created=0,
+                        entities_found=[],
+                        processing_time_ms=(time.time() - start_time) * 1000,
+                        embedding_time_ms=0,
+                        warnings=warnings or ["No chunks created from documents"],
+                    )
+
+                # Step 2: Batch embed all chunks
+                embed_start = time.time()
+                texts = [chunk.text for chunk in all_chunks]
+
+                try:
+                    from knowledge_base.raptor.EmbeddingModels import (
+                        OpenAIEmbeddingModel,
+                    )
+
+                    embedding_model = OpenAIEmbeddingModel()
+                    embeddings = embedding_model.create_embeddings_batch(texts)
+                except ImportError:
+                    # Fallback: no batch embedding available
+                    warnings.append("Batch embedding not available, using single calls")
+                    embeddings = None
+                except Exception as e:
+                    warnings.append(f"Batch embedding failed: {e}")
+                    embeddings = None
+
+                embed_time_ms = (time.time() - embed_start) * 1000
+
+                # Step 3: Create nodes with pre-computed embeddings
+                tree_name = request.tree or self.forest.default_tree or "default"
+                tree = self.forest.get_tree(tree_name)
+
+                if not tree:
+                    raise HTTPException(404, f"Tree '{tree_name}' not found")
+
+                nodes_created = 0
+                from ..core.node import KnowledgeNode
+                from ..core.types import ImportanceScore, KnowledgeType
+
+                max_index = max(tree.all_nodes.keys()) if tree.all_nodes else -1
+
+                for i, chunk in enumerate(all_chunks):
+                    new_index = max_index + 1 + i
+
+                    # Create importance score
+                    importance = ImportanceScore(
+                        explicit_priority=0.5,
+                        authority_score=0.7,  # Ingested docs start with decent authority
+                    )
+
+                    # Create node
+                    node = KnowledgeNode(
+                        text=chunk.text,
+                        index=new_index,
+                        layer=0,
+                        knowledge_type=KnowledgeType.FACTUAL,
+                        importance=importance,
+                        source_url=chunk.source_path,
+                        tree_id=tree.tree_id,
+                    )
+
+                    # Set embedding if we have it
+                    if embeddings and i < len(embeddings):
+                        node.set_embedding("OpenAI", embeddings[i])
+
+                    # Add to tree
+                    tree.add_node(node)
+                    nodes_created += 1
+
+                processing_time_ms = (time.time() - start_time) * 1000
+
+                return BatchIngestResponse(
+                    success=True,
+                    documents_processed=len(request.documents),
+                    total_chunks=len(all_chunks),
+                    total_nodes_created=nodes_created,
+                    entities_found=list(set(all_entities)),
+                    processing_time_ms=processing_time_ms,
+                    embedding_time_ms=embed_time_ms,
+                    warnings=warnings,
+                )
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Batch ingest failed: {e}")
                 raise HTTPException(500, str(e))
 
         # ==================== Teach Routes ====================
