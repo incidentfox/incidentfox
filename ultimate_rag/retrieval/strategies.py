@@ -892,17 +892,17 @@ class AdaptiveDepthStrategy(RetrievalStrategy):
                     RetrievedChunk(
                         node_id=node.index,
                         text=node.text,
-                            tree_id=tree.tree_id,
-                            score=scores[idx],
+                        tree_id=tree.tree_id,
+                        score=scores[idx],
                         importance=node.get_importance(),
                         strategy=self.name,
-                            layer=depth,
-                            metadata={
-                                "source_url": getattr(node, "source_url", None),
-                                "depth": depth,
-                            },
-                        )
+                        layer=depth,
+                        metadata={
+                            "source_url": getattr(node, "source_url", None),
+                            "depth": depth,
+                        },
                     )
+                )
             except Exception as e:
                 logger.error(f"Depth search failed for tree {tree.tree_id}: {e}")
                 continue
