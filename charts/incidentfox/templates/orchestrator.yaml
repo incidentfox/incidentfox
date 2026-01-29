@@ -108,6 +108,10 @@ spec:
               value: {{ .Values.externalSecrets.awsRegion | quote }}
             - name: RECALL_WEBHOOK_URL
               value: "https://orchestrator.incidentfox.ai/webhooks/recall"
+            - name: RECALL_BOT_NAME
+              value: {{ .Values.externalSecrets.contract.recall.botName | default "IncidentFox Notetaker" | quote }}
+            - name: RECALL_BOT_IMAGE_URL
+              value: {{ .Values.externalSecrets.contract.recall.botImageUrl | default "https://cdn.incidentfox.ai/bot-avatar.png" | quote }}
             {{- end }}
             # Slack-triggered agent run parameters (enterprise defaults)
             - name: ORCHESTRATOR_SLACK_AGENT_MAX_TURNS

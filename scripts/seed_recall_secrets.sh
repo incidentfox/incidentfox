@@ -2,23 +2,34 @@
 # Seed Recall.ai secrets to AWS Secrets Manager
 #
 # Usage:
-#   ./scripts/seed_recall_secrets.sh
+#   RECALL_API_KEY=xxx RECALL_WEBHOOK_SECRET=xxx ./scripts/seed_recall_secrets.sh
 #
 # Prerequisites:
 #   - AWS CLI configured with appropriate credentials
 #   - Access to incidentfox AWS account
+#   - RECALL_API_KEY and RECALL_WEBHOOK_SECRET environment variables set
 
 set -euo pipefail
 
 REGION="${AWS_REGION:-us-west-2}"
 PROFILE="${AWS_PROFILE:-}"
 
+if [[ -z "${RECALL_API_KEY:-}" ]]; then
+    echo "Error: RECALL_API_KEY environment variable is required"
+    exit 1
+fi
+
+if [[ -z "${RECALL_WEBHOOK_SECRET:-}" ]]; then
+    echo "Error: RECALL_WEBHOOK_SECRET environment variable is required"
+    exit 1
+fi
+
 echo "Seeding Recall.ai secrets to AWS Secrets Manager (region: $REGION)..."
 
-python3 scripts/seed_aws_secrets.py --region "$REGION" ${PROFILE:+--profile "$PROFILE"} --from-stdin <<'EOF'
+python3 scripts/seed_aws_secrets.py --region "$REGION" ${PROFILE:+--profile "$PROFILE"} --from-stdin <<EOF
 {
-  "incidentfox/prod/recall_api_key": "1dec1843c84426e0a840532efeed2b79d1208dfc",
-  "incidentfox/prod/recall_webhook_secret": "whsec_VFMysQb1uuMEa4oKTfxfi89q8lcGWO5LjnwMiuJBYBhajjARyMQjUniD7cAUaOtd"
+  "incidentfox/prod/recall_api_key": "${RECALL_API_KEY}",
+  "incidentfox/prod/recall_webhook_secret": "${RECALL_WEBHOOK_SECRET}"
 }
 EOF
 
