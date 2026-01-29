@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -100,9 +100,12 @@ class CachedEmbeddingModel(BaseEmbeddingModel):
         self.cache = cache
         self.model_id = model_id
 
+    def _normalize_text(self, text: str) -> str:
+        """Normalize text for consistent cache keys."""
+        return (text or "").replace("\n", " ")
+
     def create_embedding(self, text):
-        # Normalize like OpenAIEmbeddingModel does.
-        t = (text or "").replace("\n", " ")
+        t = self._normalize_text(text)
         key = EmbeddingCacheKey(model_id=self.model_id, text_sha256=_sha256_text(t))
         cached = self.cache.get(key)
         if cached is not None:
@@ -110,3 +113,47 @@ class CachedEmbeddingModel(BaseEmbeddingModel):
         emb = self.model.create_embedding(t)
         self.cache.put(key, np.asarray(emb, dtype=np.float32))
         return emb
+
+    def create_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """
+        Batch embed with caching: check cache first, only call model for misses.
+
+        This is optimized for the common case where some texts are already cached.
+        Cache hits are served instantly, and only cache misses are batched together
+        for a single API call.
+        """
+        if not texts:
+            return []
+
+        # Normalize all texts and compute cache keys
+        normalized = [self._normalize_text(t) for t in texts]
+        keys = [
+            EmbeddingCacheKey(model_id=self.model_id, text_sha256=_sha256_text(t))
+            for t in normalized
+        ]
+
+        # Check cache for all texts
+        results: List[Optional[np.ndarray]] = [None] * len(texts)
+        uncached_indices: List[int] = []
+        uncached_texts: List[str] = []
+
+        for i, key in enumerate(keys):
+            cached = self.cache.get(key)
+            if cached is not None:
+                results[i] = cached
+            else:
+                uncached_indices.append(i)
+                uncached_texts.append(normalized[i])
+
+        # Batch embed all uncached texts in one call
+        if uncached_texts:
+            new_embeddings = self.model.create_embeddings_batch(uncached_texts)
+
+            # Store in cache and fill results
+            for idx, emb in zip(uncached_indices, new_embeddings):
+                emb_arr = np.asarray(emb, dtype=np.float32)
+                self.cache.put(keys[idx], emb_arr)
+                results[idx] = emb_arr
+
+        # Convert to list format (numpy arrays -> lists)
+        return [r.tolist() if isinstance(r, np.ndarray) else list(r) for r in results]

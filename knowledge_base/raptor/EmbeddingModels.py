@@ -1,6 +1,7 @@
 import logging
 import threading
 from abc import ABC, abstractmethod
+from typing import List
 
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_random_exponential
@@ -9,11 +10,18 @@ from .usage_log import _Timer, log_usage
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
+# OpenAI embeddings API limit: max 2048 texts per batch request
+OPENAI_BATCH_LIMIT = 2048
+
 
 class BaseEmbeddingModel(ABC):
     @abstractmethod
     def create_embedding(self, text):
         pass
+
+    def create_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """Create embeddings for multiple texts. Default implementation calls single method."""
+        return [self.create_embedding(t) for t in texts]
 
 
 class OpenAIEmbeddingModel(BaseEmbeddingModel):
@@ -31,14 +39,16 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
             self._tls.client = c
         return c
 
+    def _normalize_text(self, text: str) -> str:
+        """Normalize text for embedding: replace newlines and handle empty strings."""
+        text = (text or "").replace("\n", " ").strip()
+        return text if text else " "
+
     # Embeddings can hit rate limits; use more patient exponential backoff.
     @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(12))
     def create_embedding(self, text):
         t = _Timer()
-        text = (text or "").replace("\n", " ").strip()
-        # Avoid invalid empty inputs for embeddings API.
-        if not text:
-            text = " "
+        text = self._normalize_text(text)
         resp = self._client().embeddings.create(input=[text], model=self.model)
         log_usage(
             kind="embeddings",
@@ -47,6 +57,49 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
             duration_s=t.elapsed(),
         )
         return resp.data[0].embedding
+
+    @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(12))
+    def _embed_batch_chunk(self, texts: List[str]) -> List[List[float]]:
+        """Embed a batch of texts (must be <= OPENAI_BATCH_LIMIT)."""
+        t = _Timer()
+        resp = self._client().embeddings.create(input=texts, model=self.model)
+        log_usage(
+            kind="embeddings",
+            model=self.model,
+            usage=getattr(resp, "usage", None),
+            duration_s=t.elapsed(),
+        )
+        # OpenAI returns embeddings in same order as input
+        return [d.embedding for d in resp.data]
+
+    def create_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """
+        Create embeddings for multiple texts using batch API calls.
+
+        This is significantly faster than calling create_embedding() for each text
+        individually since OpenAI's batch API reduces network round-trips.
+        OpenAI charges per-token, not per-request, so there's no cost difference.
+
+        Args:
+            texts: List of texts to embed.
+
+        Returns:
+            List of embeddings in the same order as input texts.
+        """
+        if not texts:
+            return []
+
+        # Normalize all texts
+        normalized = [self._normalize_text(t) for t in texts]
+
+        # Process in chunks of OPENAI_BATCH_LIMIT
+        all_embeddings: List[List[float]] = []
+        for i in range(0, len(normalized), OPENAI_BATCH_LIMIT):
+            chunk = normalized[i : i + OPENAI_BATCH_LIMIT]
+            chunk_embeddings = self._embed_batch_chunk(chunk)
+            all_embeddings.extend(chunk_embeddings)
+
+        return all_embeddings
 
 
 class SBertEmbeddingModel(BaseEmbeddingModel):
@@ -65,3 +118,11 @@ class SBertEmbeddingModel(BaseEmbeddingModel):
 
     def create_embedding(self, text):
         return self.model.encode(text)
+
+    def create_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """Batch embed using sentence-transformers native batch support."""
+        if not texts:
+            return []
+        # sentence-transformers encode() accepts a list and returns a numpy array
+        embeddings = self.model.encode(texts)
+        return [emb.tolist() for emb in embeddings]
