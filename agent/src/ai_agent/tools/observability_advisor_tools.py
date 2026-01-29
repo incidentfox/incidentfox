@@ -215,7 +215,9 @@ def compute_metric_baseline(
     try:
         values = json.loads(metric_values)
         if not isinstance(values, list):
-            return json.dumps({"ok": False, "error": "metric_values must be a JSON array"})
+            return json.dumps(
+                {"ok": False, "error": "metric_values must be a JSON array"}
+            )
 
         float_values = [float(v) for v in values]
         baseline = _calculate_baseline(float_values)
@@ -233,7 +235,11 @@ def compute_metric_baseline(
         cv = (stdev / mean * 100) if mean > 0 else 0
 
         # Skewness indicator (simplified)
-        skewness = "right_skewed" if p99 > mean * 2 else "symmetric" if abs(mean - p50) < stdev * 0.5 else "left_skewed"
+        skewness = (
+            "right_skewed"
+            if p99 > mean * 2
+            else "symmetric" if abs(mean - p50) < stdev * 0.5 else "left_skewed"
+        )
 
         # Long tail analysis
         p99_to_p50_ratio = p99 / p50 if p50 > 0 else 0
@@ -402,7 +408,9 @@ def suggest_alert_thresholds(
         except ValueError:
             svc_type = ServiceType.HTTP_API
 
-        recommended_metrics = SERVICE_METRICS.get(svc_type, SERVICE_METRICS[ServiceType.HTTP_API])
+        recommended_metrics = SERVICE_METRICS.get(
+            svc_type, SERVICE_METRICS[ServiceType.HTTP_API]
+        )
 
         # Build threshold recommendations
         thresholds = {
@@ -421,7 +429,11 @@ def suggest_alert_thresholds(
         if svc_type in [ServiceType.HTTP_API, ServiceType.GATEWAY]:
             thresholds["alerts"].extend(
                 _generate_red_alerts(
-                    service_name, baseline_data, error_budget, slo_latency_p99_ms, custom
+                    service_name,
+                    baseline_data,
+                    error_budget,
+                    slo_latency_p99_ms,
+                    custom,
                 )
             )
 
@@ -447,8 +459,12 @@ def suggest_alert_thresholds(
         thresholds["summary"] = {
             "total_alerts": len(thresholds["alerts"]),
             "by_severity": {
-                "critical": len([a for a in thresholds["alerts"] if a.get("severity") == "critical"]),
-                "warning": len([a for a in thresholds["alerts"] if a.get("severity") == "warning"]),
+                "critical": len(
+                    [a for a in thresholds["alerts"] if a.get("severity") == "critical"]
+                ),
+                "warning": len(
+                    [a for a in thresholds["alerts"] if a.get("severity") == "warning"]
+                ),
             },
             "methodology": "SRE best practices (RED/USE/Golden Signals)",
         }
@@ -487,57 +503,64 @@ def _generate_red_alerts(
     error_warning = custom.get("error_rate_warning", error_budget * 0.5)
     error_critical = custom.get("error_rate_critical", error_budget)
 
-    alerts.append({
-        "name": f"{service_name}_error_rate_warning",
-        "metric": "error_rate",
-        "condition": "greater_than",
-        "threshold": error_warning,
-        "duration": "5m",
-        "severity": "warning",
-        "description": f"Error rate exceeds {error_warning*100:.2f}% (50% of error budget)",
-        "methodology": "RED",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_error_rate_warning",
+            "metric": "error_rate",
+            "condition": "greater_than",
+            "threshold": error_warning,
+            "duration": "5m",
+            "severity": "warning",
+            "description": f"Error rate exceeds {error_warning*100:.2f}% (50% of error budget)",
+            "methodology": "RED",
+        }
+    )
 
-    alerts.append({
-        "name": f"{service_name}_error_rate_critical",
-        "metric": "error_rate",
-        "condition": "greater_than",
-        "threshold": error_critical,
-        "duration": "5m",
-        "severity": "critical",
-        "description": f"Error rate exceeds {error_critical*100:.2f}% (100% of error budget)",
-        "methodology": "RED",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_error_rate_critical",
+            "metric": "error_rate",
+            "condition": "greater_than",
+            "threshold": error_critical,
+            "duration": "5m",
+            "severity": "critical",
+            "description": f"Error rate exceeds {error_critical*100:.2f}% (100% of error budget)",
+            "methodology": "RED",
+        }
+    )
 
     # Latency Alert (based on SLO target and baseline)
     latency_baseline = baselines.get("latency_p99", {})
     latency_warning = custom.get(
-        "latency_warning_ms",
-        latency_baseline.get("p95", latency_target_ms * 0.8)
+        "latency_warning_ms", latency_baseline.get("p95", latency_target_ms * 0.8)
     )
     latency_critical = custom.get("latency_critical_ms", latency_target_ms)
 
-    alerts.append({
-        "name": f"{service_name}_latency_p99_warning",
-        "metric": "latency_p99",
-        "condition": "greater_than",
-        "threshold": latency_warning / 1000,  # Convert to seconds
-        "duration": "5m",
-        "severity": "warning",
-        "description": f"p99 latency exceeds {latency_warning}ms",
-        "methodology": "RED",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_latency_p99_warning",
+            "metric": "latency_p99",
+            "condition": "greater_than",
+            "threshold": latency_warning / 1000,  # Convert to seconds
+            "duration": "5m",
+            "severity": "warning",
+            "description": f"p99 latency exceeds {latency_warning}ms",
+            "methodology": "RED",
+        }
+    )
 
-    alerts.append({
-        "name": f"{service_name}_latency_p99_critical",
-        "metric": "latency_p99",
-        "condition": "greater_than",
-        "threshold": latency_critical / 1000,
-        "duration": "5m",
-        "severity": "critical",
-        "description": f"p99 latency exceeds SLO target of {latency_critical}ms",
-        "methodology": "RED",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_latency_p99_critical",
+            "metric": "latency_p99",
+            "condition": "greater_than",
+            "threshold": latency_critical / 1000,
+            "duration": "5m",
+            "severity": "critical",
+            "description": f"p99 latency exceeds SLO target of {latency_critical}ms",
+            "methodology": "RED",
+        }
+    )
 
     return alerts
 
@@ -549,56 +572,72 @@ def _generate_use_alerts(
     alerts = []
 
     # CPU Utilization
-    cpu_warning = custom.get("cpu_warning_percent", DEFAULT_THRESHOLDS["cpu_warning_percent"])
-    cpu_critical = custom.get("cpu_critical_percent", DEFAULT_THRESHOLDS["cpu_critical_percent"])
+    cpu_warning = custom.get(
+        "cpu_warning_percent", DEFAULT_THRESHOLDS["cpu_warning_percent"]
+    )
+    cpu_critical = custom.get(
+        "cpu_critical_percent", DEFAULT_THRESHOLDS["cpu_critical_percent"]
+    )
 
-    alerts.append({
-        "name": f"{service_name}_cpu_warning",
-        "metric": "cpu_utilization_percent",
-        "condition": "greater_than",
-        "threshold": cpu_warning,
-        "duration": "10m",
-        "severity": "warning",
-        "description": f"CPU utilization exceeds {cpu_warning}%",
-        "methodology": "USE",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_cpu_warning",
+            "metric": "cpu_utilization_percent",
+            "condition": "greater_than",
+            "threshold": cpu_warning,
+            "duration": "10m",
+            "severity": "warning",
+            "description": f"CPU utilization exceeds {cpu_warning}%",
+            "methodology": "USE",
+        }
+    )
 
-    alerts.append({
-        "name": f"{service_name}_cpu_critical",
-        "metric": "cpu_utilization_percent",
-        "condition": "greater_than",
-        "threshold": cpu_critical,
-        "duration": "5m",
-        "severity": "critical",
-        "description": f"CPU utilization exceeds {cpu_critical}%",
-        "methodology": "USE",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_cpu_critical",
+            "metric": "cpu_utilization_percent",
+            "condition": "greater_than",
+            "threshold": cpu_critical,
+            "duration": "5m",
+            "severity": "critical",
+            "description": f"CPU utilization exceeds {cpu_critical}%",
+            "methodology": "USE",
+        }
+    )
 
     # Memory Utilization
-    mem_warning = custom.get("memory_warning_percent", DEFAULT_THRESHOLDS["memory_warning_percent"])
-    mem_critical = custom.get("memory_critical_percent", DEFAULT_THRESHOLDS["memory_critical_percent"])
+    mem_warning = custom.get(
+        "memory_warning_percent", DEFAULT_THRESHOLDS["memory_warning_percent"]
+    )
+    mem_critical = custom.get(
+        "memory_critical_percent", DEFAULT_THRESHOLDS["memory_critical_percent"]
+    )
 
-    alerts.append({
-        "name": f"{service_name}_memory_warning",
-        "metric": "memory_utilization_percent",
-        "condition": "greater_than",
-        "threshold": mem_warning,
-        "duration": "10m",
-        "severity": "warning",
-        "description": f"Memory utilization exceeds {mem_warning}%",
-        "methodology": "USE",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_memory_warning",
+            "metric": "memory_utilization_percent",
+            "condition": "greater_than",
+            "threshold": mem_warning,
+            "duration": "10m",
+            "severity": "warning",
+            "description": f"Memory utilization exceeds {mem_warning}%",
+            "methodology": "USE",
+        }
+    )
 
-    alerts.append({
-        "name": f"{service_name}_memory_critical",
-        "metric": "memory_utilization_percent",
-        "condition": "greater_than",
-        "threshold": mem_critical,
-        "duration": "5m",
-        "severity": "critical",
-        "description": f"Memory utilization exceeds {mem_critical}%",
-        "methodology": "USE",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_memory_critical",
+            "metric": "memory_utilization_percent",
+            "condition": "greater_than",
+            "threshold": mem_critical,
+            "duration": "5m",
+            "severity": "critical",
+            "description": f"Memory utilization exceeds {mem_critical}%",
+            "methodology": "USE",
+        }
+    )
 
     return alerts
 
@@ -610,40 +649,46 @@ def _generate_database_alerts(
     alerts = []
 
     # Connection pool saturation
-    alerts.append({
-        "name": f"{service_name}_connections_warning",
-        "metric": "connection_count",
-        "condition": "greater_than",
-        "threshold": custom.get("connection_warning_percent", 80),
-        "duration": "5m",
-        "severity": "warning",
-        "description": "Connection pool utilization exceeds 80%",
-        "methodology": "Database",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_connections_warning",
+            "metric": "connection_count",
+            "condition": "greater_than",
+            "threshold": custom.get("connection_warning_percent", 80),
+            "duration": "5m",
+            "severity": "warning",
+            "description": "Connection pool utilization exceeds 80%",
+            "methodology": "Database",
+        }
+    )
 
     # Replication lag
-    alerts.append({
-        "name": f"{service_name}_replication_lag_critical",
-        "metric": "replication_lag_seconds",
-        "condition": "greater_than",
-        "threshold": custom.get("replication_lag_critical_seconds", 30),
-        "duration": "5m",
-        "severity": "critical",
-        "description": "Replication lag exceeds 30 seconds",
-        "methodology": "Database",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_replication_lag_critical",
+            "metric": "replication_lag_seconds",
+            "condition": "greater_than",
+            "threshold": custom.get("replication_lag_critical_seconds", 30),
+            "duration": "5m",
+            "severity": "critical",
+            "description": "Replication lag exceeds 30 seconds",
+            "methodology": "Database",
+        }
+    )
 
     # Slow queries
-    alerts.append({
-        "name": f"{service_name}_slow_queries_warning",
-        "metric": "slow_query_count",
-        "condition": "greater_than",
-        "threshold": custom.get("slow_query_threshold", 10),
-        "duration": "5m",
-        "severity": "warning",
-        "description": "High number of slow queries detected",
-        "methodology": "Database",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_slow_queries_warning",
+            "metric": "slow_query_count",
+            "condition": "greater_than",
+            "threshold": custom.get("slow_query_threshold", 10),
+            "duration": "5m",
+            "severity": "warning",
+            "description": "High number of slow queries detected",
+            "methodology": "Database",
+        }
+    )
 
     return alerts
 
@@ -655,40 +700,46 @@ def _generate_queue_alerts(
     alerts = []
 
     # Queue depth
-    alerts.append({
-        "name": f"{service_name}_queue_depth_warning",
-        "metric": "queue_depth",
-        "condition": "greater_than",
-        "threshold": custom.get("queue_depth_warning", 1000),
-        "duration": "10m",
-        "severity": "warning",
-        "description": "Queue depth exceeds warning threshold",
-        "methodology": "Queue",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_queue_depth_warning",
+            "metric": "queue_depth",
+            "condition": "greater_than",
+            "threshold": custom.get("queue_depth_warning", 1000),
+            "duration": "10m",
+            "severity": "warning",
+            "description": "Queue depth exceeds warning threshold",
+            "methodology": "Queue",
+        }
+    )
 
     # Age of oldest message
-    alerts.append({
-        "name": f"{service_name}_oldest_message_critical",
-        "metric": "oldest_message_age_seconds",
-        "condition": "greater_than",
-        "threshold": custom.get("oldest_message_critical_seconds", 3600),
-        "duration": "5m",
-        "severity": "critical",
-        "description": "Oldest message in queue is over 1 hour old",
-        "methodology": "Queue",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_oldest_message_critical",
+            "metric": "oldest_message_age_seconds",
+            "condition": "greater_than",
+            "threshold": custom.get("oldest_message_critical_seconds", 3600),
+            "duration": "5m",
+            "severity": "critical",
+            "description": "Oldest message in queue is over 1 hour old",
+            "methodology": "Queue",
+        }
+    )
 
     # Dead letter queue
-    alerts.append({
-        "name": f"{service_name}_dlq_messages",
-        "metric": "dlq_message_count",
-        "condition": "greater_than",
-        "threshold": custom.get("dlq_threshold", 0),
-        "duration": "1m",
-        "severity": "warning",
-        "description": "Messages detected in dead letter queue",
-        "methodology": "Queue",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_dlq_messages",
+            "metric": "dlq_message_count",
+            "condition": "greater_than",
+            "threshold": custom.get("dlq_threshold", 0),
+            "duration": "1m",
+            "severity": "warning",
+            "description": "Messages detected in dead letter queue",
+            "methodology": "Queue",
+        }
+    )
 
     return alerts
 
@@ -700,28 +751,32 @@ def _generate_cache_alerts(
     alerts = []
 
     # Hit rate
-    alerts.append({
-        "name": f"{service_name}_cache_hit_rate_warning",
-        "metric": "cache_hit_rate",
-        "condition": "less_than",
-        "threshold": custom.get("cache_hit_rate_warning", 0.8),
-        "duration": "15m",
-        "severity": "warning",
-        "description": "Cache hit rate below 80%",
-        "methodology": "Cache",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_cache_hit_rate_warning",
+            "metric": "cache_hit_rate",
+            "condition": "less_than",
+            "threshold": custom.get("cache_hit_rate_warning", 0.8),
+            "duration": "15m",
+            "severity": "warning",
+            "description": "Cache hit rate below 80%",
+            "methodology": "Cache",
+        }
+    )
 
     # Evictions
-    alerts.append({
-        "name": f"{service_name}_cache_evictions_critical",
-        "metric": "eviction_rate",
-        "condition": "greater_than",
-        "threshold": custom.get("eviction_rate_critical", 100),
-        "duration": "5m",
-        "severity": "critical",
-        "description": "High cache eviction rate indicates memory pressure",
-        "methodology": "Cache",
-    })
+    alerts.append(
+        {
+            "name": f"{service_name}_cache_evictions_critical",
+            "metric": "eviction_rate",
+            "condition": "greater_than",
+            "threshold": custom.get("eviction_rate_critical", 100),
+            "duration": "5m",
+            "severity": "critical",
+            "description": "High cache eviction rate indicates memory pressure",
+            "methodology": "Cache",
+        }
+    )
 
     return alerts
 
@@ -775,10 +830,12 @@ def generate_alert_rules(
 
         alerts = recs.get("alerts", [])
         if not alerts:
-            return json.dumps({
-                "ok": False,
-                "error": "No alerts found in recommendations",
-            })
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": "No alerts found in recommendations",
+                }
+            )
 
         try:
             fmt = OutputFormat(output_format)
@@ -897,6 +954,7 @@ def _generate_prometheus_rules(
     }
 
     import yaml
+
     try:
         return yaml.dump(prometheus_rule, default_flow_style=False, sort_keys=False)
     except ImportError:
@@ -919,23 +977,23 @@ def _generate_datadog_monitors(
 
         # Map metric to Datadog query
         if metric == "error_rate":
-            query = f'sum:trace.servlet.request.errors{{service:{service_name}}}.as_rate() / sum:trace.servlet.request.hits{{service:{service_name}}}.as_rate()'
+            query = f"sum:trace.servlet.request.errors{{service:{service_name}}}.as_rate() / sum:trace.servlet.request.hits{{service:{service_name}}}.as_rate()"
         elif metric == "latency_p99":
-            query = f'p99:trace.servlet.request{{service:{service_name}}}'
+            query = f"p99:trace.servlet.request{{service:{service_name}}}"
         elif metric == "cpu_utilization_percent":
-            query = f'avg:docker.cpu.usage{{service:{service_name}}}'
+            query = f"avg:docker.cpu.usage{{service:{service_name}}}"
         elif metric == "memory_utilization_percent":
-            query = f'avg:docker.mem.in_use{{service:{service_name}}}'
+            query = f"avg:docker.mem.in_use{{service:{service_name}}}"
         else:
-            query = f'avg:{metric}{{service:{service_name}}}'
+            query = f"avg:{metric}{{service:{service_name}}}"
 
         comparator = ">" if condition == "greater_than" else "<"
 
         monitor = {
             "name": f"[{service_name}] {alert['description']}",
             "type": "metric alert",
-            "query": f'{query} {comparator} {threshold}',
-            "message": f'''
+            "query": f"{query} {comparator} {threshold}",
+            "message": f"""
 {alert["description"]}
 
 Methodology: {alert.get("methodology", "SRE")}
@@ -949,16 +1007,21 @@ Alert triggered: {{{{value}}}}
 {{{{#is_recovery}}}}
 Alert recovered
 {{{{/is_recovery}}}}
-'''.strip(),
+""".strip(),
             "tags": [
                 f"service:{service_name}",
                 f"severity:{alert['severity']}",
                 f"methodology:{alert.get('methodology', 'sre')}",
-            ] + [f"{k}:{v}" for k, v in labels.items()],
+            ]
+            + [f"{k}:{v}" for k, v in labels.items()],
             "options": {
                 "thresholds": {
                     "critical": threshold,
-                    "warning": threshold * 0.8 if condition == "greater_than" else threshold * 1.2,
+                    "warning": (
+                        threshold * 0.8
+                        if condition == "greater_than"
+                        else threshold * 1.2
+                    ),
                 },
                 "notify_no_data": True,
                 "no_data_timeframe": 10,
@@ -996,11 +1059,19 @@ def _generate_cloudwatch_alarms(
         metric_mapping = {
             "error_rate": {"namespace": "AWS/ApiGateway", "metric_name": "5XXError"},
             "latency_p99": {"namespace": "AWS/ApiGateway", "metric_name": "Latency"},
-            "cpu_utilization_percent": {"namespace": "AWS/ECS", "metric_name": "CPUUtilization"},
-            "memory_utilization_percent": {"namespace": "AWS/ECS", "metric_name": "MemoryUtilization"},
+            "cpu_utilization_percent": {
+                "namespace": "AWS/ECS",
+                "metric_name": "CPUUtilization",
+            },
+            "memory_utilization_percent": {
+                "namespace": "AWS/ECS",
+                "metric_name": "MemoryUtilization",
+            },
         }
 
-        cw_metric = metric_mapping.get(metric, {"namespace": "Custom", "metric_name": metric})
+        cw_metric = metric_mapping.get(
+            metric, {"namespace": "Custom", "metric_name": metric}
+        )
 
         alarm = {
             "AlarmName": alert["name"],
@@ -1011,7 +1082,11 @@ def _generate_cloudwatch_alarms(
             "Period": 300,
             "EvaluationPeriods": max(evaluation_periods, 1),
             "Threshold": threshold,
-            "ComparisonOperator": "GreaterThanThreshold" if condition == "greater_than" else "LessThanThreshold",
+            "ComparisonOperator": (
+                "GreaterThanThreshold"
+                if condition == "greater_than"
+                else "LessThanThreshold"
+            ),
             "Dimensions": [
                 {"Name": "ServiceName", "Value": service_name},
             ],
@@ -1022,7 +1097,8 @@ def _generate_cloudwatch_alarms(
                 {"Key": "Service", "Value": service_name},
                 {"Key": "Severity", "Value": alert["severity"]},
                 {"Key": "Methodology", "Value": alert.get("methodology", "SRE")},
-            ] + [{"Key": k, "Value": v} for k, v in labels.items()],
+            ]
+            + [{"Key": k, "Value": v} for k, v in labels.items()],
         }
         alarms.append(alarm)
 
