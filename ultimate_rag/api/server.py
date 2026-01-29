@@ -29,7 +29,10 @@ except ImportError:
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
+if TYPE_CHECKING:
+    from ..core.node import KnowledgeTree
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -78,29 +81,79 @@ class QueryResponse(BaseModel):
     strategies_used: List[str]
 
 
-class IngestRequest(BaseModel):
-    """Request for document ingestion."""
+class IngestDocument(BaseModel):
+    """A single document for ingestion."""
 
-    content: Optional[str] = Field(None, description="Raw content to ingest")
+    content: str = Field(..., description="Document content")
+    source_url: Optional[str] = Field(None, description="Source URL")
+    content_type: Optional[str] = Field(None, description="Content type")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Document metadata")
+
+
+class IngestRequest(BaseModel):
+    """
+    Request for document ingestion.
+
+    Supports single document (content field) or multiple documents (documents field).
+    By default, documents are added directly without validation checks.
+    Enable validation flags to check for duplicates, contradictions, etc.
+    """
+
+    # Content input - use ONE of these
+    content: Optional[str] = Field(None, description="Single document content")
+    documents: Optional[List[IngestDocument]] = Field(
+        None, description="Multiple documents to ingest"
+    )
     file_path: Optional[str] = Field(None, description="Path to file to ingest")
+
+    # Target tree
+    tree: Optional[str] = Field(None, description="Target tree name")
+
+    # Validation controls (all default OFF for fast bulk ingestion)
+    check_duplicates: bool = Field(
+        False, description="Skip exact and near-duplicate content (>95% similarity)"
+    )
+    check_contradictions: bool = Field(
+        False, description="Detect content that contradicts existing knowledge"
+    )
+    merge_similar: bool = Field(
+        False, description="Merge with existing similar nodes instead of creating new"
+    )
+
+    # Metadata
     source_url: Optional[str] = Field(None, description="URL of the source")
     content_type: Optional[str] = Field(None, description="Content type override")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class ContradictionInfo(BaseModel):
+    """Information about a detected contradiction."""
+
+    new_text: str = Field(..., description="The new content that contradicts")
+    existing_node_id: int = Field(..., description="ID of the conflicting node")
+    existing_text: str = Field(..., description="Text of the conflicting node")
+    reason: str = Field(..., description="Why it's considered a contradiction")
 
 
 class IngestResponse(BaseModel):
     """Response for document ingestion."""
 
     success: bool
-    chunks_created: int
-    entities_found: List[str]
-    relationships_found: int
-    processing_time_ms: float
+    documents_processed: int = 0
+    chunks_created: int = 0
+    nodes_created: int = 0
+    nodes_skipped_duplicate: int = 0
+    nodes_merged: int = 0
+    contradictions_detected: List[ContradictionInfo] = []
+    entities_found: List[str] = []
+    processing_time_ms: float = 0.0
+    embedding_time_ms: float = 0.0
     warnings: List[str] = []
 
 
+# Legacy models for backwards compatibility
 class BatchDocument(BaseModel):
-    """A single document in a batch ingest request."""
+    """A single document in a batch ingest request. DEPRECATED: Use IngestDocument."""
 
     content: str = Field(..., description="Document content")
     source_url: Optional[str] = Field(None, description="Source URL")
@@ -109,14 +162,14 @@ class BatchDocument(BaseModel):
 
 
 class BatchIngestRequest(BaseModel):
-    """Request for batch document ingestion."""
+    """Request for batch document ingestion. DEPRECATED: Use IngestRequest with documents field."""
 
     documents: List[BatchDocument] = Field(..., description="Documents to ingest")
     tree: Optional[str] = Field(None, description="Target tree name")
 
 
 class BatchIngestResponse(BaseModel):
-    """Response for batch document ingestion."""
+    """Response for batch document ingestion. DEPRECATED: Use IngestResponse."""
 
     success: bool
     documents_processed: int
@@ -840,63 +893,18 @@ class UltimateRAGServer:
         # ==================== Ingest Routes ====================
 
         @app.post("/ingest", response_model=IngestResponse, tags=["Ingest"])
-        async def ingest(request: IngestRequest, background_tasks: BackgroundTasks):
+        async def ingest(request: IngestRequest):
             """
-            Ingest content into the knowledge base.
+            Ingest documents into the knowledge base.
 
-            Provide either content directly or a file_path.
-            """
-            if not self.processor:
-                raise HTTPException(503, "Server not initialized")
+            Supports single document (content field), multiple documents (documents field),
+            or file path. By default, documents are added directly with batch embedding
+            for optimal performance.
 
-            self._ingest_count += 1
-
-            try:
-                if request.content:
-                    result = self.processor.process_content(
-                        content=request.content,
-                        source_path=request.source_url or "direct_input",
-                        content_type=self._get_content_type(request.content_type),
-                        extra_metadata=request.metadata,
-                    )
-                elif request.file_path:
-                    result = self.processor.process_file(
-                        file_path=request.file_path,
-                        content_type=self._get_content_type(request.content_type),
-                        extra_metadata=request.metadata,
-                    )
-                else:
-                    raise HTTPException(400, "Provide either content or file_path")
-
-                # Add chunks to tree in background
-                if result.chunks and self.teaching:
-                    for chunk in result.chunks:
-                        background_tasks.add_task(
-                            self._add_chunk_to_tree,
-                            chunk,
-                        )
-
-                return IngestResponse(
-                    success=result.success,
-                    chunks_created=result.total_chunks,
-                    entities_found=result.entities_found,
-                    relationships_found=len(result.relationships_found),
-                    processing_time_ms=result.processing_time_ms,
-                    warnings=result.warnings,
-                )
-
-            except Exception as e:
-                logger.error(f"Ingest failed: {e}")
-                raise HTTPException(500, str(e))
-
-        @app.post("/ingest/batch", response_model=BatchIngestResponse, tags=["Ingest"])
-        async def ingest_batch(request: BatchIngestRequest):
-            """
-            Batch ingest multiple documents efficiently.
-
-            This endpoint uses batch embedding to process all document chunks
-            in a single API call, significantly faster than ingesting one at a time.
-            Use this when you have multiple documents to add at once.
+            Enable validation flags for additional checks:
+            - check_duplicates: Skip exact/near-duplicate content
+            - check_contradictions: Detect conflicting information
+            - merge_similar: Merge with existing similar nodes
             """
             import time
 
@@ -904,7 +912,51 @@ class UltimateRAGServer:
                 raise HTTPException(503, "Server not initialized")
 
             start_time = time.time()
-            self._ingest_count += len(request.documents)
+
+            # Build document list from various input formats
+            docs_to_process = []
+
+            if request.documents:
+                # Multiple documents provided
+                for doc in request.documents:
+                    docs_to_process.append({
+                        "content": doc.content,
+                        "source_url": doc.source_url or request.source_url,
+                        "content_type": doc.content_type or request.content_type,
+                        "metadata": {**(request.metadata or {}), **(doc.metadata or {})},
+                    })
+            elif request.content:
+                # Single document content
+                docs_to_process.append({
+                    "content": request.content,
+                    "source_url": request.source_url or "direct_input",
+                    "content_type": request.content_type,
+                    "metadata": request.metadata,
+                })
+            elif request.file_path:
+                # File path - read and process
+                try:
+                    result = self.processor.process_file(
+                        file_path=request.file_path,
+                        content_type=self._get_content_type(request.content_type),
+                        extra_metadata=request.metadata,
+                    )
+                    # Convert file result to document format
+                    for chunk in result.chunks:
+                        docs_to_process.append({
+                            "content": chunk.text,
+                            "source_url": request.file_path,
+                            "content_type": request.content_type,
+                            "metadata": request.metadata,
+                        })
+                except Exception as e:
+                    raise HTTPException(400, f"Failed to read file: {e}")
+            else:
+                raise HTTPException(
+                    400, "Provide content, documents, or file_path"
+                )
+
+            self._ingest_count += len(docs_to_process)
 
             try:
                 # Step 1: Process all documents into chunks
@@ -912,13 +964,13 @@ class UltimateRAGServer:
                 all_entities = []
                 warnings = []
 
-                for doc in request.documents:
+                for doc in docs_to_process:
                     try:
                         result = self.processor.process_content(
-                            content=doc.content,
-                            source_path=doc.source_url or "batch_input",
-                            content_type=self._get_content_type(doc.content_type),
-                            extra_metadata=doc.metadata,
+                            content=doc["content"],
+                            source_path=doc["source_url"] or "input",
+                            content_type=self._get_content_type(doc["content_type"]),
+                            extra_metadata=doc["metadata"],
                         )
                         all_chunks.extend(result.chunks)
                         all_entities.extend(result.entities_found)
@@ -927,11 +979,11 @@ class UltimateRAGServer:
                         warnings.append(f"Failed to process document: {e}")
 
                 if not all_chunks:
-                    return BatchIngestResponse(
+                    return IngestResponse(
                         success=False,
-                        documents_processed=len(request.documents),
-                        total_chunks=0,
-                        total_nodes_created=0,
+                        documents_processed=len(docs_to_process),
+                        chunks_created=0,
+                        nodes_created=0,
                         entities_found=[],
                         processing_time_ms=(time.time() - start_time) * 1000,
                         embedding_time_ms=0,
@@ -941,6 +993,7 @@ class UltimateRAGServer:
                 # Step 2: Batch embed all chunks
                 embed_start = time.time()
                 texts = [chunk.text for chunk in all_chunks]
+                embeddings = None
 
                 try:
                     from knowledge_base.raptor.EmbeddingModels import (
@@ -950,38 +1003,68 @@ class UltimateRAGServer:
                     embedding_model = OpenAIEmbeddingModel()
                     embeddings = embedding_model.create_embeddings_batch(texts)
                 except ImportError:
-                    # Fallback: no batch embedding available
-                    warnings.append("Batch embedding not available, using single calls")
-                    embeddings = None
+                    warnings.append("Batch embedding not available")
                 except Exception as e:
                     warnings.append(f"Batch embedding failed: {e}")
-                    embeddings = None
 
                 embed_time_ms = (time.time() - embed_start) * 1000
 
-                # Step 3: Create nodes with pre-computed embeddings
+                # Step 3: Get target tree
                 tree_name = request.tree or self.forest.default_tree or "default"
                 tree = self.forest.get_tree(tree_name)
 
                 if not tree:
                     raise HTTPException(404, f"Tree '{tree_name}' not found")
 
-                nodes_created = 0
+                # Step 4: Process chunks with optional validation
                 from ..core.node import KnowledgeNode
                 from ..core.types import ImportanceScore, KnowledgeType
+
+                nodes_created = 0
+                nodes_skipped = 0
+                nodes_merged = 0
+                contradictions = []
 
                 max_index = max(tree.all_nodes.keys()) if tree.all_nodes else -1
 
                 for i, chunk in enumerate(all_chunks):
-                    new_index = max_index + 1 + i
+                    chunk_embedding = embeddings[i] if embeddings and i < len(embeddings) else None
 
-                    # Create importance score
-                    importance = ImportanceScore(
-                        explicit_priority=0.5,
-                        authority_score=0.7,  # Ingested docs start with decent authority
-                    )
+                    # Validation checks (if enabled)
+                    if request.check_duplicates or request.check_contradictions or request.merge_similar:
+                        validation_result = await self._validate_chunk(
+                            chunk_text=chunk.text,
+                            chunk_embedding=chunk_embedding,
+                            tree=tree,
+                            check_duplicates=request.check_duplicates,
+                            check_contradictions=request.check_contradictions,
+                            merge_similar=request.merge_similar,
+                        )
+
+                        if validation_result["skip"]:
+                            nodes_skipped += 1
+                            continue
+
+                        if validation_result["merged"]:
+                            nodes_merged += 1
+                            continue
+
+                        if validation_result["contradiction"]:
+                            contradictions.append(ContradictionInfo(
+                                new_text=chunk.text[:200],
+                                existing_node_id=validation_result["contradiction"]["node_id"],
+                                existing_text=validation_result["contradiction"]["text"][:200],
+                                reason=validation_result["contradiction"]["reason"],
+                            ))
+                            # Still add the node but record the contradiction
 
                     # Create node
+                    new_index = max_index + 1 + nodes_created
+                    importance = ImportanceScore(
+                        explicit_priority=0.5,
+                        authority_score=0.7,
+                    )
+
                     node = KnowledgeNode(
                         text=chunk.text,
                         index=new_index,
@@ -992,21 +1075,22 @@ class UltimateRAGServer:
                         tree_id=tree.tree_id,
                     )
 
-                    # Set embedding if we have it
-                    if embeddings and i < len(embeddings):
-                        node.set_embedding("OpenAI", embeddings[i])
+                    if chunk_embedding:
+                        node.set_embedding("OpenAI", chunk_embedding)
 
-                    # Add to tree
                     tree.add_node(node)
                     nodes_created += 1
 
                 processing_time_ms = (time.time() - start_time) * 1000
 
-                return BatchIngestResponse(
+                return IngestResponse(
                     success=True,
-                    documents_processed=len(request.documents),
-                    total_chunks=len(all_chunks),
-                    total_nodes_created=nodes_created,
+                    documents_processed=len(docs_to_process),
+                    chunks_created=len(all_chunks),
+                    nodes_created=nodes_created,
+                    nodes_skipped_duplicate=nodes_skipped,
+                    nodes_merged=nodes_merged,
+                    contradictions_detected=contradictions,
                     entities_found=list(set(all_entities)),
                     processing_time_ms=processing_time_ms,
                     embedding_time_ms=embed_time_ms,
@@ -1016,8 +1100,48 @@ class UltimateRAGServer:
             except HTTPException:
                 raise
             except Exception as e:
-                logger.error(f"Batch ingest failed: {e}")
+                logger.error(f"Ingest failed: {e}")
                 raise HTTPException(500, str(e))
+
+        @app.post(
+            "/ingest/batch",
+            response_model=BatchIngestResponse,
+            tags=["Ingest"],
+            deprecated=True,
+        )
+        async def ingest_batch(request: BatchIngestRequest):
+            """
+            DEPRECATED: Use POST /ingest with documents field instead.
+
+            This endpoint is maintained for backwards compatibility.
+            """
+            # Convert to new format and call unified endpoint
+            new_request = IngestRequest(
+                documents=[
+                    IngestDocument(
+                        content=doc.content,
+                        source_url=doc.source_url,
+                        content_type=doc.content_type,
+                        metadata=doc.metadata,
+                    )
+                    for doc in request.documents
+                ],
+                tree=request.tree,
+            )
+
+            result = await ingest(new_request)
+
+            # Convert response to legacy format
+            return BatchIngestResponse(
+                success=result.success,
+                documents_processed=result.documents_processed,
+                total_chunks=result.chunks_created,
+                total_nodes_created=result.nodes_created,
+                entities_found=result.entities_found,
+                processing_time_ms=result.processing_time_ms,
+                embedding_time_ms=result.embedding_time_ms,
+                warnings=result.warnings,
+            )
 
         # ==================== Teach Routes ====================
 
@@ -2235,41 +2359,29 @@ class UltimateRAGServer:
             response_model=V1AddDocumentsResponse,
             tags=["v1-compat"],
         )
-        async def v1_add_documents(
-            request: V1AddDocumentsRequest, background_tasks: BackgroundTasks
-        ):
+        async def v1_add_documents(request: V1AddDocumentsRequest):
             """Add documents to tree (v1 compatible)."""
-            if not self.processor or not self.teaching:
+            if not self.processor or not self.forest:
                 raise HTTPException(503, "Server not initialized")
 
             tree_name = request.tree or "main"
 
             try:
-                # Process the content
-                from ..ingestion.processor import ContentType
-
-                result = self.processor.process_content(
+                # Use the unified ingest endpoint
+                ingest_request = IngestRequest(
                     content=request.content,
-                    source_path="api_upload",
-                    content_type=ContentType.TEXT,
+                    tree=tree_name,
                 )
 
-                # Add chunks via teaching
-                chunks_added = 0
-                for chunk in result.chunks:
-                    background_tasks.add_task(
-                        self._add_chunk_to_tree,
-                        chunk,
-                    )
-                    chunks_added += 1
+                result = await ingest(ingest_request)
 
                 return V1AddDocumentsResponse(
                     tree=tree_name,
-                    new_leaves=chunks_added,
-                    updated_clusters=0,
+                    new_leaves=result.nodes_created,
+                    updated_clusters=result.nodes_merged,
                     created_clusters=0,
-                    total_nodes_after=chunks_added,
-                    message=f"Successfully queued {chunks_added} chunks for addition",
+                    total_nodes_after=result.nodes_created,
+                    message=f"Successfully added {result.nodes_created} chunks",
                 )
 
             except Exception as e:
@@ -2289,7 +2401,7 @@ class UltimateRAGServer:
             return ContentType.TEXT  # Default to TEXT on invalid values
 
     async def _add_chunk_to_tree(self, chunk):
-        """Add a processed chunk to the tree."""
+        """Add a processed chunk to the tree via teaching pipeline."""
         if self.teaching:
             await self.teaching.teach(
                 content=chunk.text,
@@ -2298,6 +2410,167 @@ class UltimateRAGServer:
                 confidence=0.95,  # Auto-approve ingested documents
                 learned_from="document_ingestion",
             )
+
+    async def _validate_chunk(
+        self,
+        chunk_text: str,
+        chunk_embedding: Optional[List[float]],
+        tree: "KnowledgeTree",
+        check_duplicates: bool = False,
+        check_contradictions: bool = False,
+        merge_similar: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Validate a chunk against existing nodes in the tree.
+
+        Returns dict with:
+        - skip: bool - whether to skip this chunk (duplicate)
+        - merged: bool - whether chunk was merged with existing
+        - contradiction: dict or None - contradiction details if found
+        """
+        import hashlib
+
+        import numpy as np
+
+        result = {"skip": False, "merged": False, "contradiction": None}
+
+        if not (check_duplicates or check_contradictions or merge_similar):
+            return result
+
+        # Compute content hash for exact duplicate check
+        content_hash = hashlib.sha256(chunk_text.strip().encode()).hexdigest()
+
+        # Check for exact duplicates via hash
+        if check_duplicates:
+            for node in tree.all_nodes.values():
+                node_hash = hashlib.sha256(node.text.strip().encode()).hexdigest()
+                if content_hash == node_hash:
+                    result["skip"] = True
+                    return result
+
+        # Semantic similarity checks require embeddings
+        if chunk_embedding is None:
+            return result
+
+        chunk_emb = np.array(chunk_embedding)
+        similarity_threshold = 0.85
+        near_duplicate_threshold = 0.95
+
+        best_match = None
+        best_similarity = 0.0
+
+        for node in tree.all_nodes.values():
+            node_emb = node.get_embedding()
+            if node_emb is None:
+                continue
+
+            node_emb = np.array(node_emb)
+            # Cosine similarity
+            similarity = np.dot(chunk_emb, node_emb) / (
+                np.linalg.norm(chunk_emb) * np.linalg.norm(node_emb) + 1e-9
+            )
+
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_match = node
+
+        if best_match is None:
+            return result
+
+        # Near-duplicate check
+        if check_duplicates and best_similarity >= near_duplicate_threshold:
+            result["skip"] = True
+            return result
+
+        # Merge similar check
+        if merge_similar and best_similarity >= similarity_threshold:
+            # Merge by appending to existing node's text
+            # In a more sophisticated implementation, could use LLM to merge
+            best_match.text = f"{best_match.text}\n\n---\n\n{chunk_text}"
+            result["merged"] = True
+            return result
+
+        # Contradiction check
+        if check_contradictions and best_similarity >= similarity_threshold:
+            is_contradiction = self._check_simple_contradiction(
+                chunk_text, best_match.text
+            )
+            if is_contradiction:
+                result["contradiction"] = {
+                    "node_id": best_match.index,
+                    "text": best_match.text,
+                    "reason": is_contradiction,
+                }
+
+        return result
+
+    def _check_simple_contradiction(
+        self, new_text: str, existing_text: str
+    ) -> Optional[str]:
+        """
+        Simple heuristic contradiction detection.
+
+        Returns reason string if contradiction found, None otherwise.
+        """
+        new_lower = new_text.lower()
+        existing_lower = existing_text.lower()
+
+        # Check for direct contradiction patterns
+        contradiction_patterns = [
+            ("should", "should not"),
+            ("must", "must not"),
+            ("always", "never"),
+            ("enabled", "disabled"),
+            ("true", "false"),
+            ("yes", "no"),
+            ("increase", "decrease"),
+            ("start", "stop"),
+            ("add", "remove"),
+            ("allow", "deny"),
+            ("permit", "forbid"),
+        ]
+
+        for positive, negative in contradiction_patterns:
+            if positive in existing_lower and negative in new_lower:
+                return f"Existing says '{positive}', new says '{negative}'"
+            if negative in existing_lower and positive in new_lower:
+                return f"Existing says '{negative}', new says '{positive}'"
+
+        # Check for numerical contradictions (same context, different values)
+        import re
+
+        existing_numbers = re.findall(
+            r"(\w+)\s+(?:is|are|=|:)\s*(\d+(?:\.\d+)?)\s*"
+            r"(?:seconds?|s|minutes?|m|hours?|h|ms|gb|mb|kb|%)?",
+            existing_lower,
+        )
+        new_numbers = re.findall(
+            r"(\w+)\s+(?:is|are|=|:)\s*(\d+(?:\.\d+)?)\s*"
+            r"(?:seconds?|s|minutes?|m|hours?|h|ms|gb|mb|kb|%)?",
+            new_lower,
+        )
+
+        for exist_key, exist_val in existing_numbers:
+            for new_key, new_val in new_numbers:
+                # Same key but different value
+                if exist_key == new_key and exist_val != new_val:
+                    return f"Different values for '{exist_key}': {exist_val} vs {new_val}"
+
+        # Check for deprecation/update indicators
+        deprecation_phrases = [
+            "is deprecated",
+            "no longer",
+            "has been replaced",
+            "instead use",
+            "was changed to",
+            "updated to",
+        ]
+
+        for phrase in deprecation_phrases:
+            if phrase in new_lower:
+                return f"New content indicates update/deprecation: '{phrase}'"
+
+        return None
 
 
 def create_app(

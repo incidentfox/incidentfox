@@ -485,7 +485,10 @@ class KnowledgeIngestionTask:
                             if ingest_response.status_code == 200:
                                 result = ingest_response.json()
                                 documents += 1
-                                chunks += result.get("chunks_created", 0)
+                                # Handle both old (chunks_created) and new (nodes_created) response
+                                chunks += result.get(
+                                    "nodes_created", result.get("chunks_created", 0)
+                                )
 
                     except Exception as e:
                         _log(
