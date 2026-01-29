@@ -1292,3 +1292,78 @@ class MeetingData(Base):
         Index("ix_meeting_data_meeting_time", "meeting_time"),
         Index("ix_meeting_data_created_at", "created_at"),
     )
+
+
+# =============================================================================
+# Visitor Playground (Public Demo Access)
+# =============================================================================
+
+
+class VisitorEmail(Base):
+    """
+    Collect visitor emails for outreach/marketing.
+
+    When visitors access the public playground, we capture their email
+    for follow-up and lead generation.
+    """
+
+    __tablename__ = "visitor_emails"
+
+    email: Mapped[str] = mapped_column(String(256), primary_key=True)
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    visit_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Optional: track source for attribution
+    source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (Index("ix_visitor_emails_last_seen", "last_seen_at"),)
+
+
+class VisitorSession(Base):
+    """
+    Track active visitor sessions for queue management.
+
+    The visitor playground allows only one active user at a time.
+    Others join a queue and wait their turn.
+
+    Lifecycle:
+    - User enters email → session created with status='queued' or 'active'
+    - Active user's frontend sends heartbeat → updates last_heartbeat_at
+    - If queue forms and active user idle > 2min → status='warned'
+    - If warned + 3min passes → status='expired', next in queue promoted
+    - Cleanup job removes expired sessions after 1 hour
+
+    Status values:
+    - active: Currently using the playground
+    - queued: Waiting in line
+    - warned: Active but warned (others waiting, 3 min countdown)
+    - expired: Session ended (timeout or kicked)
+    """
+
+    __tablename__ = "visitor_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    email: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    last_heartbeat_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    warned_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    expired_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_visitor_sessions_status_created", "status", "created_at"),
+        Index("ix_visitor_sessions_last_heartbeat", "last_heartbeat_at"),
+    )
