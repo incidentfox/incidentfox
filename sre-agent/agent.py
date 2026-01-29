@@ -545,6 +545,7 @@ Do NOT dump full kubectl output. Synthesize findings.""",
 
             # Copy .claude/ skills to thread workspace if it doesn't exist yet
             import shutil
+
             thread_claude_dir = os.path.join(thread_workspace, ".claude")
             if not os.path.exists(thread_claude_dir):
                 source_claude_dir = "/app/.claude"
