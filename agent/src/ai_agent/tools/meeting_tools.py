@@ -820,7 +820,8 @@ class RecallProvider(MeetingProvider):
         # Filter by query (match against meeting_url or title)
         query_lower = query.lower()
         return [
-            bot for bot in bots
+            bot
+            for bot in bots
             if query_lower in (bot.get("title", "").lower())
             or query_lower in (bot.get("meeting_url", "").lower())
         ]
@@ -839,7 +840,9 @@ class RecallProvider(MeetingProvider):
         bots = result.get("results", []) if isinstance(result, dict) else []
         return [self._normalize_meeting(bot) for bot in bots]
 
-    def _normalize_transcript(self, bot_info: dict, transcript_data: dict | list) -> dict[str, Any]:
+    def _normalize_transcript(
+        self, bot_info: dict, transcript_data: dict | list
+    ) -> dict[str, Any]:
         """Normalize Recall.ai transcript to common format."""
         # Transcript data may be a list of utterances or a dict with results
         if isinstance(transcript_data, dict):
@@ -1412,7 +1415,9 @@ def meeting_start_recording(
         }
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "meeting_start_recording", "meeting")
+        return handle_integration_not_configured(
+            e, "meeting_start_recording", "meeting"
+        )
     except IntegrationAuthenticationError:
         raise
     except Exception as e:

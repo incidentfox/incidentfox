@@ -47,11 +47,21 @@ def upgrade() -> None:
         ),  # requested, joining, in_call, recording, done, error, stopped
         sa.Column("status_message", sa.Text(), nullable=True),
         # Timestamps
-        sa.Column("requested_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "requested_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.Column("joined_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("left_at", sa.DateTime(timezone=True), nullable=True),
         # Transcript tracking
-        sa.Column("transcript_segments_count", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "transcript_segments_count",
+            sa.Integer(),
+            nullable=False,
+            server_default="0",
+        ),
         sa.Column("last_transcript_at", sa.DateTime(timezone=True), nullable=True),
         # Metadata
         sa.Column(
@@ -77,7 +87,9 @@ def upgrade() -> None:
     op.create_index("ix_recall_bots_org_id", "recall_bots", ["org_id"])
     op.create_index("ix_recall_bots_team_node_id", "recall_bots", ["team_node_id"])
     op.create_index("ix_recall_bots_incident_id", "recall_bots", ["incident_id"])
-    op.create_index("ix_recall_bots_recall_bot_id", "recall_bots", ["recall_bot_id"], unique=True)
+    op.create_index(
+        "ix_recall_bots_recall_bot_id", "recall_bots", ["recall_bot_id"], unique=True
+    )
     op.create_index("ix_recall_bots_status", "recall_bots", ["status"])
     op.create_index("ix_recall_bots_created_at", "recall_bots", ["created_at"])
     op.create_index(
@@ -114,10 +126,24 @@ def upgrade() -> None:
     )
 
     # Indexes for transcript segments
-    op.create_index("ix_recall_transcript_segments_recall_bot_id", "recall_transcript_segments", ["recall_bot_id"])
-    op.create_index("ix_recall_transcript_segments_org_id", "recall_transcript_segments", ["org_id"])
-    op.create_index("ix_recall_transcript_segments_incident_id", "recall_transcript_segments", ["incident_id"])
-    op.create_index("ix_recall_transcript_segments_created_at", "recall_transcript_segments", ["created_at"])
+    op.create_index(
+        "ix_recall_transcript_segments_recall_bot_id",
+        "recall_transcript_segments",
+        ["recall_bot_id"],
+    )
+    op.create_index(
+        "ix_recall_transcript_segments_org_id", "recall_transcript_segments", ["org_id"]
+    )
+    op.create_index(
+        "ix_recall_transcript_segments_incident_id",
+        "recall_transcript_segments",
+        ["incident_id"],
+    )
+    op.create_index(
+        "ix_recall_transcript_segments_created_at",
+        "recall_transcript_segments",
+        ["created_at"],
+    )
     op.create_index(
         "ix_recall_transcript_segments_bot_timestamp",
         "recall_transcript_segments",
@@ -127,11 +153,25 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Drop recall_transcript_segments
-    op.drop_index("ix_recall_transcript_segments_bot_timestamp", table_name="recall_transcript_segments")
-    op.drop_index("ix_recall_transcript_segments_created_at", table_name="recall_transcript_segments")
-    op.drop_index("ix_recall_transcript_segments_incident_id", table_name="recall_transcript_segments")
-    op.drop_index("ix_recall_transcript_segments_org_id", table_name="recall_transcript_segments")
-    op.drop_index("ix_recall_transcript_segments_recall_bot_id", table_name="recall_transcript_segments")
+    op.drop_index(
+        "ix_recall_transcript_segments_bot_timestamp",
+        table_name="recall_transcript_segments",
+    )
+    op.drop_index(
+        "ix_recall_transcript_segments_created_at",
+        table_name="recall_transcript_segments",
+    )
+    op.drop_index(
+        "ix_recall_transcript_segments_incident_id",
+        table_name="recall_transcript_segments",
+    )
+    op.drop_index(
+        "ix_recall_transcript_segments_org_id", table_name="recall_transcript_segments"
+    )
+    op.drop_index(
+        "ix_recall_transcript_segments_recall_bot_id",
+        table_name="recall_transcript_segments",
+    )
     op.drop_table("recall_transcript_segments")
 
     # Drop recall_bots
