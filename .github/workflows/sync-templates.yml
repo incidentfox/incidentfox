@@ -19,24 +19,49 @@ on:
         type: boolean
 
 env:
-  # Database connection - uses the same RDS instance as production
-  # Secrets are configured in GitHub repository settings
-  DATABASE_URL: ${{ secrets.CONFIG_SERVICE_DATABASE_URL }}
+  AWS_REGION: us-west-2
 
 jobs:
   sync-templates:
     name: Sync Templates
     runs-on: ubuntu-latest
 
-    # Only run if we have database credentials configured
-    if: ${{ vars.TEMPLATES_SYNC_ENABLED == 'true' }}
-
     permissions:
       contents: read
+      id-token: write  # Required for OIDC auth to AWS
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get database credentials from Secrets Manager
+        id: secrets
+        run: |
+          # Fetch the RDS connection info from AWS Secrets Manager
+          SECRET_ARN="arn:aws:secretsmanager:us-west-2:103002841599:secret:incidentfox-config-service/rds"
+          SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$SECRET_ARN" --query SecretString --output text)
+
+          # Parse the JSON and construct DATABASE_URL
+          DB_HOST=$(echo "$SECRET_JSON" | jq -r '.host')
+          DB_PORT=$(echo "$SECRET_JSON" | jq -r '.port // "5432"')
+          DB_NAME=$(echo "$SECRET_JSON" | jq -r '.dbname // "incidentfox_config"')
+          DB_USER=$(echo "$SECRET_JSON" | jq -r '.username')
+          DB_PASS=$(echo "$SECRET_JSON" | jq -r '.password')
+
+          # URL-encode the password in case it has special characters
+          DB_PASS_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote_plus('$DB_PASS'))")
+
+          DATABASE_URL="postgresql+psycopg2://${DB_USER}:${DB_PASS_ENCODED}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require"
+
+          # Mask the URL in logs and set as output
+          echo "::add-mask::$DATABASE_URL"
+          echo "database_url=$DATABASE_URL" >> $GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -50,7 +75,7 @@ jobs:
       - name: Sync templates to RDS
         working-directory: config_service
         env:
-          DATABASE_URL: ${{ secrets.CONFIG_SERVICE_DATABASE_URL }}
+          DATABASE_URL: ${{ steps.secrets.outputs.database_url }}
         run: |
           if [ "${{ github.event.inputs.force_update }}" == "true" ]; then
             echo "Force updating all templates..."
