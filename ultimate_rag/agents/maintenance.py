@@ -279,9 +279,32 @@ class MaintenanceAgent:
                 # Extract common topics from the cluster
                 all_words: Dict[str, int] = {}
                 stop_words = {
-                    "how", "do", "i", "the", "a", "an", "to", "for", "in", "is",
-                    "what", "why", "when", "where", "can", "could", "would", "should",
-                    "does", "did", "are", "was", "were", "be", "been", "being",
+                    "how",
+                    "do",
+                    "i",
+                    "the",
+                    "a",
+                    "an",
+                    "to",
+                    "for",
+                    "in",
+                    "is",
+                    "what",
+                    "why",
+                    "when",
+                    "where",
+                    "can",
+                    "could",
+                    "would",
+                    "should",
+                    "does",
+                    "did",
+                    "are",
+                    "was",
+                    "were",
+                    "be",
+                    "been",
+                    "being",
                 }
                 for obs in cluster_queries:
                     words = set(obs.query.lower().split()) - stop_words
@@ -289,7 +312,9 @@ class MaintenanceAgent:
                         all_words[word] = all_words.get(word, 0) + 1
 
                 # Get top keywords that appear in most queries
-                sorted_words = sorted(all_words.items(), key=lambda x: x[1], reverse=True)
+                sorted_words = sorted(
+                    all_words.items(), key=lambda x: x[1], reverse=True
+                )
                 top_topics = [w[0] for w in sorted_words[:5] if w[1] >= 2]
 
                 if not top_topics:
@@ -330,7 +355,9 @@ class MaintenanceAgent:
             from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
             from knowledge_base.raptor.utils import distances_from_embeddings
         except ImportError as e:
-            logger.warning(f"RAPTOR imports failed, falling back to keyword clustering: {e}")
+            logger.warning(
+                f"RAPTOR imports failed, falling back to keyword clustering: {e}"
+            )
             return self._fallback_keyword_clustering(failed_queries)
 
         # Get embeddings for all queries
@@ -391,8 +418,24 @@ class MaintenanceAgent:
         """
         clusters: Dict[str, List] = {}
         stop_words = {
-            "how", "do", "i", "the", "a", "an", "to", "for", "in", "is",
-            "what", "why", "when", "where", "can", "could", "would", "should",
+            "how",
+            "do",
+            "i",
+            "the",
+            "a",
+            "an",
+            "to",
+            "for",
+            "in",
+            "is",
+            "what",
+            "why",
+            "when",
+            "where",
+            "can",
+            "could",
+            "would",
+            "should",
         }
 
         for obs in failed_queries:
@@ -493,7 +536,7 @@ class MaintenanceAgent:
                 if len(pairs) >= 50:  # Limit total pairs
                     break
 
-                other_embeddings = embeddings[i+1:]
+                other_embeddings = embeddings[i + 1 :]
                 if not other_embeddings:
                     continue
 
@@ -506,7 +549,9 @@ class MaintenanceAgent:
                         similarity = 1.0 - dist
                         # Look for nodes that are similar but not identical
                         if similarity_threshold <= similarity < 0.95:
-                            pairs.append((valid_nodes[i], valid_nodes[i+1+j], similarity))
+                            pairs.append(
+                                (valid_nodes[i], valid_nodes[i + 1 + j], similarity)
+                            )
                 except Exception as e:
                     logger.debug(f"Similarity calculation failed: {e}")
 
@@ -526,6 +571,7 @@ class MaintenanceAgent:
         """
         try:
             from openai import AsyncOpenAI
+
             client = AsyncOpenAI()
 
             response = await client.chat.completions.create(
@@ -554,16 +600,17 @@ Examples of contradictions:
 NOT contradictions:
 - Different topics entirely
 - Complementary information
-- Different levels of detail"""
+- Different levels of detail""",
                     },
                     {
                         "role": "user",
-                        "content": f"Text 1:\n{text1[:500]}\n\nText 2:\n{text2[:500]}"
+                        "content": f"Text 1:\n{text1[:500]}\n\nText 2:\n{text2[:500]}",
                     },
                 ],
             )
 
             import json
+
             content = response.choices[0].message.content.strip()
             data = json.loads(content)
 

@@ -235,12 +235,14 @@ class CrossEncoderReranker(Reranker):
                 # Use the cross-encoder model to score query-document pairs
                 batch_scores = self.model.predict(batch)
                 # Ensure scores are in [0, 1] range (some models return logits)
-                if hasattr(batch_scores, 'tolist'):
+                if hasattr(batch_scores, "tolist"):
                     batch_scores = batch_scores.tolist()
                 # Normalize if scores are outside [0, 1]
                 batch_scores = [max(0.0, min(1.0, float(s))) for s in batch_scores]
             except Exception as e:
-                logger.warning(f"Cross-encoder scoring failed: {e}, preserving original scores")
+                logger.warning(
+                    f"Cross-encoder scoring failed: {e}, preserving original scores"
+                )
                 # Fall back to original scores for this batch
                 batch_scores = [chunks[i + j].score for j in range(len(batch))]
             scores.extend(batch_scores)

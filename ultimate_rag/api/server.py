@@ -806,7 +806,9 @@ class UltimateRAGServer:
 
                 result = await self.teaching.teach(
                     content=request.knowledge,
-                    knowledge_type=knowledge_type.value if knowledge_type else "factual",
+                    knowledge_type=(
+                        knowledge_type.value if knowledge_type else "factual"
+                    ),
                     source=request.source or "api",
                     confidence=request.importance or 0.8,
                     related_entities=request.entities,

@@ -225,7 +225,9 @@ class GitRepoSource(ContentSource):
         self.local_path = Path(local_path) if local_path else None
         self.branch = branch
         self.patterns = patterns or ["**/*.md", "docs/**/*"]
-        self.clone_dir = Path(clone_dir) if clone_dir else Path("/tmp/ultimate_rag_repos")
+        self.clone_dir = (
+            Path(clone_dir) if clone_dir else Path("/tmp/ultimate_rag_repos")
+        )
         self.depth = depth  # Shallow clone depth, None for full clone
 
         # Will be set after clone/init
@@ -281,8 +283,8 @@ class GitRepoSource(ContentSource):
 
     def _clone_repo(self) -> Optional[Path]:
         """Clone the repository."""
-        import subprocess
         import hashlib
+        import subprocess
 
         if not self.repo_url:
             return None
@@ -325,6 +327,7 @@ class GitRepoSource(ContentSource):
                 logger.error(f"Failed to update existing repo: {e}")
                 # Try to remove and re-clone
                 import shutil
+
                 shutil.rmtree(clone_path, ignore_errors=True)
 
         # Clone the repository
@@ -407,11 +410,7 @@ class GitRepoSource(ContentSource):
 
             # Get last commit info
             result = subprocess.run(
-                [
-                    "git", "log", "-1",
-                    "--format=%H|%an|%ae|%aI|%s",
-                    "--", file_path
-                ],
+                ["git", "log", "-1", "--format=%H|%an|%ae|%aI|%s", "--", file_path],
                 cwd=self.local_path,
                 capture_output=True,
                 text=True,
@@ -464,10 +463,12 @@ class ConfluenceSource(ContentSource):
             self._session = requests.Session()
             if self.username and self.api_token:
                 self._session.auth = (self.username, self.api_token)
-            self._session.headers.update({
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-            })
+            self._session.headers.update(
+                {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                }
+            )
         return self._session
 
     def _api_request(
@@ -641,9 +642,9 @@ class SlackSource(ContentSource):
         params: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """Make API request to Slack."""
-        import urllib.request
-        import urllib.parse
         import json
+        import urllib.parse
+        import urllib.request
 
         try:
             url = f"https://slack.com/api/{method}"
@@ -698,7 +699,11 @@ class SlackSource(ContentSource):
             return
 
         for channel in self.channels:
-            channel_id = self._get_channel_id(channel) if not channel.startswith("C") else channel
+            channel_id = (
+                self._get_channel_id(channel)
+                if not channel.startswith("C")
+                else channel
+            )
             if not channel_id:
                 logger.warning(f"Could not find channel: {channel}")
                 continue
@@ -718,7 +723,11 @@ class SlackSource(ContentSource):
         oldest = str(since.timestamp())
 
         for channel in self.channels:
-            channel_id = self._get_channel_id(channel) if not channel.startswith("C") else channel
+            channel_id = (
+                self._get_channel_id(channel)
+                if not channel.startswith("C")
+                else channel
+            )
             if not channel_id:
                 continue
 
@@ -780,7 +789,8 @@ class SlackSource(ContentSource):
 
             # Yield non-thread messages as individual or grouped documents
             non_thread_messages = [
-                m for m in all_messages
+                m
+                for m in all_messages
                 if not m.get("thread_ts") or m.get("ts") == m.get("thread_ts")
             ]
             if non_thread_messages:
@@ -802,7 +812,9 @@ class SlackSource(ContentSource):
         text_parts = []
         for msg in messages:
             user_id = msg.get("user", "unknown")
-            user_name = self._get_user_name(user_id) if user_id != "unknown" else "unknown"
+            user_name = (
+                self._get_user_name(user_id) if user_id != "unknown" else "unknown"
+            )
             text = msg.get("text", "")
             ts = float(msg.get("ts", 0))
             timestamp = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
@@ -822,7 +834,9 @@ class SlackSource(ContentSource):
                 "channel": channel,
                 "thread_ts": thread_ts,
                 "message_count": len(messages),
-                "participants": list(set(m.get("user", "") for m in messages if m.get("user"))),
+                "participants": list(
+                    set(m.get("user", "") for m in messages if m.get("user"))
+                ),
             },
         )
 
@@ -838,7 +852,9 @@ class SlackSource(ContentSource):
         text_parts = []
         for msg in messages:
             user_id = msg.get("user", "unknown")
-            user_name = self._get_user_name(user_id) if user_id != "unknown" else "unknown"
+            user_name = (
+                self._get_user_name(user_id) if user_id != "unknown" else "unknown"
+            )
             text = msg.get("text", "")
             ts = float(msg.get("ts", 0))
             timestamp = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
@@ -859,7 +875,9 @@ class SlackSource(ContentSource):
             metadata={
                 "channel": channel,
                 "message_count": len(messages),
-                "participants": list(set(m.get("user", "") for m in messages if m.get("user"))),
+                "participants": list(
+                    set(m.get("user", "") for m in messages if m.get("user"))
+                ),
             },
         )
 

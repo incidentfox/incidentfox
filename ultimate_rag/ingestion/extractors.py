@@ -159,6 +159,7 @@ class LLMEntityExtractor(EntityExtractor):
         if self._client is None:
             try:
                 from openai import OpenAI
+
                 self._client = OpenAI()
             except ImportError:
                 logger.warning("OpenAI not available for LLM entity extraction")
@@ -196,11 +197,11 @@ Return as a JSON array. Example:
 ]
 
 Only extract entities that are specific named things, not generic concepts.
-Return an empty array [] if no entities found."""
+Return an empty array [] if no entities found.""",
                     },
                     {
                         "role": "user",
-                        "content": f"Extract entities from this text:\n\n{text}"
+                        "content": f"Extract entities from this text:\n\n{text}",
                     },
                 ],
             )
@@ -209,12 +210,14 @@ Return an empty array [] if no entities found."""
 
             # Parse JSON response
             import json
+
             try:
                 entities_data = json.loads(content)
             except json.JSONDecodeError:
                 # Try to extract JSON from response
                 import re
-                json_match = re.search(r'\[.*\]', content, re.DOTALL)
+
+                json_match = re.search(r"\[.*\]", content, re.DOTALL)
                 if json_match:
                     entities_data = json.loads(json_match.group())
                 else:

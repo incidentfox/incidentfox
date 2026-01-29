@@ -408,25 +408,40 @@ Resolution: {resolution}
 
         for positive, negative in contradiction_patterns:
             if positive in existing_lower and negative in content_lower:
-                logger.info(f"Detected contradiction: existing has '{positive}', new has '{negative}'")
+                logger.info(
+                    f"Detected contradiction: existing has '{positive}', new has '{negative}'"
+                )
                 return True
             if negative in existing_lower and positive in content_lower:
-                logger.info(f"Detected contradiction: existing has '{negative}', new has '{positive}'")
+                logger.info(
+                    f"Detected contradiction: existing has '{negative}', new has '{positive}'"
+                )
                 return True
 
         # 2. Numerical contradiction (e.g., "timeout is 30s" vs "timeout is 60s")
         import re
-        existing_numbers = re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:seconds?|s|minutes?|m|hours?|h|ms|gb|mb|kb|%)\b', existing_lower)
-        new_numbers = re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:seconds?|s|minutes?|m|hours?|h|ms|gb|mb|kb|%)\b', content_lower)
+
+        existing_numbers = re.findall(
+            r"\b(\d+(?:\.\d+)?)\s*(?:seconds?|s|minutes?|m|hours?|h|ms|gb|mb|kb|%)\b",
+            existing_lower,
+        )
+        new_numbers = re.findall(
+            r"\b(\d+(?:\.\d+)?)\s*(?:seconds?|s|minutes?|m|hours?|h|ms|gb|mb|kb|%)\b",
+            content_lower,
+        )
 
         if existing_numbers and new_numbers:
             for existing_num in existing_numbers:
                 for new_num in new_numbers:
                     if existing_num != new_num:
-                        existing_context = self._get_number_context(existing_lower, existing_num)
+                        existing_context = self._get_number_context(
+                            existing_lower, existing_num
+                        )
                         new_context = self._get_number_context(content_lower, new_num)
                         if existing_context & new_context:
-                            logger.info(f"Detected numerical contradiction: {existing_num} vs {new_num} for {existing_context & new_context}")
+                            logger.info(
+                                f"Detected numerical contradiction: {existing_num} vs {new_num} for {existing_context & new_context}"
+                            )
                             return True
 
         # 3. Update/deprecation indicators
@@ -442,7 +457,9 @@ Resolution: {resolution}
 
         for phrase in deprecation_phrases:
             if phrase in content_lower:
-                logger.info(f"Detected potential update: new content contains '{phrase}'")
+                logger.info(
+                    f"Detected potential update: new content contains '{phrase}'"
+                )
                 return True
 
         # 4. LLM-based semantic contradiction detection
@@ -453,12 +470,16 @@ Resolution: {resolution}
                 existing_emb = existing_node.get_embedding()
                 if existing_emb:
                     import numpy as np
+
                     similarity = np.dot(content_emb, existing_emb) / (
-                        np.linalg.norm(content_emb) * np.linalg.norm(existing_emb) + 1e-9
+                        np.linalg.norm(content_emb) * np.linalg.norm(existing_emb)
+                        + 1e-9
                     )
                     # Only use LLM for moderately similar texts (potential conflicts)
                     if 0.5 < similarity < 0.9:
-                        llm_result = await self._llm_check_contradiction(content, existing_node.text)
+                        llm_result = await self._llm_check_contradiction(
+                            content, existing_node.text
+                        )
                         if llm_result:
                             return True
             except Exception as e:
@@ -474,6 +495,7 @@ Resolution: {resolution}
         """
         try:
             from openai import AsyncOpenAI
+
             client = AsyncOpenAI()
 
             response = await client.chat.completions.create(
@@ -499,7 +521,7 @@ Examples of contradictions:
 Do NOT flag as contradiction if:
 - Texts discuss different topics/systems
 - Texts provide complementary information
-- One text is more detailed than the other"""
+- One text is more detailed than the other""",
                     },
                     {
                         "role": "user",
@@ -509,7 +531,7 @@ Do NOT flag as contradiction if:
 Text 2:
 {text2[:500]}
 
-Do these texts contradict each other?"""
+Do these texts contradict each other?""",
                     },
                 ],
             )
@@ -527,6 +549,7 @@ Do these texts contradict each other?"""
     def _get_number_context(self, text: str, number: str, window: int = 5) -> set:
         """Get context words around a number in text."""
         import re
+
         words = text.split()
         context = set()
         for i, word in enumerate(words):
@@ -534,7 +557,7 @@ Do these texts contradict each other?"""
                 start = max(0, i - window)
                 end = min(len(words), i + window + 1)
                 for w in words[start:end]:
-                    clean_w = re.sub(r'[^a-z]', '', w)
+                    clean_w = re.sub(r"[^a-z]", "", w)
                     if clean_w and len(clean_w) > 2:
                         context.add(clean_w)
         return context

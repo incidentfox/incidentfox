@@ -130,6 +130,7 @@ class RetrievalStrategy(ABC):
         # Try LLM-based analysis first
         try:
             import asyncio
+
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 # If we're already in an async context, use heuristics
@@ -147,6 +148,7 @@ class RetrievalStrategy(ABC):
         """LLM-based query analysis for intent and entity extraction."""
         try:
             from openai import AsyncOpenAI
+
             client = AsyncOpenAI()
 
             response = await client.chat.completions.create(
@@ -170,12 +172,9 @@ Intent definitions:
 - troubleshooting: Fixing errors, debugging, resolving issues
 - comparative: Comparing options
 - relational: Who owns/manages something
-- temporal: When something happened or changed"""
+- temporal: When something happened or changed""",
                     },
-                    {
-                        "role": "user",
-                        "content": query
-                    },
+                    {"role": "user", "content": query},
                 ],
             )
 
@@ -187,7 +186,8 @@ Intent definitions:
                 data = json.loads(content)
             except json.JSONDecodeError:
                 import re
-                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+
+                json_match = re.search(r"\{.*\}", content, re.DOTALL)
                 if json_match:
                     data = json.loads(json_match.group())
                 else:
@@ -243,8 +243,24 @@ Intent definitions:
 
         # Extract keywords (simple approach)
         stop_words = {
-            "how", "do", "i", "the", "a", "an", "to", "for", "in", "is",
-            "what", "why", "where", "when", "can", "could", "would", "should",
+            "how",
+            "do",
+            "i",
+            "the",
+            "a",
+            "an",
+            "to",
+            "for",
+            "in",
+            "is",
+            "what",
+            "why",
+            "where",
+            "when",
+            "can",
+            "could",
+            "would",
+            "should",
         }
         words = query_lower.split()
         keywords = [w for w in words if w not in stop_words and len(w) > 2]
@@ -282,7 +298,9 @@ Intent definitions:
             from knowledge_base.raptor.utils import distances_from_embeddings
         except ImportError as e:
             logger.error(f"Failed to import RAPTOR modules: {e}")
-            logger.error("Ensure knowledge_base is in PYTHONPATH and dependencies are installed")
+            logger.error(
+                "Ensure knowledge_base is in PYTHONPATH and dependencies are installed"
+            )
             return []
 
         chunks = []
@@ -335,9 +353,11 @@ Intent definitions:
                             strategy=self.name,
                             metadata={
                                 "source_url": getattr(node, "source_url", None),
-                                "knowledge_type": node.knowledge_type.value
-                                if hasattr(node, "knowledge_type")
-                                else "factual",
+                                "knowledge_type": (
+                                    node.knowledge_type.value
+                                    if hasattr(node, "knowledge_type")
+                                    else "factual"
+                                ),
                             },
                         )
                     )
@@ -373,6 +393,7 @@ class MultiQueryStrategy(RetrievalStrategy):
         if self._client is None:
             try:
                 from openai import AsyncOpenAI
+
                 self._client = AsyncOpenAI()
             except ImportError:
                 logger.warning("OpenAI not available for multi-query expansion")
@@ -436,11 +457,11 @@ Rules:
 - Each variation should approach the topic from a different angle
 - Keep variations concise (under 20 words each)
 - Output ONLY the variations, one per line, no numbering or prefixes
-- Variations should be natural language queries, not keywords"""
+- Variations should be natural language queries, not keywords""",
                         },
                         {
                             "role": "user",
-                            "content": f"Generate {self.num_variations} different ways to search for information about:\n\n{query}"
+                            "content": f"Generate {self.num_variations} different ways to search for information about:\n\n{query}",
                         },
                     ],
                 )
@@ -453,8 +474,10 @@ Rules:
                         for line in content.strip().split("\n")
                         if line.strip() and len(line.strip()) > 5
                     ]
-                    variations.extend(llm_variations[:self.num_variations])
-                    logger.debug(f"LLM expanded query into {len(variations)} variations")
+                    variations.extend(llm_variations[: self.num_variations])
+                    logger.debug(
+                        f"LLM expanded query into {len(variations)} variations"
+                    )
 
             except Exception as e:
                 logger.warning(f"LLM query expansion failed, using heuristics: {e}")
@@ -477,15 +500,11 @@ Rules:
 
         # Add intent-specific reformulation
         if analysis.intent == QueryIntent.PROCEDURAL:
-            expansions.append(
-                f"steps procedure guide {' '.join(analysis.keywords)}"
-            )
+            expansions.append(f"steps procedure guide {' '.join(analysis.keywords)}")
         elif analysis.intent == QueryIntent.TROUBLESHOOTING:
             expansions.append(f"error fix solution {' '.join(analysis.keywords)}")
         elif analysis.intent == QueryIntent.RELATIONAL:
-            expansions.append(
-                f"owner team responsible {' '.join(analysis.keywords)}"
-            )
+            expansions.append(f"owner team responsible {' '.join(analysis.keywords)}")
 
         return expansions
 
@@ -524,6 +543,7 @@ class HyDEStrategy(RetrievalStrategy):
         if self._client is None:
             try:
                 from openai import AsyncOpenAI
+
                 self._client = AsyncOpenAI()
             except ImportError:
                 logger.warning("OpenAI not available for HyDE")
@@ -585,7 +605,9 @@ class HyDEStrategy(RetrievalStrategy):
                 elif analysis.intent == QueryIntent.TROUBLESHOOTING:
                     doc_type = "a troubleshooting guide with root causes and solutions"
                 elif analysis.intent == QueryIntent.RELATIONAL:
-                    doc_type = "documentation about ownership, dependencies, or relationships"
+                    doc_type = (
+                        "documentation about ownership, dependencies, or relationships"
+                    )
                 else:
                     doc_type = "technical documentation or reference material"
 
@@ -605,11 +627,11 @@ Rules:
 - Include specific details, steps, or explanations that would be in real docs
 - Do NOT write a conversational answer - write as documentation
 - Separate each excerpt with "---" on its own line
-- Include relevant technical terms, service names, and concepts"""
+- Include relevant technical terms, service names, and concepts""",
                         },
                         {
                             "role": "user",
-                            "content": f"Write hypothetical documentation excerpts that would answer:\n\n{query}"
+                            "content": f"Write hypothetical documentation excerpts that would answer:\n\n{query}",
                         },
                     ],
                 )
@@ -623,11 +645,15 @@ Rules:
                         if h.strip() and len(h.strip()) > 20
                     ]
                     if hypotheses:
-                        logger.debug(f"LLM generated {len(hypotheses)} hypotheses for HyDE")
-                        return hypotheses[:self.num_hypotheses]
+                        logger.debug(
+                            f"LLM generated {len(hypotheses)} hypotheses for HyDE"
+                        )
+                        return hypotheses[: self.num_hypotheses]
 
             except Exception as e:
-                logger.warning(f"LLM hypothesis generation failed, using templates: {e}")
+                logger.warning(
+                    f"LLM hypothesis generation failed, using templates: {e}"
+                )
 
         # Fall back to template-based hypothesis
         return self._template_hypothesis(query)
@@ -936,13 +962,18 @@ class HybridGraphTreeStrategy(RetrievalStrategy):
         # Step 1: Graph-based retrieval (with error handling)
         if graph:
             try:
-                graph_chunks = await self._retrieve_via_graph(query, forest, graph, top_k)
+                graph_chunks = await self._retrieve_via_graph(
+                    query, forest, graph, top_k
+                )
                 for chunk in graph_chunks:
                     chunk.score *= self.graph_weight
                     all_chunks[chunk.node_id] = chunk
             except Exception as e:
                 import logging
-                logging.getLogger(__name__).warning(f"Graph retrieval failed, falling back to tree: {e}")
+
+                logging.getLogger(__name__).warning(
+                    f"Graph retrieval failed, falling back to tree: {e}"
+                )
 
         # Step 2: Tree-based retrieval
         tree_chunks = await self._retrieve_via_tree(query, forest, top_k)
@@ -1303,7 +1334,9 @@ class IncidentAwareStrategy(RetrievalStrategy):
                                     strategy=f"{self.name}_incident",
                                     metadata={
                                         "incident_id": incident.entity_id,
-                                        "resolution": incident.properties.get("resolution"),
+                                        "resolution": incident.properties.get(
+                                            "resolution"
+                                        ),
                                     },
                                 )
                             )
@@ -1437,6 +1470,7 @@ class IncidentAwareStrategy(RetrievalStrategy):
         """Extract service names from query using LLM."""
         try:
             from openai import AsyncOpenAI
+
             client = AsyncOpenAI()
 
             response = await client.chat.completions.create(
@@ -1449,17 +1483,15 @@ class IncidentAwareStrategy(RetrievalStrategy):
                         "content": """Extract service/system names mentioned in the query.
 Return ONLY a JSON array of service names, e.g. ["api-gateway", "postgres", "redis"]
 If no services are mentioned, return an empty array: []
-Focus on infrastructure components, databases, APIs, microservices, etc."""
+Focus on infrastructure components, databases, APIs, microservices, etc.""",
                     },
-                    {
-                        "role": "user",
-                        "content": query
-                    },
+                    {"role": "user", "content": query},
                 ],
             )
 
             content = response.choices[0].message.content.strip()
             import json
+
             return json.loads(content)
         except Exception as e:
             logger.warning(f"LLM service extraction failed: {e}")
