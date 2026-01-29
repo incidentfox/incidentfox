@@ -125,8 +125,99 @@ class RetrievalStrategy(ABC):
         """
         Analyze a query to understand intent and extract entities.
 
-        In production, use an LLM or NER model for better analysis.
+        Uses LLM for sophisticated analysis with heuristic fallback.
         """
+        # Try LLM-based analysis first
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're already in an async context, use heuristics
+                return self._analyze_query_heuristic(query)
+            else:
+                return loop.run_until_complete(self._analyze_query_llm(query))
+        except RuntimeError:
+            # No event loop, try to create one
+            try:
+                return asyncio.run(self._analyze_query_llm(query))
+            except Exception:
+                return self._analyze_query_heuristic(query)
+
+    async def _analyze_query_llm(self, query: str) -> QueryAnalysis:
+        """LLM-based query analysis for intent and entity extraction."""
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI()
+
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0.0,
+                max_tokens=200,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """Analyze this search query and return JSON with:
+{
+  "intent": one of ["factual", "procedural", "troubleshooting", "comparative", "relational", "temporal"],
+  "entities": list of service/system/team names mentioned,
+  "keywords": list of important search terms,
+  "urgency": number 0.0-1.0 (1.0 = critical incident)
+}
+
+Intent definitions:
+- factual: Looking for facts or information
+- procedural: How to do something, steps, procedures
+- troubleshooting: Fixing errors, debugging, resolving issues
+- comparative: Comparing options
+- relational: Who owns/manages something
+- temporal: When something happened or changed"""
+                    },
+                    {
+                        "role": "user",
+                        "content": query
+                    },
+                ],
+            )
+
+            content = response.choices[0].message.content.strip()
+            import json
+
+            # Parse JSON response
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError:
+                import re
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group())
+                else:
+                    return self._analyze_query_heuristic(query)
+
+            # Map intent string to enum
+            intent_map = {
+                "factual": QueryIntent.FACTUAL,
+                "procedural": QueryIntent.PROCEDURAL,
+                "troubleshooting": QueryIntent.TROUBLESHOOTING,
+                "comparative": QueryIntent.COMPARATIVE,
+                "relational": QueryIntent.RELATIONAL,
+                "temporal": QueryIntent.TEMPORAL,
+            }
+            intent = intent_map.get(data.get("intent", "factual"), QueryIntent.FACTUAL)
+
+            return QueryAnalysis(
+                original_query=query,
+                intent=intent,
+                entities_mentioned=data.get("entities", []),
+                keywords=data.get("keywords", []),
+                urgency=float(data.get("urgency", 0.5)),
+            )
+
+        except Exception as e:
+            logger.debug(f"LLM query analysis failed, using heuristics: {e}")
+            return self._analyze_query_heuristic(query)
+
+    def _analyze_query_heuristic(self, query: str) -> QueryAnalysis:
+        """Fallback heuristic-based query analysis."""
         query_lower = query.lower()
 
         # Detect intent based on keywords
@@ -152,20 +243,8 @@ class RetrievalStrategy(ABC):
 
         # Extract keywords (simple approach)
         stop_words = {
-            "how",
-            "do",
-            "i",
-            "the",
-            "a",
-            "an",
-            "to",
-            "for",
-            "in",
-            "is",
-            "what",
-            "why",
-            "where",
-            "when",
+            "how", "do", "i", "the", "a", "an", "to", "for", "in", "is",
+            "what", "why", "where", "when", "can", "could", "would", "should",
         }
         words = query_lower.split()
         keywords = [w for w in words if w not in stop_words and len(w) > 2]
@@ -182,7 +261,7 @@ class RetrievalStrategy(ABC):
         return QueryAnalysis(
             original_query=query,
             intent=intent,
-            entities_mentioned=[],  # Would use NER in production
+            entities_mentioned=[],
             keywords=keywords,
             urgency=urgency,
         )
@@ -1282,10 +1361,109 @@ class IncidentAwareStrategy(RetrievalStrategy):
         forest: "TreeForest",
         graph: "KnowledgeGraph",
     ) -> List[RetrievedChunk]:
-        """Get context about affected services."""
-        # Would use entity linking to find services mentioned
-        # Then get their dependencies, owners, etc.
-        return []
+        """
+        Get context about affected services using LLM-based entity extraction
+        and graph traversal for dependencies.
+        """
+        from ..graph.entities import EntityType
+
+        chunks = []
+
+        # Extract service names from query using LLM
+        service_names = await self._extract_services_from_query(query)
+
+        if not service_names:
+            # Fall back to keyword matching against known services
+            services = graph.get_entities_by_type(EntityType.SERVICE)
+            query_lower = query.lower()
+            for service in services:
+                if service.name.lower() in query_lower or any(
+                    alias.lower() in query_lower for alias in service.aliases
+                ):
+                    service_names.append(service.name)
+
+        # Get context for each identified service
+        for service_name in service_names:
+            service = graph.get_entity_by_name(service_name)
+            if not service:
+                continue
+
+            # Get service's RAPTOR nodes
+            for node_id in service.raptor_node_ids:
+                node = self._find_node_in_forest(node_id, forest)
+                if node:
+                    chunks.append(
+                        RetrievedChunk(
+                            node_id=node_id,
+                            text=node.text,
+                            tree_id=getattr(node, "tree_id", None),
+                            score=0.7,  # Base score for direct service match
+                            importance=node.get_importance(),
+                            strategy=f"{self.name}_service",
+                            metadata={
+                                "service_id": service.entity_id,
+                                "service_name": service.name,
+                            },
+                        )
+                    )
+
+            # Get dependencies and their context
+            dependencies = graph.get_related_entities(
+                service.entity_id, relationship_type="depends_on"
+            )
+            for dep in dependencies[:3]:  # Limit to top 3 dependencies
+                for node_id in dep.raptor_node_ids:
+                    node = self._find_node_in_forest(node_id, forest)
+                    if node:
+                        chunks.append(
+                            RetrievedChunk(
+                                node_id=node_id,
+                                text=node.text,
+                                tree_id=getattr(node, "tree_id", None),
+                                score=0.5,  # Lower score for dependency context
+                                importance=node.get_importance(),
+                                strategy=f"{self.name}_dependency",
+                                metadata={
+                                    "dependency_of": service.name,
+                                    "dependency_name": dep.name,
+                                },
+                            )
+                        )
+
+        chunks.sort(key=lambda c: c.score, reverse=True)
+        return chunks
+
+    async def _extract_services_from_query(self, query: str) -> List[str]:
+        """Extract service names from query using LLM."""
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI()
+
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0.0,
+                max_tokens=100,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """Extract service/system names mentioned in the query.
+Return ONLY a JSON array of service names, e.g. ["api-gateway", "postgres", "redis"]
+If no services are mentioned, return an empty array: []
+Focus on infrastructure components, databases, APIs, microservices, etc."""
+                    },
+                    {
+                        "role": "user",
+                        "content": query
+                    },
+                ],
+            )
+
+            content = response.choices[0].message.content.strip()
+            import json
+            return json.loads(content)
+        except Exception as e:
+            logger.warning(f"LLM service extraction failed: {e}")
+            return []
 
     async def _tree_search(
         self,
@@ -1293,8 +1471,8 @@ class IncidentAwareStrategy(RetrievalStrategy):
         forest: "TreeForest",
         top_k: int,
     ) -> List[RetrievedChunk]:
-        """Standard tree-based search."""
-        return []
+        """Standard tree-based semantic search using shared helper."""
+        return await self.search_trees(query, forest, top_k)
 
     def _find_node_in_forest(
         self,

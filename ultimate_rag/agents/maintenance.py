@@ -408,18 +408,18 @@ class MaintenanceAgent:
         """
         Find potential contradictions between nodes.
 
-        Uses observation data and simple heuristics.
-        In production, use NLI models for better detection.
+        Uses multiple approaches:
+        1. Observation-reported contradictions
+        2. LLM-based semantic contradiction detection on similar nodes
         """
         contradictions = []
+        import uuid
 
-        # Check observation-reported contradictions
+        # 1. Check observation-reported contradictions
         if self.observations:
             quality_issues = self.observations.get_quality_issues()
             for obs in quality_issues:
                 if obs.contradicting_nodes and len(obs.contradicting_nodes) >= 2:
-                    import uuid
-
                     contradiction = Contradiction(
                         contradiction_id=str(uuid.uuid4()),
                         node_ids=obs.contradicting_nodes,
@@ -432,8 +432,149 @@ class MaintenanceAgent:
                     contradictions.append(contradiction)
                     self._contradictions[contradiction.contradiction_id] = contradiction
 
+        # 2. Active LLM-based contradiction detection on similar nodes
+        similar_pairs = await self._find_similar_node_pairs(similarity_threshold=0.7)
+
+        for node1, node2, similarity in similar_pairs[:20]:  # Limit LLM calls
+            is_contradiction, description = await self._llm_check_contradiction(
+                node1.text, node2.text
+            )
+            if is_contradiction:
+                contradiction = Contradiction(
+                    contradiction_id=str(uuid.uuid4()),
+                    node_ids=[node1.index, node2.index],
+                    description=description,
+                    field=None,
+                    detected_at=datetime.utcnow(),
+                    severity="medium" if similarity < 0.85 else "high",
+                    suggested_resolution="Review both nodes and determine which is correct",
+                )
+                contradictions.append(contradiction)
+                self._contradictions[contradiction.contradiction_id] = contradiction
+
         logger.info(f"Detected {len(contradictions)} contradictions")
         return contradictions
+
+    async def _find_similar_node_pairs(
+        self,
+        similarity_threshold: float = 0.7,
+    ) -> List[tuple]:
+        """Find pairs of nodes with high semantic similarity that might contradict."""
+        try:
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from knowledge_base.raptor.utils import distances_from_embeddings
+        except ImportError:
+            logger.warning("RAPTOR not available for similarity detection")
+            return []
+
+        pairs = []
+
+        for tree in self.forest.trees.values():
+            nodes = [n for n in tree.all_nodes.values() if n.is_active]
+            if len(nodes) < 2:
+                continue
+
+            # Get embeddings
+            embedding_key = getattr(tree, "embedding_model", "OpenAI") or "OpenAI"
+            embeddings = []
+            valid_nodes = []
+
+            for node in nodes:
+                emb = node.embeddings.get(embedding_key)
+                if emb:
+                    embeddings.append(emb)
+                    valid_nodes.append(node)
+
+            if len(embeddings) < 2:
+                continue
+
+            # Find similar pairs
+            for i in range(len(valid_nodes)):
+                if len(pairs) >= 50:  # Limit total pairs
+                    break
+
+                other_embeddings = embeddings[i+1:]
+                if not other_embeddings:
+                    continue
+
+                try:
+                    distances = distances_from_embeddings(
+                        embeddings[i], other_embeddings, distance_metric="cosine"
+                    )
+
+                    for j, dist in enumerate(distances):
+                        similarity = 1.0 - dist
+                        # Look for nodes that are similar but not identical
+                        if similarity_threshold <= similarity < 0.95:
+                            pairs.append((valid_nodes[i], valid_nodes[i+1+j], similarity))
+                except Exception as e:
+                    logger.debug(f"Similarity calculation failed: {e}")
+
+        # Sort by similarity descending
+        pairs.sort(key=lambda x: x[2], reverse=True)
+        return pairs
+
+    async def _llm_check_contradiction(
+        self,
+        text1: str,
+        text2: str,
+    ) -> tuple:
+        """
+        Use LLM to check if two texts contradict each other.
+
+        Returns (is_contradiction: bool, description: str)
+        """
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI()
+
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0.0,
+                max_tokens=150,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are an expert at detecting contradictions in technical documentation.
+
+Analyze whether two pieces of text make contradictory claims.
+
+Respond with JSON:
+{
+  "contradicts": true or false,
+  "description": "brief description of the contradiction if found"
+}
+
+Examples of contradictions:
+- Different values for same configuration
+- Opposite instructions for same procedure
+- Conflicting requirements or constraints
+- One says "always" while other says "never"
+
+NOT contradictions:
+- Different topics entirely
+- Complementary information
+- Different levels of detail"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Text 1:\n{text1[:500]}\n\nText 2:\n{text2[:500]}"
+                    },
+                ],
+            )
+
+            import json
+            content = response.choices[0].message.content.strip()
+            data = json.loads(content)
+
+            return (
+                data.get("contradicts", False),
+                data.get("description", "Potential contradiction detected"),
+            )
+
+        except Exception as e:
+            logger.debug(f"LLM contradiction check failed: {e}")
+            return (False, "")
 
     async def find_near_duplicates(
         self,
