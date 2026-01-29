@@ -18,9 +18,10 @@ on:
       command:
         description: 'Alembic command to run'
         required: true
-        default: 'upgrade head'
+        default: 'upgrade heads'
         type: choice
         options:
+          - upgrade heads
           - upgrade head
           - current
           - history
@@ -74,8 +75,8 @@ jobs:
             CMD="${{ github.event.inputs.command }}"
             DRY_RUN="${{ github.event.inputs.dry_run }}"
           else
-            # Automatic trigger: always upgrade head
-            CMD="upgrade head"
+            # Automatic trigger: use 'heads' to handle multiple branches
+            CMD="upgrade heads"
             DRY_RUN="false"
           fi
 
