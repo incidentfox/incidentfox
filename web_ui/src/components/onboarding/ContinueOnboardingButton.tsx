@@ -7,6 +7,8 @@ import { ArrowRight, X } from 'lucide-react';
 
 interface ContinueOnboardingButtonProps {
   onContinue: (step: number, step4Action?: Step4NextAction) => void;
+  /** When true, uses localStorage only for onboarding state (for visitors) */
+  isVisitor?: boolean;
 }
 
 const STEP_NAMES: { [key: number]: string } = {
@@ -23,9 +25,9 @@ const DEFAULT_STEP4_PROGRESS: Step4Progress = {
   visitedAgentConfig: false,
 };
 
-export function ContinueOnboardingButton({ onContinue }: ContinueOnboardingButtonProps) {
+export function ContinueOnboardingButton({ onContinue, isVisitor = false }: ContinueOnboardingButtonProps) {
   const pathname = usePathname();
-  const { clearQuickStartStep } = useOnboarding();
+  const { clearQuickStartStep } = useOnboarding({ isVisitor });
   const [dismissed, setDismissed] = useState(false);
   const [localStep, setLocalStep] = useState<number | null>(null);
   const [localStep4Progress, setLocalStep4Progress] = useState<Step4Progress>(DEFAULT_STEP4_PROGRESS);

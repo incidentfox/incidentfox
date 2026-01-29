@@ -96,12 +96,13 @@ export default function AdminHomePage() {
   const [services, setServices] = useState<ServiceHealth[]>([]);
   const [integrations, setIntegrations] = useState<IntegrationHealth[]>([]);
 
-  // Onboarding state
+  // Onboarding state - visitors use localStorage only
+  const isVisitor = identity?.auth_kind === 'visitor';
   const {
     shouldShowWelcome,
     markWelcomeSeen,
     markFirstAgentRunCompleted,
-  } = useOnboarding();
+  } = useOnboarding({ isVisitor });
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
   // Show welcome modal on first visit

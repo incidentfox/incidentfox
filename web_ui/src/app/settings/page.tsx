@@ -121,7 +121,9 @@ export default function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { identity, loading: identityLoading } = useIdentity();
-  const { resetOnboarding } = useOnboarding();
+  // Visitors use localStorage only for onboarding state
+  const isVisitor = identity?.auth_kind === 'visitor';
+  const { resetOnboarding } = useOnboarding({ isVisitor });
 
   // Tab state - synced with URL query param
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
