@@ -26,7 +26,7 @@ import mimetypes
 import os
 import re
 from pathlib import Path
-from typing import AsyncIterator, Union
+from typing import AsyncIterator, Optional, Union
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -531,9 +531,31 @@ Do NOT dump full kubectl output. Synthesize findings.""",
             ),
         }
 
+        # Build options for streaming input mode
+        # Determine working directory based on mode
+        # - Sandbox mode: Use /app (each sandbox is isolated, has .claude/ skills)
+        # - Simple mode: Use per-thread workspace for session persistence
+        if os.path.exists("/workspace"):
+            # Sandbox mode - use canonical /app directory where .claude/ lives
+            cwd = "/app"
+        else:
+            # Simple mode - use per-thread workspace for multi-turn conversations
+            thread_workspace = f"/tmp/sessions/{self.thread_id}"
+            os.makedirs(thread_workspace, exist_ok=True)
+
+            # Copy .claude/ skills to thread workspace if it doesn't exist yet
+            import shutil
+
+            thread_claude_dir = os.path.join(thread_workspace, ".claude")
+            if not os.path.exists(thread_claude_dir):
+                source_claude_dir = "/app/.claude"
+                if os.path.exists(source_claude_dir):
+                    shutil.copytree(source_claude_dir, thread_claude_dir)
+
+            cwd = thread_workspace
+
         self.options = ClaudeAgentOptions(
-            # Point to /app where .claude/ directory lives (canonical SDK pattern)
-            cwd="/app",
+            cwd=cwd,
             # Core tools for file operations and script execution
             allowed_tools=[
                 "Skill",
@@ -551,7 +573,7 @@ Do NOT dump full kubectl output. Synthesize findings.""",
             permission_mode="acceptEdits",
             can_use_tool=can_use_tool_handler,
             include_partial_messages=True,  # Needed to get parent_tool_use_id for subagent tracking
-            # Enable skill loading from .claude/skills directories
+            # Enable skill loading from .claude/ directories
             setting_sources=["user", "project"],
             # Register specialized subagents for context isolation
             agents=subagents,
@@ -559,10 +581,13 @@ Do NOT dump full kubectl output. Synthesize findings.""",
         )
 
     async def start(self):
-        """Initialize the Claude client session."""
+        """Initialize the Claude client session for streaming input mode."""
         if self.client is None:
+            # Don't use async with here - we need to keep the client alive
+            # across multiple execute() calls. We'll manage lifecycle manually.
             self.client = ClaudeSDKClient(options=self.options)
-            await self.client.connect()
+            # Manually enter the async context manager
+            await self.client.__aenter__()
 
             # Set up Laminar tracing metadata
             environment = get_environment()
@@ -576,6 +601,11 @@ Do NOT dump full kubectl output. Synthesize findings.""",
 
             Laminar.set_trace_session_id(self.thread_id)
             Laminar.set_trace_metadata(metadata)
+
+    async def cleanup(self):
+        """Clean up the client session."""
+        if self.client:
+            await self.client.__aexit__(None, None, None)
 
     @observe()
     async def execute(
@@ -618,37 +648,38 @@ Do NOT dump full kubectl output. Synthesize findings.""",
 
         try:
             # Build message - can be simple string or multimodal content
-            if images:
-                # Multimodal message: text + images
-                # Build content array per Claude SDK format
-                content = [{"type": "text", "text": prompt}]
-                for img in images:
-                    content.append(
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": img["media_type"],
-                                "data": img["data"],
-                            },
-                        }
+            # Always use generator pattern for consistency (even for simple text)
+            # This is the recommended SDK pattern per the streaming input docs
+            async def message_generator():
+                if images:
+                    # Multimodal message: text + images
+                    content = [{"type": "text", "text": prompt}]
+                    for img in images:
+                        content.append(
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": img["media_type"],
+                                    "data": img["data"],
+                                },
+                            }
+                        )
+                    print(
+                        f"📷 [AGENT] Sending multimodal message with {len(images)} image(s)"
                     )
-
-                print(
-                    f"📷 [AGENT] Sending multimodal message with {len(images)} image(s)"
-                )
-
-                # SDK expects a generator for multimodal input
-                async def message_generator():
                     yield {
                         "type": "user",
                         "message": {"role": "user", "content": content},
                     }
+                else:
+                    # Simple text message - still use generator pattern
+                    yield {
+                        "type": "user",
+                        "message": {"role": "user", "content": prompt},
+                    }
 
-                await self.client.query(message_generator())
-            else:
-                # Simple text message
-                await self.client.query(prompt)
+            await self.client.query(message_generator())
 
             # Receive response with timeout
             try:
