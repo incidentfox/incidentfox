@@ -30,9 +30,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize app
-app = App(
+# Initialize app with timeout
+from slack_sdk import WebClient
+
+# Create WebClient with timeout
+web_client = WebClient(
     token=os.environ.get("SLACK_BOT_TOKEN"),
+    timeout=30,  # 30 second timeout for all API calls
+)
+
+app = App(
+    client=web_client,
     signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
 )
 
@@ -198,14 +206,23 @@ def save_investigation_snapshot(state: MessageState):
         return None
 
 
-def parse_sse_event(line: str) -> Optional[dict]:
-    """Parse an SSE data line into a dict."""
-    if not line.startswith("data: "):
-        return None
-    try:
-        return json.loads(line[6:])
-    except json.JSONDecodeError:
-        return None
+def parse_sse_event(event_type: Optional[str], line: str) -> tuple[Optional[str], Optional[dict]]:
+    """Parse SSE lines and return (event_type, data_dict)."""
+    # Parse event type line
+    if line.startswith("event: "):
+        return (line[7:].strip(), None)
+
+    # Parse data line
+    if line.startswith("data: "):
+        try:
+            data = json.loads(line[6:])
+            # Return complete event with type and data
+            if event_type:
+                return (None, {"type": event_type, "data": data})
+        except json.JSONDecodeError:
+            pass
+
+    return (event_type, None)
 
 
 def build_progress_blocks(state: MessageState, client, team_id: str) -> list:
@@ -1617,9 +1634,11 @@ def handle_mention(event, say, client, context):
     # Will be updated immediately with first event
     from asset_manager import clear_asset_cache, get_asset_file_id
 
+    logger.info("Getting loading asset...")
     loading_file_id = None
     try:
         loading_file_id = get_asset_file_id(client, team_id, "loading")
+        logger.info(f"Got loading asset: {loading_file_id}")
     except Exception as e:
         logger.warning(f"Failed to get loading asset: {e}")
 
@@ -1648,6 +1667,7 @@ def handle_mention(event, say, client, context):
             ]
 
     # Try with slack_file first, fall back to emoji if it fails
+    logger.info("Posting initial message...")
     try:
         initial_response = client.chat_postMessage(
             channel=channel_id,
@@ -1655,6 +1675,7 @@ def handle_mention(event, say, client, context):
             text="Investigating...",
             blocks=build_initial_blocks(use_slack_file=True),
         )
+        logger.info(f"Initial message posted: {initial_response.get('ts')}")
     except Exception as e:
         logger.warning(f"Failed to post with slack_file, falling back to emoji: {e}")
         # Clear cached asset (might be invalid)
@@ -1665,6 +1686,7 @@ def handle_mention(event, say, client, context):
             text="Investigating...",
             blocks=build_initial_blocks(use_slack_file=False),
         )
+        logger.info(f"Initial message posted (fallback): {initial_response.get('ts')}")
 
     message_ts = initial_response["ts"]
 
@@ -1730,12 +1752,14 @@ def handle_mention(event, say, client, context):
 
         # Process SSE stream
         event_count = 0
+        current_event_type = None
         for line in response.iter_lines(decode_unicode=True):
             if line:
-                event = parse_sse_event(line)
+                current_event_type, event = parse_sse_event(current_event_type, line)
                 if event:
                     event_count += 1
                     handle_stream_event(state, event, client, team_id)
+                    current_event_type = None  # Reset after processing
 
         # Cache state for modal view
         import time
@@ -2091,12 +2115,14 @@ Use all available tools to gather context about this issue."""
 
         # Process SSE stream
         event_count = 0
+        current_event_type = None
         for line in response.iter_lines(decode_unicode=True):
             if line:
-                sse_event = parse_sse_event(line)
+                current_event_type, sse_event = parse_sse_event(current_event_type, line)
                 if sse_event:
                     event_count += 1
                     handle_stream_event(state, sse_event, client, team_id)
+                    current_event_type = None  # Reset after processing
 
         # Cache state for modal view
         import time
@@ -2758,12 +2784,14 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
 
         # Process SSE stream
         event_count = 0
+        current_event_type = None
         for line in response.iter_lines(decode_unicode=True):
             if line:
-                sse_event = parse_sse_event(line)
+                current_event_type, sse_event = parse_sse_event(current_event_type, line)
                 if sse_event:
                     event_count += 1
                     handle_stream_event(state, sse_event, client, team_id)
+                    current_event_type = None  # Reset after processing
 
         # Cache state for modal view
         import time
