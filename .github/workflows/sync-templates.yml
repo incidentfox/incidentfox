@@ -1,0 +1,73 @@
+name: Sync Templates to RDS
+
+# Automatically syncs template JSON files to the RDS database when they change.
+# This ensures the web UI's "Apply Template" feature always has the latest templates.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config_service/templates/*.json'
+
+  # Allow manual trigger for re-syncing all templates
+  workflow_dispatch:
+    inputs:
+      force_update:
+        description: 'Force update all templates regardless of version'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  # Database connection - uses the same RDS instance as production
+  # Secrets are configured in GitHub repository settings
+  DATABASE_URL: ${{ secrets.CONFIG_SERVICE_DATABASE_URL }}
+
+jobs:
+  sync-templates:
+    name: Sync Templates
+    runs-on: ubuntu-latest
+
+    # Only run if we have database credentials configured
+    if: ${{ vars.TEMPLATES_SYNC_ENABLED == 'true' }}
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r config_service/requirements.txt
+
+      - name: Sync templates to RDS
+        working-directory: config_service
+        env:
+          DATABASE_URL: ${{ secrets.CONFIG_SERVICE_DATABASE_URL }}
+        run: |
+          if [ "${{ github.event.inputs.force_update }}" == "true" ]; then
+            echo "Force updating all templates..."
+            python scripts/seed_templates.py --force
+          else
+            echo "Syncing templates (version-based upsert)..."
+            python scripts/seed_templates.py
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Template Sync Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Templates from \`config_service/templates/\` have been synced to the RDS database." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.force_update }}" == "true" ]; then
+            echo "**Mode:** Force update (all templates updated)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Mode:** Version-based (only changed templates updated)" >> $GITHUB_STEP_SUMMARY
+          fi
