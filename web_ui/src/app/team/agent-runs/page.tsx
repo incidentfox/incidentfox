@@ -98,7 +98,9 @@ const AGENT_COLORS: Record<string, string> = {
 
 export default function TeamAgentRunsPage() {
   const { identity } = useIdentity();
-  const { state: onboardingState, markFirstAgentRunCompleted, setQuickStartStep } = useOnboarding();
+  // Visitors use localStorage only for onboarding state
+  const isVisitor = identity?.auth_kind === 'visitor';
+  const { state: onboardingState, markFirstAgentRunCompleted, setQuickStartStep } = useOnboarding({ isVisitor });
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
