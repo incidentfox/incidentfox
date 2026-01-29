@@ -55,8 +55,12 @@ Get IncidentFox running in your Slack workspace in under 5 minutes.
 
 #### 1. Create Slack App (2 min)
 
-1. **[Click here to create your app](https://api.slack.com/apps?new_app=1)** → Choose "From an app manifest"
-  <img width="1355" height="923" alt="image" src="https://github.com/user-attachments/assets/dfeadd58-a6c2-4b13-8df3-e7b8ac69c886" />
+1. **<a href="https://api.slack.com/apps?new_app=1" target="_blank" rel="noopener noreferrer">
+   Click here to create your app
+   </a>** → Choose "From an app manifest"
+
+   <img width="1355" height="923" alt="image" src="https://github.com/user-attachments/assets/dfeadd58-a6c2-4b13-8df3-e7b8ac69c886" />
+
 
 2. Select your workspace
    
