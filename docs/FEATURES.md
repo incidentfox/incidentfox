@@ -264,5 +264,4 @@ Add any integration via Model Context Protocol:
 
 - **[INTEGRATIONS.md](INTEGRATIONS.md)** - Set up Slack, GitHub, PagerDuty, and more
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Understand the agent system design
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deploy for your organization
-- **[../INSTALL.md](../INSTALL.md)** - Quick self-hosted installation guide
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deploy for your organization (Docker Compose, Kubernetes, Production)
