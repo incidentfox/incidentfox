@@ -50,12 +50,13 @@ export default function TeamDashboardPage() {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [pending, setPending] = useState<PendingItems>({ configChanges: 0, knowledgeChanges: 0 });
 
-  // Onboarding state
+  // Onboarding state - visitors use localStorage only
+  const isVisitor = identity?.auth_kind === 'visitor';
   const {
     shouldShowWelcome,
     markWelcomeSeen,
     markFirstAgentRunCompleted,
-  } = useOnboarding();
+  } = useOnboarding({ isVisitor });
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
   // Show welcome modal on first visit
