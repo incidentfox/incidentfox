@@ -318,6 +318,27 @@ class ObservationCollector:
         self.record(obs)
         return obs
 
+    # Aliases for compatibility with UltimateRetriever
+    def record_query_failure(
+        self,
+        query: str,
+        partial_matches: Optional[List[int]] = None,
+        gap_description: str = "",
+        **kwargs,
+    ) -> AgentObservation:
+        """Alias for record_failure for compatibility with retriever."""
+        return self.record_failure(query, gap_description, partial_matches)
+
+    def record_query_success(
+        self,
+        query: str,
+        node_ids: Optional[List[int]] = None,
+        top_score: float = 1.0,
+        **kwargs,
+    ) -> AgentObservation:
+        """Alias for record_success for compatibility with retriever."""
+        return self.record_success(query, node_ids or [], top_score)
+
     def record_correction(
         self,
         query: str,
