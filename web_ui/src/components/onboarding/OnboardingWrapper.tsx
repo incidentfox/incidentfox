@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { ContinueOnboardingButton } from './ContinueOnboardingButton';
 import { QuickStartWizard } from './QuickStartWizard';
+import { useIdentity } from '@/lib/useIdentity';
 import type { Step4NextAction } from '@/lib/useOnboarding';
 
 interface OnboardingWrapperProps {
@@ -14,6 +15,8 @@ interface OnboardingWrapperProps {
  * Should be placed high in the component tree to appear on all pages.
  */
 export function OnboardingWrapper({ children }: OnboardingWrapperProps) {
+  const { identity } = useIdentity();
+  const isVisitor = identity?.auth_kind === 'visitor';
   const [showWizard, setShowWizard] = useState(false);
   const [wizardInitialStep, setWizardInitialStep] = useState(1);
 
@@ -44,7 +47,7 @@ export function OnboardingWrapper({ children }: OnboardingWrapperProps) {
       {children}
 
       {/* Floating continue button - appears when user navigates away mid-wizard */}
-      <ContinueOnboardingButton onContinue={handleContinueOnboarding} />
+      <ContinueOnboardingButton onContinue={handleContinueOnboarding} isVisitor={isVisitor} />
 
       {/* Quick Start Wizard modal */}
       {showWizard && (
@@ -53,6 +56,7 @@ export function OnboardingWrapper({ children }: OnboardingWrapperProps) {
           onRunAgent={handleRunAgent}
           onSkip={handleSkip}
           initialStep={wizardInitialStep}
+          isVisitor={isVisitor}
         />
       )}
     </>
