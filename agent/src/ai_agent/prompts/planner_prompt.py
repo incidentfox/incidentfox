@@ -29,7 +29,6 @@ from .layers import (
     build_capabilities_section,
 )
 
-
 # =============================================================================
 # Default Planner Prompt (loaded from 01_slack template)
 # =============================================================================
@@ -54,7 +53,9 @@ def _get_default_planner_prompt() -> str:
     # agent/src/ai_agent/prompts/planner_prompt.py -> config_service/templates/
     module_dir = Path(__file__).parent
     repo_root = module_dir.parent.parent.parent.parent  # Up to repo root
-    template_path = repo_root / "config_service" / "templates" / "01_slack_incident_triage.json"
+    template_path = (
+        repo_root / "config_service" / "templates" / "01_slack_incident_triage.json"
+    )
 
     if not template_path.exists():
         # Fallback for when running from different locations or in tests
@@ -64,7 +65,9 @@ def _get_default_planner_prompt() -> str:
     if template_path.exists():
         with open(template_path) as f:
             template = json.load(f)
-            prompt_config = template.get("agents", {}).get("planner", {}).get("prompt", {})
+            prompt_config = (
+                template.get("agents", {}).get("planner", {}).get("prompt", {})
+            )
             if isinstance(prompt_config, dict):
                 prompt = prompt_config.get("system", "")
                 if prompt:
