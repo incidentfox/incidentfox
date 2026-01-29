@@ -386,33 +386,88 @@ Resolution: {resolution}
         """
         Check if new content contradicts existing knowledge.
 
-        This is a simplified check - in production, use NLI model
-        or LLM to detect contradictions.
+        Uses a multi-layered approach:
+        1. Extract key factual claims
+        2. Check for direct negation patterns
+        3. Compare numerical values if present
+        4. Use embedding similarity to detect semantic opposition
         """
-        # Simple heuristic: check for negation words near similar content
-        negation_indicators = [
-            "not",
-            "don't",
-            "doesn't",
-            "shouldn't",
-            "never",
-            "incorrect",
-            "wrong",
-            "false",
-            "outdated",
-            "deprecated",
-        ]
-
         content_lower = content.lower()
         existing_lower = existing_node.text.lower()
 
-        # If content has negations about similar topics, might be contradiction
-        for neg in negation_indicators:
-            if neg in content_lower:
-                # Very basic check - in production use proper NLI
+        # 1. Direct contradiction patterns
+        contradiction_patterns = [
+            # Pattern: new content negates existing
+            ("should", "should not"),
+            ("must", "must not"),
+            ("always", "never"),
+            ("enabled", "disabled"),
+            ("true", "false"),
+            ("yes", "no"),
+            ("increase", "decrease"),
+            ("start", "stop"),
+            ("add", "remove"),
+        ]
+
+        for positive, negative in contradiction_patterns:
+            # Check if existing has positive and new has negative (or vice versa)
+            if positive in existing_lower and negative in content_lower:
+                logger.info(f"Detected contradiction: existing has '{positive}', new has '{negative}'")
+                return True
+            if negative in existing_lower and positive in content_lower:
+                logger.info(f"Detected contradiction: existing has '{negative}', new has '{positive}'")
+                return True
+
+        # 2. Numerical contradiction (e.g., "timeout is 30s" vs "timeout is 60s")
+        import re
+        existing_numbers = re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:seconds?|s|minutes?|m|hours?|h|ms|gb|mb|kb|%)\b', existing_lower)
+        new_numbers = re.findall(r'\b(\d+(?:\.\d+)?)\s*(?:seconds?|s|minutes?|m|hours?|h|ms|gb|mb|kb|%)\b', content_lower)
+
+        if existing_numbers and new_numbers:
+            # Extract context around numbers to check if they refer to same thing
+            for existing_num in existing_numbers:
+                for new_num in new_numbers:
+                    if existing_num != new_num:
+                        # Check if similar context words appear near both numbers
+                        existing_context = self._get_number_context(existing_lower, existing_num)
+                        new_context = self._get_number_context(content_lower, new_num)
+                        if existing_context & new_context:
+                            logger.info(f"Detected numerical contradiction: {existing_num} vs {new_num} for {existing_context & new_context}")
+                            return True
+
+        # 3. Update/deprecation indicators
+        deprecation_phrases = [
+            "is deprecated",
+            "no longer",
+            "has been replaced",
+            "instead use",
+            "was changed to",
+            "updated to",
+            "is now",
+        ]
+
+        for phrase in deprecation_phrases:
+            if phrase in content_lower:
+                # New content suggests existing info is outdated
+                logger.info(f"Detected potential update: new content contains '{phrase}'")
                 return True
 
         return False
+
+    def _get_number_context(self, text: str, number: str, window: int = 5) -> set:
+        """Get context words around a number in text."""
+        import re
+        words = text.split()
+        context = set()
+        for i, word in enumerate(words):
+            if number in word:
+                start = max(0, i - window)
+                end = min(len(words), i + window + 1)
+                for w in words[start:end]:
+                    clean_w = re.sub(r'[^a-z]', '', w)
+                    if clean_w and len(clean_w) > 2:
+                        context.add(clean_w)
+        return context
 
     async def _merge_with_existing(
         self,

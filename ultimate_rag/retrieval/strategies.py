@@ -571,32 +571,83 @@ class AdaptiveDepthStrategy(RetrievalStrategy):
         depth: int,
         top_k: int,
     ) -> List[RetrievedChunk]:
-        """Retrieve nodes at a specific tree depth."""
+        """Retrieve nodes at a specific tree depth using semantic search."""
+        try:
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from knowledge_base.raptor.utils import distances_from_embeddings
+        except ImportError as e:
+            logger.error(f"Failed to import RAPTOR modules: {e}")
+            return []
+
         chunks = []
+        embedding_model = OpenAIEmbeddingModel()
+
+        try:
+            query_embedding = embedding_model.create_embedding(query)
+        except Exception as e:
+            logger.error(f"Failed to create query embedding: {e}")
+            return []
 
         for tree in forest.trees.values():
-            # Filter nodes at target depth
+            # Filter nodes at target depth (using layer as proxy for depth)
             nodes_at_depth = [
                 node
                 for node in tree.all_nodes.values()
-                if node.is_active and self._get_node_depth(node, tree) == depth
+                if getattr(node, "is_active", True)
+                and getattr(node, "layer", 0) == depth
             ]
 
-            # In production: embed query and compute similarity with filtered nodes
-            # For now, return placeholder
-            for node in nodes_at_depth[:top_k]:
-                chunks.append(
-                    RetrievedChunk(
-                        node_id=node.index,
-                        text=node.text,
-                        score=0.5,  # Would be actual similarity
-                        importance=node.get_importance(),
-                        strategy=self.name,
-                        tree_level=depth,
-                    )
+            if not nodes_at_depth:
+                continue
+
+            # Extract embeddings for filtered nodes
+            embeddings = []
+            valid_nodes = []
+            embedding_key = getattr(tree, "embedding_model", "OpenAI") or "OpenAI"
+
+            for node in nodes_at_depth:
+                node_embedding = node.embeddings.get(embedding_key)
+                if node_embedding:
+                    embeddings.append(node_embedding)
+                    valid_nodes.append(node)
+
+            if not embeddings:
+                continue
+
+            try:
+                # Compute similarity scores
+                distances = distances_from_embeddings(
+                    query_embedding, embeddings, distance_metric="cosine"
+                )
+                scores = [1.0 - d for d in distances]
+                sorted_indices = sorted(
+                    range(len(scores)), key=lambda i: scores[i], reverse=True
                 )
 
-        return chunks
+                for idx in sorted_indices[:top_k]:
+                    node = valid_nodes[idx]
+                    chunks.append(
+                        RetrievedChunk(
+                            node_id=node.index,
+                            text=node.text,
+                            tree_id=tree.tree_id,
+                            score=scores[idx],
+                            importance=node.get_importance(),
+                            strategy=self.name,
+                            layer=depth,
+                            metadata={
+                                "source_url": getattr(node, "source_url", None),
+                                "depth": depth,
+                            },
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"Depth search failed for tree {tree.tree_id}: {e}")
+                continue
+
+        # Sort by score and return top_k
+        chunks.sort(key=lambda c: c.score, reverse=True)
+        return chunks[:top_k]
 
     def _get_node_depth(self, node: "KnowledgeNode", tree: "KnowledgeTree") -> int:
         """Get the depth of a node in the tree."""
@@ -859,17 +910,81 @@ class IncidentAwareStrategy(RetrievalStrategy):
         forest: "TreeForest",
         graph: "KnowledgeGraph",
     ) -> List[RetrievedChunk]:
-        """Find runbooks matching the symptoms in the query."""
+        """Find runbooks matching the symptoms in the query using semantic similarity."""
         from ..graph.entities import EntityType
 
+        try:
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from knowledge_base.raptor.utils import distances_from_embeddings
+        except ImportError:
+            logger.warning("RAPTOR not available, falling back to keyword matching")
+            return await self._find_runbooks_keyword(query, forest, graph)
+
         chunks = []
+        embedding_model = OpenAIEmbeddingModel()
+
+        try:
+            query_embedding = embedding_model.create_embedding(query)
+        except Exception as e:
+            logger.error(f"Failed to embed query: {e}")
+            return await self._find_runbooks_keyword(query, forest, graph)
 
         # Find all runbook entities
         runbooks = graph.get_entities_by_type(EntityType.RUNBOOK)
 
         for runbook in runbooks:
-            # Check if symptoms match (simple keyword matching)
-            # In production: use embedding similarity
+            # Compute semantic similarity with runbook content
+            runbook_text = f"{runbook.name} {runbook.description}"
+            symptoms = runbook.properties.get("symptoms", [])
+            if symptoms:
+                runbook_text += " " + " ".join(symptoms)
+
+            try:
+                runbook_embedding = embedding_model.create_embedding(runbook_text)
+                distances = distances_from_embeddings(
+                    query_embedding, [runbook_embedding], distance_metric="cosine"
+                )
+                similarity_score = 1.0 - distances[0]
+
+                if similarity_score > 0.4:  # Threshold for relevance
+                    # Get linked RAPTOR nodes
+                    for node_id in runbook.raptor_node_ids:
+                        node = self._find_node_in_forest(node_id, forest)
+                        if node:
+                            chunks.append(
+                                RetrievedChunk(
+                                    node_id=node_id,
+                                    text=node.text,
+                                    tree_id=getattr(node, "tree_id", None),
+                                    score=similarity_score,
+                                    importance=node.get_importance(),
+                                    strategy=f"{self.name}_runbook",
+                                    metadata={
+                                        "runbook_id": runbook.entity_id,
+                                        "runbook_name": runbook.name,
+                                    },
+                                )
+                            )
+            except Exception as e:
+                logger.warning(f"Failed to embed runbook {runbook.name}: {e}")
+                continue
+
+        chunks.sort(key=lambda c: c.score, reverse=True)
+        return chunks
+
+    async def _find_runbooks_keyword(
+        self,
+        query: str,
+        forest: "TreeForest",
+        graph: "KnowledgeGraph",
+    ) -> List[RetrievedChunk]:
+        """Fallback keyword-based runbook search."""
+        from ..graph.entities import EntityType
+
+        chunks = []
+        runbooks = graph.get_entities_by_type(EntityType.RUNBOOK)
+
+        for runbook in runbooks:
             symptoms = runbook.properties.get("symptoms", [])
             query_lower = query.lower()
 
@@ -879,7 +994,6 @@ class IncidentAwareStrategy(RetrievalStrategy):
                     match_score += 1
 
             if match_score > 0:
-                # Get linked RAPTOR nodes
                 for node_id in runbook.raptor_node_ids:
                     node = self._find_node_in_forest(node_id, forest)
                     if node:
@@ -905,20 +1019,83 @@ class IncidentAwareStrategy(RetrievalStrategy):
         forest: "TreeForest",
         graph: "KnowledgeGraph",
     ) -> List[RetrievedChunk]:
-        """Find similar past incidents."""
+        """Find similar past incidents using semantic similarity."""
         from ..graph.entities import EntityType
-        from ..graph.relationships import RelationshipType
+
+        try:
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from knowledge_base.raptor.utils import distances_from_embeddings
+        except ImportError:
+            logger.warning("RAPTOR not available, falling back to keyword matching")
+            return await self._find_similar_incidents_keyword(query, forest, graph)
 
         chunks = []
+        embedding_model = OpenAIEmbeddingModel()
 
-        # Find resolved incidents with SIMILAR_TO relationships
+        try:
+            query_embedding = embedding_model.create_embedding(query)
+        except Exception as e:
+            logger.error(f"Failed to embed query: {e}")
+            return await self._find_similar_incidents_keyword(query, forest, graph)
+
+        # Find resolved incidents
         incidents = graph.get_entities_by_type(EntityType.INCIDENT)
 
         for incident in incidents:
             if incident.properties.get("status") != "resolved":
                 continue
 
-            # Check for keyword overlap
+            # Compute semantic similarity
+            incident_text = f"{incident.name} {incident.description}"
+
+            try:
+                incident_embedding = embedding_model.create_embedding(incident_text)
+                distances = distances_from_embeddings(
+                    query_embedding, [incident_embedding], distance_metric="cosine"
+                )
+                similarity_score = 1.0 - distances[0]
+
+                if similarity_score > 0.5:  # Threshold for relevance
+                    for node_id in incident.raptor_node_ids:
+                        node = self._find_node_in_forest(node_id, forest)
+                        if node:
+                            chunks.append(
+                                RetrievedChunk(
+                                    node_id=node_id,
+                                    text=node.text,
+                                    tree_id=getattr(node, "tree_id", None),
+                                    score=similarity_score,
+                                    importance=node.get_importance(),
+                                    strategy=f"{self.name}_incident",
+                                    metadata={
+                                        "incident_id": incident.entity_id,
+                                        "resolution": incident.properties.get("resolution"),
+                                    },
+                                )
+                            )
+            except Exception as e:
+                logger.warning(f"Failed to embed incident {incident.name}: {e}")
+                continue
+
+        chunks.sort(key=lambda c: c.score, reverse=True)
+        return chunks
+
+    async def _find_similar_incidents_keyword(
+        self,
+        query: str,
+        forest: "TreeForest",
+        graph: "KnowledgeGraph",
+    ) -> List[RetrievedChunk]:
+        """Fallback keyword-based incident search."""
+        from ..graph.entities import EntityType
+
+        chunks = []
+        incidents = graph.get_entities_by_type(EntityType.INCIDENT)
+
+        for incident in incidents:
+            if incident.properties.get("status") != "resolved":
+                continue
+
             incident_text = f"{incident.name} {incident.description}"
             query_words = set(query.lower().split())
             incident_words = set(incident_text.lower().split())
