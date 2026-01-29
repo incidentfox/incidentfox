@@ -268,7 +268,9 @@ async def create_investigation_stream(
                     "type": "error",
                     "data": {"message": response["error"]},
                     "thread_id": thread_id,
-                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "timestamp": datetime.datetime.now(
+                        datetime.timezone.utc
+                    ).isoformat(),
                 }
                 yield f"data: {json.dumps(error_payload)}\n\n"
                 break
