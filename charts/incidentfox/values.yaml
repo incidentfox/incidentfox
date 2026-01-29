@@ -109,6 +109,16 @@ externalSecrets:
       secretName: incidentfox-newrelic
       apiKeyKey: NEW_RELIC_API_KEY
       apiKeyRemoteRefKey: incidentfox/prod/newrelic_api_key
+    # Recall.ai for real-time meeting transcription
+    recall:
+      enabled: true
+      secretName: incidentfox-recall
+      apiKeyKey: RECALL_API_KEY
+      webhookSecretKey: RECALL_WEBHOOK_SECRET
+      apiKeyRemoteRefKey: incidentfox/prod/recall_api_key
+      webhookSecretRemoteRefKey: incidentfox/prod/recall_webhook_secret
+      botName: "IncidentFox Notetaker"
+      botImageUrl: "https://cdn.incidentfox.ai/bot-avatar.png"
 
 services:
   configService:

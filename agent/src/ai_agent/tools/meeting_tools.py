@@ -609,6 +609,284 @@ class OtterProvider(MeetingProvider):
 
 
 # =============================================================================
+# Recall.ai Provider (Real-time Transcription)
+# =============================================================================
+
+
+class RecallProvider(MeetingProvider):
+    """
+    Recall.ai meeting bot provider for real-time transcription.
+
+    Recall.ai provides a unified API for meeting bots across Zoom, Google Meet,
+    Microsoft Teams, Webex, and other platforms. Bots join meetings as participants
+    and stream real-time transcripts via webhooks.
+
+    Key features:
+    - White-label bots (appear as "IncidentFox Notetaker")
+    - Real-time transcript streaming (~200ms latency)
+    - Per-participant speaker diarization
+    - SOC 2, HIPAA, GDPR compliant
+
+    Docs: https://docs.recall.ai/
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        region: str = "us-west-2",
+        bot_name: str = "IncidentFox Notetaker",
+        bot_image_url: str | None = None,
+        webhook_url: str | None = None,
+    ):
+        self.api_key = api_key
+        self.region = region
+        self.bot_name = bot_name
+        self.bot_image_url = bot_image_url
+        self.webhook_url = webhook_url
+        self.api_base = f"https://{region}.recall.ai/api/v1"
+
+    def _request(self, method: str, endpoint: str, **kwargs) -> dict:
+        """Make request to Recall.ai API."""
+        try:
+            response = httpx.request(
+                method,
+                f"{self.api_base}{endpoint}",
+                headers={
+                    "Authorization": f"Token {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                timeout=30,
+                **kwargs,
+            )
+
+            if response.status_code == 401:
+                raise IntegrationAuthenticationError("recall")
+            if response.status_code == 404:
+                return {}
+            if response.status_code >= 400:
+                raise IntegrationConnectionError(
+                    "recall",
+                    status_code=response.status_code,
+                    details=response.text[:500],
+                )
+
+            return response.json()
+
+        except httpx.RequestError as e:
+            raise IntegrationConnectionError(
+                "recall", details=f"Connection error: {str(e)}"
+            )
+
+    def create_bot(
+        self,
+        meeting_url: str,
+        incident_id: str | None = None,
+        custom_bot_name: str | None = None,
+        enable_partial_transcripts: bool = False,
+    ) -> dict[str, Any]:
+        """
+        Create a bot and send it to join a meeting.
+
+        Args:
+            meeting_url: The meeting URL (Zoom, Google Meet, Teams, etc.)
+            incident_id: Optional incident ID to associate with this recording
+            custom_bot_name: Override the default bot name
+            enable_partial_transcripts: Enable low-latency partial transcripts
+
+        Returns:
+            Bot creation response including bot_id
+        """
+        # Build bot configuration
+        bot_config: dict[str, Any] = {
+            "meeting_url": meeting_url,
+            "bot_name": custom_bot_name or self.bot_name,
+        }
+
+        # Add bot image if configured
+        if self.bot_image_url:
+            bot_config["bot_image"] = self.bot_image_url
+
+        # Configure transcription
+        bot_config["recording_config"] = {
+            "transcript": {
+                "provider": {"meeting_captions": {}}  # Use platform's native captions
+            }
+        }
+
+        # Configure real-time webhook endpoints
+        if self.webhook_url:
+            events = ["bot.status_change", "transcript.data"]
+            if enable_partial_transcripts:
+                events.append("transcript.partial_data")
+
+            bot_config["real_time_endpoints"] = [
+                {
+                    "type": "webhook",
+                    "url": self.webhook_url,
+                    "events": events,
+                }
+            ]
+
+        # Add incident_id to metadata for webhook routing
+        if incident_id:
+            bot_config["metadata"] = {"incident_id": incident_id}
+
+        logger.info(
+            "recall_creating_bot",
+            meeting_url=meeting_url,
+            bot_name=bot_config["bot_name"],
+            incident_id=incident_id,
+        )
+
+        result = self._request("POST", "/bot", json=bot_config)
+
+        logger.info(
+            "recall_bot_created",
+            bot_id=result.get("id"),
+            meeting_url=meeting_url,
+        )
+
+        return {
+            "bot_id": result.get("id"),
+            "status": result.get("status", {}).get("code", "unknown"),
+            "meeting_url": meeting_url,
+            "provider": "recall",
+        }
+
+    def get_bot_status(self, bot_id: str) -> dict[str, Any]:
+        """Get the current status of a bot."""
+        result = self._request("GET", f"/bot/{bot_id}")
+
+        if not result:
+            raise ToolExecutionError("recall", f"Bot not found: {bot_id}")
+
+        status = result.get("status", {})
+        return {
+            "bot_id": bot_id,
+            "status_code": status.get("code", "unknown"),
+            "status_message": status.get("message", ""),
+            "meeting_url": result.get("meeting_url"),
+            "created_at": result.get("created_at"),
+            "provider": "recall",
+        }
+
+    def stop_bot(self, bot_id: str) -> dict[str, Any]:
+        """
+        Stop a bot and remove it from the meeting.
+
+        Args:
+            bot_id: The bot ID to stop
+
+        Returns:
+            Confirmation of bot stop
+        """
+        logger.info("recall_stopping_bot", bot_id=bot_id)
+
+        self._request("POST", f"/bot/{bot_id}/leave_call")
+
+        return {
+            "bot_id": bot_id,
+            "status": "stopped",
+            "message": "Bot has been requested to leave the meeting",
+            "provider": "recall",
+        }
+
+    def get_transcript(self, meeting_id: str) -> dict[str, Any]:
+        """
+        Get transcript for a completed meeting.
+
+        For Recall.ai, meeting_id is the bot_id.
+        """
+        # First get bot info
+        bot_info = self._request("GET", f"/bot/{meeting_id}")
+        if not bot_info:
+            raise ToolExecutionError("recall", f"Bot/meeting not found: {meeting_id}")
+
+        # Get transcript
+        transcript_data = self._request("GET", f"/bot/{meeting_id}/transcript")
+
+        return self._normalize_transcript(bot_info, transcript_data)
+
+    def search_meetings(self, query: str, hours_back: int = 24) -> list[dict[str, Any]]:
+        """
+        Search recent meetings/bots.
+
+        Note: Recall.ai doesn't have full-text search. This returns recent bots
+        and filters client-side by meeting URL or metadata.
+        """
+        # Get recent bots and filter
+        bots = self.get_recent_meetings(hours_back)
+
+        # Filter by query (match against meeting_url or title)
+        query_lower = query.lower()
+        return [
+            bot
+            for bot in bots
+            if query_lower in (bot.get("title", "").lower())
+            or query_lower in (bot.get("meeting_url", "").lower())
+        ]
+
+    def get_recent_meetings(self, hours: int = 24) -> list[dict[str, Any]]:
+        """Get recent bots/meetings."""
+        # Calculate time range
+        from_time = (datetime.utcnow() - timedelta(hours=hours)).isoformat() + "Z"
+
+        result = self._request(
+            "GET",
+            "/bot",
+            params={"created_at__gte": from_time, "limit": 50},
+        )
+
+        bots = result.get("results", []) if isinstance(result, dict) else []
+        return [self._normalize_meeting(bot) for bot in bots]
+
+    def _normalize_transcript(
+        self, bot_info: dict, transcript_data: dict | list
+    ) -> dict[str, Any]:
+        """Normalize Recall.ai transcript to common format."""
+        # Transcript data may be a list of utterances or a dict with results
+        if isinstance(transcript_data, dict):
+            utterances = transcript_data.get("results", [])
+        else:
+            utterances = transcript_data or []
+
+        return {
+            "id": bot_info.get("id"),
+            "title": f"Meeting ({bot_info.get('meeting_url', 'Unknown')})",
+            "date": bot_info.get("created_at"),
+            "duration_seconds": bot_info.get("duration_seconds"),
+            "host": None,
+            "participants": [p.get("name") for p in bot_info.get("participants", [])],
+            "segments": [
+                {
+                    "speaker": u.get("speaker", "Unknown"),
+                    "text": u.get("text", ""),
+                    "start_time": u.get("start_time"),
+                    "end_time": u.get("end_time"),
+                }
+                for u in utterances
+            ],
+            "summary": {},
+            "provider": "recall",
+        }
+
+    def _normalize_meeting(self, bot: dict) -> dict[str, Any]:
+        """Normalize Recall.ai bot to common meeting format."""
+        status = bot.get("status", {})
+        return {
+            "id": bot.get("id"),
+            "title": f"Meeting ({bot.get('meeting_url', 'Unknown')})",
+            "date": bot.get("created_at"),
+            "duration_seconds": bot.get("duration_seconds"),
+            "host": None,
+            "participants": [p.get("name") for p in bot.get("participants", [])],
+            "status": status.get("code", "unknown"),
+            "meeting_url": bot.get("meeting_url"),
+            "provider": "recall",
+        }
+
+
+# =============================================================================
 # Provider Factory
 # =============================================================================
 
@@ -657,6 +935,14 @@ def _get_meeting_config() -> dict[str, Any]:
                 "CONFIG_SERVICE_URL", "http://localhost:8001"
             )
             config["team_token"] = os.getenv("TEAM_TOKEN")
+        elif provider == "recall":
+            config["recall_api_key"] = os.getenv("RECALL_API_KEY")
+            config["recall_region"] = os.getenv("RECALL_REGION", "us-west-2")
+            config["recall_bot_name"] = os.getenv(
+                "RECALL_BOT_NAME", "IncidentFox Notetaker"
+            )
+            config["recall_bot_image_url"] = os.getenv("RECALL_BOT_IMAGE_URL")
+            config["recall_webhook_url"] = os.getenv("RECALL_WEBHOOK_URL")
 
         return config
 
@@ -666,7 +952,7 @@ def _get_meeting_config() -> dict[str, Any]:
         tool_id="meeting_tools",
         missing_fields=["provider"],
         message="No meeting transcription provider configured. "
-        "Please configure Fireflies, Circleback, Otter, or Vexa in team settings.",
+        "Please configure Fireflies, Circleback, Otter, Vexa, or Recall in team settings.",
     )
 
 
@@ -725,12 +1011,28 @@ def _get_provider() -> MeetingProvider:
             )
         return OtterProvider(api_key)
 
+    elif provider == "recall":
+        api_key = config.get("recall_api_key")
+        if not api_key:
+            raise IntegrationNotConfiguredError(
+                "meeting",
+                tool_id="meeting_tools",
+                missing_fields=["recall_api_key"],
+            )
+        return RecallProvider(
+            api_key=api_key,
+            region=config.get("recall_region", "us-west-2"),
+            bot_name=config.get("recall_bot_name", "IncidentFox Notetaker"),
+            bot_image_url=config.get("recall_bot_image_url"),
+            webhook_url=config.get("recall_webhook_url"),
+        )
+
     else:
         raise IntegrationNotConfiguredError(
             "meeting",
             tool_id="meeting_tools",
             message=f"Unknown meeting provider: {provider}. "
-            "Supported providers: fireflies, circleback, vexa, otter",
+            "Supported providers: fireflies, circleback, vexa, otter, recall",
         )
 
 
@@ -1039,6 +1341,193 @@ def meeting_join(meeting_url: str) -> dict[str, Any]:
 
 
 # =============================================================================
+# Recall.ai Real-Time Meeting Tools
+# =============================================================================
+
+
+def meeting_start_recording(
+    meeting_url: str,
+    incident_id: str | None = None,
+    bot_name: str | None = None,
+) -> dict[str, Any]:
+    """
+    Send an IncidentFox bot to join a meeting and start real-time transcription.
+
+    Use this tool to add the IncidentFox meeting bot to an incident war room.
+    The bot will join the meeting (Zoom, Google Meet, or Teams) and stream
+    real-time transcripts that will be fed to the investigation.
+
+    This tool requires Recall.ai to be configured as the meeting provider.
+
+    Args:
+        meeting_url: The meeting URL (Zoom, Google Meet, Teams, Webex, etc.)
+        incident_id: Optional incident ID to associate transcripts with
+        bot_name: Optional custom name for the bot (default: "IncidentFox Notetaker")
+
+    Returns:
+        Bot creation result including:
+        - bot_id: ID to track the bot
+        - status: Current status
+        - meeting_url: The meeting URL
+        - message: Instructions for next steps
+    """
+    try:
+        config = _get_meeting_config()
+        provider_name = config.get("provider")
+
+        if provider_name != "recall":
+            return {
+                "error": f"meeting_start_recording requires Recall.ai provider. "
+                f"Current provider: {provider_name}.",
+                "suggestion": "Please configure Recall.ai in team settings to use "
+                "real-time meeting transcription during incidents.",
+            }
+
+        provider = _get_provider()
+        if not isinstance(provider, RecallProvider):
+            raise ToolExecutionError(
+                "meeting_start_recording", "Provider mismatch - expected RecallProvider"
+            )
+
+        result = provider.create_bot(
+            meeting_url=meeting_url,
+            incident_id=incident_id,
+            custom_bot_name=bot_name,
+            enable_partial_transcripts=False,  # Full transcripts only for less noise
+        )
+
+        logger.info(
+            "meeting_recording_started",
+            bot_id=result.get("bot_id"),
+            meeting_url=meeting_url,
+            incident_id=incident_id,
+        )
+
+        return {
+            "bot_id": result.get("bot_id"),
+            "status": result.get("status"),
+            "meeting_url": meeting_url,
+            "incident_id": incident_id,
+            "message": f"IncidentFox bot is joining the meeting. "
+            f"Bot ID: {result.get('bot_id')}. "
+            "The bot will appear as a participant and start transcribing. "
+            "Transcripts will be streamed to this investigation in real-time.",
+        }
+
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "meeting_start_recording", "meeting"
+        )
+    except IntegrationAuthenticationError:
+        raise
+    except Exception as e:
+        logger.error("meeting_start_recording_failed", url=meeting_url, error=str(e))
+        raise ToolExecutionError("meeting_start_recording", str(e), e)
+
+
+def meeting_stop_recording(bot_id: str) -> dict[str, Any]:
+    """
+    Stop a meeting bot and remove it from the meeting.
+
+    Use this tool to remove the IncidentFox bot from a meeting when
+    the incident war room is no longer needed.
+
+    Args:
+        bot_id: The bot ID (returned from meeting_start_recording)
+
+    Returns:
+        Confirmation including:
+        - bot_id: The bot that was stopped
+        - status: "stopped"
+        - message: Confirmation message
+    """
+    try:
+        config = _get_meeting_config()
+        provider_name = config.get("provider")
+
+        if provider_name != "recall":
+            return {
+                "error": f"meeting_stop_recording requires Recall.ai provider. "
+                f"Current provider: {provider_name}.",
+            }
+
+        provider = _get_provider()
+        if not isinstance(provider, RecallProvider):
+            raise ToolExecutionError(
+                "meeting_stop_recording", "Provider mismatch - expected RecallProvider"
+            )
+
+        result = provider.stop_bot(bot_id)
+
+        logger.info(
+            "meeting_recording_stopped",
+            bot_id=bot_id,
+        )
+
+        return result
+
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "meeting_stop_recording", "meeting")
+    except IntegrationAuthenticationError:
+        raise
+    except Exception as e:
+        logger.error("meeting_stop_recording_failed", bot_id=bot_id, error=str(e))
+        raise ToolExecutionError("meeting_stop_recording", str(e), e)
+
+
+def meeting_get_bot_status(bot_id: str) -> dict[str, Any]:
+    """
+    Get the current status of a meeting bot.
+
+    Use this tool to check if a bot is still in a meeting, has left,
+    or encountered an error.
+
+    Args:
+        bot_id: The bot ID (returned from meeting_start_recording)
+
+    Returns:
+        Bot status including:
+        - bot_id: The bot ID
+        - status_code: Current status (joining, in_call, recording, done, error)
+        - status_message: Human-readable status message
+        - meeting_url: The meeting URL
+    """
+    try:
+        config = _get_meeting_config()
+        provider_name = config.get("provider")
+
+        if provider_name != "recall":
+            return {
+                "error": f"meeting_get_bot_status requires Recall.ai provider. "
+                f"Current provider: {provider_name}.",
+            }
+
+        provider = _get_provider()
+        if not isinstance(provider, RecallProvider):
+            raise ToolExecutionError(
+                "meeting_get_bot_status", "Provider mismatch - expected RecallProvider"
+            )
+
+        result = provider.get_bot_status(bot_id)
+
+        logger.info(
+            "meeting_bot_status_fetched",
+            bot_id=bot_id,
+            status=result.get("status_code"),
+        )
+
+        return result
+
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(e, "meeting_get_bot_status", "meeting")
+    except IntegrationAuthenticationError:
+        raise
+    except Exception as e:
+        logger.error("meeting_get_bot_status_failed", bot_id=bot_id, error=str(e))
+        raise ToolExecutionError("meeting_get_bot_status", str(e), e)
+
+
+# =============================================================================
 # Tool Exports
 # =============================================================================
 
@@ -1048,4 +1537,8 @@ MEETING_TOOLS = [
     meeting_get_recent,
     meeting_search_transcript,
     meeting_join,
+    # Recall.ai real-time tools
+    meeting_start_recording,
+    meeting_stop_recording,
+    meeting_get_bot_status,
 ]
