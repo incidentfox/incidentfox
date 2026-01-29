@@ -36,6 +36,33 @@ logger = structlog.get_logger(__name__)
 # =============================================================================
 
 
+def _check_visitor_write_access(authorization: str) -> None:
+    """
+    Check if the authorization header contains a visitor token.
+    If so, deny write access.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return
+
+    token = authorization.split(" ", 1)[1].strip()
+    if token.count(".") != 2:
+        return  # Not a JWT
+
+    try:
+        from ...core.impersonation import extract_visitor_session_id
+
+        session_id = extract_visitor_session_id(token)
+        if session_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Visitors cannot modify configuration. Sign up for a team account to access all features.",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # Not a visitor token, continue
+
+
 def _resolve_team_identity(
     authorization: str,
     x_org_id: Optional[str],
@@ -957,6 +984,9 @@ async def update_my_config(
 
     Auth: Supports both Bearer token (v1 style) and X-Org-Id/X-Team-Node-Id headers (v2 style).
     """
+    # Visitors cannot modify configuration
+    _check_visitor_write_access(authorization)
+
     org_id, team_node_id = _resolve_team_identity(
         authorization, x_org_id, x_team_node_id, db
     )

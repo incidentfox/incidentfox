@@ -18,6 +18,7 @@ from src.api.routes.team import router as team_router
 from src.api.routes.templates import router as templates_router
 from src.api.routes.tool_metadata import router as tool_metadata_router
 from src.api.routes.ui import router as ui_router
+from src.api.routes.visitor import router as visitor_router
 from src.core.audit_log import app_logger, configure_logging, new_request_id
 from src.core.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
 
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(integration_schemas_router)
     app.include_router(tool_metadata_router)
     app.include_router(dependencies_router)
+    app.include_router(visitor_router)
 
     @app.middleware("http")
     async def add_request_id(request: Request, call_next):

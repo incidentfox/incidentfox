@@ -30,6 +30,54 @@ router = APIRouter(prefix="/api/v1/team", tags=["team"])
 
 
 # =============================================================================
+# Visitor Access Control
+# =============================================================================
+
+
+def require_write_access(team: TeamPrincipal) -> None:
+    """
+    Verify the team principal has write access.
+
+    Raises HTTPException 403 if the principal is a visitor (read-only access).
+    """
+    if team.is_visitor():
+        raise HTTPException(
+            status_code=403,
+            detail="Visitors cannot modify configuration. Sign up for a team account to access all features.",
+        )
+
+
+def _check_visitor_write_access(authorization: str) -> None:
+    """
+    Check if the authorization header contains a visitor token.
+    If so, deny write access.
+
+    This is used for endpoints that use _resolve_team_or_admin_identity
+    instead of require_team_auth.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return
+
+    token = authorization.split(" ", 1)[1].strip()
+    if token.count(".") != 2:
+        return  # Not a JWT
+
+    try:
+        from ...core.impersonation import extract_visitor_session_id
+
+        session_id = extract_visitor_session_id(token)
+        if session_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Visitors cannot modify configuration. Sign up for a team account to access all features.",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # Not a visitor token, continue
+
+
+# =============================================================================
 # Authentication Helpers
 # =============================================================================
 
@@ -177,6 +225,8 @@ async def create_knowledge_document(
     team: TeamPrincipal = Depends(require_team_auth),
 ):
     """Create a new knowledge document."""
+    require_write_access(team)
+
     doc_id = f"doc_{uuid.uuid4().hex[:12]}"
 
     doc = KnowledgeDocument(
@@ -212,6 +262,8 @@ async def delete_knowledge_document(
     team: TeamPrincipal = Depends(require_team_auth),
 ):
     """Delete a knowledge document."""
+    require_write_access(team)
+
     doc = (
         db.query(KnowledgeDocument)
         .filter(
@@ -238,6 +290,8 @@ async def upload_knowledge_document(
     team: TeamPrincipal = Depends(require_team_auth),
 ):
     """Upload a document to the knowledge base."""
+    require_write_access(team)
+
     content = await file.read()
     text_content = content.decode("utf-8", errors="ignore")
 
@@ -316,6 +370,8 @@ async def approve_kb_change(
     team: TeamPrincipal = Depends(require_team_auth),
 ):
     """Approve a proposed knowledge change and add it to the knowledge base."""
+    require_write_access(team)
+
     change = (
         db.query(PendingConfigChange)
         .filter(
@@ -361,6 +417,8 @@ async def reject_kb_change(
     team: TeamPrincipal = Depends(require_team_auth),
 ):
     """Reject a proposed knowledge change."""
+    require_write_access(team)
+
     change = (
         db.query(PendingConfigChange)
         .filter(
@@ -515,6 +573,8 @@ async def approve_pending_change(
     team: TeamPrincipal = Depends(require_team_auth),
 ):
     """Approve a pending configuration change."""
+    require_write_access(team)
+
     change = (
         db.query(PendingConfigChange)
         .filter(
@@ -604,6 +664,8 @@ async def reject_pending_change(
     team: TeamPrincipal = Depends(require_team_auth),
 ):
     """Reject a pending configuration change."""
+    require_write_access(team)
+
     change = (
         db.query(PendingConfigChange)
         .filter(
@@ -1008,6 +1070,9 @@ async def update_output_config(
     - Trigger-specific routing rules (e.g., Slack -> reply in thread)
     Supports both team and admin tokens (admin uses org root node).
     """
+    # Visitors cannot modify output config
+    _check_visitor_write_access(authorization)
+
     org_id, team_node_id = _resolve_team_or_admin_identity(authorization, db)
 
     config = (
