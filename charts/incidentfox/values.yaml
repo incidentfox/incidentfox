@@ -118,7 +118,7 @@ externalSecrets:
       apiKeyRemoteRefKey: incidentfox/prod/recall_api_key
       webhookSecretRemoteRefKey: incidentfox/prod/recall_webhook_secret
       botName: "IncidentFox Notetaker"
-      botImageUrl: "https://cdn.incidentfox.ai/bot-avatar.png"
+      botImageUrl: "https://incidentfox-assets.s3.us-west-2.amazonaws.com/bot-avatar.png"
 
 services:
   configService:
