@@ -627,8 +627,11 @@ class SandboxManager:
                 if pod.status.phase == "Running":
                     for condition in pod.status.conditions or []:
                         if condition.type == "Ready" and condition.status == "True":
-                            # Pod is ready, now check if FastAPI server is responding
-                            # We'll verify this when we actually try to execute
+                            # In local Kind clusters, give network routing a moment to settle
+                            # This prevents 502 errors when router tries to connect immediately
+                            # Production clusters don't need this delay
+                            if os.getenv("ROUTER_LOCAL_PORT"):
+                                time.sleep(3)
                             return True
 
             except ApiException:
