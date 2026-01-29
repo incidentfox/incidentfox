@@ -603,10 +603,13 @@ class UltimateRAGServer:
         embedder = None
         try:
             from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+
             embedder = OpenAIEmbeddingModel()
             logger.info("Initialized OpenAI embedder for TeachingInterface")
         except ImportError:
-            logger.warning("OpenAI embedder not available, nodes will not have embeddings")
+            logger.warning(
+                "OpenAI embedder not available, nodes will not have embeddings"
+            )
 
         self.teaching = (
             TeachingInterface(
