@@ -8,9 +8,10 @@ This module provides:
 - Shared templates (error handling, tool limits, evidence format)
 - Integration-specific error definitions
 
-Agent prompts are now defined inline per agent (e.g., PLANNER_SYSTEM_PROMPT
-in planner_prompt.py). Context flows through the user message via
-build_user_context() to allow natural propagation to sub-agents.
+Agent prompts can be defined per-agent (e.g., DEFAULT_PLANNER_PROMPT in
+planner_prompt.py) or via templates. Templates are the source of truth when
+configured. Context flows through the user message via build_user_context()
+to allow natural propagation to sub-agents.
 """
 
 from typing import Any
@@ -1055,6 +1056,22 @@ def build_tool_guidance(tools: list) -> str:
 
 
 # -----------------------------------------------------------------------------
+# Behavioral Principles (Universal for ALL agents)
+# -----------------------------------------------------------------------------
+
+BEHAVIORAL_PRINCIPLES = """## BEHAVIORAL PRINCIPLES
+
+**Intellectual Honesty:** Never fabricate information. If a tool fails, say so. Distinguish facts (direct observations) from hypotheses (interpretations). Say "I don't know" rather than guessing.
+
+**Thoroughness Over Speed:** Find root cause, not just symptoms. Keep asking "why?" until you reach something actionable. Stop when: you've identified a specific cause, exhausted available tools, or need access you don't have.
+
+**Evidence & Efficiency:** Quote log lines, include timestamps, explain reasoning. Report negative results - what's ruled out is valuable. Don't repeat tool calls with identical parameters.
+
+**Human-Centric:** Respect human input and corrections. Ask clarifying questions when genuinely needed, but don't over-ask.
+"""
+
+
+# -----------------------------------------------------------------------------
 # Error Handling Template (Shared)
 # -----------------------------------------------------------------------------
 
@@ -1596,6 +1613,7 @@ def build_agent_shared_sections(
     include_evidence_format: bool = True,
     include_synthesis: bool = False,
     include_transparency: bool = True,
+    include_behavioral_principles: bool = True,
     # Customization
     integration_name: str | None = None,
     integration_errors: list[dict[str, str]] | None = None,
@@ -1618,6 +1636,7 @@ def build_agent_shared_sections(
         include_evidence_format: Include evidence presentation guidance
         include_synthesis: Include multi-source synthesis guidance
         include_transparency: Include transparency/auditability guidance (default True)
+        include_behavioral_principles: Include universal behavioral principles (default True)
         integration_name: Name for integration-specific errors
         integration_errors: Integration-specific error patterns
         max_tool_calls: Maximum tool calls allowed
@@ -1641,6 +1660,10 @@ def build_agent_shared_sections(
         system_prompt = base_prompt + "\\n\\n" + shared
     """
     sections = []
+
+    # Behavioral principles come first as foundational guidance
+    if include_behavioral_principles:
+        sections.append(BEHAVIORAL_PRINCIPLES)
 
     if include_error_handling:
         if integration_name and integration_errors:
@@ -1927,6 +1950,7 @@ def build_agent_prompt_sections(
     include_tool_limits: bool = True,
     include_evidence_format: bool = True,
     include_transparency: bool = True,
+    include_behavioral_principles: bool = True,
     custom_errors: list[dict[str, str]] | None = None,
     custom_max_calls: int | None = None,
     custom_synthesize_after: int | None = None,
@@ -1947,6 +1971,7 @@ def build_agent_prompt_sections(
         include_tool_limits: Include tool call limits section
         include_evidence_format: Include evidence formatting section
         include_transparency: Include transparency/auditability guidance (default True)
+        include_behavioral_principles: Include universal behavioral principles (default True)
         custom_errors: Override default errors for this integration
         custom_max_calls: Override default max tool calls
         custom_synthesize_after: Override default synthesize threshold
@@ -1987,6 +2012,7 @@ def build_agent_prompt_sections(
         include_evidence_format=include_evidence_format,
         include_synthesis=False,
         include_transparency=include_transparency,
+        include_behavioral_principles=include_behavioral_principles,
         integration_name=integration_name,
         integration_errors=errors,
         max_tool_calls=max_calls,

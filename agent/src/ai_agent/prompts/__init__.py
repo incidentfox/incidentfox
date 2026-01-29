@@ -42,12 +42,16 @@ from .layers import (
     get_integration_errors,
     get_integration_tool_limits,
 )
-from .planner_prompt import PLANNER_SYSTEM_PROMPT, build_planner_system_prompt
+from .planner_prompt import DEFAULT_PLANNER_PROMPT, build_planner_system_prompt
+
+# Backwards compatibility alias (deprecated - use DEFAULT_PLANNER_PROMPT)
+PLANNER_SYSTEM_PROMPT = DEFAULT_PLANNER_PROMPT
 
 __all__ = [
     # Planner prompt
     "build_planner_system_prompt",
-    "PLANNER_SYSTEM_PROMPT",
+    "DEFAULT_PLANNER_PROMPT",
+    "PLANNER_SYSTEM_PROMPT",  # Deprecated alias for backwards compatibility
     # User context builder (for user/task message)
     "build_user_context",
     # Role-based and delegation guidance

@@ -21,7 +21,9 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "agent" / "src"))
 
 from ai_agent.prompts.agent_capabilities import AGENT_CAPABILITIES
+from ai_agent.prompts.planner_prompt import DEFAULT_PLANNER_PROMPT
 from ai_agent.prompts.layers import (
+    BEHAVIORAL_PRINCIPLES,
     DELEGATION_GUIDANCE,
     ERROR_HANDLING_COMMON,
     EVIDENCE_FORMAT_GUIDANCE,
@@ -33,7 +35,6 @@ from ai_agent.prompts.layers import (
     get_integration_errors,
     get_integration_tool_limits,
 )
-from ai_agent.prompts.planner_prompt import PLANNER_SYSTEM_PROMPT
 
 # =============================================================================
 # Agent Base Prompts (from application code)
@@ -43,7 +44,8 @@ from ai_agent.prompts.planner_prompt import PLANNER_SYSTEM_PROMPT
 # We inline them here to avoid importing the full agent modules.
 
 AGENT_BASE_PROMPTS = {
-    "planner": PLANNER_SYSTEM_PROMPT,
+    "planner": DEFAULT_PLANNER_PROMPT,
+
     "investigation": """You are the Investigation sub-orchestrator coordinating specialized agents for comprehensive incident analysis.
 
 ## YOUR ROLE
