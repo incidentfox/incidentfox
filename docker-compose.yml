@@ -1,41 +1,9 @@
 version: '3.8'
 
-# Hardened Docker Compose setup for IncidentFox
-# Provides container isolation, network controls, and resource limits
+# Docker Compose setup for IncidentFox self-hosted installation
+# Provides container isolation and resource limits
 
 services:
-  # Network proxy - controls all external traffic
-  # Enforces domain allowlist and logs all requests
-  # OPTIONAL: Comment out for quick testing
-  proxy:
-    image: envoyproxy/envoy:v1.31-latest
-    container_name: incidentfox-proxy
-    volumes:
-      - ./proxy-config.yaml:/etc/envoy/envoy.yaml:ro
-    ports:
-      - "9901:9901"  # Admin interface (optional, for debugging)
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
-      - CHOWN  # Needed for Envoy entrypoint
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=100m
-    mem_limit: 256m
-    cpus: 0.5
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    networks:
-      - proxy_network
-    profiles:
-      - proxy  # Optional profile - enable with: docker-compose --profile proxy up
-
   # SRE Agent - runs investigations
   sre-agent:
     build:
@@ -48,10 +16,6 @@ services:
       - LMNR_PROJECT_API_KEY=${LMNR_PROJECT_API_KEY:-}
       - CORALOGIX_API_KEY=${CORALOGIX_API_KEY:-}
       - CORALOGIX_DOMAIN=${CORALOGIX_DOMAIN:-}
-      # Proxy config (only if proxy profile is enabled)
-      # - HTTP_PROXY=http://proxy:8080
-      # - HTTPS_PROXY=http://proxy:8080
-      # - NO_PROXY=localhost,127.0.0.1
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -115,9 +79,6 @@ services:
       - default  # Needs external access to connect to Slack
 
 networks:
-  proxy_network:
-    driver: bridge
-    internal: false  # Proxy needs external access
   app_network:
     driver: bridge
     internal: true  # Internal network for inter-service communication
