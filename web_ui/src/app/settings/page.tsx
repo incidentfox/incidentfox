@@ -210,7 +210,6 @@ export default function SettingsPage() {
   const [newRoutingValue, setNewRoutingValue] = useState('');
 
   const isAdmin = identity?.role === 'admin';
-  const isVisitor = identity?.auth_kind === 'visitor';
   const canWrite = !isVisitor;
 
   // Theme toggle
