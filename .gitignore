@@ -33,6 +33,12 @@ knowledge_base/**/runs/**
 knowledge_base/**/*.pkl
 knowledge_base/**/*.sqlite
 
+# Ultimate RAG caches (RAPTOR embedding/summary caches)
+.cache/
+ultimate_rag/**/.cache/
+**/*.sqlite-shm
+**/*.sqlite-wal
+
 
 eval_results_*.json
 
