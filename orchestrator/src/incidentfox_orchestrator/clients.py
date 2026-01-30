@@ -411,7 +411,9 @@ class ConfigServiceClient:
         """
         Update the Slack summary message timestamp for a recall bot.
         """
-        url = f"{self.base_url}/api/v1/internal/recall-bots/{recall_bot_id}/slack-summary"
+        url = (
+            f"{self.base_url}/api/v1/internal/recall-bots/{recall_bot_id}/slack-summary"
+        )
         headers = {
             "Authorization": f"Bearer {admin_token}",
             "X-Internal-Service": "orchestrator",
