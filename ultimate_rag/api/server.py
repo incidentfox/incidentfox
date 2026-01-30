@@ -151,9 +151,9 @@ class IngestResponse(BaseModel):
     warnings: List[str] = []
 
 
-# Legacy models for backwards compatibility
+# Batch ingestion models
 class BatchDocument(BaseModel):
-    """A single document in a batch ingest request. DEPRECATED: Use IngestDocument."""
+    """A single document in a batch ingest request."""
 
     content: str = Field(..., description="Document content")
     source_url: Optional[str] = Field(None, description="Source URL")
@@ -162,14 +162,35 @@ class BatchDocument(BaseModel):
 
 
 class BatchIngestRequest(BaseModel):
-    """Request for batch document ingestion. DEPRECATED: Use IngestRequest with documents field."""
+    """Request for batch document ingestion with optional RAPTOR hierarchy building."""
 
     documents: List[BatchDocument] = Field(..., description="Documents to ingest")
     tree: Optional[str] = Field(None, description="Target tree name")
 
+    # RAPTOR hierarchy building
+    build_hierarchy: bool = Field(
+        False,
+        description=(
+            "Build full RAPTOR tree hierarchy with clustering and summarization. "
+            "When True, creates a proper hierarchical tree instead of flat storage. "
+            "This takes longer but enables much better retrieval quality."
+        ),
+    )
+
+    # Hierarchy configuration (only used when build_hierarchy=True)
+    hierarchy_num_layers: int = Field(
+        5, ge=2, le=10, description="Max number of tree layers (default: 5)"
+    )
+    hierarchy_target_top_nodes: int = Field(
+        50, ge=10, le=200, description="Target size for top layer (default: 50)"
+    )
+    hierarchy_summarization_length: int = Field(
+        200, ge=50, le=500, description="Max tokens for summary nodes (default: 200)"
+    )
+
 
 class BatchIngestResponse(BaseModel):
-    """Response for batch document ingestion. DEPRECATED: Use IngestResponse."""
+    """Response for batch document ingestion."""
 
     success: bool
     documents_processed: int
@@ -179,6 +200,10 @@ class BatchIngestResponse(BaseModel):
     processing_time_ms: float
     embedding_time_ms: float
     warnings: List[str] = []
+
+    # Hierarchy info (populated when build_hierarchy=True)
+    num_layers: int = 0
+    layer_distribution: Dict[int, int] = {}  # layer -> node count
 
 
 class TeachRequest(BaseModel):
@@ -1126,41 +1151,244 @@ class UltimateRAGServer:
             "/ingest/batch",
             response_model=BatchIngestResponse,
             tags=["Ingest"],
-            deprecated=True,
         )
         async def ingest_batch(request: BatchIngestRequest):
             """
-            DEPRECATED: Use POST /ingest with documents field instead.
+            Batch ingest multiple documents efficiently.
 
-            This endpoint is maintained for backwards compatibility.
+            This endpoint uses batch embedding to process all document chunks
+            in a single API call, significantly faster than ingesting one at a time.
+
+            Set `build_hierarchy=True` to enable full RAPTOR tree building with
+            clustering and summarization. This creates a proper hierarchical tree
+            for much better retrieval quality.
             """
-            # Convert to new format and call unified endpoint
-            new_request = IngestRequest(
-                documents=[
-                    IngestDocument(
-                        content=doc.content,
-                        source_url=doc.source_url,
-                        content_type=doc.content_type,
-                        metadata=doc.metadata,
+            import time
+
+            if not self.processor or not self.forest:
+                raise HTTPException(503, "Server not initialized")
+
+            start_time = time.time()
+            self._ingest_count += len(request.documents)
+            warnings = []
+
+            try:
+                # Step 1: Extract text from all documents
+                texts = []
+                all_entities = []
+                all_relationships = []
+
+                for doc in request.documents:
+                    try:
+                        # For hierarchy building, we want the raw text
+                        # (RAPTOR will do its own chunking)
+                        if request.build_hierarchy:
+                            texts.append(doc.content)
+                            # Still extract entities/relationships for the graph
+                            result = self.processor.process_content(
+                                content=doc.content,
+                                source_path=doc.source_url or "batch_input",
+                                content_type=self._get_content_type(doc.content_type),
+                                extra_metadata=doc.metadata,
+                            )
+                            all_entities.extend(result.entities_found)
+                            all_relationships.extend(result.relationships_found)
+                        else:
+                            # For flat ingestion, use the processor to chunk
+                            result = self.processor.process_content(
+                                content=doc.content,
+                                source_path=doc.source_url or "batch_input",
+                                content_type=self._get_content_type(doc.content_type),
+                                extra_metadata=doc.metadata,
+                            )
+                            texts.extend([chunk.text for chunk in result.chunks])
+                            all_entities.extend(result.entities_found)
+                            all_relationships.extend(result.relationships_found)
+                            warnings.extend(result.warnings)
+                    except Exception as e:
+                        warnings.append(f"Failed to process document: {e}")
+
+                if not texts:
+                    return BatchIngestResponse(
+                        success=False,
+                        documents_processed=len(request.documents),
+                        total_chunks=0,
+                        total_nodes_created=0,
+                        entities_found=[],
+                        processing_time_ms=(time.time() - start_time) * 1000,
+                        embedding_time_ms=0,
+                        warnings=warnings or ["No content to ingest"],
                     )
-                    for doc in request.documents
-                ],
-                tree=request.tree,
-            )
 
-            result = await ingest(new_request)
+                tree_name = request.tree or self.forest.default_tree or "default"
 
-            # Convert response to legacy format
-            return BatchIngestResponse(
-                success=result.success,
-                documents_processed=result.documents_processed,
-                total_chunks=result.chunks_created,
-                total_nodes_created=result.nodes_created,
-                entities_found=result.entities_found,
-                processing_time_ms=result.processing_time_ms,
-                embedding_time_ms=result.embedding_time_ms,
-                warnings=result.warnings,
-            )
+                # ========== RAPTOR HIERARCHY BUILDING ==========
+                if request.build_hierarchy:
+                    logger.info(
+                        f"Building RAPTOR hierarchy from {len(texts)} documents "
+                        f"(layers={request.hierarchy_num_layers}, "
+                        f"target_top={request.hierarchy_target_top_nodes})"
+                    )
+
+                    try:
+                        from ..raptor.tree_building import (
+                            RaptorTreeBuilder,
+                            TreeBuildConfig,
+                        )
+
+                        config = TreeBuildConfig(
+                            num_layers=request.hierarchy_num_layers,
+                            target_top_nodes=request.hierarchy_target_top_nodes,
+                            summarization_length=request.hierarchy_summarization_length,
+                            auto_depth=True,
+                        )
+
+                        builder = RaptorTreeBuilder(config)
+                        new_tree = builder.build_from_texts(texts, tree_name=tree_name)
+
+                        # Replace existing tree with new hierarchical tree
+                        if tree_name in self.forest.trees:
+                            del self.forest.trees[tree_name]
+                        self.forest.add_tree(new_tree)
+
+                        # Calculate layer distribution
+                        layer_dist = {}
+                        for node in new_tree.all_nodes.values():
+                            layer = getattr(node, "layer", 0)
+                            layer_dist[layer] = layer_dist.get(layer, 0) + 1
+
+                        # Populate knowledge graph from extracted entities
+                        # Link to leaf node IDs only (layer 0)
+                        leaf_node_ids = [
+                            n.index
+                            for n in new_tree.all_nodes.values()
+                            if getattr(n, "layer", 0) == 0
+                        ]
+                        graph_stats = self._populate_graph_from_entities(
+                            entities=all_entities,
+                            relationships=all_relationships,
+                            node_ids=leaf_node_ids,
+                            tree_id=tree_name,
+                        )
+                        if graph_stats["entities_added"] > 0:
+                            logger.info(
+                                f"Graph updated: {graph_stats['entities_added']} entities, "
+                                f"{graph_stats['relationships_added']} relationships"
+                            )
+
+                        processing_time_ms = (time.time() - start_time) * 1000
+
+                        return BatchIngestResponse(
+                            success=True,
+                            documents_processed=len(request.documents),
+                            total_chunks=layer_dist.get(0, 0),  # Leaf nodes
+                            total_nodes_created=len(new_tree.all_nodes),
+                            entities_found=list(set(all_entities)),
+                            processing_time_ms=processing_time_ms,
+                            embedding_time_ms=0,  # Included in processing
+                            warnings=warnings,
+                            num_layers=new_tree.num_layers,
+                            layer_distribution=layer_dist,
+                        )
+
+                    except Exception as e:
+                        logger.error(f"RAPTOR hierarchy building failed: {e}")
+                        warnings.append(
+                            f"Hierarchy building failed, falling back to flat: {e}"
+                        )
+                        # Fall through to flat ingestion
+
+                # ========== FLAT INGESTION (default) ==========
+                embed_start = time.time()
+
+                try:
+                    from knowledge_base.raptor.EmbeddingModels import (
+                        OpenAIEmbeddingModel,
+                    )
+
+                    embedding_model = OpenAIEmbeddingModel()
+                    embeddings = embedding_model.create_embeddings_batch(texts)
+                except ImportError:
+                    warnings.append("Batch embedding not available, using single calls")
+                    embeddings = None
+                except Exception as e:
+                    warnings.append(f"Batch embedding failed: {e}")
+                    embeddings = None
+
+                embed_time_ms = (time.time() - embed_start) * 1000
+
+                # Get or create tree
+                tree = self.forest.get_tree(tree_name)
+                if not tree:
+                    raise HTTPException(404, f"Tree '{tree_name}' not found")
+
+                nodes_created = 0
+                from ..core.node import KnowledgeNode
+                from ..core.types import ImportanceScore, KnowledgeType
+
+                max_index = max(tree.all_nodes.keys()) if tree.all_nodes else -1
+
+                for i, text in enumerate(texts):
+                    new_index = max_index + 1 + i
+
+                    importance = ImportanceScore(
+                        explicit_priority=0.5,
+                        authority_score=0.7,
+                    )
+
+                    node = KnowledgeNode(
+                        text=text,
+                        index=new_index,
+                        layer=0,
+                        knowledge_type=KnowledgeType.FACTUAL,
+                        importance=importance,
+                        tree_id=tree.tree_id,
+                    )
+
+                    if embeddings and i < len(embeddings):
+                        node.set_embedding("OpenAI", embeddings[i])
+
+                    tree.add_node(node)
+                    nodes_created += 1
+
+                # Populate knowledge graph from extracted entities
+                node_id_list = list(range(max_index + 1, max_index + 1 + nodes_created))
+                graph_stats = self._populate_graph_from_entities(
+                    entities=all_entities,
+                    relationships=all_relationships,
+                    node_ids=node_id_list,
+                    tree_id=tree_name,
+                )
+                if (
+                    graph_stats["entities_added"] > 0
+                    or graph_stats["entities_updated"] > 0
+                ):
+                    logger.info(
+                        f"Graph updated: {graph_stats['entities_added']} new entities, "
+                        f"{graph_stats['entities_updated']} updated, "
+                        f"{graph_stats['relationships_added']} relationships"
+                    )
+
+                processing_time_ms = (time.time() - start_time) * 1000
+
+                return BatchIngestResponse(
+                    success=True,
+                    documents_processed=len(request.documents),
+                    total_chunks=len(texts),
+                    total_nodes_created=nodes_created,
+                    entities_found=list(set(all_entities)),
+                    processing_time_ms=processing_time_ms,
+                    embedding_time_ms=embed_time_ms,
+                    warnings=warnings,
+                    num_layers=0,
+                    layer_distribution={0: nodes_created},
+                )
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Batch ingest failed: {e}")
+                raise HTTPException(500, str(e))
 
         # ==================== Teach Routes ====================
 
@@ -2592,6 +2820,161 @@ class UltimateRAGServer:
                 return f"New content indicates update/deprecation: '{phrase}'"
 
         return None
+
+    def _populate_graph_from_entities(
+        self,
+        entities: List[str],
+        relationships: List[tuple],
+        node_ids: Optional[List[int]] = None,
+        tree_id: str = "default",
+    ) -> Dict[str, int]:
+        """
+        Populate the knowledge graph from extracted entities and relationships.
+
+        Args:
+            entities: List of entity name strings
+            relationships: List of (source, relationship_type, target) tuples
+            node_ids: Optional list of RAPTOR node IDs to link entities to
+            tree_id: Tree ID for linking
+
+        Returns:
+            Stats dict with counts of entities and relationships added
+        """
+        from ..graph.entities import Entity, EntityType
+        from ..graph.relationships import Relationship, RelationshipType
+
+        stats = {"entities_added": 0, "relationships_added": 0, "entities_updated": 0}
+
+        # Entity type inference based on name patterns
+        def infer_entity_type(name: str) -> EntityType:
+            name_lower = name.lower()
+            # Service patterns
+            if any(
+                kw in name_lower
+                for kw in ["-api", "-service", "service", "api", "server", "worker"]
+            ):
+                return EntityType.SERVICE
+            # Person patterns
+            if "@" in name_lower or any(
+                kw in name_lower for kw in ["team lead", "engineer", "manager"]
+            ):
+                return EntityType.PERSON
+            # Team patterns
+            if any(kw in name_lower for kw in ["team", "squad", "group"]):
+                return EntityType.TEAM
+            # Technology patterns
+            if any(
+                kw in name_lower
+                for kw in [
+                    "python",
+                    "java",
+                    "node",
+                    "react",
+                    "kubernetes",
+                    "k8s",
+                    "docker",
+                    "aws",
+                    "gcp",
+                    "azure",
+                    "postgres",
+                    "mysql",
+                    "redis",
+                    "kafka",
+                    "mongodb",
+                    "elasticsearch",
+                    "terraform",
+                    "jenkins",
+                    "github",
+                ]
+            ):
+                return EntityType.TECHNOLOGY
+            # Document patterns
+            if any(
+                kw in name_lower
+                for kw in ["readme", "doc", "guide", "manual", "runbook"]
+            ):
+                return EntityType.DOCUMENT
+            # Default
+            return EntityType.CUSTOM
+
+        # Relationship type mapping
+        rel_type_map = {
+            "depends_on": RelationshipType.DEPENDS_ON,
+            "calls": RelationshipType.CALLS,
+            "owns": RelationshipType.OWNS,
+            "maintains": RelationshipType.MAINTAINS,
+            "member_of": RelationshipType.MEMBER_OF,
+            "expert_in": RelationshipType.EXPERT_IN,
+            "documents": RelationshipType.DOCUMENTS,
+            "uses": RelationshipType.USES,
+            "related_to": RelationshipType.RELATED_TO,
+        }
+
+        # Process entities
+        for entity_name in entities:
+            if not entity_name or len(entity_name) < 2:
+                continue
+
+            entity_id = entity_name.lower().replace(" ", "-").replace("_", "-")
+
+            # Check if entity already exists
+            existing = self.graph.get_entity(entity_id)
+            if existing:
+                # Update with new node references
+                if node_ids:
+                    for node_id in node_ids:
+                        existing.add_node_reference(node_id, tree_id)
+                stats["entities_updated"] += 1
+            else:
+                # Create new entity
+                entity = Entity(
+                    entity_id=entity_id,
+                    entity_type=infer_entity_type(entity_name),
+                    name=entity_name,
+                    display_name=entity_name.title(),
+                    node_ids=node_ids or [],
+                    tree_ids=[tree_id] if tree_id else [],
+                    properties={"source": "auto_extraction"},
+                )
+                self.graph.add_entity(entity)
+                stats["entities_added"] += 1
+
+        # Process relationships
+        for rel_tuple in relationships:
+            if len(rel_tuple) != 3:
+                continue
+
+            source_name, rel_type_str, target_name = rel_tuple
+
+            source_id = source_name.lower().replace(" ", "-").replace("_", "-")
+            target_id = target_name.lower().replace(" ", "-").replace("_", "-")
+
+            # Get or infer relationship type
+            rel_type = rel_type_map.get(
+                rel_type_str.lower(), RelationshipType.RELATED_TO
+            )
+
+            # Create relationship ID
+            import hashlib
+
+            rel_id = hashlib.md5(
+                f"{source_id}:{rel_type.value}:{target_id}".encode()
+            ).hexdigest()[:12]
+
+            # Check if relationship exists
+            existing_rel = self.graph.get_relationship(rel_id)
+            if not existing_rel:
+                relationship = Relationship(
+                    relationship_id=rel_id,
+                    source_id=source_id,
+                    target_id=target_id,
+                    relationship_type=rel_type,
+                    properties={"source": "auto_extraction"},
+                )
+                self.graph.add_relationship(relationship)
+                stats["relationships_added"] += 1
+
+        return stats
 
 
 def create_app(

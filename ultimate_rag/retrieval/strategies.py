@@ -70,7 +70,9 @@ class RetrievedChunk:
     score: float  # Base similarity score
     importance: float  # Importance score from node
     strategy: str  # Which strategy found this
+    tree_id: str = ""  # Tree this chunk came from
     tree_level: int = 0  # Level in RAPTOR tree (0 = leaf)
+    layer: int = 0  # Alias for tree_level (used by RAPTOR)
     path: List[int] = field(default_factory=list)  # Path from root to this node
     metadata: Dict[str, Any] = field(default_factory=dict)
 
