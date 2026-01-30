@@ -16,10 +16,14 @@ description: Log, metric, and trace analysis methodology. Use when analyzing log
 
 ## Available Backends
 
-Check which backends are configured by looking for environment variables:
-- `CORALOGIX_API_KEY` → Coralogix (DataPrime)
-- `DATADOG_API_KEY` → Datadog
-- `AWS_REGION` → CloudWatch
+**IMPORTANT**: Credentials are injected automatically by a proxy layer. Do NOT check for API keys in environment variables - they won't be there. Just use the backend scripts directly; authentication is handled transparently.
+
+Available backends:
+- **Coralogix** (DataPrime) - Use the scripts in `.claude/skills/observability/coralogix/scripts/`
+- **Datadog** (future) - Coming soon
+- **CloudWatch** (future) - Coming soon
+
+To check if a backend is working, try a simple query rather than checking env vars.
 
 ### Coralogix
 For DataPrime query syntax, see: `.claude/skills/observability/coralogix/SKILL.md`

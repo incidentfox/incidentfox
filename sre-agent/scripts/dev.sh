@@ -149,6 +149,17 @@ if ! kubectl get deployment sandbox-router-deployment &>/dev/null; then
 fi
 echo "  ✓ Sandbox router deployed"
 
+# Check if credential-resolver is deployed
+if ! kubectl get deployment credential-resolver -n incidentfox-prod &>/dev/null; then
+    echo -e "${RED}❌ Credential resolver not deployed!${NC}"
+    echo ""
+    echo "The Kind cluster exists but credential proxy isn't installed."
+    echo "Run: make setup-local"
+    echo ""
+    exit 1
+fi
+echo "  ✓ Credential resolver deployed"
+
 echo -e "${GREEN}✅ Setup OK${NC}"
 echo ""
 
@@ -174,6 +185,12 @@ grep -v "runtimeClassName" k8s/sandbox-template.yaml | kubectl apply -f - >/dev/
 echo -e "${GREEN}✅ Template deployed${NC}"
 echo ""
 
+# Ensure envoy config is up to date
+echo -e "${BLUE}📋 Updating envoy proxy config...${NC}"
+kubectl apply -f credential-proxy/k8s/configmap-envoy-local.yaml >/dev/null
+echo -e "${GREEN}✅ Envoy config updated${NC}"
+echo ""
+
 # Setup port-forward to router
 echo -e "${BLUE}🔀 Setting up port-forward to router...${NC}"
 pkill -f "kubectl.*port-forward.*8080" 2>/dev/null || true
@@ -193,12 +210,15 @@ sleep 2
 echo -e "${GREEN}✅ Port-forward ready (PID: $PORT_FORWARD_PID)${NC}"
 echo ""
 
-# Load environment
-if [ ! -f ".env" ]; then
+# Load environment - prefer root .env (has real credentials)
+if [ -f "../.env" ]; then
+    source "../.env"
+elif [ -f ".env" ]; then
+    source ".env"
+else
     echo -e "${RED}❌ .env file not found!${NC}"
     exit 1
 fi
-source .env
 
 # Check if port 8000 is already in use
 if lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null 2>&1; then

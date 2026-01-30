@@ -1,0 +1,19 @@
+# Credential Resolver Service
+# ClusterIP service for ext_authz calls from Envoy sidecars
+apiVersion: v1
+kind: Service
+metadata:
+  name: credential-resolver-svc
+  namespace: incidentfox-prod
+  labels:
+    app: credential-resolver
+    component: sre-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: credential-resolver
+  ports:
+  - name: http
+    port: 8002
+    targetPort: 8002
+    protocol: TCP

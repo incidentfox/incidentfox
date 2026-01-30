@@ -21,9 +21,11 @@ import secrets
 import time
 import uuid
 from asyncio import Event
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 import httpx
+from auth import generate_sandbox_jwt
 from dotenv import load_dotenv
 from events import error_event
 from fastapi import FastAPI, HTTPException, Request
@@ -52,6 +54,69 @@ print(f"✅ SandboxManager initialized (namespace={namespace}, image={image})")
 # Tokens expire after 1 hour to prevent stale downloads
 _file_download_tokens: Dict[str, dict] = {}
 _FILE_TOKEN_TTL_SECONDS = 3600  # 1 hour
+
+# Session store: thread_id -> {jwt, jwt_expiry, tenant_id, team_id}
+# JWTs are reused across sandbox recreations for the same session
+_sessions: Dict[str, dict] = {}
+_SESSION_JWT_TTL_HOURS = 24  # JWT valid for 24h (spans multiple sandbox lifetimes)
+_SESSION_JWT_REUSE_THRESHOLD_MINUTES = 30  # Reuse JWT if >30 min remaining
+
+
+def get_or_create_session_jwt(
+    thread_id: str, tenant_id: str, team_id: str
+) -> tuple[str, datetime]:
+    """Get existing JWT if still valid, or create new one.
+
+    This enables session continuity across sandbox recreations. A user's
+    session can span multiple sandbox lifetimes without generating new JWTs.
+
+    Args:
+        thread_id: Investigation thread ID (session key)
+        tenant_id: Organization/tenant ID
+        team_id: Team node ID
+
+    Returns:
+        Tuple of (jwt_token, jwt_expiry)
+    """
+    session = _sessions.get(thread_id)
+    now = datetime.now(timezone.utc)
+
+    # Check if existing JWT is still valid with enough remaining time
+    if session:
+        jwt_expiry = session.get("jwt_expiry")
+        if jwt_expiry and jwt_expiry > now + timedelta(
+            minutes=_SESSION_JWT_REUSE_THRESHOLD_MINUTES
+        ):
+            print(
+                f"♻️  Reusing existing JWT for thread {thread_id} "
+                f"(expires in {int((jwt_expiry - now).total_seconds() / 60)} min)"
+            )
+            return session["jwt"], jwt_expiry
+
+    # Generate new JWT
+    sandbox_name = f"investigation-{thread_id}"
+    jwt_token = generate_sandbox_jwt(
+        tenant_id=tenant_id,
+        team_id=team_id,
+        sandbox_name=sandbox_name,
+        thread_id=thread_id,
+        ttl_hours=_SESSION_JWT_TTL_HOURS,
+    )
+    jwt_expiry = now + timedelta(hours=_SESSION_JWT_TTL_HOURS)
+
+    # Store in session
+    _sessions[thread_id] = {
+        "jwt": jwt_token,
+        "jwt_expiry": jwt_expiry,
+        "tenant_id": tenant_id,
+        "team_id": team_id,
+    }
+    print(
+        f"🔑 Generated new JWT for thread {thread_id} (expires in {_SESSION_JWT_TTL_HOURS}h)"
+    )
+
+    return jwt_token, jwt_expiry
+
 
 app = FastAPI(
     title="IncidentFox Investigation Server",
@@ -85,6 +150,8 @@ class FileAttachment(BaseModel):
 class InvestigateRequest(BaseModel):
     prompt: str
     thread_id: Optional[str] = None  # For follow-ups, generate if not provided
+    tenant_id: Optional[str] = None  # Organization/tenant ID for credential lookup
+    team_id: Optional[str] = None  # Team node ID for credential lookup
     images: Optional[List[ImageData]] = None  # Optional attached images
     file_attachments: Optional[List[FileAttachment]] = (
         None  # File attachments (downloaded via proxy)
@@ -362,14 +429,28 @@ async def investigate(request: InvestigateRequest):
     # Generate thread_id if not provided
     thread_id = request.thread_id or f"thread-{uuid.uuid4().hex[:8]}"
 
+    # Extract tenant context (defaults for local dev)
+    tenant_id = request.tenant_id or os.getenv("DEFAULT_TENANT_ID", "local")
+    team_id = request.team_id or os.getenv("DEFAULT_TEAM_ID", "local")
+
     # Create/reuse sandbox
     sandbox_info = sandbox_manager.get_sandbox(thread_id)
 
     if not sandbox_info:
-        # Create new sandbox
-        print(f"🔧 Creating sandbox for thread {thread_id}")
+        # Get or create session JWT (reuses existing if still valid)
+        jwt_token, _ = get_or_create_session_jwt(thread_id, tenant_id, team_id)
+
+        # Create new sandbox with session JWT
+        print(
+            f"🔧 Creating sandbox for thread {thread_id} (tenant={tenant_id}, team={team_id})"
+        )
         try:
-            sandbox_info = sandbox_manager.create_sandbox(thread_id)
+            sandbox_info = sandbox_manager.create_sandbox(
+                thread_id,
+                tenant_id=tenant_id,
+                team_id=team_id,
+                jwt_token=jwt_token,
+            )
 
             # Wait for sandbox to be ready
             print(f"⏳ Waiting for sandbox {sandbox_info.name} to be ready...")

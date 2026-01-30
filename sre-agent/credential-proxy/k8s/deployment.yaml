@@ -1,0 +1,99 @@
+# Credential Resolver Deployment (Production)
+# ext_authz service for credential injection in sandbox pods
+# Uses environment-based credentials from K8s Secret
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: credential-resolver
+  namespace: incidentfox-prod
+  labels:
+    app: credential-resolver
+    component: sre-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: credential-resolver
+  template:
+    metadata:
+      labels:
+        app: credential-resolver
+        component: sre-agent
+    spec:
+      serviceAccountName: credential-resolver
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: credential-resolver
+        image: 103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8002
+          name: http
+          protocol: TCP
+        env:
+        # Use environment-based credentials (from K8s Secret)
+        - name: CREDENTIAL_SOURCE
+          value: "environment"
+        # JWT validation mode: "strict" requires valid JWT for all requests
+        - name: JWT_MODE
+          value: "strict"
+        # Shared secret for JWT validation (must match sre-agent server)
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: jwt-secret
+        # Anthropic credentials
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: anthropic-api-key
+        # Coralogix credentials
+        - name: CORALOGIX_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: coralogix-api-key
+        - name: CORALOGIX_DOMAIN
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: coralogix-domain
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: credential-resolver
+              topologyKey: kubernetes.io/hostname

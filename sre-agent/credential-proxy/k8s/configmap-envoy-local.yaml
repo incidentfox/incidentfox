@@ -1,0 +1,165 @@
+# Envoy Proxy ConfigMap (Local Kind Development)
+# Deployed to default namespace where sandbox pods run
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy-proxy-config
+  namespace: default
+  labels:
+    app: sre-agent
+    component: envoy-sidecar
+data:
+  envoy.yaml: |
+    # Envoy proxy configuration for credential injection (Local Kind)
+    # Used as sidecar in sandbox pods
+    #
+    # Request flow:
+    # 1. Agent uses ANTHROPIC_BASE_URL=http://localhost:8001
+    # 2. Agent makes request to http://localhost:8001/v1/messages
+    # 3. Envoy routes by path prefix (since Host is localhost:8001)
+    # 4. Envoy calls ext_authz (credential-resolver) to get auth headers
+    # 5. Envoy injects headers and forwards to upstream
+
+    admin:
+      address:
+        socket_address:
+          address: 127.0.0.1
+          port_value: 9901
+
+    static_resources:
+      listeners:
+      - name: http_proxy
+        address:
+          socket_address:
+            address: 0.0.0.0
+            port_value: 8001
+        filter_chains:
+        - filters:
+          - name: envoy.filters.network.http_connection_manager
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+              stat_prefix: credential_proxy
+              codec_type: AUTO
+
+              http_protocol_options:
+                allow_absolute_url: true
+
+              route_config:
+                name: proxy_routes
+                virtual_hosts:
+                # Path-based routing for localhost (SDK uses BASE_URL=http://localhost:8001)
+                - name: localhost_proxy
+                  domains:
+                  - "localhost:8001"
+                  - "127.0.0.1:8001"
+                  - "localhost"
+                  - "*"
+                  routes:
+                  # Anthropic API paths
+                  - match:
+                      prefix: "/v1/"
+                    route:
+                      cluster: anthropic
+                      auto_host_rewrite: true
+                  - match:
+                      prefix: "/api/event_logging/"
+                    route:
+                      cluster: anthropic
+                      auto_host_rewrite: true
+                  # Coralogix API paths
+                  - match:
+                      prefix: "/api/v1/dataprime/"
+                    route:
+                      cluster: coralogix_us2
+                      auto_host_rewrite: true
+                  - match:
+                      prefix: "/api/v1/query"
+                    route:
+                      cluster: coralogix_us2
+                      auto_host_rewrite: true
+
+              http_filters:
+              # ext_authz filter - calls credential-resolver for auth headers
+              - name: envoy.filters.http.ext_authz
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                  transport_api_version: V3
+                  http_service:
+                    server_uri:
+                      # FQDN: credential-resolver runs in incidentfox-prod namespace
+                      uri: http://credential-resolver-svc.incidentfox-prod.svc.cluster.local:8002/check
+                      cluster: ext_authz
+                      timeout: 2s
+                    authorization_request:
+                      allowed_headers:
+                        patterns:
+                        - exact: "x-tenant-id"
+                        - exact: "x-team-id"
+                      headers_to_add:
+                      - key: "x-original-host"
+                        value: "%REQ(:authority)%"
+                    authorization_response:
+                      allowed_upstream_headers:
+                        patterns:
+                        - exact: "authorization"
+                        - exact: "x-api-key"
+                  failure_mode_allow: false
+
+              - name: envoy.filters.http.router
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+      clusters:
+      # ext_authz cluster (credential-resolver service)
+      - name: ext_authz
+        type: STRICT_DNS
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: ext_authz
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: credential-resolver-svc.incidentfox-prod.svc.cluster.local
+                    port_value: 8002
+
+      # Anthropic API
+      - name: anthropic
+        type: LOGICAL_DNS
+        dns_lookup_family: V4_ONLY
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: anthropic
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: api.anthropic.com
+                    port_value: 443
+        transport_socket:
+          name: envoy.transport_sockets.tls
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            sni: api.anthropic.com
+
+      # Coralogix US2
+      - name: coralogix_us2
+        type: LOGICAL_DNS
+        dns_lookup_family: V4_ONLY
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: coralogix_us2
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: api.us2.coralogix.com
+                    port_value: 443
+        transport_socket:
+          name: envoy.transport_sockets.tls
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            sni: api.us2.coralogix.com

@@ -1,0 +1,56 @@
+# Credential Proxy Local Development
+#
+# This docker-compose file sets up the credential proxy for local development.
+# The security model is the same as production:
+# - Secrets are only accessible to credential-resolver
+# - Agent/sandbox never sees API keys (can't run `env` and find them)
+# - All HTTP requests route through Envoy which calls credential-resolver
+#
+# Usage:
+#   1. Create .env file with your secrets (see .env.example)
+#   2. Run: docker compose up -d
+#   3. Set HTTP_PROXY=http://localhost:8001 in your agent environment
+#   4. Agent requests to api.anthropic.com / api.*.coralogix.com get auth injected
+#
+# To test credential injection:
+#   curl -x http://localhost:8001 \
+#     -H "X-IncidentFox-Auth: test-token" \
+#     -H "X-Tenant-ID: local" \
+#     -H "X-Team-ID: local" \
+#     https://api.us2.coralogix.com/api/v1/health
+
+services:
+  # Credential resolver - loads secrets from .env, injects into requests
+  credential-resolver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      # Use environment mode (load from env vars, not Config Service)
+      - CREDENTIAL_SOURCE=environment
+      # Local dev: permissive JWT mode (allows requests without valid JWT)
+      - JWT_MODE=permissive
+      - JWT_SECRET=dev-secret-change-in-prod
+    env_file:
+      - ../../.env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8002/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Envoy proxy - routes requests, calls credential-resolver for auth headers
+  envoy:
+    image: envoyproxy/envoy:v1.28-latest
+    ports:
+      - "8001:8001"
+      - "9901:9901"  # Admin interface
+    volumes:
+      - ./envoy/envoy-local.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      credential-resolver:
+        condition: service_healthy
+    command: ["--config-path", "/etc/envoy/envoy.yaml", "--log-level", "info"]
