@@ -175,15 +175,14 @@ class RaptorTreeBuilder:
 
         logger.info(f"Building RAPTOR tree from {len(texts)} documents...")
 
-        # RAPTOR's build_from_text expects a single string
-        # Join documents with clear separators for proper chunking
-        combined_text = "\n\n---DOCUMENT_SEPARATOR---\n\n".join(texts)
-        logger.info(
-            f"Combined {len(texts)} documents into {len(combined_text)} characters"
-        )
+        # Use build_from_chunks instead of build_from_text
+        # This treats each text as a pre-chunked leaf node
+        # Filter out empty texts
+        chunks = [t for t in texts if t and t.strip()]
+        logger.info(f"Building tree from {len(chunks)} pre-chunked documents")
 
-        # Build RAPTOR tree
-        raptor_tree = self._raptor_builder.build_from_text(combined_text)
+        # Build RAPTOR tree using chunks directly
+        raptor_tree = self._raptor_builder.build_from_chunks(chunks)
 
         # Convert to KnowledgeTree
         from .bridge import RaptorBridge

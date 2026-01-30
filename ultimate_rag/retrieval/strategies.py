@@ -314,8 +314,11 @@ Intent definitions:
             logger.error(f"Failed to create query embedding: {e}")
             return []
 
+        # Debug: log forest state
+        logger.info(f"[search_trees] Forest has {len(forest.trees)} trees")
         for tree in forest.trees.values():
             node_list = list(tree.all_nodes.values())
+            logger.info(f"[search_trees] Tree {tree.tree_id}: {len(node_list)} nodes")
             if not node_list:
                 continue
 
@@ -323,13 +326,16 @@ Intent definitions:
             embeddings = []
             valid_nodes = []
             embedding_key = getattr(tree, "embedding_model", "OpenAI") or "OpenAI"
+            logger.info(f"[search_trees] Using embedding key: {embedding_key}")
 
             for node in node_list:
                 node_embedding = node.embeddings.get(embedding_key)
-                if node_embedding:
+                # Check if embedding exists (handle numpy arrays properly)
+                if node_embedding is not None:
                     embeddings.append(node_embedding)
                     valid_nodes.append(node)
 
+            logger.info(f"[search_trees] Found {len(valid_nodes)} nodes with embeddings")
             if not embeddings:
                 continue
 
@@ -1518,3 +1524,114 @@ Focus on infrastructure components, databases, APIs, microservices, etc.""",
             if node_id in tree.all_nodes:
                 return tree.all_nodes[node_id]
         return None
+
+
+class QueryDecompositionStrategy(RetrievalStrategy):
+    """
+    Decompose complex multi-hop queries into simpler sub-queries.
+
+    For questions requiring multiple pieces of information, this strategy:
+    1. Uses LLM to identify sub-questions
+    2. Retrieves for each sub-question independently
+    3. Merges and re-ranks combined results
+    """
+
+    name = "query_decomposition"
+
+    DECOMPOSITION_PROMPT = """Analyze this complex question and break it into simpler sub-questions.
+
+Question: {query}
+
+Rules:
+- Identify distinct information needs (entities, facts, relationships)
+- Each sub-question should be answerable independently
+- Output 2-4 focused sub-questions
+- Format: one question per line, no numbering
+
+Example:
+Input: "Which company acquired the startup founded by the person who invented the iPhone?"
+Output:
+Who invented the iPhone?
+What startup did Steve Jobs found?
+Which company acquired that startup?
+"""
+
+    def __init__(self, model: str = "gpt-4o-mini"):
+        self.model = model
+        self._client = None
+
+    def _get_client(self):
+        """Lazy initialization of OpenAI client."""
+        if self._client is None:
+            try:
+                from openai import AsyncOpenAI
+                self._client = AsyncOpenAI()
+            except ImportError:
+                logger.warning("OpenAI not available for query decomposition")
+        return self._client
+
+    async def _decompose_query(self, query: str) -> List[str]:
+        """Use LLM to break query into sub-questions."""
+        client = self._get_client()
+        if not client:
+            logger.warning("LLM client not available for decomposition")
+            return [query]
+
+        try:
+            response = await client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self.DECOMPOSITION_PROMPT.format(query=query)},
+                ],
+                temperature=0.3,
+            )
+
+            sub_queries = [
+                line.strip()
+                for line in response.choices[0].message.content.split("\n")
+                if line.strip()
+            ]
+            logger.info(f"Query decomposed into {len(sub_queries)} sub-queries")
+            return [query] + sub_queries  # Include original
+        except Exception as e:
+            logger.error(f"LLM query decomposition failed: {e}")
+            return [query]
+
+    async def retrieve(
+        self,
+        query: str,
+        forest: "TreeForest",
+        graph: Optional["KnowledgeGraph"] = None,
+        top_k: int = 10,
+        **kwargs,
+    ) -> List[RetrievedChunk]:
+        """Retrieve using query decomposition."""
+        sub_queries = await self._decompose_query(query)
+
+        all_chunks: Dict[int, RetrievedChunk] = {}
+        chunk_hit_count: Dict[int, int] = {}
+
+        for sub_q in sub_queries:
+            chunks = await self.search_trees(sub_q, forest, top_k)
+            for chunk in chunks:
+                chunk_hit_count[chunk.node_id] = chunk_hit_count.get(chunk.node_id, 0) + 1
+
+                if chunk.node_id not in all_chunks:
+                    all_chunks[chunk.node_id] = chunk
+                elif chunk.score > all_chunks[chunk.node_id].score:
+                    all_chunks[chunk.node_id].score = chunk.score
+
+        # Boost chunks that appear in multiple sub-query results
+        for node_id, chunk in all_chunks.items():
+            hit_count = chunk_hit_count[node_id]
+            if hit_count > 1:
+                boost_factor = 1.0 + (0.2 * (hit_count - 1))
+                chunk.score = min(1.0, chunk.score * boost_factor)
+
+        results = sorted(
+            all_chunks.values(),
+            key=lambda c: c.score,
+            reverse=True
+        )[:top_k]
+
+        return results

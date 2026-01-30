@@ -16,6 +16,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from .reranker import (
+    CrossEncoderReranker,
     EnsembleReranker,
     ImportanceReranker,
     RerankConfig,
@@ -28,6 +29,7 @@ from .strategies import (
     IncidentAwareStrategy,
     MultiQueryStrategy,
     QueryAnalysis,
+    QueryDecompositionStrategy,
     QueryIntent,
     RetrievalStrategy,
     RetrievedChunk,
@@ -147,14 +149,24 @@ class UltimateRetriever:
             "adaptive_depth": AdaptiveDepthStrategy(),
             "hybrid": HybridGraphTreeStrategy(),
             "incident": IncidentAwareStrategy(),
+            "query_decomposition": QueryDecompositionStrategy(),
         }
 
-        # Initialize rerankers
-        self._reranker = EnsembleReranker(
-            rerankers=[
-                ImportanceReranker(self.config.rerank_config),
-            ]
-        )
+        # Initialize rerankers with cross-encoder for better precision
+        rerankers_list = [ImportanceReranker(self.config.rerank_config)]
+        
+        # Try to add cross-encoder reranker (requires sentence-transformers)
+        try:
+            from sentence_transformers import CrossEncoder
+            cross_encoder_model = CrossEncoder("BAAI/bge-reranker-base")
+            rerankers_list.append(CrossEncoderReranker(model=cross_encoder_model))
+            logger.info("Cross-encoder reranker enabled (BAAI/bge-reranker-base)")
+        except ImportError:
+            logger.warning("sentence-transformers not installed, cross-encoder disabled")
+        except Exception as e:
+            logger.warning(f"Failed to load cross-encoder model: {e}")
+        
+        self._reranker = EnsembleReranker(rerankers=rerankers_list)
 
         # Stats
         self._query_count = 0
@@ -269,12 +281,13 @@ class UltimateRetriever:
             strategies.append(self._strategies["incident"])
 
         elif mode == RetrievalMode.THOROUGH:
-            # Use all strategies
+            # Use all strategies including query decomposition
             strategies.extend(
                 [
                     self._strategies["multi_query"],
                     self._strategies["hyde"],
                     self._strategies["hybrid"],
+                    self._strategies["query_decomposition"],
                 ]
             )
 
@@ -285,11 +298,13 @@ class UltimateRetriever:
                 strategies.append(self._strategies["adaptive_depth"])
             elif analysis.intent == QueryIntent.RELATIONAL:
                 strategies.append(self._strategies["hybrid"])
+                strategies.append(self._strategies["query_decomposition"])  # Good for multi-hop
             elif analysis.intent == QueryIntent.TROUBLESHOOTING:
                 strategies.append(self._strategies["incident"])
             else:
                 strategies.append(self._strategies["multi_query"])
                 strategies.append(self._strategies["hybrid"])
+                strategies.append(self._strategies["query_decomposition"])  # Good for complex queries
 
         return strategies
 
