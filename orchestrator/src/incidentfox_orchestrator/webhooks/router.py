@@ -1769,9 +1769,30 @@ async def _handle_recall_transcript_data(
             recall_bot_id=bot_id,
         )
 
-        # If this is a partial transcript, don't feed to agent (too noisy)
+        # If this is a partial transcript, don't feed to agent or update Slack (too noisy)
         if is_partial:
             return
+
+        # Post/update transcript summary to Slack thread (if configured)
+        if bot_info.get("slack_channel_id") and bot_info.get("slack_thread_ts"):
+            try:
+                from incidentfox_orchestrator.recall_summary import (
+                    post_transcript_summary,
+                )
+
+                await post_transcript_summary(
+                    config_service_client=cfg,
+                    admin_token=admin_token,
+                    recall_bot_id=bot_id,
+                    bot_info=bot_info,
+                )
+            except Exception as slack_error:
+                _log(
+                    "recall_transcript_slack_summary_failed",
+                    correlation_id=correlation_id,
+                    bot_id=bot_id,
+                    error=str(slack_error),
+                )
 
         # Feed transcript to active investigation if there's an associated incident
         if incident_id and team_node_id:

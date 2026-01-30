@@ -683,6 +683,8 @@ class RecallProvider(MeetingProvider):
         incident_id: str | None = None,
         custom_bot_name: str | None = None,
         enable_partial_transcripts: bool = False,
+        slack_channel_id: str | None = None,
+        slack_thread_ts: str | None = None,
     ) -> dict[str, Any]:
         """
         Create a bot and send it to join a meeting.
@@ -692,6 +694,8 @@ class RecallProvider(MeetingProvider):
             incident_id: Optional incident ID to associate with this recording
             custom_bot_name: Override the default bot name
             enable_partial_transcripts: Enable low-latency partial transcripts
+            slack_channel_id: Optional Slack channel for transcript summaries
+            slack_thread_ts: Optional Slack thread for transcript summaries
 
         Returns:
             Bot creation response including bot_id
@@ -727,31 +731,124 @@ class RecallProvider(MeetingProvider):
                 }
             ]
 
-        # Add incident_id to metadata for webhook routing
+        # Build metadata for webhook routing
+        metadata: dict[str, Any] = {}
         if incident_id:
-            bot_config["metadata"] = {"incident_id": incident_id}
+            metadata["incident_id"] = incident_id
+        if slack_channel_id:
+            metadata["slack_channel_id"] = slack_channel_id
+        if slack_thread_ts:
+            metadata["slack_thread_ts"] = slack_thread_ts
+        if metadata:
+            bot_config["metadata"] = metadata
 
         logger.info(
             "recall_creating_bot",
             meeting_url=meeting_url,
             bot_name=bot_config["bot_name"],
             incident_id=incident_id,
+            slack_channel_id=slack_channel_id,
         )
 
         result = self._request("POST", "/bot", json=bot_config)
 
+        bot_id = result.get("id")
+
+        # Also register the bot with our orchestrator to store Slack thread info
+        # This ensures the webhook handler can find the Slack context
+        ctx = get_execution_context()
+        if ctx and (slack_channel_id or slack_thread_ts):
+            try:
+                self._register_bot_with_orchestrator(
+                    bot_id=bot_id,
+                    meeting_url=meeting_url,
+                    bot_name=custom_bot_name or self.bot_name,
+                    incident_id=incident_id,
+                    slack_channel_id=slack_channel_id,
+                    slack_thread_ts=slack_thread_ts,
+                    org_id=ctx.org_id,
+                    team_node_id=ctx.team_node_id,
+                )
+            except Exception as e:
+                # Log but don't fail - bot was created in Recall
+                logger.warning(
+                    "recall_bot_orchestrator_registration_failed",
+                    bot_id=bot_id,
+                    error=str(e),
+                )
+
         logger.info(
             "recall_bot_created",
-            bot_id=result.get("id"),
+            bot_id=bot_id,
             meeting_url=meeting_url,
         )
 
         return {
-            "bot_id": result.get("id"),
+            "bot_id": bot_id,
             "status": result.get("status", {}).get("code", "unknown"),
             "meeting_url": meeting_url,
             "provider": "recall",
         }
+
+    def _register_bot_with_orchestrator(
+        self,
+        bot_id: str,
+        meeting_url: str,
+        bot_name: str,
+        incident_id: str | None,
+        slack_channel_id: str | None,
+        slack_thread_ts: str | None,
+        org_id: str,
+        team_node_id: str,
+    ) -> None:
+        """
+        Register bot with orchestrator to store Slack thread info.
+
+        This is called after creating the bot in Recall.ai to ensure
+        our webhook handler can find the Slack context for posting summaries.
+        """
+        import uuid
+
+        # Get config service URL and admin token
+        config_service_url = os.getenv("CONFIG_SERVICE_URL", "").strip()
+        admin_token = os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN", "").strip()
+
+        if not config_service_url or not admin_token:
+            logger.debug(
+                "recall_bot_orchestrator_registration_skipped",
+                reason="missing_config",
+            )
+            return
+
+        internal_id = uuid.uuid4().hex
+
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(
+                f"{config_service_url}/api/v1/internal/recall-bots",
+                headers={
+                    "Authorization": f"Bearer {admin_token}",
+                    "X-Internal-Service": "agent",
+                },
+                json={
+                    "id": internal_id,
+                    "org_id": org_id,
+                    "team_node_id": team_node_id,
+                    "recall_bot_id": bot_id,
+                    "meeting_url": meeting_url,
+                    "incident_id": incident_id,
+                    "bot_name": bot_name,
+                    "slack_channel_id": slack_channel_id,
+                    "slack_thread_ts": slack_thread_ts,
+                },
+            )
+            response.raise_for_status()
+
+        logger.info(
+            "recall_bot_registered_with_orchestrator",
+            bot_id=bot_id,
+            internal_id=internal_id,
+            slack_channel_id=slack_channel_id,
+        )
 
     def get_bot_status(self, bot_id: str) -> dict[str, Any]:
         """Get the current status of a bot."""
@@ -1349,6 +1446,8 @@ def meeting_start_recording(
     meeting_url: str,
     incident_id: str | None = None,
     bot_name: str | None = None,
+    slack_channel_id: str | None = None,
+    slack_thread_ts: str | None = None,
 ) -> dict[str, Any]:
     """
     Send an IncidentFox bot to join a meeting and start real-time transcription.
@@ -1357,12 +1456,17 @@ def meeting_start_recording(
     The bot will join the meeting (Zoom, Google Meet, or Teams) and stream
     real-time transcripts that will be fed to the investigation.
 
+    If invoked from a Slack thread, provide the slack_channel_id and slack_thread_ts
+    to have transcript summaries automatically posted back to that thread.
+
     This tool requires Recall.ai to be configured as the meeting provider.
 
     Args:
         meeting_url: The meeting URL (Zoom, Google Meet, Teams, Webex, etc.)
         incident_id: Optional incident ID to associate transcripts with
         bot_name: Optional custom name for the bot (default: "IncidentFox Notetaker")
+        slack_channel_id: Optional Slack channel ID to post transcript summaries
+        slack_thread_ts: Optional Slack thread timestamp for transcript summaries
 
     Returns:
         Bot creation result including:
@@ -1389,11 +1493,27 @@ def meeting_start_recording(
                 "meeting_start_recording", "Provider mismatch - expected RecallProvider"
             )
 
+        # Try to get Slack context from execution context if not provided
+        if not slack_channel_id or not slack_thread_ts:
+            ctx = get_execution_context()
+            if ctx and ctx.team_config:
+                # Check for Slack context in metadata (set during agent run)
+                metadata = ctx.team_config.get("_run_metadata", {})
+                slack_meta = metadata.get("slack", {})
+                if not slack_channel_id:
+                    slack_channel_id = slack_meta.get("channel_id")
+                if not slack_thread_ts:
+                    slack_thread_ts = slack_meta.get("thread_ts") or slack_meta.get(
+                        "event_ts"
+                    )
+
         result = provider.create_bot(
             meeting_url=meeting_url,
             incident_id=incident_id,
             custom_bot_name=bot_name,
             enable_partial_transcripts=False,  # Full transcripts only for less noise
+            slack_channel_id=slack_channel_id,
+            slack_thread_ts=slack_thread_ts,
         )
 
         logger.info(
@@ -1401,17 +1521,27 @@ def meeting_start_recording(
             bot_id=result.get("bot_id"),
             meeting_url=meeting_url,
             incident_id=incident_id,
+            slack_channel_id=slack_channel_id,
+            slack_thread_ts=slack_thread_ts,
         )
+
+        message = (
+            f"IncidentFox bot is joining the meeting. "
+            f"Bot ID: {result.get('bot_id')}. "
+            "The bot will appear as a participant and start transcribing. "
+            "Transcripts will be streamed to this investigation in real-time."
+        )
+        if slack_channel_id and slack_thread_ts:
+            message += " Transcript summaries will be posted to this Slack thread."
 
         return {
             "bot_id": result.get("bot_id"),
             "status": result.get("status"),
             "meeting_url": meeting_url,
             "incident_id": incident_id,
-            "message": f"IncidentFox bot is joining the meeting. "
-            f"Bot ID: {result.get('bot_id')}. "
-            "The bot will appear as a participant and start transcribing. "
-            "Transcripts will be streamed to this investigation in real-time.",
+            "slack_channel_id": slack_channel_id,
+            "slack_thread_ts": slack_thread_ts,
+            "message": message,
         }
 
     except IntegrationNotConfiguredError as e:

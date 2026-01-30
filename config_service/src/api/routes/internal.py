@@ -1406,3 +1406,395 @@ def get_active_trees(
         total_trees=len(trees),
         total_teams_with_trees=sum(t.team_count for t in trees),
     )
+
+
+# ==================== Recall.ai Bot Management ====================
+
+
+class RecallBotCreateRequest(BaseModel):
+    """Request to create a recall bot record."""
+
+    id: str
+    org_id: str
+    team_node_id: str
+    recall_bot_id: str
+    meeting_url: str
+    incident_id: Optional[str] = None
+    bot_name: Optional[str] = None
+    slack_channel_id: Optional[str] = None
+    slack_thread_ts: Optional[str] = None
+
+
+class RecallBotResponse(BaseModel):
+    """Response with recall bot info."""
+
+    id: str
+    org_id: str
+    team_node_id: str
+    recall_bot_id: str
+    meeting_url: str
+    incident_id: Optional[str] = None
+    status: str
+    slack_channel_id: Optional[str] = None
+    slack_thread_ts: Optional[str] = None
+    slack_summary_ts: Optional[str] = None
+    transcript_segments_count: int = 0
+    created_at: datetime
+
+
+@router.post("/recall-bots", response_model=RecallBotResponse)
+def create_recall_bot(
+    request: RecallBotCreateRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Create a recall bot record.
+
+    Called by orchestrator when a meeting bot is created via Recall.ai.
+    """
+    from sqlalchemy import text
+
+    logger.info(
+        "create_recall_bot",
+        id=request.id,
+        org_id=request.org_id,
+        recall_bot_id=request.recall_bot_id,
+        meeting_url=request.meeting_url,
+        slack_channel_id=request.slack_channel_id,
+    )
+
+    session.execute(
+        text("""
+            INSERT INTO recall_bots (
+                id, org_id, team_node_id, recall_bot_id, meeting_url,
+                incident_id, bot_name, status, slack_channel_id, slack_thread_ts
+            ) VALUES (
+                :id, :org_id, :team_node_id, :recall_bot_id, :meeting_url,
+                :incident_id, :bot_name, 'requested', :slack_channel_id, :slack_thread_ts
+            )
+        """),
+        {
+            "id": request.id,
+            "org_id": request.org_id,
+            "team_node_id": request.team_node_id,
+            "recall_bot_id": request.recall_bot_id,
+            "meeting_url": request.meeting_url,
+            "incident_id": request.incident_id,
+            "bot_name": request.bot_name,
+            "slack_channel_id": request.slack_channel_id,
+            "slack_thread_ts": request.slack_thread_ts,
+        },
+    )
+    session.commit()
+
+    return RecallBotResponse(
+        id=request.id,
+        org_id=request.org_id,
+        team_node_id=request.team_node_id,
+        recall_bot_id=request.recall_bot_id,
+        meeting_url=request.meeting_url,
+        incident_id=request.incident_id,
+        status="requested",
+        slack_channel_id=request.slack_channel_id,
+        slack_thread_ts=request.slack_thread_ts,
+        slack_summary_ts=None,
+        transcript_segments_count=0,
+        created_at=datetime.utcnow(),
+    )
+
+
+@router.get("/recall-bots/{recall_bot_id}", response_model=RecallBotResponse)
+def get_recall_bot(
+    recall_bot_id: str,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Get a recall bot by its Recall.ai bot ID.
+    """
+    from sqlalchemy import text
+
+    result = session.execute(
+        text("""
+            SELECT id, org_id, team_node_id, recall_bot_id, meeting_url,
+                   incident_id, status, slack_channel_id, slack_thread_ts,
+                   slack_summary_ts, transcript_segments_count, created_at
+            FROM recall_bots
+            WHERE recall_bot_id = :recall_bot_id
+        """),
+        {"recall_bot_id": recall_bot_id},
+    ).fetchone()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Recall bot not found")
+
+    return RecallBotResponse(
+        id=result.id,
+        org_id=result.org_id,
+        team_node_id=result.team_node_id,
+        recall_bot_id=result.recall_bot_id,
+        meeting_url=result.meeting_url,
+        incident_id=result.incident_id,
+        status=result.status,
+        slack_channel_id=result.slack_channel_id,
+        slack_thread_ts=result.slack_thread_ts,
+        slack_summary_ts=result.slack_summary_ts,
+        transcript_segments_count=result.transcript_segments_count,
+        created_at=result.created_at,
+    )
+
+
+class RecallBotStatusUpdateRequest(BaseModel):
+    """Request to update recall bot status."""
+
+    status: str
+    status_message: Optional[str] = None
+
+
+@router.patch("/recall-bots/{recall_bot_id}/status")
+def update_recall_bot_status(
+    recall_bot_id: str,
+    request: RecallBotStatusUpdateRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Update a recall bot's status.
+
+    Called by orchestrator when receiving status change webhooks from Recall.ai.
+    """
+    from sqlalchemy import text
+
+    logger.info(
+        "update_recall_bot_status",
+        recall_bot_id=recall_bot_id,
+        status=request.status,
+    )
+
+    # Map Recall.ai status codes to our status values
+    # Recall statuses: created, joining, in_call_not_recording, in_call_recording, call_ended
+    status_mapping = {
+        "created": "requested",
+        "joining": "joining",
+        "in_call_not_recording": "in_call",
+        "in_call_recording": "recording",
+        "call_ended": "done",
+    }
+    mapped_status = status_mapping.get(request.status, request.status)
+
+    # Update timestamp based on status
+    timestamp_field = ""
+    if mapped_status == "joining":
+        timestamp_field = ", joined_at = NOW()"
+    elif mapped_status == "done":
+        timestamp_field = ", left_at = NOW()"
+
+    session.execute(
+        text(f"""
+            UPDATE recall_bots
+            SET status = :status,
+                status_message = :status_message,
+                updated_at = NOW()
+                {timestamp_field}
+            WHERE recall_bot_id = :recall_bot_id
+        """),
+        {
+            "recall_bot_id": recall_bot_id,
+            "status": mapped_status,
+            "status_message": request.status_message,
+        },
+    )
+    session.commit()
+
+    return {"ok": True, "status": mapped_status}
+
+
+class RecallTranscriptSegmentRequest(BaseModel):
+    """Request to store a transcript segment."""
+
+    segment_id: str
+    recall_bot_id: str
+    org_id: str
+    incident_id: Optional[str] = None
+    speaker: Optional[str] = None
+    text: str
+    timestamp_ms: Optional[int] = None
+    is_partial: bool = False
+    raw_event: Optional[dict] = None
+
+
+@router.post("/recall-bots/{recall_bot_id}/transcript-segments")
+def store_recall_transcript_segment(
+    recall_bot_id: str,
+    request: RecallTranscriptSegmentRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Store a transcript segment from Recall.ai.
+
+    Called by orchestrator when receiving transcript webhooks from Recall.ai.
+    """
+    from sqlalchemy import text
+
+    session.execute(
+        text("""
+            INSERT INTO recall_transcript_segments (
+                id, recall_bot_id, org_id, incident_id, speaker, text,
+                timestamp_ms, is_partial, raw_event
+            ) VALUES (
+                :id, :recall_bot_id, :org_id, :incident_id, :speaker, :text,
+                :timestamp_ms, :is_partial, CAST(:raw_event AS jsonb)
+            )
+        """),
+        {
+            "id": request.segment_id,
+            "recall_bot_id": request.recall_bot_id,
+            "org_id": request.org_id,
+            "incident_id": request.incident_id,
+            "speaker": request.speaker,
+            "text": request.text,
+            "timestamp_ms": request.timestamp_ms,
+            "is_partial": request.is_partial,
+            "raw_event": json.dumps(request.raw_event) if request.raw_event else None,
+        },
+    )
+    session.commit()
+
+    return {"ok": True, "segment_id": request.segment_id}
+
+
+@router.post("/recall-bots/{recall_bot_id}/increment-transcript-count")
+def increment_recall_bot_transcript_count(
+    recall_bot_id: str,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Increment the transcript segment count and update last_transcript_at.
+    """
+    from sqlalchemy import text
+
+    session.execute(
+        text("""
+            UPDATE recall_bots
+            SET transcript_segments_count = transcript_segments_count + 1,
+                last_transcript_at = NOW(),
+                updated_at = NOW()
+            WHERE recall_bot_id = :recall_bot_id
+        """),
+        {"recall_bot_id": recall_bot_id},
+    )
+    session.commit()
+
+    return {"ok": True}
+
+
+class RecallBotSlackSummaryUpdateRequest(BaseModel):
+    """Request to update the Slack summary message timestamp."""
+
+    slack_summary_ts: str
+
+
+@router.patch("/recall-bots/{recall_bot_id}/slack-summary")
+def update_recall_bot_slack_summary(
+    recall_bot_id: str,
+    request: RecallBotSlackSummaryUpdateRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Update the Slack summary message timestamp for a recall bot.
+
+    Called after posting/updating the transcript summary to Slack.
+    """
+    from sqlalchemy import text
+
+    session.execute(
+        text("""
+            UPDATE recall_bots
+            SET slack_summary_ts = :slack_summary_ts,
+                last_summary_at = NOW(),
+                updated_at = NOW()
+            WHERE recall_bot_id = :recall_bot_id
+        """),
+        {
+            "recall_bot_id": recall_bot_id,
+            "slack_summary_ts": request.slack_summary_ts,
+        },
+    )
+    session.commit()
+
+    return {"ok": True}
+
+
+class RecallTranscriptSegmentsResponse(BaseModel):
+    """Response with transcript segments."""
+
+    segments: List[dict]
+    total: int
+
+
+@router.get(
+    "/recall-bots/{recall_bot_id}/transcript-segments",
+    response_model=RecallTranscriptSegmentsResponse,
+)
+def get_recall_transcript_segments(
+    recall_bot_id: str,
+    since_id: Optional[str] = None,
+    limit: int = 100,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Get transcript segments for a recall bot.
+
+    Args:
+        recall_bot_id: The Recall.ai bot ID
+        since_id: Only return segments created after this ID
+        limit: Maximum number of segments to return
+    """
+    from sqlalchemy import text
+
+    if since_id:
+        result = session.execute(
+            text("""
+                SELECT id, speaker, text, timestamp_ms, is_partial, created_at
+                FROM recall_transcript_segments
+                WHERE recall_bot_id = :recall_bot_id
+                  AND id > :since_id
+                  AND is_partial = false
+                ORDER BY timestamp_ms ASC, created_at ASC
+                LIMIT :limit
+            """),
+            {"recall_bot_id": recall_bot_id, "since_id": since_id, "limit": limit},
+        ).fetchall()
+    else:
+        result = session.execute(
+            text("""
+                SELECT id, speaker, text, timestamp_ms, is_partial, created_at
+                FROM recall_transcript_segments
+                WHERE recall_bot_id = :recall_bot_id
+                  AND is_partial = false
+                ORDER BY timestamp_ms ASC, created_at ASC
+                LIMIT :limit
+            """),
+            {"recall_bot_id": recall_bot_id, "limit": limit},
+        ).fetchall()
+
+    segments = [
+        {
+            "id": row.id,
+            "speaker": row.speaker,
+            "text": row.text,
+            "timestamp_ms": row.timestamp_ms,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in result
+    ]
+
+    return RecallTranscriptSegmentsResponse(
+        segments=segments,
+        total=len(segments),
+    )
