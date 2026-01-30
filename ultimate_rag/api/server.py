@@ -29,7 +29,7 @@ except ImportError:
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -939,6 +939,7 @@ class UltimateRAGServer:
                 # Step 1: Extract text from all documents
                 texts = []
                 all_entities = []
+                all_relationships = []
 
                 for doc in request.documents:
                     try:
@@ -946,6 +947,15 @@ class UltimateRAGServer:
                         # (RAPTOR will do its own chunking)
                         if request.build_hierarchy:
                             texts.append(doc.content)
+                            # Still extract entities/relationships for the graph
+                            result = self.processor.process_content(
+                                content=doc.content,
+                                source_path=doc.source_url or "batch_input",
+                                content_type=self._get_content_type(doc.content_type),
+                                extra_metadata=doc.metadata,
+                            )
+                            all_entities.extend(result.entities_found)
+                            all_relationships.extend(result.relationships_found)
                         else:
                             # For flat ingestion, use the processor to chunk
                             result = self.processor.process_content(
@@ -956,6 +966,7 @@ class UltimateRAGServer:
                             )
                             texts.extend([chunk.text for chunk in result.chunks])
                             all_entities.extend(result.entities_found)
+                            all_relationships.extend(result.relationships_found)
                             warnings.extend(result.warnings)
                     except Exception as e:
                         warnings.append(f"Failed to process document: {e}")
@@ -1008,6 +1019,24 @@ class UltimateRAGServer:
                         for node in new_tree.all_nodes.values():
                             layer = getattr(node, "layer", 0)
                             layer_dist[layer] = layer_dist.get(layer, 0) + 1
+
+                        # Populate knowledge graph from extracted entities
+                        # Link to leaf node IDs only (layer 0)
+                        leaf_node_ids = [
+                            n.index for n in new_tree.all_nodes.values()
+                            if getattr(n, "layer", 0) == 0
+                        ]
+                        graph_stats = self._populate_graph_from_entities(
+                            entities=all_entities,
+                            relationships=all_relationships,
+                            node_ids=leaf_node_ids,
+                            tree_id=tree_name,
+                        )
+                        if graph_stats["entities_added"] > 0:
+                            logger.info(
+                                f"Graph updated: {graph_stats['entities_added']} entities, "
+                                f"{graph_stats['relationships_added']} relationships"
+                            )
 
                         processing_time_ms = (time.time() - start_time) * 1000
 
@@ -1083,6 +1112,21 @@ class UltimateRAGServer:
 
                     tree.add_node(node)
                     nodes_created += 1
+
+                # Populate knowledge graph from extracted entities
+                node_id_list = list(range(max_index + 1, max_index + 1 + nodes_created))
+                graph_stats = self._populate_graph_from_entities(
+                    entities=all_entities,
+                    relationships=all_relationships,
+                    node_ids=node_id_list,
+                    tree_id=tree_name,
+                )
+                if graph_stats["entities_added"] > 0 or graph_stats["entities_updated"] > 0:
+                    logger.info(
+                        f"Graph updated: {graph_stats['entities_added']} new entities, "
+                        f"{graph_stats['entities_updated']} updated, "
+                        f"{graph_stats['relationships_added']} relationships"
+                    )
 
                 processing_time_ms = (time.time() - start_time) * 1000
 
@@ -2384,6 +2428,134 @@ class UltimateRAGServer:
                 confidence=0.95,  # Auto-approve ingested documents
                 learned_from="document_ingestion",
             )
+
+    def _populate_graph_from_entities(
+        self,
+        entities: List[str],
+        relationships: List[Tuple[str, str, str]],
+        node_ids: Optional[List[int]] = None,
+        tree_id: str = "default",
+    ) -> Dict[str, int]:
+        """
+        Populate the knowledge graph from extracted entities and relationships.
+
+        Args:
+            entities: List of entity name strings
+            relationships: List of (source, relationship_type, target) tuples
+            node_ids: Optional list of RAPTOR node IDs to link entities to
+            tree_id: Tree ID for linking
+
+        Returns:
+            Stats dict with counts of entities and relationships added
+        """
+        from ..graph.entities import Entity, EntityType
+        from ..graph.relationships import Relationship, RelationshipType
+
+        stats = {"entities_added": 0, "relationships_added": 0, "entities_updated": 0}
+
+        # Entity type inference based on name patterns
+        def infer_entity_type(name: str) -> EntityType:
+            name_lower = name.lower()
+            # Service patterns
+            if any(kw in name_lower for kw in ["-api", "-service", "service", "api", "server", "worker"]):
+                return EntityType.SERVICE
+            # Person patterns
+            if "@" in name_lower or any(kw in name_lower for kw in ["team lead", "engineer", "manager"]):
+                return EntityType.PERSON
+            # Team patterns
+            if any(kw in name_lower for kw in ["team", "squad", "group"]):
+                return EntityType.TEAM
+            # Technology patterns
+            if any(kw in name_lower for kw in [
+                "python", "java", "node", "react", "kubernetes", "k8s", "docker",
+                "aws", "gcp", "azure", "postgres", "mysql", "redis", "kafka",
+                "mongodb", "elasticsearch", "terraform", "jenkins", "github"
+            ]):
+                return EntityType.TECHNOLOGY
+            # Document patterns
+            if any(kw in name_lower for kw in ["readme", "doc", "guide", "manual", "runbook"]):
+                return EntityType.DOCUMENT
+            # Default
+            return EntityType.CUSTOM
+
+        # Relationship type mapping
+        rel_type_map = {
+            "depends_on": RelationshipType.DEPENDS_ON,
+            "calls": RelationshipType.CALLS,
+            "owns": RelationshipType.OWNS,
+            "maintains": RelationshipType.MAINTAINS,
+            "member_of": RelationshipType.MEMBER_OF,
+            "expert_in": RelationshipType.EXPERT_IN,
+            "documents": RelationshipType.DOCUMENTS,
+            "uses": RelationshipType.USES,
+            "related_to": RelationshipType.RELATED_TO,
+        }
+
+        # Process entities
+        for entity_name in entities:
+            if not entity_name or len(entity_name) < 2:
+                continue
+
+            entity_id = entity_name.lower().replace(" ", "-").replace("_", "-")
+
+            # Check if entity already exists
+            existing = self.graph.get_entity(entity_id)
+            if existing:
+                # Update with new node references
+                if node_ids:
+                    for node_id in node_ids:
+                        existing.add_node_reference(node_id, tree_id)
+                stats["entities_updated"] += 1
+            else:
+                # Create new entity
+                entity = Entity(
+                    entity_id=entity_id,
+                    entity_type=infer_entity_type(entity_name),
+                    name=entity_name,
+                    display_name=entity_name.title(),
+                    node_ids=node_ids or [],
+                    tree_ids=[tree_id] if tree_id else [],
+                    properties={"source": "auto_extraction"},
+                )
+                self.graph.add_entity(entity)
+                stats["entities_added"] += 1
+
+        # Process relationships
+        for rel_tuple in relationships:
+            if len(rel_tuple) != 3:
+                continue
+
+            source_name, rel_type_str, target_name = rel_tuple
+
+            source_id = source_name.lower().replace(" ", "-").replace("_", "-")
+            target_id = target_name.lower().replace(" ", "-").replace("_", "-")
+
+            # Get or infer relationship type
+            rel_type = rel_type_map.get(
+                rel_type_str.lower(),
+                RelationshipType.RELATED_TO
+            )
+
+            # Create relationship ID
+            import hashlib
+            rel_id = hashlib.md5(
+                f"{source_id}:{rel_type.value}:{target_id}".encode()
+            ).hexdigest()[:12]
+
+            # Check if relationship exists
+            existing_rel = self.graph.get_relationship(rel_id)
+            if not existing_rel:
+                relationship = Relationship(
+                    relationship_id=rel_id,
+                    source_id=source_id,
+                    target_id=target_id,
+                    relationship_type=rel_type,
+                    properties={"source": "auto_extraction"},
+                )
+                self.graph.add_relationship(relationship)
+                stats["relationships_added"] += 1
+
+        return stats
 
 
 def create_app(
