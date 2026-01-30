@@ -7,7 +7,6 @@ When requests come through proxy (envoy:8001), use path-based routing.
 DOMAIN_TO_INTEGRATION: dict[str, str] = {
     # Anthropic
     "api.anthropic.com": "anthropic",
-
     # Coralogix (all regions)
     "api.coralogix.com": "coralogix",
     "api.us1.coralogix.com": "coralogix",

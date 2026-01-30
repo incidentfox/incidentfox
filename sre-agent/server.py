@@ -111,9 +111,12 @@ def get_or_create_session_jwt(
         "tenant_id": tenant_id,
         "team_id": team_id,
     }
-    print(f"🔑 Generated new JWT for thread {thread_id} (expires in {_SESSION_JWT_TTL_HOURS}h)")
+    print(
+        f"🔑 Generated new JWT for thread {thread_id} (expires in {_SESSION_JWT_TTL_HOURS}h)"
+    )
 
     return jwt_token, jwt_expiry
+
 
 app = FastAPI(
     title="IncidentFox Investigation Server",
@@ -438,7 +441,9 @@ async def investigate(request: InvestigateRequest):
         jwt_token, _ = get_or_create_session_jwt(thread_id, tenant_id, team_id)
 
         # Create new sandbox with session JWT
-        print(f"🔧 Creating sandbox for thread {thread_id} (tenant={tenant_id}, team={team_id})")
+        print(
+            f"🔧 Creating sandbox for thread {thread_id} (tenant={tenant_id}, team={team_id})"
+        )
         try:
             sandbox_info = sandbox_manager.create_sandbox(
                 thread_id,

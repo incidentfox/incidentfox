@@ -73,7 +73,9 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     global config_client, ENV_CREDENTIALS
 
-    logger.info(f"Starting credential-resolver with source={CREDENTIAL_SOURCE}, jwt_mode={JWT_MODE}")
+    logger.info(
+        f"Starting credential-resolver with source={CREDENTIAL_SOURCE}, jwt_mode={JWT_MODE}"
+    )
 
     if CREDENTIAL_SOURCE == "config_service":
         config_client = ConfigServiceClient()
@@ -115,8 +117,12 @@ async def health():
     return {"status": "healthy", "source": CREDENTIAL_SOURCE, "jwt_mode": JWT_MODE}
 
 
-@app.api_route("/check", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+@app.api_route(
+    "/check", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+)
+@app.api_route(
+    "/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+)
 async def ext_authz_check(request: Request, path: str = ""):
     """Handle ext_authz check from Envoy.
 
@@ -163,7 +169,9 @@ async def ext_authz_check(request: Request, path: str = ""):
     # 4. Build auth headers and return them as HTTP response headers
     # Envoy's ext_authz will forward these based on allowed_upstream_headers config
     headers_to_add = build_auth_headers(integration_id, creds)
-    logger.info(f"Injecting headers for {integration_id}: {list(headers_to_add.keys())}")
+    logger.info(
+        f"Injecting headers for {integration_id}: {list(headers_to_add.keys())}"
+    )
 
     return Response(status_code=200, headers=headers_to_add)
 

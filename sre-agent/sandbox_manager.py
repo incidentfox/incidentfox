@@ -16,11 +16,10 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import requests
+from auth import generate_sandbox_jwt
 from kubernetes import client
 from kubernetes import config as k8s_config
 from kubernetes.client.rest import ApiException
-
-from auth import generate_sandbox_jwt
 
 
 class SandboxExecutionError(Exception):
@@ -95,7 +94,9 @@ class SandboxManager:
         configmap_name = f"envoy-config-{sandbox_name}"
 
         # Get credential-resolver namespace (where the service runs)
-        cred_resolver_ns = os.getenv("CREDENTIAL_RESOLVER_NAMESPACE", "incidentfox-prod")
+        cred_resolver_ns = os.getenv(
+            "CREDENTIAL_RESOLVER_NAMESPACE", "incidentfox-prod"
+        )
 
         envoy_config = f"""# Envoy proxy configuration for credential injection
 # Per-sandbox config with embedded JWT for authentication
@@ -502,7 +503,7 @@ static_resources:
                                 "name": "envoy-config",
                                 "configMap": {"name": envoy_configmap_name},
                             }
-                        ]
+                        ],
                     },
                 },
                 # Automatic cleanup after TTL
