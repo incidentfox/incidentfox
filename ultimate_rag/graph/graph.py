@@ -217,7 +217,9 @@ class KnowledgeGraph:
         # Filter by relationship type if specified
         if relationship_type:
             relationships = [
-                r for r in relationships if r.relationship_type.value == relationship_type
+                r
+                for r in relationships
+                if r.relationship_type.value == relationship_type
             ]
 
         # Get related entity IDs
