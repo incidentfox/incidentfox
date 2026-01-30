@@ -297,8 +297,8 @@ class TeamPrincipal:
 
     def can_write(self) -> bool:
         """Check if this principal can write configuration."""
-        # Visitors cannot write - they have read-only access
-        return self.auth_kind != "visitor"
+        # Visitors can now write for playground demo
+        return True
 
 
 def require_team_auth(
