@@ -518,6 +518,115 @@ Rules:
         return await self.search_trees(query, forest, top_k)
 
 
+class QueryDecompositionStrategy(RetrievalStrategy):
+    """
+    Decompose complex multi-hop queries into simpler sub-queries.
+
+    For questions requiring information from multiple sources, this strategy:
+    1. Uses LLM to identify distinct sub-questions
+    2. Retrieves for each sub-question independently
+    3. Merges results with score boosting for chunks found by multiple sub-queries
+    """
+
+    name = "query_decomposition"
+
+    DECOMPOSITION_PROMPT = """Analyze this question and break it into simpler sub-questions.
+
+Question: {query}
+
+Instructions:
+- Identify distinct pieces of information needed
+- Each sub-question should be answerable by a single document
+- Output 2-4 focused sub-questions, one per line
+- No numbering or bullets"""
+
+    def __init__(self, model: str = "gpt-4o-mini", max_sub_queries: int = 4):
+        self.model = model
+        self.max_sub_queries = max_sub_queries
+        self._client = None
+
+    def _get_client(self):
+        """Lazy initialization of OpenAI client."""
+        if self._client is None:
+            try:
+                from openai import AsyncOpenAI
+
+                self._client = AsyncOpenAI()
+            except ImportError:
+                logger.warning("OpenAI not available for query decomposition")
+        return self._client
+
+    async def _decompose_query(self, query: str) -> List[str]:
+        """Use LLM to break query into sub-questions."""
+        sub_queries = [query]
+        client = self._get_client()
+        if not client:
+            return sub_queries
+
+        try:
+            response = await client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": self.DECOMPOSITION_PROMPT.format(query=query),
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=200,
+            )
+            content = response.choices[0].message.content
+            if content:
+                llm_sub_queries = [
+                    line.strip().rstrip("?") + "?"
+                    for line in content.strip().split("\n")
+                    if line.strip() and len(line.strip()) > 10
+                ]
+                sub_queries.extend(llm_sub_queries[: self.max_sub_queries])
+                logger.info(f"Query decomposed into {len(sub_queries)} sub-queries")
+        except Exception as e:
+            logger.warning(f"Query decomposition failed: {e}")
+
+        return sub_queries
+
+    async def retrieve(
+        self,
+        query: str,
+        forest: "TreeForest",
+        graph: Optional["KnowledgeGraph"] = None,
+        top_k: int = 10,
+        **kwargs,
+    ) -> List[RetrievedChunk]:
+        """Retrieve using decomposed sub-queries."""
+        sub_queries = await self._decompose_query(query)
+
+        all_chunks: Dict[int, RetrievedChunk] = {}
+        chunk_hit_count: Dict[int, int] = {}
+
+        for sub_q in sub_queries:
+            chunks = await self.search_trees(sub_q, forest, top_k)
+            for chunk in chunks:
+                chunk_hit_count[chunk.node_id] = (
+                    chunk_hit_count.get(chunk.node_id, 0) + 1
+                )
+                if chunk.node_id not in all_chunks:
+                    all_chunks[chunk.node_id] = chunk
+                elif chunk.score > all_chunks[chunk.node_id].score:
+                    all_chunks[chunk.node_id].score = chunk.score
+
+        # Boost chunks found by multiple sub-queries
+        for node_id, chunk in all_chunks.items():
+            hit_count = chunk_hit_count[node_id]
+            if hit_count > 1:
+                boost_factor = 1.0 + (0.2 * (hit_count - 1))
+                chunk.score = min(1.0, chunk.score * boost_factor)
+
+        results = sorted(all_chunks.values(), key=lambda c: c.score, reverse=True)[
+            :top_k
+        ]
+        return results
+
+
 class HyDEStrategy(RetrievalStrategy):
     """
     Hypothetical Document Embeddings (HyDE) with LLM generation.
