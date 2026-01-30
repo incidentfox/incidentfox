@@ -28,6 +28,7 @@ from .strategies import (
     IncidentAwareStrategy,
     MultiQueryStrategy,
     QueryAnalysis,
+    QueryDecompositionStrategy,
     QueryIntent,
     RetrievalStrategy,
     RetrievedChunk,
@@ -143,6 +144,7 @@ class UltimateRetriever:
         # Initialize strategies
         self._strategies: Dict[str, RetrievalStrategy] = {
             "multi_query": MultiQueryStrategy(),
+            "query_decomposition": QueryDecompositionStrategy(),
             "hyde": HyDEStrategy(),
             "adaptive_depth": AdaptiveDepthStrategy(),
             "hybrid": HybridGraphTreeStrategy(),
