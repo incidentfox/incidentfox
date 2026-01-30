@@ -28,6 +28,7 @@ from .strategies import (
     IncidentAwareStrategy,
     MultiQueryStrategy,
     QueryAnalysis,
+    QueryDecompositionStrategy,
     QueryIntent,
     RetrievalStrategy,
     RetrievedChunk,
@@ -147,6 +148,7 @@ class UltimateRetriever:
             "adaptive_depth": AdaptiveDepthStrategy(),
             "hybrid": HybridGraphTreeStrategy(),
             "incident": IncidentAwareStrategy(),
+            "query_decomposition": QueryDecompositionStrategy(),
         }
 
         # Initialize rerankers
@@ -279,7 +281,10 @@ class UltimateRetriever:
             )
 
         else:  # STANDARD
-            # Select based on query intent
+            # Always include query decomposition for multi-hop queries
+            strategies.append(self._strategies["query_decomposition"])
+            
+            # Select additional based on query intent
             if analysis.intent == QueryIntent.PROCEDURAL:
                 strategies.append(self._strategies["hybrid"])
                 strategies.append(self._strategies["adaptive_depth"])
