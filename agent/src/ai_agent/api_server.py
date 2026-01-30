@@ -1845,15 +1845,57 @@ def create_app() -> Sanic:
                     # Continue without team config - use default agent
 
         # Get the agent
+        team_config_hash = (
+            str(hash(team_config.model_dump_json())) if team_config else None
+        )
         cached_agent = registry.get_agent(
             agent_name,
-            team_config_hash=(
-                str(hash(team_config.model_dump_json())) if team_config else None
-            ),
+            team_config_hash=team_config_hash,
             factory_kwargs={"team_config": team_config} if team_config else None,
         )
 
+        # If agent not found in registry, try creating it dynamically from team config
+        if not cached_agent and team_config:
+            try:
+                from .agents.registry import create_generic_agent_from_config
+
+                # Check if agent exists in team config
+                agent_config = team_config.get_agent_config(agent_name)
+
+                if agent_config and agent_config.enabled:
+                    # Create agent dynamically
+                    cached_agent = create_generic_agent_from_config(
+                        agent_name, team_config=team_config
+                    )
+
+                    logger.info(
+                        "dynamic_agent_created_stream",
+                        agent_name=agent_name,
+                        team_config_hash=team_config_hash,
+                        agent_is_none=cached_agent is None,
+                    )
+                else:
+                    logger.warning(
+                        "agent_not_in_config_stream",
+                        agent_name=agent_name,
+                        has_config=agent_config is not None,
+                        enabled=agent_config.enabled if agent_config else None,
+                    )
+            except Exception as e:
+                logger.error(
+                    "dynamic_agent_creation_failed_stream",
+                    agent_name=agent_name,
+                    error=str(e),
+                    exc_info=True,
+                )
+
         if not cached_agent:
+            logger.error(
+                "agent_not_found_returning_404_stream",
+                agent_name=agent_name,
+                team_config_hash=team_config_hash,
+                had_team_config=team_config is not None,
+            )
             return response.json(
                 {
                     "error": f"Agent '{agent_name}' not found",
