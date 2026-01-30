@@ -1693,6 +1693,13 @@ def create_app() -> FastAPI:
         bot_name: Optional[str] = Field(
             None, description="Custom bot name (default: IncidentFox Notetaker)"
         )
+        # Slack thread info for posting transcript summaries
+        slack_channel_id: Optional[str] = Field(
+            None, description="Slack channel ID to post transcript summaries"
+        )
+        slack_thread_ts: Optional[str] = Field(
+            None, description="Slack thread timestamp to post summaries under"
+        )
 
     class MeetingBotJoinResponse(BaseModel):
         ok: bool
@@ -1827,6 +1834,8 @@ def create_app() -> FastAPI:
                         recall_bot_id=recall_bot_id,
                         meeting_url=body.meeting_url,
                         bot_name=bot_name,
+                        slack_channel_id=body.slack_channel_id,
+                        slack_thread_ts=body.slack_thread_ts,
                     )
                 except Exception as db_error:
                     _log(
@@ -1843,6 +1852,8 @@ def create_app() -> FastAPI:
                     incident_id=body.incident_id,
                     recall_bot_id=recall_bot_id,
                     meeting_url=body.meeting_url,
+                    slack_channel_id=body.slack_channel_id,
+                    slack_thread_ts=body.slack_thread_ts,
                 )
 
                 return MeetingBotJoinResponse(

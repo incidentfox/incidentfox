@@ -239,6 +239,219 @@ class ConfigServiceClient:
         r.raise_for_status()
         return dict(r.json())
 
+    # ==================== Recall.ai Bot Management ====================
+
+    def create_recall_bot(
+        self,
+        *,
+        admin_token: str,
+        id: str,
+        org_id: str,
+        team_node_id: str,
+        recall_bot_id: str,
+        meeting_url: str,
+        incident_id: Optional[str] = None,
+        bot_name: Optional[str] = None,
+        slack_channel_id: Optional[str] = None,
+        slack_thread_ts: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a recall bot record.
+
+        Called when a meeting bot is created via Recall.ai.
+        """
+        url = f"{self.base_url}/api/v1/internal/recall-bots"
+        headers = {
+            "Authorization": f"Bearer {admin_token}",
+            "X-Internal-Service": "orchestrator",
+        }
+        payload = {
+            "id": id,
+            "org_id": org_id,
+            "team_node_id": team_node_id,
+            "recall_bot_id": recall_bot_id,
+            "meeting_url": meeting_url,
+            "incident_id": incident_id,
+            "bot_name": bot_name,
+            "slack_channel_id": slack_channel_id,
+            "slack_thread_ts": slack_thread_ts,
+        }
+        if self._http is not None:
+            r = self._http.post(url, headers=headers, json=payload)
+        else:
+            with httpx.Client(timeout=10.0) as c:
+                r = c.post(url, headers=headers, json=payload)
+        r.raise_for_status()
+        return dict(r.json())
+
+    def get_recall_bot(
+        self,
+        *,
+        admin_token: str,
+        recall_bot_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a recall bot by its Recall.ai bot ID.
+        """
+        url = f"{self.base_url}/api/v1/internal/recall-bots/{recall_bot_id}"
+        headers = {
+            "Authorization": f"Bearer {admin_token}",
+            "X-Internal-Service": "orchestrator",
+        }
+        try:
+            if self._http is not None:
+                r = self._http.get(url, headers=headers)
+            else:
+                with httpx.Client(timeout=10.0) as c:
+                    r = c.get(url, headers=headers)
+            if r.status_code == 404:
+                return None
+            r.raise_for_status()
+            return dict(r.json())
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+
+    def update_recall_bot_status(
+        self,
+        *,
+        admin_token: str,
+        recall_bot_id: str,
+        status: str,
+        status_message: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Update a recall bot's status.
+        """
+        url = f"{self.base_url}/api/v1/internal/recall-bots/{recall_bot_id}/status"
+        headers = {
+            "Authorization": f"Bearer {admin_token}",
+            "X-Internal-Service": "orchestrator",
+        }
+        payload = {"status": status, "status_message": status_message}
+        if self._http is not None:
+            r = self._http.patch(url, headers=headers, json=payload)
+        else:
+            with httpx.Client(timeout=10.0) as c:
+                r = c.patch(url, headers=headers, json=payload)
+        r.raise_for_status()
+        return dict(r.json())
+
+    def store_recall_transcript_segment(
+        self,
+        *,
+        admin_token: str,
+        segment_id: str,
+        recall_bot_id: str,
+        org_id: str,
+        incident_id: Optional[str] = None,
+        speaker: Optional[str] = None,
+        text: str,
+        timestamp_ms: Optional[int] = None,
+        is_partial: bool = False,
+        raw_event: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Store a transcript segment from Recall.ai.
+        """
+        url = f"{self.base_url}/api/v1/internal/recall-bots/{recall_bot_id}/transcript-segments"
+        headers = {
+            "Authorization": f"Bearer {admin_token}",
+            "X-Internal-Service": "orchestrator",
+        }
+        payload = {
+            "segment_id": segment_id,
+            "recall_bot_id": recall_bot_id,
+            "org_id": org_id,
+            "incident_id": incident_id,
+            "speaker": speaker,
+            "text": text,
+            "timestamp_ms": timestamp_ms,
+            "is_partial": is_partial,
+            "raw_event": raw_event,
+        }
+        if self._http is not None:
+            r = self._http.post(url, headers=headers, json=payload)
+        else:
+            with httpx.Client(timeout=10.0) as c:
+                r = c.post(url, headers=headers, json=payload)
+        r.raise_for_status()
+        return dict(r.json())
+
+    def increment_recall_bot_transcript_count(
+        self,
+        *,
+        admin_token: str,
+        recall_bot_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Increment the transcript segment count for a recall bot.
+        """
+        url = f"{self.base_url}/api/v1/internal/recall-bots/{recall_bot_id}/increment-transcript-count"
+        headers = {
+            "Authorization": f"Bearer {admin_token}",
+            "X-Internal-Service": "orchestrator",
+        }
+        if self._http is not None:
+            r = self._http.post(url, headers=headers)
+        else:
+            with httpx.Client(timeout=10.0) as c:
+                r = c.post(url, headers=headers)
+        r.raise_for_status()
+        return dict(r.json())
+
+    def update_recall_bot_slack_summary(
+        self,
+        *,
+        admin_token: str,
+        recall_bot_id: str,
+        slack_summary_ts: str,
+    ) -> Dict[str, Any]:
+        """
+        Update the Slack summary message timestamp for a recall bot.
+        """
+        url = f"{self.base_url}/api/v1/internal/recall-bots/{recall_bot_id}/slack-summary"
+        headers = {
+            "Authorization": f"Bearer {admin_token}",
+            "X-Internal-Service": "orchestrator",
+        }
+        payload = {"slack_summary_ts": slack_summary_ts}
+        if self._http is not None:
+            r = self._http.patch(url, headers=headers, json=payload)
+        else:
+            with httpx.Client(timeout=10.0) as c:
+                r = c.patch(url, headers=headers, json=payload)
+        r.raise_for_status()
+        return dict(r.json())
+
+    def get_recall_transcript_segments(
+        self,
+        *,
+        admin_token: str,
+        recall_bot_id: str,
+        since_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> Dict[str, Any]:
+        """
+        Get transcript segments for a recall bot.
+        """
+        url = f"{self.base_url}/api/v1/internal/recall-bots/{recall_bot_id}/transcript-segments"
+        headers = {
+            "Authorization": f"Bearer {admin_token}",
+            "X-Internal-Service": "orchestrator",
+        }
+        params: Dict[str, Any] = {"limit": limit}
+        if since_id:
+            params["since_id"] = since_id
+        if self._http is not None:
+            r = self._http.get(url, headers=headers, params=params)
+        else:
+            with httpx.Client(timeout=10.0) as c:
+                r = c.get(url, headers=headers, params=params)
+        r.raise_for_status()
+        return dict(r.json())
+
 
 class PipelineApiClient:
     def __init__(
