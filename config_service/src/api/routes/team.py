@@ -38,43 +38,22 @@ def require_write_access(team: TeamPrincipal) -> None:
     """
     Verify the team principal has write access.
 
-    Raises HTTPException 403 if the principal is a visitor (read-only access).
+    Note: Visitor write access is now ALLOWED for the playground demo.
+    Visitors can configure integrations and agents to try out the product.
     """
-    if team.is_visitor():
-        raise HTTPException(
-            status_code=403,
-            detail="Visitors cannot modify configuration. Sign up for a team account to access all features.",
-        )
+    # Visitors are now allowed to write for playground demo
+    pass
 
 
 def _check_visitor_write_access(authorization: str) -> None:
     """
     Check if the authorization header contains a visitor token.
-    If so, deny write access.
 
-    This is used for endpoints that use _resolve_team_or_admin_identity
-    instead of require_team_auth.
+    Note: Visitor write access is now ALLOWED for the playground demo.
+    Visitors can configure integrations and agents to try out the product.
     """
-    if not authorization or not authorization.lower().startswith("bearer "):
-        return
-
-    token = authorization.split(" ", 1)[1].strip()
-    if token.count(".") != 2:
-        return  # Not a JWT
-
-    try:
-        from ...core.impersonation import extract_visitor_session_id
-
-        session_id = extract_visitor_session_id(token)
-        if session_id:
-            raise HTTPException(
-                status_code=403,
-                detail="Visitors cannot modify configuration. Sign up for a team account to access all features.",
-            )
-    except HTTPException:
-        raise
-    except Exception:
-        pass  # Not a visitor token, continue
+    # Visitors are now allowed to write for playground demo
+    pass
 
 
 # =============================================================================

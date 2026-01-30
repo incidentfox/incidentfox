@@ -183,8 +183,8 @@ def auth_me_impl(
                 team_node_id=oidc_principal.team_node_id,
                 subject=oidc_principal.subject,
                 email=oidc_principal.email,
-                can_write=False,  # Visitors cannot write configuration
-                permissions=["team:read", "agent:invoke"],  # Limited permissions
+                can_write=True,  # Visitors can write for playground demo
+                permissions=["team:read", "team:write", "agent:invoke"],  # Full playground access
                 visitor_session_id=oidc_principal.claims.get("visitor_session_id"),
             )
 
