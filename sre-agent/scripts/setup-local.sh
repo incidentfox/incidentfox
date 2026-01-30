@@ -15,6 +15,7 @@ echo "📋 Checking prerequisites..."
 command -v kind >/dev/null 2>&1 || { echo "❌ kind not found. Install: https://kind.sigs.k8s.io/"; exit 1; }
 command -v kubectl >/dev/null 2>&1 || { echo "❌ kubectl not found"; exit 1; }
 command -v docker >/dev/null 2>&1 || { echo "❌ Docker not found"; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo "❌ jq not found. Install: brew install jq"; exit 1; }
 echo "✅ Prerequisites OK"
 echo ""
 
@@ -92,17 +93,24 @@ echo ""
 echo "4️⃣  Creating secrets..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-if [ ! -f ".env" ]; then
+# Look for .env file - prefer root .env (has real credentials), fallback to local
+if [ -f "../.env" ]; then
+    echo "  Using root .env file"
+    ENV_FILE="../.env"
+elif [ -f ".env" ]; then
+    echo "  Using local .env file"
+    ENV_FILE=".env"
+else
     echo "❌ .env file not found!"
     echo ""
-    echo "Create .env with:"
+    echo "Create .env in the repo root with:"
     echo "  ANTHROPIC_API_KEY=sk-ant-..."
-    echo "  LMNR_PROJECT_API_KEY=..."
+    echo "  CORALOGIX_API_KEY=..."
     echo ""
     exit 1
 fi
 
-source .env
+source "$ENV_FILE"
 
 if [ -z "$ANTHROPIC_API_KEY" ]; then
     echo "❌ ANTHROPIC_API_KEY not set in .env"
@@ -150,8 +158,44 @@ kubectl create secret generic incidentfox-secrets \
 echo "✅ Secrets created"
 echo ""
 
-# Step 5: Deploy sandbox template (without gVisor for local dev)
-echo "5️⃣  Deploying sandbox template..."
+# Step 5: Deploy credential proxy (Envoy + credential-resolver)
+echo "5️⃣  Deploying credential proxy..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Create incidentfox-prod namespace (where credential-resolver runs)
+kubectl create namespace incidentfox-prod 2>/dev/null || true
+
+# Copy secrets to incidentfox-prod namespace (credential-resolver needs them)
+kubectl delete secret incidentfox-secrets -n incidentfox-prod 2>/dev/null || true
+kubectl get secret incidentfox-secrets -n default -o json | \
+    jq '.metadata.namespace = "incidentfox-prod" | del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp)' | \
+    kubectl create -f - >/dev/null 2>&1 || true
+
+# Build credential-resolver image
+echo "Building credential-resolver image..."
+docker build -q -t credential-resolver:local ./credential-proxy
+
+# Load into Kind
+echo "Loading credential-resolver into Kind..."
+kind load docker-image credential-resolver:local --name incidentfox
+
+# Deploy credential-resolver
+echo "Deploying credential-resolver..."
+kubectl apply -f credential-proxy/k8s/deployment-local.yaml
+kubectl apply -f credential-proxy/k8s/service-local.yaml
+
+# Wait for credential-resolver to be ready
+kubectl rollout status deployment/credential-resolver -n incidentfox-prod --timeout=60s
+
+# Deploy envoy config ConfigMap (in default namespace where sandboxes run)
+echo "Deploying envoy proxy config..."
+kubectl apply -f credential-proxy/k8s/configmap-envoy-local.yaml
+
+echo "✅ Credential proxy deployed"
+echo ""
+
+# Step 6: Deploy sandbox template (without gVisor for local dev)
+echo "6️⃣  Deploying sandbox template..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 # Remove gVisor runtimeClassName for local dev (not available in Kind)
 grep -v "runtimeClassName" k8s/sandbox-template.yaml | kubectl apply -f - >/dev/null
@@ -168,6 +212,7 @@ echo "  ✅ Kind cluster (incidentfox)"
 echo "  ✅ agent-sandbox controller"
 echo "  ✅ Sandbox Router"
 echo "  ✅ Service patcher"
+echo "  ✅ Credential proxy (Envoy + credential-resolver)"
 echo "  ✅ Sandbox template"
 echo "  ✅ Secrets"
 echo ""

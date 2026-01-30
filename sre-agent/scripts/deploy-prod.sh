@@ -1,6 +1,6 @@
 #!/bin/bash
 # ONE-COMMAND Production Deployment
-# Usage: ./scripts/deploy-prod-simple.sh
+# Usage: ./scripts/deploy-prod.sh
 
 set -e
 
@@ -9,13 +9,20 @@ echo "======================================="
 echo ""
 
 # Check prerequisites
-if [ ! -f ".env" ]; then
-    echo "❌ .env file not found. Create it from .env.example"
+# Look for .env file - prefer root .env (has real credentials), fallback to local
+if [ -f "../.env" ]; then
+    echo "  Using root .env file"
+    ENV_FILE="../.env"
+elif [ -f ".env" ]; then
+    echo "  Using local .env file"
+    ENV_FILE=".env"
+else
+    echo "❌ .env file not found. Create it in repo root."
     exit 1
 fi
 
 # Load API keys
-source .env
+source "$ENV_FILE"
 if [ -z "$ANTHROPIC_API_KEY" ]; then
     echo "❌ ANTHROPIC_API_KEY not set in .env"
     exit 1
@@ -25,9 +32,14 @@ fi
 echo "1️⃣  Switching to production cluster..."
 kubectl config use-context arn:aws:eks:us-west-2:103002841599:cluster/incidentfox-prod
 
-# Build and push multi-platform image
+# Login to ECR (required for docker buildx --push)
 echo ""
-echo "2️⃣  Building multi-platform Docker image..."
+echo "2️⃣  Logging into ECR..."
+aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 103002841599.dkr.ecr.us-west-2.amazonaws.com
+
+# Build and push multi-platform sre-agent image
+echo ""
+echo "3️⃣  Building multi-platform sre-agent image..."
 docker buildx create --use --name multiplatform 2>/dev/null || docker buildx use multiplatform
 docker buildx build \
     --platform linux/amd64,linux/arm64 \
@@ -35,18 +47,33 @@ docker buildx build \
     --push \
     .
 
-# Update secrets
+# Build and push credential-resolver image
 echo ""
-echo "3️⃣  Updating production secrets..."
+echo "4️⃣  Building credential-resolver image..."
+docker buildx build \
+    --platform linux/amd64,linux/arm64 \
+    -t 103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:latest \
+    -f credential-proxy/Dockerfile \
+    credential-proxy \
+    --push
+
+# Update secrets (including Coralogix for credential-resolver and JWT secret)
+echo ""
+echo "5️⃣  Updating production secrets..."
+# Generate JWT secret if not provided (should be set in .env for consistency)
+JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32)}"
 kubectl create secret generic incidentfox-secrets \
     --namespace=incidentfox-prod \
     --from-literal=anthropic-api-key="${ANTHROPIC_API_KEY}" \
     --from-literal=laminar-api-key="${LMNR_PROJECT_API_KEY:-}" \
+    --from-literal=coralogix-api-key="${CORALOGIX_API_KEY:-}" \
+    --from-literal=coralogix-domain="${CORALOGIX_DOMAIN:-}" \
+    --from-literal=jwt-secret="${JWT_SECRET}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
 # Update ECR pull secret
 echo ""
-echo "4️⃣  Refreshing ECR credentials..."
+echo "6️⃣  Refreshing ECR credentials for K8s..."
 kubectl create secret docker-registry ecr-registry-secret \
     --docker-server=103002841599.dkr.ecr.us-west-2.amazonaws.com \
     --docker-username=AWS \
@@ -54,19 +81,32 @@ kubectl create secret docker-registry ecr-registry-secret \
     --namespace=incidentfox-prod \
     --dry-run=client -o yaml | kubectl apply -f -
 
+# Deploy credential-resolver (must be before sandbox template)
+echo ""
+echo "7️⃣  Deploying credential-resolver..."
+kubectl apply -f credential-proxy/k8s/serviceaccount.yaml
+kubectl apply -f credential-proxy/k8s/deployment.yaml
+kubectl apply -f credential-proxy/k8s/service.yaml
+kubectl rollout status deployment/credential-resolver -n incidentfox-prod --timeout=2m
+
+# Deploy envoy proxy config (in incidentfox-prod namespace for sandbox pods)
+echo ""
+echo "8️⃣  Deploying envoy proxy config..."
+kubectl apply -f credential-proxy/k8s/configmap-envoy.yaml
+
 # Deploy service patcher (cluster-wide)
 echo ""
-echo "5️⃣  Deploying service patcher..."
+echo "9️⃣  Deploying service patcher..."
 kubectl apply -f k8s/service-patcher.yaml
 
 # Deploy sandbox template
 echo ""
-echo "6️⃣  Deploying sandbox template..."
+echo "🔟  Deploying sandbox template..."
 kubectl apply -f k8s/sandbox-template.yaml -n incidentfox-prod
 
 # Deploy updated YAML (picks up new image + config changes like USE_GVISOR)
 echo ""
-echo "7️⃣  Deploying updated server configuration..."
+echo "1️⃣1️⃣  Deploying updated server configuration..."
 kubectl apply -f k8s/server-deployment.yaml -n incidentfox-prod
 kubectl rollout status deployment/incidentfox-server -n incidentfox-prod --timeout=3m
 
@@ -83,4 +123,4 @@ echo "  curl http://$PROD_URL/health"
 echo ""
 echo "View logs:"
 echo "  kubectl logs -n incidentfox-prod -l app=incidentfox-server --tail=50"
-
+echo "  kubectl logs -n incidentfox-prod -l app=credential-resolver --tail=50"

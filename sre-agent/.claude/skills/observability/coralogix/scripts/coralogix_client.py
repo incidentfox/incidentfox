@@ -49,18 +49,17 @@ REGION_TO_DOMAIN = {
 def get_config() -> dict[str, str | None]:
     """Get Coralogix configuration from environment.
 
+    Credentials are injected by the credential-proxy based on tenant context.
+
     Environment variables:
-        CORALOGIX_API_KEY - Required API key
+        INCIDENTFOX_TENANT_ID - Tenant ID for credential lookup
+        INCIDENTFOX_TEAM_ID - Team ID for credential lookup
         CORALOGIX_DOMAIN - Team hostname (e.g., myteam.app.cx498.coralogix.com)
         CORALOGIX_REGION - Region code (e.g., us2, eu1)
     """
-    api_key = os.getenv("CORALOGIX_API_KEY")
-    if not api_key:
-        print("Error: CORALOGIX_API_KEY environment variable not set", file=sys.stderr)
-        sys.exit(1)
-
     return {
-        "api_key": api_key,
+        "tenant_id": os.getenv("INCIDENTFOX_TENANT_ID", "local"),
+        "team_id": os.getenv("INCIDENTFOX_TEAM_ID", "local"),
         "domain": os.getenv("CORALOGIX_DOMAIN"),
         "region": os.getenv("CORALOGIX_REGION"),
     }
@@ -108,33 +107,36 @@ def resolve_api_domain(config: dict[str, str | None]) -> str:
 
 
 def get_api_url(endpoint: str) -> str:
-    """Build the correct Coralogix API URL.
+    """Build the Coralogix API URL for proxy mode.
+
+    Uses CORALOGIX_BASE_URL which routes through the credential proxy.
+    The proxy handles credential injection and forwards to the real Coralogix API.
 
     Args:
         endpoint: API path (e.g., "/api/v1/dataprime/query")
 
     Returns:
-        Full API URL (e.g., "https://api.us2.coralogix.com/api/v1/dataprime/query")
+        Full API URL
     """
-    config = get_config()
-    api_domain = resolve_api_domain(config)
-    return f"https://api.{api_domain}{endpoint}"
+    base_url = os.getenv("CORALOGIX_BASE_URL")
+    if not base_url:
+        raise RuntimeError(
+            "CORALOGIX_BASE_URL not set. Agent must run through credential proxy."
+        )
+    return f"{base_url.rstrip('/')}{endpoint}"
 
 
 def get_headers() -> dict[str, str]:
-    """Get Coralogix API headers with proper authentication."""
+    """Get Coralogix API headers.
+
+    Includes tenant context headers for credential-proxy to look up credentials.
+    Authorization header will be injected by the proxy.
+    """
     config = get_config()
-    api_key = config["api_key"]
-
-    # Handle both raw keys and "Bearer xxx" format
-    if api_key and api_key.lower().startswith("bearer "):
-        auth_value = api_key
-    else:
-        auth_value = f"Bearer {api_key}"
-
     return {
-        "Authorization": auth_value,
         "Content-Type": "application/json",
+        "X-Tenant-Id": config.get("tenant_id") or "local",
+        "X-Team-Id": config.get("team_id") or "local",
     }
 
 

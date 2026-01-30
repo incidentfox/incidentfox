@@ -1,0 +1,51 @@
+# Network Policy for Credential Resolver
+# Restricts access to only:
+# - Sandbox pods (Envoy sidecars making ext_authz calls)
+# - Prometheus for metrics scraping
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: credential-resolver-policy
+  namespace: incidentfox-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: credential-resolver
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ext_authz calls from sandbox pods
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: incidentfox-sandboxes
+    - podSelector:
+        matchLabels:
+          component: sandbox
+    ports:
+    - protocol: TCP
+      port: 8002
+  # Allow health checks from kubelet
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 8002
+  egress:
+  # Allow calls to Config Service
+  - to:
+    - podSelector:
+        matchLabels:
+          app: incidentfox-config-service
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53

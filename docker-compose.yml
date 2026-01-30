@@ -4,6 +4,46 @@ version: '3.8'
 # Provides container isolation and resource limits
 
 services:
+  # Credential resolver - loads secrets from .env, injects into requests
+  credential-resolver:
+    build:
+      context: ./sre-agent/credential-proxy
+      dockerfile: Dockerfile
+    container_name: incidentfox-credential-resolver
+    restart: unless-stopped
+    environment:
+      - CREDENTIAL_SOURCE=environment
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8002/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - app_network
+
+  # Envoy proxy - routes requests, calls credential-resolver for auth headers
+  envoy:
+    image: envoyproxy/envoy:v1.28-latest
+    container_name: incidentfox-envoy
+    restart: unless-stopped
+    ports:
+      - "9901:9901"  # Admin interface
+    volumes:
+      - ./sre-agent/credential-proxy/envoy/envoy-local.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      credential-resolver:
+        condition: service_healthy
+    command: ["--config-path", "/etc/envoy/envoy.yaml", "--log-level", "debug"]
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    networks:
+      - app_network
+      - default  # Needs external access to reach upstream APIs
+
   # SRE Agent - runs investigations
   sre-agent:
     build:
@@ -12,10 +52,21 @@ services:
     container_name: incidentfox-sre-agent
     restart: unless-stopped
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - LMNR_PROJECT_API_KEY=${LMNR_PROJECT_API_KEY:-}
-      - CORALOGIX_API_KEY=${CORALOGIX_API_KEY:-}
+      # Proxy mode - no secrets in agent!
+      - ANTHROPIC_BASE_URL=http://envoy:8001
+      - ANTHROPIC_API_KEY=sk-ant-placeholder-proxy-will-inject-real-key
+      # Coralogix routed through proxy (credentials injected)
+      - CORALOGIX_BASE_URL=http://envoy:8001
+      # Tenant context for credential lookup
+      - INCIDENTFOX_TENANT_ID=local
+      - INCIDENTFOX_TEAM_ID=local
+      # Coralogix config (no API key - injected by proxy)
       - CORALOGIX_DOMAIN=${CORALOGIX_DOMAIN:-}
+      # Other services
+      - LMNR_PROJECT_API_KEY=${LMNR_PROJECT_API_KEY:-}
+    depends_on:
+      envoy:
+        condition: service_started
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -33,6 +84,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    ports:
+      - "8000:8000"  # Expose for local testing
     networks:
       - app_network
       - default  # Needs external access for API calls

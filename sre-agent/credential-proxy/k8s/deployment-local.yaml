@@ -1,0 +1,78 @@
+# Credential Resolver Deployment (Local Kind Development)
+# Uses environment-based credentials loaded from K8s Secret
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: credential-resolver
+  namespace: incidentfox-prod
+  labels:
+    app: credential-resolver
+    component: sre-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: credential-resolver
+  template:
+    metadata:
+      labels:
+        app: credential-resolver
+        component: sre-agent
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: credential-resolver
+        image: credential-resolver:local
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8002
+          name: http
+          protocol: TCP
+        env:
+        # Local mode: load credentials from environment (K8s Secret)
+        - name: CREDENTIAL_SOURCE
+          value: "environment"
+        # Anthropic credentials
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: anthropic-api-key
+        # Coralogix credentials
+        - name: CORALOGIX_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: coralogix-api-key
+        - name: CORALOGIX_DOMAIN
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: coralogix-domain
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL

@@ -5,11 +5,12 @@ description: Coralogix log analysis with DataPrime query language. Use when quer
 
 # Coralogix Analysis
 
-## Environment Setup
+## Authentication
 
-Required environment variables:
-- `CORALOGIX_API_KEY` - Your Coralogix API key (required)
-- `CORALOGIX_DOMAIN` - Team hostname (e.g., `myteam.app.cx498.coralogix.com`) - recommended
+**IMPORTANT**: Credentials are injected automatically by a proxy layer. Do NOT check for `CORALOGIX_API_KEY` or other API keys in environment variables - they won't be visible to you. Just run the scripts directly; authentication is handled transparently.
+
+Configuration environment variables you CAN check (non-secret):
+- `CORALOGIX_DOMAIN` - Team hostname (e.g., `myteam.app.cx498.coralogix.com`)
 - `CORALOGIX_REGION` - Region code (e.g., `us2`, `eu1`) - fallback if domain not set
 
 **Region mapping** (the scripts auto-detect based on domain):
