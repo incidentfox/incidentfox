@@ -124,6 +124,10 @@ interface IntegrationSchemaResponse {
 
 export default function TeamToolsPage() {
   const { identity } = useIdentity();
+  // Visitors have read-only access
+  const isVisitor = identity?.auth_kind === 'visitor';
+  const canWrite = !isVisitor;
+
   const [items, setItems] = useState<ToolItem[]>([]);
   const [toolsCatalog, setToolsCatalog] = useState<CatalogTool[]>([]);
   const [toolMetadata, setToolMetadata] = useState<ToolMetadata[]>([]);
@@ -935,7 +939,7 @@ export default function TeamToolsPage() {
           
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Enable/Disable Toggle - Only for tools and MCPs, NOT for integrations */}
-            {item.type !== 'integration' && (
+            {item.type !== 'integration' && canWrite && (
               <button
                 onClick={() => toggleEnabled(item)}
                 disabled={saving}
@@ -954,8 +958,8 @@ export default function TeamToolsPage() {
               </button>
             )}
 
-            {/* Filter Tools button - only for MCP servers with tools */}
-            {item.type === 'mcp_server' && item.tools && item.tools.length > 0 && (
+            {/* Filter Tools button - only for MCP servers with tools (hidden for visitors) */}
+            {item.type === 'mcp_server' && item.tools && item.tools.length > 0 && canWrite && (
               <button
                 onClick={() => {
                   // Debug: Log the item data
@@ -1008,8 +1012,8 @@ export default function TeamToolsPage() {
               </button>
             )}
 
-            {/* Delete button - only for team-added MCP servers */}
-            {item.type === 'mcp_server' && item.source === 'team' && (
+            {/* Delete button - only for team-added MCP servers (hidden for visitors) */}
+            {item.type === 'mcp_server' && item.source === 'team' && canWrite && (
               <button
                 onClick={() => deleteMCPServer(item)}
                 disabled={saving}
@@ -1039,13 +1043,15 @@ export default function TeamToolsPage() {
               <p className="text-sm text-gray-500">Configure tools and integrations for your AI agents</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowAddCustomModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Add Custom
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => setShowAddCustomModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Add Custom
+            </button>
+          )}
         </div>
 
 
@@ -1242,7 +1248,7 @@ export default function TeamToolsPage() {
                           }`}>
                             {isTeamLevel ? 'team' : 'inherited'}
                           </span>
-                          {isTeamLevel && (
+                          {isTeamLevel && canWrite && (
                             <button
                               type="button"
                               onClick={async () => {
@@ -1288,7 +1294,8 @@ export default function TeamToolsPage() {
                       <select
                         value={editValues[fieldName] || field.default || ''}
                         onChange={(e) => setEditValues({ ...editValues, [fieldName]: e.target.value })}
-                        className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"
+                        disabled={!canWrite}
+                        className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         {field.allowed_values.map(v => (
                           <option key={v} value={v}>{v}</option>
@@ -1301,7 +1308,8 @@ export default function TeamToolsPage() {
                           value={editValues[fieldName] || ''}
                           onChange={(e) => setEditValues({ ...editValues, [fieldName]: e.target.value })}
                           placeholder={field.placeholder || field.default || ''}
-                          className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"
+                          disabled={!canWrite}
+                          className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                         />
                         {field.type === 'secret' && (
                           <button
@@ -1324,20 +1332,27 @@ export default function TeamToolsPage() {
             </div>
 
             <div className="p-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3">
+              {isVisitor && (
+                <span className="text-sm text-amber-600 dark:text-amber-400 mr-auto self-center">
+                  Read-only in visitor mode
+                </span>
+              )}
               <button
                 onClick={() => setEditingItem(null)}
                 className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
               >
-                Cancel
+                {canWrite ? 'Cancel' : 'Close'}
               </button>
-              <button
-                onClick={saveConfig}
-                disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
-              >
-                <Save className="w-4 h-4" />
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+              {canWrite && (
+                <button
+                  onClick={saveConfig}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -117,6 +117,10 @@ type RawMeResponse = {
 export default function AgentSettingsPage() {
   const router = useRouter();
   const { identity } = useIdentity();
+  // Visitors have read-only access
+  const isVisitor = identity?.auth_kind === 'visitor';
+  const canWrite = !isVisitor;
+
   const [agents, setAgents] = useState<Record<string, AgentConfig>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -676,46 +680,48 @@ export default function AgentSettingsPage() {
               Templates
             </button>
 
-            <div className="relative">
-              <button
-                onClick={() => setShowAgentTypeMenu(!showAgentTypeMenu)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
-              >
-                <span className="text-lg leading-none">+</span>
-                Add Agent
-              </button>
+            {canWrite && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowAgentTypeMenu(!showAgentTypeMenu)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+                >
+                  <span className="text-lg leading-none">+</span>
+                  Add Agent
+                </button>
 
-              {showAgentTypeMenu && (
-                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
-                  <button
-                    onClick={() => {
-                      setShowAgentTypeMenu(false);
-                      setShowAddAgent(true);
-                    }}
-                    className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors rounded-t-lg flex items-center gap-3"
-                  >
-                    <Bot className="w-4 h-4 text-gray-500" />
-                    <div>
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">Add Local Agent</div>
-                      <div className="text-xs text-gray-500">Create a new internal agent</div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowAgentTypeMenu(false);
-                      setShowAddRemoteAgent(true);
-                    }}
-                    className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors rounded-b-lg flex items-center gap-3"
-                  >
-                    <ExternalLink className="w-4 h-4 text-gray-500" />
-                    <div>
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">Add Remote A2A Agent</div>
-                      <div className="text-xs text-gray-500">Integrate external AI agent</div>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
+                {showAgentTypeMenu && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
+                    <button
+                      onClick={() => {
+                        setShowAgentTypeMenu(false);
+                        setShowAddAgent(true);
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors rounded-t-lg flex items-center gap-3"
+                    >
+                      <Bot className="w-4 h-4 text-gray-500" />
+                      <div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">Add Local Agent</div>
+                        <div className="text-xs text-gray-500">Create a new internal agent</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAgentTypeMenu(false);
+                        setShowAddRemoteAgent(true);
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors rounded-b-lg flex items-center gap-3"
+                    >
+                      <ExternalLink className="w-4 h-4 text-gray-500" />
+                      <div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">Add Remote A2A Agent</div>
+                        <div className="text-xs text-gray-500">Integrate external AI agent</div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <button
               onClick={() => loadAgents()}
               disabled={loading}
@@ -724,7 +730,7 @@ export default function AgentSettingsPage() {
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            {editingAgent && (
+            {editingAgent && canWrite && (
               <button
                 onClick={handleSave}
                 disabled={saving}
@@ -737,6 +743,11 @@ export default function AgentSettingsPage() {
                 )}
                 Save
               </button>
+            )}
+            {isVisitor && editingAgent && (
+              <span className="text-sm text-amber-600 dark:text-amber-400 px-3 py-2">
+                Read-only in visitor mode
+              </span>
             )}
           </div>
         </div>
@@ -814,21 +825,24 @@ export default function AgentSettingsPage() {
                   value={overridesText}
                   onChange={(e) => setOverridesText(e.target.value)}
                   placeholder={`// Your team's configuration\n// Edit and save to customize settings\n{\n  \n}`}
-                  className="flex-1 min-h-0 w-full p-3 font-mono text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+                  disabled={!canWrite}
+                  className="flex-1 min-h-0 w-full p-3 font-mono text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none disabled:opacity-60 disabled:cursor-not-allowed"
                 />
 
                 <div className="mt-3 flex justify-between items-center flex-shrink-0">
                   <p className="text-xs text-gray-500">
-                    Edit and save to update your team&apos;s configuration.
+                    {isVisitor ? 'Read-only in visitor mode' : 'Edit and save to update your team\'s configuration.'}
                   </p>
-                  <button
-                    onClick={saveOverrides}
-                    disabled={saving}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-70"
-                  >
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Save
-                  </button>
+                  {canWrite && (
+                    <button
+                      onClick={saveOverrides}
+                      disabled={saving}
+                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-70"
+                    >
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Save
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1004,6 +1018,13 @@ export default function AgentSettingsPage() {
           <div className="w-1/2 border-l border-gray-200 dark:border-gray-800 overflow-auto bg-white dark:bg-gray-900">
             {currentAgent && editingAgent ? (
               <div className="p-6 space-y-6">
+                {/* Visitor read-only notice */}
+                {isVisitor && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+                    Read-only in visitor mode. Configuration cannot be changed.
+                  </div>
+                )}
+
                 {/* Agent Header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -1020,28 +1041,30 @@ export default function AgentSettingsPage() {
 
                 <div className="flex items-center gap-2">
                   {/* Enable/Disable Toggle */}
-                  <button
-                    onClick={() =>
-                      setEditingAgent({ ...editingAgent, enabled: !editingAgent.enabled })
-                    }
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                      editingAgent.enabled
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500'
-                    }`}
-                  >
-                    {editingAgent.enabled ? (
-                      <>
-                        <ToggleRight className="w-4 h-4" />
-                        On
-                      </>
-                    ) : (
-                      <>
-                        <ToggleLeft className="w-4 h-4" />
-                        Off
-                      </>
-                    )}
-                  </button>
+                  {canWrite && (
+                    <button
+                      onClick={() =>
+                        setEditingAgent({ ...editingAgent, enabled: !editingAgent.enabled })
+                      }
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                        editingAgent.enabled
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-500'
+                      }`}
+                    >
+                      {editingAgent.enabled ? (
+                        <>
+                          <ToggleRight className="w-4 h-4" />
+                          On
+                        </>
+                      ) : (
+                        <>
+                          <ToggleLeft className="w-4 h-4" />
+                          Off
+                        </>
+                      )}
+                    </button>
+                  )}
 
                   {/* Close button */}
                   <button
@@ -1085,7 +1108,8 @@ export default function AgentSettingsPage() {
                             model: { ...editingAgent.model, name: e.target.value },
                           })
                         }
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                        disabled={!canWrite}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         <optgroup label="Reasoning Models">
                           <option value="gpt-5">gpt-5</option>
@@ -1118,7 +1142,8 @@ export default function AgentSettingsPage() {
                             max_turns: parseInt(e.target.value) || 20,
                           })
                         }
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                        disabled={!canWrite}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -1148,7 +1173,8 @@ export default function AgentSettingsPage() {
                               },
                             })
                           }
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                          disabled={!canWrite}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           <option value="none">None (fastest)</option>
                           <option value="low">Low</option>
@@ -1179,7 +1205,8 @@ export default function AgentSettingsPage() {
                               },
                             })
                           }
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                          disabled={!canWrite}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           <option value="low">Low (concise)</option>
                           <option value="medium">Medium (default)</option>
@@ -1215,7 +1242,8 @@ export default function AgentSettingsPage() {
                               },
                             })
                           }
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                          disabled={!canWrite}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
                         />
                       </div>
                       <div className="flex items-end">
@@ -1264,7 +1292,8 @@ export default function AgentSettingsPage() {
                         })
                       }
                       rows={12}
-                      className="w-full px-3 py-2 text-sm font-mono rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 resize-y"
+                      disabled={!canWrite}
+                      className="w-full px-3 py-2 text-sm font-mono rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 resize-y disabled:opacity-60 disabled:cursor-not-allowed"
                       placeholder="Enter system prompt..."
                     />
                   ) : (
@@ -1283,22 +1312,24 @@ export default function AgentSettingsPage() {
                       <Wrench className="w-5 h-5 text-gray-500" />
                       <h3 className="font-semibold text-gray-900 dark:text-white">Tools</h3>
                     </div>
-                    <button
-                      onClick={() => setShowToolPicker(!showToolPicker)}
-                      className="text-xs text-gray-500 hover:text-gray-400 flex items-center gap-1"
-                    >
-                      {showToolPicker ? (
-                        <>
-                          <EyeOff className="w-4 h-4" />
-                          Hide
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="w-4 h-4" />
-                          Manage Tools
-                        </>
-                      )}
-                    </button>
+                    {canWrite && (
+                      <button
+                        onClick={() => setShowToolPicker(!showToolPicker)}
+                        className="text-xs text-gray-500 hover:text-gray-400 flex items-center gap-1"
+                      >
+                        {showToolPicker ? (
+                          <>
+                            <EyeOff className="w-4 h-4" />
+                            Hide
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-4 h-4" />
+                            Manage Tools
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
 
                   {showToolPicker ? (
@@ -1492,9 +1523,11 @@ export default function AgentSettingsPage() {
                       <h3 className="font-semibold text-gray-900 dark:text-white">
                         MCP Servers
                       </h3>
-                      <span className="text-xs text-gray-500">
-                        (click to enable/disable)
-                      </span>
+                      {canWrite && (
+                        <span className="text-xs text-gray-500">
+                          (click to enable/disable)
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -1526,7 +1559,7 @@ export default function AgentSettingsPage() {
                                   ? mcpInfo?.tools.length || 0
                                   : mcpInfo?.enabled_tools.length || 0;
 
-                                return (
+                                return canWrite ? (
                                   <button
                                     key={mcpId}
                                     onClick={() => {
@@ -1546,13 +1579,22 @@ export default function AgentSettingsPage() {
                                     <span className="text-xs opacity-75">({toolCount})</span>
                                     <X className="w-3 h-3 opacity-60 group-hover:opacity-100" />
                                   </button>
+                                ) : (
+                                  <span
+                                    key={mcpId}
+                                    className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-cyan-500 text-white"
+                                  >
+                                    <Server className="w-4 h-4" />
+                                    {mcpInfo?.name || mcpId}
+                                    <span className="text-xs opacity-75">({toolCount})</span>
+                                  </span>
                                 );
                               })}
                             </div>
                           )}
 
-                          {/* Available MCPs to add */}
-                          {(() => {
+                          {/* Available MCPs to add (hidden for visitors) */}
+                          {canWrite && (() => {
                             const disabledMcps = availableMcps.filter(
                               mcp => !enabledMcps.includes(mcp.id)
                             );
@@ -1613,9 +1655,11 @@ export default function AgentSettingsPage() {
                       <h3 className="font-semibold text-gray-900 dark:text-white">
                         Sub-Agents
                       </h3>
-                      <span className="text-xs text-gray-500">
-                        (click to add/remove)
-                      </span>
+                      {canWrite && (
+                        <span className="text-xs text-gray-500">
+                          (click to add/remove)
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -1637,7 +1681,7 @@ export default function AgentSettingsPage() {
                                 const remoteSub = remoteAgents.find(r => r.id === subId);
                                 const isRemote = !!remoteSub;
 
-                                return (
+                                return canWrite ? (
                                   <button
                                     key={subId}
                                     onClick={() => {
@@ -1661,13 +1705,25 @@ export default function AgentSettingsPage() {
                                     {sub?.name || remoteSub?.name || subId}
                                     <X className="w-3 h-3 opacity-60 group-hover:opacity-100" />
                                   </button>
+                                ) : (
+                                  <span
+                                    key={subId}
+                                    className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-gray-600 text-white"
+                                  >
+                                    {isRemote ? (
+                                      <ExternalLink className="w-4 h-4" />
+                                    ) : (
+                                      <Bot className="w-4 h-4" />
+                                    )}
+                                    {sub?.name || remoteSub?.name || subId}
+                                  </span>
                                 );
                               })}
                             </div>
                           )}
 
-                          {/* Available agents to add */}
-                          {(() => {
+                          {/* Available agents to add (hidden for visitors) */}
+                          {canWrite && (() => {
                             const allAgentIds = [...Object.keys(agents), ...remoteAgents.map(r => r.id)];
                             const availableAgents = allAgentIds.filter(
                               id => id !== editingAgent.id && !enabledSubAgents.includes(id)
@@ -1868,7 +1924,8 @@ export default function AgentSettingsPage() {
                   )}
                 </div>
 
-                {/* Actions */}
+                {/* Actions (hidden for visitors) */}
+                {canWrite && (
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800">
                   <div className="flex items-center gap-2 mb-4">
                     <Settings className="w-5 h-5 text-gray-500" />
@@ -1938,6 +1995,7 @@ export default function AgentSettingsPage() {
                     </button>
                   </div>
                 </div>
+                )}
               </div>
             </div>
           )}
