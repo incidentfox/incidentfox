@@ -1023,7 +1023,8 @@ class UltimateRAGServer:
                         # Populate knowledge graph from extracted entities
                         # Link to leaf node IDs only (layer 0)
                         leaf_node_ids = [
-                            n.index for n in new_tree.all_nodes.values()
+                            n.index
+                            for n in new_tree.all_nodes.values()
                             if getattr(n, "layer", 0) == 0
                         ]
                         graph_stats = self._populate_graph_from_entities(
@@ -1121,7 +1122,10 @@ class UltimateRAGServer:
                     node_ids=node_id_list,
                     tree_id=tree_name,
                 )
-                if graph_stats["entities_added"] > 0 or graph_stats["entities_updated"] > 0:
+                if (
+                    graph_stats["entities_added"] > 0
+                    or graph_stats["entities_updated"] > 0
+                ):
                     logger.info(
                         f"Graph updated: {graph_stats['entities_added']} new entities, "
                         f"{graph_stats['entities_updated']} updated, "
@@ -2457,23 +2461,50 @@ class UltimateRAGServer:
         def infer_entity_type(name: str) -> EntityType:
             name_lower = name.lower()
             # Service patterns
-            if any(kw in name_lower for kw in ["-api", "-service", "service", "api", "server", "worker"]):
+            if any(
+                kw in name_lower
+                for kw in ["-api", "-service", "service", "api", "server", "worker"]
+            ):
                 return EntityType.SERVICE
             # Person patterns
-            if "@" in name_lower or any(kw in name_lower for kw in ["team lead", "engineer", "manager"]):
+            if "@" in name_lower or any(
+                kw in name_lower for kw in ["team lead", "engineer", "manager"]
+            ):
                 return EntityType.PERSON
             # Team patterns
             if any(kw in name_lower for kw in ["team", "squad", "group"]):
                 return EntityType.TEAM
             # Technology patterns
-            if any(kw in name_lower for kw in [
-                "python", "java", "node", "react", "kubernetes", "k8s", "docker",
-                "aws", "gcp", "azure", "postgres", "mysql", "redis", "kafka",
-                "mongodb", "elasticsearch", "terraform", "jenkins", "github"
-            ]):
+            if any(
+                kw in name_lower
+                for kw in [
+                    "python",
+                    "java",
+                    "node",
+                    "react",
+                    "kubernetes",
+                    "k8s",
+                    "docker",
+                    "aws",
+                    "gcp",
+                    "azure",
+                    "postgres",
+                    "mysql",
+                    "redis",
+                    "kafka",
+                    "mongodb",
+                    "elasticsearch",
+                    "terraform",
+                    "jenkins",
+                    "github",
+                ]
+            ):
                 return EntityType.TECHNOLOGY
             # Document patterns
-            if any(kw in name_lower for kw in ["readme", "doc", "guide", "manual", "runbook"]):
+            if any(
+                kw in name_lower
+                for kw in ["readme", "doc", "guide", "manual", "runbook"]
+            ):
                 return EntityType.DOCUMENT
             # Default
             return EntityType.CUSTOM
@@ -2532,12 +2563,12 @@ class UltimateRAGServer:
 
             # Get or infer relationship type
             rel_type = rel_type_map.get(
-                rel_type_str.lower(),
-                RelationshipType.RELATED_TO
+                rel_type_str.lower(), RelationshipType.RELATED_TO
             )
 
             # Create relationship ID
             import hashlib
+
             rel_id = hashlib.md5(
                 f"{source_id}:{rel_type.value}:{target_id}".encode()
             ).hexdigest()[:12]

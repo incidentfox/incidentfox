@@ -65,18 +65,16 @@ class RaptorTreeBuilder:
             return
 
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.SummarizationModels import (
-                GPT3TurboSummarizationModel,
-            )
             from knowledge_base.raptor.embedding_cache import (
                 CachedEmbeddingModel,
                 EmbeddingCache,
             )
-            from knowledge_base.raptor.summary_cache import SummaryCache
+            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
             from knowledge_base.raptor.SummarizationModels import (
                 CachedSummarizationModel,
+                GPT3TurboSummarizationModel,
             )
+            from knowledge_base.raptor.summary_cache import SummaryCache
 
             # Embedding model
             self._embedding_model = OpenAIEmbeddingModel(
@@ -227,18 +225,14 @@ class RaptorTreeBuilder:
 
         texts = [node.text for node in leaf_nodes]
 
-        logger.info(
-            f"Building hierarchy from {len(texts)} existing leaf nodes..."
-        )
+        logger.info(f"Building hierarchy from {len(texts)} existing leaf nodes...")
 
         # Build new tree with hierarchy
         new_tree = self.build_from_texts(texts, tree_name=tree.tree_id)
 
         # Preserve metadata from original nodes where possible
         # (matching by text hash)
-        text_to_metadata = {
-            hash(node.text): node.metadata for node in leaf_nodes
-        }
+        text_to_metadata = {hash(node.text): node.metadata for node in leaf_nodes}
 
         for node in new_tree.all_nodes.values():
             if node.layer == 0:
