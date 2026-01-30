@@ -93,6 +93,18 @@ class KnowledgeGraph:
         self.created_at = datetime.utcnow()
         self.updated_at = datetime.utcnow()
 
+    # ==================== Property Accessors ====================
+
+    @property
+    def entities(self) -> Dict[str, Entity]:
+        """Public read-only access to entities dictionary."""
+        return self._entities
+
+    @property
+    def relationships(self) -> Dict[str, Relationship]:
+        """Public read-only access to relationships dictionary."""
+        return self._relationships
+
     # ==================== Entity Operations ====================
 
     def add_entity(self, entity: Entity) -> None:
@@ -179,6 +191,46 @@ class KnowledgeGraph:
         entity_ids = self._entities_by_type.get(entity_type, set())
         return [self._entities[eid] for eid in entity_ids if eid in self._entities]
 
+    def get_entity_by_name(self, name: str) -> Optional[Entity]:
+        """Get an entity by name (case-insensitive). Alias for find_entity."""
+        return self.find_entity(name)
+
+    def get_related_entities(
+        self,
+        entity_id: str,
+        relationship_type: Optional[str] = None,
+        direction: str = "outgoing",
+    ) -> List[Entity]:
+        """
+        Get entities related to the given entity.
+
+        Args:
+            entity_id: Source entity ID
+            relationship_type: Filter by relationship type (string value)
+            direction: 'outgoing', 'incoming', or 'both'
+
+        Returns:
+            List of related entities
+        """
+        relationships = self.get_relationships(entity_id, direction=direction)
+
+        # Filter by relationship type if specified
+        if relationship_type:
+            relationships = [
+                r for r in relationships if r.relationship_type.value == relationship_type
+            ]
+
+        # Get related entity IDs
+        related_ids = set()
+        for rel in relationships:
+            if rel.source_id == entity_id:
+                related_ids.add(rel.target_id)
+            else:
+                related_ids.add(rel.source_id)
+
+        # Return entities
+        return [self._entities[eid] for eid in related_ids if eid in self._entities]
+
     def remove_entity(self, entity_id: str) -> bool:
         """Remove an entity and its relationships."""
         if entity_id not in self._entities:
@@ -264,6 +316,14 @@ class KnowledgeGraph:
         relationships = [r for r in relationships if r.is_active]
 
         return relationships
+
+    def get_relationships_for_entity(
+        self,
+        entity_id: str,
+        direction: str = "both",
+    ) -> List[Relationship]:
+        """Alias for get_relationships. Returns all relationships for an entity."""
+        return self.get_relationships(entity_id, direction=direction)
 
     def find_relationship(
         self,

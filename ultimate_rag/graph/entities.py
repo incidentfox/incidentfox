@@ -61,6 +61,11 @@ class Entity:
     # Aliases for fuzzy matching
     aliases: List[str] = field(default_factory=list)
 
+    @property
+    def raptor_node_ids(self) -> List[int]:
+        """Alias for node_ids for backward compatibility."""
+        return self.node_ids
+
     def __hash__(self):
         return hash(self.entity_id)
 
