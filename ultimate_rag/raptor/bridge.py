@@ -101,19 +101,23 @@ class RaptorBridge:
             self._raptor_to_knowledge[raptor_node.index] = knowledge_node.index
             self._knowledge_to_raptor[knowledge_node.index] = raptor_node.index
 
-        # Set root and leaf nodes
+        # Set root and leaf nodes (must be Dict[int, KnowledgeNode], not list!)
         # Handle both node objects and node indices (RAPTOR may store either)
         def get_node_index(n):
             return n.index if hasattr(n, "index") else n
 
-        knowledge_tree.root_nodes = [
-            knowledge_tree.all_nodes[self._raptor_to_knowledge[get_node_index(n)]]
+        knowledge_tree.root_nodes = {
+            self._raptor_to_knowledge[get_node_index(n)]: knowledge_tree.all_nodes[
+                self._raptor_to_knowledge[get_node_index(n)]
+            ]
             for n in raptor_tree.root_nodes
-        ]
-        knowledge_tree.leaf_nodes = [
-            knowledge_tree.all_nodes[self._raptor_to_knowledge[get_node_index(n)]]
+        }
+        knowledge_tree.leaf_nodes = {
+            self._raptor_to_knowledge[get_node_index(n)]: knowledge_tree.all_nodes[
+                self._raptor_to_knowledge[get_node_index(n)]
+            ]
             for n in raptor_tree.leaf_nodes
-        ]
+        }
 
         # Set layer mapping
         knowledge_tree.layer_to_nodes = {}

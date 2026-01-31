@@ -326,7 +326,8 @@ Intent definitions:
 
             for node in node_list:
                 node_embedding = node.embeddings.get(embedding_key)
-                if node_embedding:
+                # Use 'is not None' to handle numpy arrays correctly
+                if node_embedding is not None:
                     embeddings.append(node_embedding)
                     valid_nodes.append(node)
 
@@ -978,7 +979,8 @@ class AdaptiveDepthStrategy(RetrievalStrategy):
 
             for node in nodes_at_depth:
                 node_embedding = node.embeddings.get(embedding_key)
-                if node_embedding:
+                # Use 'is not None' to handle numpy arrays correctly
+                if node_embedding is not None:
                     embeddings.append(node_embedding)
                     valid_nodes.append(node)
 
