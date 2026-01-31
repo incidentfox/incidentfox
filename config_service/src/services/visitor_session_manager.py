@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import structlog
@@ -29,6 +29,11 @@ logger = structlog.get_logger(__name__)
 IDLE_TIMEOUT_NO_QUEUE = timedelta(minutes=30)
 WARNING_DURATION = timedelta(minutes=3)
 SESSION_CLEANUP_AGE = timedelta(hours=1)
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 
 # Playground configuration
 PLAYGROUND_ORG_ID = "playground"
@@ -131,7 +136,7 @@ class VisitorSessionManager:
 
         # Update heartbeat for active/warned sessions
         if session.status in ("active", "warned"):
-            session.last_heartbeat_at = datetime.utcnow()
+            session.last_heartbeat_at = _utc_now()
             logger.debug(
                 "heartbeat_updated",
                 session_id=session_id,
@@ -167,7 +172,7 @@ class VisitorSessionManager:
         was_active = session.status in ("active", "warned")
 
         session.status = "expired"
-        session.expired_at = datetime.utcnow()
+        session.expired_at = _utc_now()
 
         # If this was the active session, promote next in queue
         if was_active:
@@ -193,15 +198,15 @@ class VisitorSessionManager:
         """Record/update visitor email for marketing."""
         visitor = db.query(VisitorEmail).filter_by(email=email).first()
         if visitor:
-            visitor.last_seen_at = datetime.utcnow()
+            visitor.last_seen_at = _utc_now()
             visitor.visit_count += 1
             if source and not visitor.source:
                 visitor.source = source
         else:
             visitor = VisitorEmail(
                 email=email,
-                first_seen_at=datetime.utcnow(),
-                last_seen_at=datetime.utcnow(),
+                first_seen_at=_utc_now(),
+                last_seen_at=_utc_now(),
                 visit_count=1,
                 source=source,
             )
@@ -210,7 +215,7 @@ class VisitorSessionManager:
 
     def _cleanup_expired_sessions(self, db: Session) -> int:
         """Remove old expired sessions."""
-        cutoff = datetime.utcnow() - SESSION_CLEANUP_AGE
+        cutoff = _utc_now() - SESSION_CLEANUP_AGE
         deleted = (
             db.query(VisitorSession)
             .filter(
@@ -276,8 +281,8 @@ class VisitorSessionManager:
             id=session_id,
             email=email,
             status="active",
-            created_at=datetime.utcnow(),
-            last_heartbeat_at=datetime.utcnow(),
+            created_at=_utc_now(),
+            last_heartbeat_at=_utc_now(),
         )
         db.add(session)
         db.commit()
@@ -303,8 +308,8 @@ class VisitorSessionManager:
             id=session_id,
             email=email,
             status="queued",
-            created_at=datetime.utcnow(),
-            last_heartbeat_at=datetime.utcnow(),
+            created_at=_utc_now(),
+            last_heartbeat_at=_utc_now(),
         )
         db.add(session)
         db.commit()
@@ -331,7 +336,7 @@ class VisitorSessionManager:
 
     def _build_active_response(self, db: Session, session: VisitorSession) -> dict:
         """Build response for an active/warned session."""
-        session.last_heartbeat_at = datetime.utcnow()
+        session.last_heartbeat_at = _utc_now()
         db.commit()
 
         token = self._issue_visitor_token(session.id, session.email)
@@ -343,7 +348,7 @@ class VisitorSessionManager:
         }
 
         if session.status == "warned" and session.warned_at:
-            elapsed = datetime.utcnow() - session.warned_at
+            elapsed = _utc_now() - session.warned_at
             remaining = WARNING_DURATION - elapsed
             response["warning_seconds_remaining"] = max(
                 0, int(remaining.total_seconds())
@@ -374,7 +379,7 @@ class VisitorSessionManager:
             response["estimated_wait_seconds"] = self._estimate_wait_time(position)
 
         elif session.status == "warned" and session.warned_at:
-            elapsed = datetime.utcnow() - session.warned_at
+            elapsed = _utc_now() - session.warned_at
             remaining = WARNING_DURATION - elapsed
             response["warning_seconds_remaining"] = max(
                 0, int(remaining.total_seconds())
@@ -391,7 +396,7 @@ class VisitorSessionManager:
             return
 
         queue_count = self._get_queue_count(db)
-        idle_time = datetime.utcnow() - active.last_heartbeat_at
+        idle_time = _utc_now() - active.last_heartbeat_at
 
         if queue_count == 0:
             # No queue - use lenient 30 min timeout
@@ -407,7 +412,7 @@ class VisitorSessionManager:
             if active.status == "warned":
                 # Check if warning period expired
                 if active.warned_at:
-                    warning_elapsed = datetime.utcnow() - active.warned_at
+                    warning_elapsed = _utc_now() - active.warned_at
                     if warning_elapsed > WARNING_DURATION:
                         logger.info(
                             "visitor_session_warning_expired",
@@ -424,12 +429,12 @@ class VisitorSessionManager:
                     queue_count=queue_count,
                 )
                 active.status = "warned"
-                active.warned_at = datetime.utcnow()
+                active.warned_at = _utc_now()
 
     def _expire_session(self, db: Session, session: VisitorSession) -> None:
         """Mark a session as expired."""
         session.status = "expired"
-        session.expired_at = datetime.utcnow()
+        session.expired_at = _utc_now()
         logger.info("visitor_session_expired", session_id=session.id)
 
     def _promote_next_in_queue(self, db: Session) -> Optional[VisitorSession]:
@@ -443,7 +448,7 @@ class VisitorSessionManager:
 
         if next_session:
             next_session.status = "active"
-            next_session.last_heartbeat_at = datetime.utcnow()
+            next_session.last_heartbeat_at = _utc_now()
             logger.info(
                 "visitor_session_promoted",
                 session_id=next_session.id,
