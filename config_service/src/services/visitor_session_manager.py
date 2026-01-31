@@ -5,7 +5,7 @@ Manages visitor access to the playground with queue-based fairness:
 - Only 1 active session at a time
 - Others join a queue (FIFO)
 - Active session timeout: 30 min idle when queue empty
-- Warning threshold: 2 min idle when queue not empty → 3 min countdown
+- When queue exists: immediate 3 min countdown, then kicked
 - Heartbeat: frontend calls every 30s while tab is open
 """
 
@@ -27,7 +27,6 @@ logger = structlog.get_logger(__name__)
 
 # Configuration constants
 IDLE_TIMEOUT_NO_QUEUE = timedelta(minutes=30)
-IDLE_THRESHOLD_WITH_QUEUE = timedelta(minutes=2)
 WARNING_DURATION = timedelta(minutes=3)
 SESSION_CLEANUP_AGE = timedelta(hours=1)
 
@@ -404,7 +403,7 @@ class VisitorSessionManager:
                 )
                 self._expire_session(db, active)
         else:
-            # Queue exists - be more aggressive
+            # Queue exists - start 3-minute countdown
             if active.status == "warned":
                 # Check if warning period expired
                 if active.warned_at:
@@ -417,12 +416,11 @@ class VisitorSessionManager:
                         )
                         self._expire_session(db, active)
                         self._promote_next_in_queue(db)
-            elif idle_time > IDLE_THRESHOLD_WITH_QUEUE:
-                # Start warning
+            else:
+                # Start warning immediately when queue exists
                 logger.info(
                     "visitor_session_warning_started",
                     session_id=active.id,
-                    idle_seconds=idle_time.total_seconds(),
                     queue_count=queue_count,
                 )
                 active.status = "warned"
