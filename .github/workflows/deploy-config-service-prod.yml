@@ -1,0 +1,116 @@
+name: Deploy Config Service to Production
+
+on:
+  workflow_dispatch:  # Manual trigger only from GitHub UI
+
+env:
+  AWS_REGION: us-west-2
+  EKS_CLUSTER_NAME: incidentfox-prod
+  ECR_REGISTRY: 103002841599.dkr.ecr.us-west-2.amazonaws.com
+  NAMESPACE: incidentfox-prod
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+          echo "✅ AWS credentials configured"
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}
+          kubectl config current-context
+          echo "✅ kubectl configured"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+          echo "✅ Logged in to ECR"
+
+      - name: Build and push Docker image
+        working-directory: config_service
+        run: |
+          docker buildx create --use --name multiplatform 2>/dev/null || docker buildx use multiplatform
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t ${{ env.ECR_REGISTRY }}/incidentfox-config-service:latest \
+            --push \
+            .
+          echo "✅ Docker image pushed to ECR"
+
+      - name: Install jq (required by deploy script)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          echo "✅ jq installed"
+
+      - name: Deploy to Kubernetes
+        working-directory: config_service/k8s
+        run: |
+          # Make deploy script executable
+          chmod +x deploy-eks.sh
+
+          # Run deployment script (handles secrets, deployment, and migrations)
+          ./deploy-eks.sh
+
+          echo "✅ Deployment complete"
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=config-service
+
+          # Check pod health
+          kubectl wait --for=condition=ready pod \
+            -l app=config-service \
+            -n ${{ env.NAMESPACE }} \
+            --timeout=120s
+
+          echo "✅ All pods are healthy"
+
+      - name: Test config service health
+        run: |
+          kubectl exec -n ${{ env.NAMESPACE }} deployment/config-service -- \
+            curl -s http://localhost:8080/health
+          echo ""
+          echo "✅ Health check passed"
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Service:** Config Service" >> $GITHUB_STEP_SUMMARY
+          echo "**Cluster:** ${{ env.EKS_CLUSTER_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Region:** ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Namespace:** ${{ env.NAMESPACE }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pod Status" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=config-service >> $GITHUB_STEP_SUMMARY || true
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Internal URL:** http://config-service-svc.${{ env.NAMESPACE }}.svc.cluster.local:8080" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Database Migrations" >> $GITHUB_STEP_SUMMARY
+          echo "Database migrations were automatically applied during deployment." >> $GITHUB_STEP_SUMMARY

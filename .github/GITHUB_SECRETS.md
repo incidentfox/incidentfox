@@ -41,9 +41,7 @@ The following are stored elsewhere and do NOT need to be in GitHub secrets:
 | Secret | Where It Lives | Why |
 |--------|---------------|-----|
 | `ANTHROPIC_API_KEY` | Config-service (BYOK) or AWS Secrets Manager (shared) | Per-tenant BYOK or shared key for free tier/non-BYOK customers |
-| `CORALOGIX_API_KEY` | Config-service | Customer's observability integration |
-| `CORALOGIX_DOMAIN` | Config-service | Customer's observability integration |
-| `DATADOG_API_KEY` | Config-service | Customer's observability integration |
+| Other integration keys | Config-service | Customer integration credentials (Coralogix, Datadog, Slack, GitHub, etc.) |
 
 ## AWS IAM Policy
 
