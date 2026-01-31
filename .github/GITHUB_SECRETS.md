@@ -2,37 +2,48 @@
 
 This document lists the required GitHub secrets for CI/CD workflows.
 
+## Multi-Tenant Architecture
+
+In the multi-tenant architecture, customer API keys are **NOT** stored in GitHub secrets or K8s secrets:
+
+- **Customer API keys** (Anthropic BYOK, Coralogix, Datadog, etc.) → stored in config-service RDS
+- **Shared Anthropic key** (for free trials) → stored in AWS Secrets Manager, accessed via IRSA
+- **Platform secrets** (JWT, observability) → stored in GitHub secrets / K8s secrets
+
 ## Required Secrets for Production Deployment
 
 Navigate to your GitHub repository → Settings → Secrets and variables → Actions → New repository secret
 
 ### AWS Credentials
 
-- **`AWS_ACCESS_KEY_ID`**
+- **`AWS_ACCESS_KEY_ID`** (Required)
   AWS access key with permissions to:
   - Push to ECR (Elastic Container Registry)
   - Update EKS cluster configuration
   - Manage EKS resources
 
-- **`AWS_SECRET_ACCESS_KEY`**
+- **`AWS_SECRET_ACCESS_KEY`** (Required)
   Corresponding AWS secret access key
 
-### Application Secrets
-
-- **`ANTHROPIC_API_KEY`** (Required)
-  Your Anthropic API key for Claude access
+### Platform Secrets
 
 - **`JWT_SECRET`** (Required)
-  Secret for JWT token signing (generate with: `openssl rand -hex 32`)
+  Secret for JWT token signing between sre-agent and credential-resolver.
+  Generate with: `openssl rand -hex 32`
 
 - **`LMNR_PROJECT_API_KEY`** (Optional)
-  Laminar API key for observability
+  Laminar API key for **our** observability tracing (not customer's)
 
-- **`CORALOGIX_API_KEY`** (Optional)
-  Coralogix API key for log aggregation
+### Secrets NOT Needed Here
 
-- **`CORALOGIX_DOMAIN`** (Optional)
-  Coralogix domain (e.g., `cx498.coralogix.com`)
+The following are stored elsewhere and do NOT need to be in GitHub secrets:
+
+| Secret | Where It Lives | Why |
+|--------|---------------|-----|
+| `ANTHROPIC_API_KEY` | Config-service (BYOK) or AWS Secrets Manager (shared) | Per-tenant or shared trial key |
+| `CORALOGIX_API_KEY` | Config-service | Customer's observability integration |
+| `CORALOGIX_DOMAIN` | Config-service | Customer's observability integration |
+| `DATADOG_API_KEY` | Config-service | Customer's observability integration |
 
 ## AWS IAM Policy
 
@@ -77,8 +88,6 @@ The AWS credentials should have the following minimum permissions:
 
 ## Setting Secrets via GitHub CLI
 
-You can also set secrets using the GitHub CLI:
-
 ```bash
 # Install GitHub CLI if needed
 brew install gh
@@ -86,14 +95,28 @@ brew install gh
 # Authenticate
 gh auth login
 
-# Set secrets
+# Set required secrets
 gh secret set AWS_ACCESS_KEY_ID
 gh secret set AWS_SECRET_ACCESS_KEY
-gh secret set ANTHROPIC_API_KEY
 gh secret set JWT_SECRET --body "$(openssl rand -hex 32)"
+
+# Optional: observability
 gh secret set LMNR_PROJECT_API_KEY
-gh secret set CORALOGIX_API_KEY
-gh secret set CORALOGIX_DOMAIN
+```
+
+## Shared Anthropic Key Setup (AWS Secrets Manager)
+
+For free trial users, the shared Anthropic key is stored in AWS Secrets Manager:
+
+```bash
+# Create secret in AWS Secrets Manager
+aws secretsmanager create-secret \
+  --name "incidentfox/prod/anthropic" \
+  --description "Shared Anthropic API key for free trial users" \
+  --secret-string '{"api_key": "sk-ant-..."}' \
+  --region us-west-2
+
+# The credential-resolver service accesses this via IRSA (IAM Roles for Service Accounts)
 ```
 
 ## Workflow Triggers
@@ -107,7 +130,7 @@ This ensures production deployments are intentional and controlled.
 
 ## Verifying Configuration
 
-After setting up secrets, you can:
+After setting up secrets:
 
 1. Go to Actions tab in your GitHub repository
 2. Find the "Deploy SRE Agent to Production" workflow

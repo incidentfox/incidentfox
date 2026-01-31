@@ -54,23 +54,10 @@ spec:
           value: "us-west-2"
         - name: SHARED_ANTHROPIC_SECRET
           value: "incidentfox/prod/anthropic"
-        # Fallback: Environment credentials for internal testing
-        - name: ANTHROPIC_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: incidentfox-secrets
-              key: anthropic-api-key
-        # Coralogix credentials (still from env for now)
-        - name: CORALOGIX_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: incidentfox-secrets
-              key: coralogix-api-key
-        - name: CORALOGIX_DOMAIN
-          valueFrom:
-            secretKeyRef:
-              name: incidentfox-secrets
-              key: coralogix-domain
+        # Multi-tenant credential flow:
+        # - Customer API keys (Anthropic BYOK, Coralogix, Datadog) -> stored in config-service RDS
+        # - Shared Anthropic key (for free trials) -> fetched from AWS Secrets Manager
+        # - No integration credentials stored in K8s secrets or environment variables
         resources:
           requests:
             cpu: 100m

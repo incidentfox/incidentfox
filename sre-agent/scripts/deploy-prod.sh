@@ -21,12 +21,11 @@ else
     exit 1
 fi
 
-# Load API keys
+# Load environment (optional keys for observability)
 source "$ENV_FILE"
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "❌ ANTHROPIC_API_KEY not set in .env"
-    exit 1
-fi
+# Note: ANTHROPIC_API_KEY is NOT required here - customer keys are in config-service,
+# and the shared trial key is fetched from AWS Secrets Manager via IRSA.
+# Only LMNR_PROJECT_API_KEY (our observability) and JWT_SECRET are used from .env.
 
 # Switch to production context
 echo "1️⃣  Switching to production cluster..."
@@ -57,18 +56,21 @@ docker buildx build \
     credential-proxy \
     --push
 
-# Update secrets (including Coralogix for credential-resolver and JWT secret)
+# Update secrets (platform secrets only - customer keys are in config-service)
 echo ""
 echo "5️⃣  Updating production secrets..."
 # Generate JWT secret if not provided (should be set in .env for consistency)
 JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32)}"
+
+# Multi-tenant architecture:
+# - jwt-secret: Required for sre-agent <-> credential-resolver auth
+# - laminar-api-key: OUR observability tracing (not customer's)
+# - Customer API keys (Anthropic BYOK, Coralogix, Datadog): stored in config-service RDS
+# - Shared Anthropic key (free trials): fetched from AWS Secrets Manager via IRSA
 kubectl create secret generic incidentfox-secrets \
     --namespace=incidentfox-prod \
-    --from-literal=anthropic-api-key="${ANTHROPIC_API_KEY}" \
-    --from-literal=laminar-api-key="${LMNR_PROJECT_API_KEY:-}" \
-    --from-literal=coralogix-api-key="${CORALOGIX_API_KEY:-}" \
-    --from-literal=coralogix-domain="${CORALOGIX_DOMAIN:-}" \
     --from-literal=jwt-secret="${JWT_SECRET}" \
+    --from-literal=laminar-api-key="${LMNR_PROJECT_API_KEY:-}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
 # Update ECR pull secret

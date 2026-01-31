@@ -39,22 +39,21 @@ spec:
           value: "true"  # Production uses gVisor for enhanced isolation
         - name: CREDENTIAL_RESOLVER_NAMESPACE
           value: "incidentfox-prod"  # Where credential-resolver service runs
+        # JWT secret for signing tokens passed to sandboxes (required)
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
               name: incidentfox-secrets
               key: jwt-secret
-        - name: ANTHROPIC_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: incidentfox-secrets
-              key: anthropic-api-key
+        # Laminar API key for OUR observability tracing (optional, not customer's)
         - name: LMNR_PROJECT_API_KEY
           valueFrom:
             secretKeyRef:
               name: incidentfox-secrets
               key: laminar-api-key
               optional: true
+        # Note: Customer API keys (Anthropic, Coralogix, etc.) are NOT needed here.
+        # Sandboxes get credentials from credential-resolver at runtime via envoy sidecar.
         resources:
           requests:
             cpu: "250m"
