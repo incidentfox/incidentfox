@@ -162,82 +162,34 @@ You should see a streaming response! 🎉
 
 ## Why IncidentFox?
 
-Most AI SRE tools stop at alert correlation — grouping alerts into incidents. IncidentFox goes further: it **actually investigates**. It reads logs, queries metrics, traces service dependencies, analyzes recent deployments, and finds the root cause.
+Most AI SRE tools are either **locked to one vendor** (Datadog Bits AI only works with Datadog) or **stop at alert correlation** (BigPanda groups alerts, humans still debug). IncidentFox is different: it's open-source, works with your existing stack, and actually investigates.
 
-### The Problem with Current Tools
+### What Makes Us Different
 
-| Tool Category | What They Do | What's Missing |
-|---------------|--------------|----------------|
-| **Observability AI** (Datadog Bits AI, Dynatrace Davis) | Deep investigation, but only within their ecosystem | Locked to one vendor. If you use Grafana + Datadog + custom tools, you're out of luck |
-| **AIOps** (BigPanda, Moogsoft, PagerDuty) | Alert correlation and noise reduction | Stops at grouping. Human still debugs. AI features often cost $699+/mo extra |
-| **Incident Management** (incident.io, Rootly) | Great workflows, status pages, postmortems | Rely on human expertise for technical debugging |
-| **Runbook Automation** (Shoreline, Kubiya) | Execute predefined runbooks | Only works when runbooks exist. 85% of orgs have stale or incomplete runbooks |
+**Customize agents without code.** Agents are JSON configs — model, prompts, tools, sub-agents. Want your investigation agent to always check your escalation policy first? Edit the prompt in the UI. 30 seconds, no deploy.
 
-### How IncidentFox Is Different
+**Add integrations in 5 minutes.** MCP protocol means one JSON block to connect any tool ecosystem — AWS EKS, GitHub, Slack, Postgres, 100+ others. No custom integration code. No deployment.
 
-**1. Investigation, not just correlation**
+**Config inheritance for multi-team scale.** Org sets defaults (which agents, which integrations). Teams override only what they need. Deep merge at every key — teams add tools without losing org baseline. 50 teams, 5 lines of config each.
 
-Other tools: "These 5 alerts are related"
-IncidentFox: "Database connection pool exhausted at 10:32 UTC causing cascading failures. Recent deployment `abc123` increased connection timeout from 5s to 30s, holding connections longer. Here's the git blame and rollback command."
+**Agents that learn from incidents.** After 100 investigations, the system detects patterns: "You query Kafka 40 times but don't have Kafka tools — add them?" Proposes improvements. Approval-gated, no auto-deploy.
 
-**2. Works with your existing stack**
+**RAPTOR knowledge base (ICLR 2024).** Not flat vector search. Hierarchical tree that clusters docs → summarizes clusters → builds abstraction layers. 100-page runbook? High-level queries find summaries, detail queries find specifics. Standard RAG fails on dense technical docs.
 
-| Category | Integrations |
-|----------|-------------|
-| Observability | Grafana, Datadog, New Relic, Prometheus, Coralogix, Splunk, Elastic |
-| Infrastructure | Kubernetes, AWS, Azure, GCP, Docker |
-| Code & CI/CD | GitHub, GitLab, Git |
-| Incident Mgmt | PagerDuty, OpsGenie, incident.io, Jira |
-| Data | Snowflake, BigQuery, PostgreSQL, Kafka |
+**Validation before you break production.** Disable an integration? System checks: "Can't disable Grafana — `grafana_query_prometheus` depends on it, and planner agent uses that tool." Catches misconfigs before deploy.
 
-Add new integrations via **MCP protocol** in 5 minutes — no code changes, just config.
+### vs. Competitors
 
-**3. Intelligent log analysis (not bulk loading)**
-
-Most AI tools load 100K log lines, hit context limits, and fail. IncidentFox uses **progressive discovery**:
-1. Get statistics first (error rate, severity distribution, top patterns)
-2. Sample intelligently (errors only, or around specific timestamp)
-3. Drill down based on findings
-
-**4. Seasonality-aware anomaly detection**
-
-Basic tools use Z-score: "This value is 3 standard deviations from mean = anomaly"
-IncidentFox uses **Prophet**: Knows 3am traffic is normally low. Knows Monday morning spikes are expected. Separates trend from seasonal patterns.
-
-**5. Knowledge base that learns**
-
-| Standard RAG | RAPTOR (IncidentFox) |
-|--------------|---------------------|
-| Flat vector search | Hierarchical tree with multi-level abstractions |
-| Static embeddings | Learns from incident outcomes — what worked gets boosted |
-| No context | Indexes runbooks, postmortems, tribal knowledge |
-| Query similarity only | Tracks contradictions, gaps, stale content |
-
-**6. Transparent reasoning**
-
-See exactly what the AI checked:
-- Which logs it read and what patterns it found
-- Which metrics it queried and what anomalies it detected
-- Which services it traced and how dependencies connect
-- Why it reached its conclusion
-
-**7. Self-hosted, your data stays yours**
-
-| Deployment | Data Location |
-|------------|---------------|
-| SaaS | Managed (if you want convenience) |
-| Self-hosted | Your VPC, your control |
-| Air-gapped | Zero internet, local LLM support |
-
-Critical for: financial services, healthcare, government, anyone with data residency requirements.
-
-**8. Enterprise-ready from day one**
-
-- **Hierarchical config**: Org → Business Unit → Team with inheritance
-- **OIDC/SSO**: Google, Azure AD, Okta
-- **Audit logging**: Append-only, versioned, with rollback
-- **Approval workflows**: Per-field approval for sensitive changes
-- **Telemetry controls**: Opt-in only, no PII ever collected
+| Capability | IncidentFox | Datadog/Dynatrace | BigPanda/Moogsoft | incident.io/Rootly |
+|------------|-------------|-------------------|-------------------|-------------------|
+| Works with any stack | ✅ Grafana + Datadog + custom | ❌ Their ecosystem only | ⚠️ Alert ingestion only | ⚠️ Workflow focus |
+| Customize agents | ✅ JSON config, no code | ❌ Fixed agents | ❌ N/A | ❌ N/A |
+| Add integrations | ✅ 5 min (MCP) | ❌ Wait for vendor | ❌ Custom code | ❌ Custom code |
+| Multi-team config | ✅ Inheritance + merge | ❌ Flat | ❌ Flat | ❌ Flat |
+| Self-learning | ✅ Gap detection + proposals | ❌ Static | ❌ Static | ❌ Static |
+| Knowledge base | ✅ RAPTOR (hierarchical) | ⚠️ Basic RAG | ❌ None | ❌ None |
+| Self-hosted | ✅ Docker/Helm/air-gapped | ❌ SaaS only | ⚠️ On-prem available | ❌ SaaS only |
+| Open source | ✅ Apache 2.0 | ❌ Proprietary | ❌ Proprietary | ❌ Proprietary |
 
 ---
 
