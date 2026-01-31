@@ -39,13 +39,13 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 
 ## Get Started
 
-|  | **Try It** | **Self-Host** | **Managed** |
-|---|------------|---------------|-------------|
-| **Best for** | Evaluating with your team | Production with full control | Production, zero ops |
-| **How** | Docker Compose + Slack | Kubernetes (Helm) | Sign up |
-| **Setup time** | 5 minutes | 30 minutes | Instant |
-| **Cost** | Free | Free (open source) | [Contact us](mailto:founders@incidentfox.ai) |
-|  | [Quick Start ↓](#quick-start) | [Deployment Guide →](docs/DEPLOYMENT.md) | [Sign Up →](https://ui.incidentfox.ai) |
+|  | **Try Free** | **Local Docker** | **Self-Host** | **Managed** |
+|---|--------------|------------------|---------------|-------------|
+| **Best for** | Quick exploration | Evaluating with your team | Production, full control | Production, premium features |
+| **How** | Join our Slack | Docker Compose | Kubernetes (Helm) | On-prem or SaaS |
+| **Setup time** | Instant | 5 minutes | 30 minutes | [Contact us](mailto:founders@incidentfox.ai) |
+| **Cost** | Free | Free | Free (open source) | Custom pricing |
+|  | [Join Slack →](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ) | [Quick Start ↓](#quick-start) | [Deployment Guide →](docs/DEPLOYMENT.md) | [Get in Touch →](mailto:founders@incidentfox.ai) |
 
 ---
 
