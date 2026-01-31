@@ -15,14 +15,14 @@ import os
 from typing import Optional
 
 import requests
-from slack_sdk.oauth.installation_store import InstallationStore, Installation, Bot
+from slack_sdk.oauth.installation_store import Bot, Installation, InstallationStore
 
 logger = logging.getLogger(__name__)
 
 # Config service URL
 CONFIG_SERVICE_URL = os.environ.get(
     "CONFIG_SERVICE_URL",
-    "http://config-service-svc.incidentfox-prod.svc.cluster.local:8080"
+    "http://config-service-svc.incidentfox-prod.svc.cluster.local:8080",
 )
 
 
@@ -82,9 +82,15 @@ class ConfigServiceInstallationStore(InstallationStore):
 
             if installation.incoming_webhook_url:
                 bot_payload["incoming_webhook_url"] = installation.incoming_webhook_url
-                bot_payload["incoming_webhook_channel"] = installation.incoming_webhook_channel
-                bot_payload["incoming_webhook_channel_id"] = installation.incoming_webhook_channel_id
-                bot_payload["incoming_webhook_configuration_url"] = installation.incoming_webhook_configuration_url
+                bot_payload["incoming_webhook_channel"] = (
+                    installation.incoming_webhook_channel
+                )
+                bot_payload["incoming_webhook_channel_id"] = (
+                    installation.incoming_webhook_channel_id
+                )
+                bot_payload["incoming_webhook_configuration_url"] = (
+                    installation.incoming_webhook_configuration_url
+                )
 
             try:
                 response = requests.post(
@@ -118,9 +124,15 @@ class ConfigServiceInstallationStore(InstallationStore):
 
             if installation.incoming_webhook_url:
                 user_payload["incoming_webhook_url"] = installation.incoming_webhook_url
-                user_payload["incoming_webhook_channel"] = installation.incoming_webhook_channel
-                user_payload["incoming_webhook_channel_id"] = installation.incoming_webhook_channel_id
-                user_payload["incoming_webhook_configuration_url"] = installation.incoming_webhook_configuration_url
+                user_payload["incoming_webhook_channel"] = (
+                    installation.incoming_webhook_channel
+                )
+                user_payload["incoming_webhook_channel_id"] = (
+                    installation.incoming_webhook_channel_id
+                )
+                user_payload["incoming_webhook_configuration_url"] = (
+                    installation.incoming_webhook_configuration_url
+                )
 
             try:
                 response = requests.post(
@@ -130,7 +142,9 @@ class ConfigServiceInstallationStore(InstallationStore):
                     timeout=10,
                 )
                 response.raise_for_status()
-                logger.info(f"User installation saved for team {installation.team_id}, user {installation.user_id}")
+                logger.info(
+                    f"User installation saved for team {installation.team_id}, user {installation.user_id}"
+                )
             except requests.exceptions.RequestException as e:
                 logger.error(f"Failed to save user installation: {e}")
                 # Don't raise - user installation is secondary to bot installation
@@ -197,7 +211,9 @@ class ConfigServiceInstallationStore(InstallationStore):
                 incoming_webhook_url=data.get("incoming_webhook_url"),
                 incoming_webhook_channel=data.get("incoming_webhook_channel"),
                 incoming_webhook_channel_id=data.get("incoming_webhook_channel_id"),
-                incoming_webhook_configuration_url=data.get("incoming_webhook_configuration_url"),
+                incoming_webhook_configuration_url=data.get(
+                    "incoming_webhook_configuration_url"
+                ),
                 is_enterprise_install=data.get("is_enterprise_install", False),
                 token_type=data.get("token_type"),
             )

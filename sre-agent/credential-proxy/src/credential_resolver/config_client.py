@@ -71,7 +71,9 @@ def get_shared_anthropic_key() -> Optional[str]:
             return None
 
     except Exception as e:
-        logger.warning(f"Failed to fetch from Secrets Manager (expected without IRSA): {e}")
+        logger.warning(
+            f"Failed to fetch from Secrets Manager (expected without IRSA): {e}"
+        )
         return None
 
 
@@ -80,7 +82,8 @@ class ConfigServiceClient:
 
     def __init__(self, base_url: str | None = None):
         self.base_url = base_url or os.getenv(
-            "CONFIG_SERVICE_URL", "http://config-service-svc.incidentfox-prod.svc.cluster.local:8080"
+            "CONFIG_SERVICE_URL",
+            "http://config-service-svc.incidentfox-prod.svc.cluster.local:8080",
         )
         self._client = httpx.AsyncClient(timeout=10.0)
 
@@ -195,9 +198,7 @@ class ConfigServiceClient:
         if trial_valid:
             shared_key = get_shared_anthropic_key()
             if shared_key:
-                logger.info(
-                    f"Using shared Anthropic key for trial tenant={tenant_id}"
-                )
+                logger.info(f"Using shared Anthropic key for trial tenant={tenant_id}")
                 return {
                     "api_key": shared_key,
                     "is_trial": True,
@@ -212,9 +213,7 @@ class ConfigServiceClient:
 
         # Case 2: Active subscription with custom API key
         if subscription_status == "active" and api_key:
-            logger.info(
-                f"Using custom Anthropic key for subscribed tenant={tenant_id}"
-            )
+            logger.info(f"Using custom Anthropic key for subscribed tenant={tenant_id}")
             return {"api_key": api_key}
 
         # Case 3: Trial expired, no active subscription

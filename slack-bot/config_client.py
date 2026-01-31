@@ -4,10 +4,10 @@ Config Service Client for Slack Bot
 Handles multi-tenant workspace provisioning and credential management.
 """
 
-import os
 import logging
-from typing import Optional, Dict, Any
+import os
 from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
 
 import requests
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Config service URL
 CONFIG_SERVICE_URL = os.environ.get(
     "CONFIG_SERVICE_URL",
-    "http://config-service-svc.incidentfox-prod.svc.cluster.local:8080"
+    "http://config-service-svc.incidentfox-prod.svc.cluster.local:8080",
 )
 
 # Admin token for provisioning (set via environment)
@@ -73,9 +73,11 @@ class ConfigServiceClient:
                     "slack_team_name": slack_team_name,
                     "installer_user_id": installer_user_id,
                     "provisioned_at": datetime.utcnow().isoformat(),
-                }
+                },
             )
-            logger.info(f"Created org node for workspace {slack_team_name}: {org_response}")
+            logger.info(
+                f"Created org node for workspace {slack_team_name}: {org_response}"
+            )
 
             # Step 2: Create default team node
             team_response = self._create_team_node(
@@ -96,7 +98,9 @@ class ConfigServiceClient:
             trial_info = None
             if FREE_TRIAL_ENABLED and INCIDENTFOX_ANTHROPIC_API_KEY:
                 trial_info = self._setup_free_trial(org_id, team_node_id)
-                logger.info(f"Free trial enabled for {org_id}: expires {trial_info.get('expires_at')}")
+                logger.info(
+                    f"Free trial enabled for {org_id}: expires {trial_info.get('expires_at')}"
+                )
 
             return {
                 "org_id": org_id,
@@ -110,10 +114,7 @@ class ConfigServiceClient:
             raise
 
     def _create_org_node(
-        self,
-        org_id: str,
-        name: str,
-        metadata: Dict = None
+        self, org_id: str, name: str, metadata: Dict = None
     ) -> Dict[str, Any]:
         """Create organization node."""
         url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/nodes"

@@ -5,8 +5,8 @@ Revises: 20260130_recall_slack_thread
 Create Date: 2026-01-31
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
 # revision identifiers, used by Alembic.
@@ -37,7 +37,12 @@ def upgrade():
         sa.Column("is_enterprise_install", sa.Boolean, default=False),
         sa.Column("token_type", sa.String(50), nullable=True),
         sa.Column("installed_at", sa.DateTime, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime, server_default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column(
+            "updated_at",
+            sa.DateTime,
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
         # Store full installation data as JSON for future-proofing
         sa.Column("raw_data", JSONB, nullable=True),
     )

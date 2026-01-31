@@ -3,6 +3,8 @@ Internal API routes for service-to-service communication.
 These endpoints are not exposed externally and use internal auth.
 """
 
+import json
+import uuid as uuid_lib
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -10,9 +12,6 @@ import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-
-import json
-import uuid as uuid_lib
 
 from src.db import repository
 from src.db.config_models import NodeConfiguration
@@ -1850,7 +1849,9 @@ class SlackInstallationResponse(BaseModel):
     installed_at: datetime
 
 
-def _installation_to_response(installation: SlackInstallation) -> SlackInstallationResponse:
+def _installation_to_response(
+    installation: SlackInstallation,
+) -> SlackInstallationResponse:
     """Convert a SlackInstallation model to response."""
     return SlackInstallationResponse(
         id=installation.id,
@@ -1861,9 +1862,13 @@ def _installation_to_response(installation: SlackInstallation) -> SlackInstallat
         bot_token=installation.bot_token,
         bot_id=installation.bot_id,
         bot_user_id=installation.bot_user_id,
-        bot_scopes=installation.bot_scopes.split(",") if installation.bot_scopes else None,
+        bot_scopes=(
+            installation.bot_scopes.split(",") if installation.bot_scopes else None
+        ),
         user_token=installation.user_token,
-        user_scopes=installation.user_scopes.split(",") if installation.user_scopes else None,
+        user_scopes=(
+            installation.user_scopes.split(",") if installation.user_scopes else None
+        ),
         incoming_webhook_url=installation.incoming_webhook_url,
         incoming_webhook_channel=installation.incoming_webhook_channel,
         incoming_webhook_channel_id=installation.incoming_webhook_channel_id,
@@ -1915,13 +1920,19 @@ def save_slack_installation(
         existing.bot_token = request.bot_token
         existing.bot_id = request.bot_id
         existing.bot_user_id = request.bot_user_id
-        existing.bot_scopes = ",".join(request.bot_scopes) if request.bot_scopes else None
+        existing.bot_scopes = (
+            ",".join(request.bot_scopes) if request.bot_scopes else None
+        )
         existing.user_token = request.user_token
-        existing.user_scopes = ",".join(request.user_scopes) if request.user_scopes else None
+        existing.user_scopes = (
+            ",".join(request.user_scopes) if request.user_scopes else None
+        )
         existing.incoming_webhook_url = request.incoming_webhook_url
         existing.incoming_webhook_channel = request.incoming_webhook_channel
         existing.incoming_webhook_channel_id = request.incoming_webhook_channel_id
-        existing.incoming_webhook_configuration_url = request.incoming_webhook_configuration_url
+        existing.incoming_webhook_configuration_url = (
+            request.incoming_webhook_configuration_url
+        )
         existing.is_enterprise_install = request.is_enterprise_install
         existing.token_type = request.token_type
         existing.raw_data = request.model_dump()
@@ -1959,7 +1970,9 @@ def save_slack_installation(
     return _installation_to_response(installation)
 
 
-@router.get("/slack/installations/find", response_model=Optional[SlackInstallationResponse])
+@router.get(
+    "/slack/installations/find", response_model=Optional[SlackInstallationResponse]
+)
 def find_slack_installation(
     team_id: str,
     enterprise_id: Optional[str] = None,

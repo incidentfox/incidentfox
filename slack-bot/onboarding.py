@@ -8,7 +8,7 @@ Handles:
 """
 
 import logging
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -34,118 +34,112 @@ def build_api_key_modal(
     # Header section
     if trial_info and not trial_info.get("expired"):
         days = trial_info.get("days_remaining", 0)
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": (
-                    f":rocket: *You're on a free trial!*\n"
-                    f"You have *{days} days* remaining. "
-                    f"Add your own API key to continue using IncidentFox after the trial."
-                )
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f":rocket: *You're on a free trial!*\n"
+                        f"You have *{days} days* remaining. "
+                        f"Add your own API key to continue using IncidentFox after the trial."
+                    ),
+                },
             }
-        })
+        )
         blocks.append({"type": "divider"})
     else:
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": (
-                    ":key: *Set up your Anthropic API key*\n\n"
-                    "IncidentFox uses Claude to investigate incidents. "
-                    "Enter your Anthropic API key below to get started."
-                )
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        ":key: *Set up your Anthropic API key*\n\n"
+                        "IncidentFox uses Claude to investigate incidents. "
+                        "Enter your Anthropic API key below to get started."
+                    ),
+                },
             }
-        })
+        )
         blocks.append({"type": "divider"})
 
     # Error message if any
     if error_message:
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f":warning: *Error:* {error_message}"
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":warning: *Error:* {error_message}",
+                },
             }
-        })
+        )
 
     # API Key input
-    blocks.append({
-        "type": "input",
-        "block_id": "api_key_block",
-        "element": {
-            "type": "plain_text_input",
-            "action_id": "api_key_input",
-            "placeholder": {
+    blocks.append(
+        {
+            "type": "input",
+            "block_id": "api_key_block",
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "api_key_input",
+                "placeholder": {"type": "plain_text", "text": "sk-ant-api..."},
+            },
+            "label": {"type": "plain_text", "text": "Anthropic API Key"},
+            "hint": {
                 "type": "plain_text",
-                "text": "sk-ant-api..."
-            }
-        },
-        "label": {
-            "type": "plain_text",
-            "text": "Anthropic API Key"
-        },
-        "hint": {
-            "type": "plain_text",
-            "text": "Get your API key from console.anthropic.com"
+                "text": "Get your API key from console.anthropic.com",
+            },
         }
-    })
+    )
 
     # Optional API endpoint (for enterprise ML gateways)
-    blocks.append({
-        "type": "input",
-        "block_id": "api_endpoint_block",
-        "optional": True,
-        "element": {
-            "type": "plain_text_input",
-            "action_id": "api_endpoint_input",
-            "placeholder": {
+    blocks.append(
+        {
+            "type": "input",
+            "block_id": "api_endpoint_block",
+            "optional": True,
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "api_endpoint_input",
+                "placeholder": {
+                    "type": "plain_text",
+                    "text": "https://api.anthropic.com (default)",
+                },
+            },
+            "label": {"type": "plain_text", "text": "API Endpoint (Optional)"},
+            "hint": {
                 "type": "plain_text",
-                "text": "https://api.anthropic.com (default)"
-            }
-        },
-        "label": {
-            "type": "plain_text",
-            "text": "API Endpoint (Optional)"
-        },
-        "hint": {
-            "type": "plain_text",
-            "text": "Leave blank to use the default Anthropic API. Set this if your company uses an internal ML gateway."
+                "text": "Leave blank to use the default Anthropic API. Set this if your company uses an internal ML gateway.",
+            },
         }
-    })
+    )
 
     # Help text
-    blocks.append({
-        "type": "context",
-        "elements": [
-            {
-                "type": "mrkdwn",
-                "text": (
-                    ":lock: Your API key is encrypted and stored securely. "
-                    "<https://console.anthropic.com/settings/keys|Get an API key>"
-                )
-            }
-        ]
-    })
+    blocks.append(
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": (
+                        ":lock: Your API key is encrypted and stored securely. "
+                        "<https://console.anthropic.com/settings/keys|Get an API key>"
+                    ),
+                }
+            ],
+        }
+    )
 
     return {
         "type": "modal",
         "callback_id": "api_key_submission",
         "private_metadata": team_id,  # Store team_id for submission handler
-        "title": {
-            "type": "plain_text",
-            "text": "IncidentFox Setup"
-        },
-        "submit": {
-            "type": "plain_text",
-            "text": "Save"
-        },
-        "close": {
-            "type": "plain_text",
-            "text": "Cancel"
-        },
-        "blocks": blocks
+        "title": {"type": "plain_text", "text": "IncidentFox Setup"},
+        "submit": {"type": "plain_text", "text": "Save"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": blocks,
     }
 
 
@@ -197,21 +191,9 @@ def build_setup_required_message(
         # On active trial - shouldn't hit this case but handle it
         return []
 
-    blocks.append({
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": header_text
-        }
-    })
+    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": header_text}})
 
-    blocks.append({
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": body_text
-        }
-    })
+    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": body_text}})
 
     # Build action buttons based on whether upgrade is needed
     action_elements = [
@@ -221,51 +203,43 @@ def build_setup_required_message(
             "text": {
                 "type": "plain_text",
                 "text": ":key: Set Up API Key",
-                "emoji": True
+                "emoji": True,
             },
-            "style": "primary"
+            "style": "primary",
         }
     ]
 
     if show_upgrade:
-        action_elements.append({
-            "type": "button",
-            "action_id": "open_upgrade_page",
-            "text": {
-                "type": "plain_text",
-                "text": ":credit_card: View Pricing",
-                "emoji": True
-            },
-            "url": "https://incidentfox.ai/pricing"
-        })
-    else:
-        action_elements.append({
-            "type": "button",
-            "action_id": "dismiss_setup_message",
-            "text": {
-                "type": "plain_text",
-                "text": "Later"
+        action_elements.append(
+            {
+                "type": "button",
+                "action_id": "open_upgrade_page",
+                "text": {
+                    "type": "plain_text",
+                    "text": ":credit_card: View Pricing",
+                    "emoji": True,
+                },
+                "url": "https://incidentfox.ai/pricing",
             }
-        })
+        )
+    else:
+        action_elements.append(
+            {
+                "type": "button",
+                "action_id": "dismiss_setup_message",
+                "text": {"type": "plain_text", "text": "Later"},
+            }
+        )
 
-    blocks.append({
-        "type": "actions",
-        "elements": action_elements
-    })
+    blocks.append({"type": "actions", "elements": action_elements})
 
     help_text = ":bulb: Need help? Visit <https://docs.incidentfox.ai|our docs> or contact support."
     if show_upgrade:
         help_text = ":bulb: Questions about pricing? Email us at support@incidentfox.ai"
 
-    blocks.append({
-        "type": "context",
-        "elements": [
-            {
-                "type": "mrkdwn",
-                "text": help_text
-            }
-        ]
-    })
+    blocks.append(
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": help_text}]}
+    )
 
     return blocks
 
@@ -282,8 +256,8 @@ def build_setup_complete_message() -> list:
                     "Your API key has been saved. You can now mention me in any channel "
                     "to start investigating incidents.\n\n"
                     "Try it out: `@IncidentFox help me investigate this error`"
-                )
-            }
+                ),
+            },
         }
     ]
 
@@ -297,65 +271,67 @@ def build_upgrade_required_message(trial_info: Optional[Dict] = None) -> list:
     """
     blocks = []
 
-    blocks.append({
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": ":warning: *Subscription required*"
+    blocks.append(
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": ":warning: *Subscription required*"},
         }
-    })
+    )
 
-    blocks.append({
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": (
-                "Your free trial has ended. We noticed you've already set up your "
-                "API key - great!\n\n"
-                "To continue using IncidentFox, please upgrade to a paid subscription. "
-                "Your API key will be used once the subscription is active."
-            )
-        }
-    })
-
-    blocks.append({
-        "type": "actions",
-        "elements": [
-            {
-                "type": "button",
-                "action_id": "open_upgrade_page",
-                "text": {
-                    "type": "plain_text",
-                    "text": ":credit_card: Upgrade Now",
-                    "emoji": True
-                },
-                "style": "primary",
-                "url": "https://incidentfox.ai/pricing"
-            },
-            {
-                "type": "button",
-                "action_id": "contact_sales",
-                "text": {
-                    "type": "plain_text",
-                    "text": "Contact Sales"
-                },
-                "url": "https://incidentfox.ai/contact"
-            }
-        ]
-    })
-
-    blocks.append({
-        "type": "context",
-        "elements": [
-            {
+    blocks.append(
+        {
+            "type": "section",
+            "text": {
                 "type": "mrkdwn",
                 "text": (
-                    ":bulb: Plans start at $X/month. "
-                    "Questions? Email us at support@incidentfox.ai"
-                )
-            }
-        ]
-    })
+                    "Your free trial has ended. We noticed you've already set up your "
+                    "API key - great!\n\n"
+                    "To continue using IncidentFox, please upgrade to a paid subscription. "
+                    "Your API key will be used once the subscription is active."
+                ),
+            },
+        }
+    )
+
+    blocks.append(
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "action_id": "open_upgrade_page",
+                    "text": {
+                        "type": "plain_text",
+                        "text": ":credit_card: Upgrade Now",
+                        "emoji": True,
+                    },
+                    "style": "primary",
+                    "url": "https://incidentfox.ai/pricing",
+                },
+                {
+                    "type": "button",
+                    "action_id": "contact_sales",
+                    "text": {"type": "plain_text", "text": "Contact Sales"},
+                    "url": "https://incidentfox.ai/contact",
+                },
+            ],
+        }
+    )
+
+    blocks.append(
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": (
+                        ":bulb: Plans start at $X/month. "
+                        "Questions? Email us at support@incidentfox.ai"
+                    ),
+                }
+            ],
+        }
+    )
 
     return blocks
 

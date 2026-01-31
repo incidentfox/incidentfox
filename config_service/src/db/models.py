@@ -1387,23 +1387,37 @@ class SlackInstallation(Base):
     __tablename__ = "slack_installations"
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
-    enterprise_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    enterprise_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, index=True
+    )
     team_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, index=True
+    )
 
     app_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     bot_token: Mapped[str] = mapped_column(Text, nullable=False)
     bot_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     bot_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    bot_scopes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Comma-separated
+    bot_scopes: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )  # Comma-separated
 
     user_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    user_scopes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Comma-separated
+    user_scopes: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )  # Comma-separated
 
     incoming_webhook_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    incoming_webhook_channel: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    incoming_webhook_channel_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    incoming_webhook_configuration_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    incoming_webhook_channel: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
+    incoming_webhook_channel_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
+    incoming_webhook_configuration_url: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
 
     is_enterprise_install: Mapped[bool] = mapped_column(Boolean, default=False)
     token_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -1412,7 +1426,10 @@ class SlackInstallation(Base):
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
     )
 
     # Store full installation data as JSON for future-proofing
