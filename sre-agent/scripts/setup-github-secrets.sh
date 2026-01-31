@@ -37,7 +37,12 @@ fi
 # Source the .env file
 source "$ENV_FILE"
 
-# Required secrets
+# Multi-tenant architecture - GitHub secrets are for CI/CD pipeline only:
+# - Platform secrets (JWT, Laminar) for deployment
+# - AWS credentials for ECR/EKS access
+# - Shared Anthropic key is in AWS Secrets Manager (set by setup-prod.sh)
+# - Customer API keys are in config-service RDS (set by customers)
+
 echo ""
 echo "Setting required secrets..."
 
@@ -55,13 +60,6 @@ else
     echo "  ✅ AWS_SECRET_ACCESS_KEY"
 fi
 
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "⚠️  ANTHROPIC_API_KEY not set in .env"
-else
-    echo -n "$ANTHROPIC_API_KEY" | gh secret set ANTHROPIC_API_KEY
-    echo "  ✅ ANTHROPIC_API_KEY"
-fi
-
 # Generate JWT_SECRET if not present
 if [ -z "$JWT_SECRET" ]; then
     echo "⚠️  JWT_SECRET not set in .env, generating..."
@@ -76,29 +74,11 @@ else
     echo "  ✅ JWT_SECRET"
 fi
 
-# Optional secrets
-echo ""
-echo "Setting optional secrets..."
-
-if [ -n "$LMNR_PROJECT_API_KEY" ]; then
+if [ -z "$LMNR_PROJECT_API_KEY" ]; then
+    echo "⚠️  LMNR_PROJECT_API_KEY not set in .env (required for telemetry)"
+else
     echo -n "$LMNR_PROJECT_API_KEY" | gh secret set LMNR_PROJECT_API_KEY
     echo "  ✅ LMNR_PROJECT_API_KEY"
-else
-    echo "  ⏭️  LMNR_PROJECT_API_KEY (skipped, not in .env)"
-fi
-
-if [ -n "$CORALOGIX_API_KEY" ]; then
-    echo -n "$CORALOGIX_API_KEY" | gh secret set CORALOGIX_API_KEY
-    echo "  ✅ CORALOGIX_API_KEY"
-else
-    echo "  ⏭️  CORALOGIX_API_KEY (skipped, not in .env)"
-fi
-
-if [ -n "$CORALOGIX_DOMAIN" ]; then
-    echo -n "$CORALOGIX_DOMAIN" | gh secret set CORALOGIX_DOMAIN
-    echo "  ✅ CORALOGIX_DOMAIN"
-else
-    echo "  ⏭️  CORALOGIX_DOMAIN (skipped, not in .env)"
 fi
 
 echo ""

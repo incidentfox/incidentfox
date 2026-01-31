@@ -31,7 +31,7 @@ Navigate to your GitHub repository → Settings → Secrets and variables → Ac
   Secret for JWT token signing between sre-agent and credential-resolver.
   Generate with: `openssl rand -hex 32`
 
-- **`LMNR_PROJECT_API_KEY`** (Optional)
+- **`LMNR_PROJECT_API_KEY`** (Required)
   Laminar API key for **our** observability tracing (not customer's)
 
 ### Secrets NOT Needed Here
@@ -40,7 +40,7 @@ The following are stored elsewhere and do NOT need to be in GitHub secrets:
 
 | Secret | Where It Lives | Why |
 |--------|---------------|-----|
-| `ANTHROPIC_API_KEY` | Config-service (BYOK) or AWS Secrets Manager (shared) | Per-tenant or shared trial key |
+| `ANTHROPIC_API_KEY` | Config-service (BYOK) or AWS Secrets Manager (shared) | Per-tenant BYOK or shared key for free tier/non-BYOK customers |
 | `CORALOGIX_API_KEY` | Config-service | Customer's observability integration |
 | `CORALOGIX_DOMAIN` | Config-service | Customer's observability integration |
 | `DATADOG_API_KEY` | Config-service | Customer's observability integration |
@@ -99,25 +99,35 @@ gh auth login
 gh secret set AWS_ACCESS_KEY_ID
 gh secret set AWS_SECRET_ACCESS_KEY
 gh secret set JWT_SECRET --body "$(openssl rand -hex 32)"
-
-# Optional: observability
 gh secret set LMNR_PROJECT_API_KEY
 ```
 
 ## Shared Anthropic Key Setup (AWS Secrets Manager)
 
-For free trial users, the shared Anthropic key is stored in AWS Secrets Manager:
+For free tier and non-BYOK customers, the shared Anthropic key is stored in AWS Secrets Manager.
+This is automatically configured when running `./scripts/setup-prod.sh`, but can be manually set:
 
 ```bash
-# Create secret in AWS Secrets Manager
+# Create or update secret in AWS Secrets Manager
 aws secretsmanager create-secret \
   --name "incidentfox/prod/anthropic" \
-  --description "Shared Anthropic API key for free trial users" \
-  --secret-string '{"api_key": "sk-ant-..."}' \
+  --description "Shared Anthropic API key for free tier and non-BYOK customers" \
+  --secret-string "sk-ant-..." \
+  --region us-west-2
+
+# Or update if it already exists:
+aws secretsmanager update-secret \
+  --secret-id "incidentfox/prod/anthropic" \
+  --secret-string "sk-ant-..." \
   --region us-west-2
 
 # The credential-resolver service accesses this via IRSA (IAM Roles for Service Accounts)
 ```
+
+**Note**: This is the shared key used by customers who:
+- Are in the free trial period
+- Choose not to bring their own key (BYOK) after trial ends
+- Get rate-limited features (canned responses, no auto-alert responses)
 
 ## Workflow Triggers
 
