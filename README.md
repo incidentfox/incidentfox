@@ -1,7 +1,5 @@
 # IncidentFox
 
-> **Build the world's best AI SRE.**
-
 AI-powered incident investigation and infrastructure automation. IncidentFox integrates with your observability stack, infrastructure, and collaboration tools to automatically investigate incidents, find root causes, and suggest fixes.
 
 **[Try it for free right now](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ), or [spin up the docker locally](#quick-start) in 5 minutes.**
@@ -11,6 +9,18 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
   <br>
   <em>Investigate incidents directly from Slack</em>
 </p>
+
+---
+
+## Table of Contents
+
+- [Why IncidentFox?](#why-incidentfox)
+- [Get Started](#get-started)
+- [Quick Start: Local Docker + Slack](#quick-start)
+- [Features](#features)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -25,19 +35,11 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 
 ---
 
-## Table of Contents
-
-- [Get Started](#get-started)
-- [Quick Start: Local Docker + Slack](#quick-start)
-- [Features](#features)
-- [Integrations](#integrations)
-- [Documentation](#documentation)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
 ## Get Started
+
+IncidentFox is **open source** (Apache 2.0). All core features are free — deploy anywhere, no restrictions.
+
+For teams that need more, we offer **managed deployments**, **premium features** (advanced analytics, priority support), and **professional services**. [Contact us →](mailto:founders@incidentfox.ai)
 
 |  | **Try Free** | **Local Docker** | **Self-Host** | **Managed** |
 |---|--------------|------------------|---------------|-------------|
@@ -112,20 +114,6 @@ docker-compose up -d
 - **Audit Logging** — Full trail of all agent actions
 
 [Full feature details →](docs/FEATURES.md)
-
----
-
-## Integrations
-
-**Triggers:** Slack · GitHub Bot · PagerDuty · REST API · A2A Protocol
-
-**Observability:** Grafana · Datadog · New Relic · Prometheus · Elasticsearch · Coralogix
-
-**Infrastructure:** Kubernetes · AWS · Docker
-
-**Code:** GitHub · GitLab
-
-[Integration setup guides →](docs/INTEGRATIONS.md)
 
 ---
 
