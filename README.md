@@ -14,9 +14,10 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 
 ## Table of Contents
 
-- [Why IncidentFox?](#why-incidentfox)
+- [What is IncidentFox?](#what-is-incidentfox)
 - [Get Started](#get-started)
 - [Quick Start: Local Docker + Slack](#quick-start)
+- [Deploy for Your Team](#deploy-for-your-team)
 - [Features](#features)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
@@ -24,14 +25,13 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 
 ---
 
-## Why IncidentFox?
+## What is IncidentFox?
 
-| Challenge | How IncidentFox Helps |
-|-----------|----------------------|
-| **Alert fatigue** | Correlation engine reduces noise 85-95% using temporal, topology, and semantic analysis |
-| **Context switching** | Stay in Slack — investigations stream updates directly to your channel |
-| **Tribal knowledge silos** | RAPTOR knowledge base learns your runbooks and past incidents |
-| **Tool sprawl** | 178+ built-in integrations, plus MCP protocol for anything else |
+An **AI SRE** that helps root cause and propose mitigations for production on-call issues. It automatically forms hypotheses, collects info from your infrastructure, observability tools, and code, and reasons through to an answer.
+
+**Slack-first** ([see screenshot above](#incidentfox)), but also works on web UI, GitHub, PagerDuty, and API.
+
+**Highly customizable** — set up in minutes, and it self-improves by automatically learning and persisting your team's context.
 
 ---
 
@@ -53,7 +53,7 @@ For teams that need more, we offer **managed deployments**, **premium features**
 
 ## Quick Start
 
-Get IncidentFox running locally with Docker and Slack in 5 minutes.
+Run IncidentFox on your local machine with Docker. Perfect for individual evaluation or small team trials.
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/c51c51f2-3e1f-459e-8ce4-1e2a56c92971" width="700" controls autoplay loop muted></video>
@@ -92,7 +92,64 @@ docker-compose up -d
 
 ---
 
+## Deploy for Your Team
+
+For production deployments, use our Helm charts to deploy IncidentFox on Kubernetes.
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/8c785a32-c46a-4d5b-8297-fe13f23a2392" alt="Web Console">
+  <br>
+  <em>Web Console — View and manage multi-agent workflows</em>
+</p>
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Slack / GitHub / API                     │
+└─────────────────────────────────┬───────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────────┐
+│                         Orchestrator                             │
+│              (routes requests, manages agent lifecycle)          │
+└───────────┬─────────────────────────────────────┬───────────────┘
+            │                                     │
+┌───────────▼───────────┐           ┌─────────────▼─────────────┐
+│        Agents         │           │      Config Service        │
+│  (investigates issues,│           │  (team settings, prompts,  │
+│   calls tools, reasons)│           │   tool configs, SSO)       │
+└───────────┬───────────┘           └─────────────┬─────────────┘
+            │                                     │
+┌───────────▼─────────────────────────────────────▼───────────────┐
+│                         PostgreSQL                               │
+│            (investigations, knowledge base, audit logs)          │
+└───────────┬─────────────────────────────────────────────────────┘
+            │
+┌───────────▼───────────┐           ┌─────────────────────────────┐
+│     RAG / RAPTOR      │           │         Web UI              │
+│  (runbooks, past      │           │  (dashboard, investigations,│
+│   incidents, context) │           │   config management)        │
+└───────────────────────┘           └─────────────────────────────┘
+```
+
+### Quick Deploy
+
+```bash
+helm repo add incidentfox https://charts.incidentfox.ai
+helm install incidentfox incidentfox/incidentfox -n incidentfox --create-namespace
+```
+
+**Full deployment guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Helm chart docs:** [charts/incidentfox/README.md](charts/incidentfox/README.md)
+
+---
+
 ## Features
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/60934195-83bf-4d5d-ab7e-0c32e60dbe86" alt="Knowledge Base">
+  <br>
+  <em>Hierarchical RAG for your proprietary knowledge</em>
+</p>
 
 ### Core Platform
 
