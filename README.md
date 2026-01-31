@@ -18,7 +18,8 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 - [Get Started](#get-started)
 - [Quick Start: Local Docker + Slack](#quick-start)
 - [Deploy for Your Team](#deploy-for-your-team)
-- [Features](#features)
+- [Under the Hood](#under-the-hood)
+- [Enterprise Ready](#enterprise-ready)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
@@ -96,11 +97,14 @@ docker-compose up -d
 
 For production deployments, use our Helm charts to deploy IncidentFox on Kubernetes.
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/8c785a32-c46a-4d5b-8297-fe13f23a2392" alt="Web Console">
-  <br>
-  <em>Web Console — View and manage multi-agent workflows</em>
-</p>
+### Quick Deploy
+
+```bash
+helm repo add incidentfox https://charts.incidentfox.ai
+helm install incidentfox incidentfox/incidentfox -n incidentfox --create-namespace
+```
+
+**Full deployment guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Helm chart docs:** [charts/incidentfox/README.md](charts/incidentfox/README.md)
 
 ### Architecture Overview
 
@@ -116,40 +120,38 @@ For production deployments, use our Helm charts to deploy IncidentFox on Kuberne
                     └───────┬─────────────────┬───────────┘
                             │                 │
           ┌─────────────────▼───┐    ┌────────▼────────────┐
-          │       Agent         │    │   Config Service    │
-          │  (OpenAI/Claude SDK,│    │  (multi-tenant cfg, │
-          │   178+ tools,       │    │   RBAC, routing,    │
-          │   multi-agent)      │    │   team hierarchy)   │
-          └─────────┬───────────┘    └──────────┬─────────┘
-                    │                           │
-    ┌───────────────┼───────────────────────────┼──────────────┐
-    │               ▼                           ▼              │
-    │  ┌────────────────────┐    ┌─────────────────────────┐   │
-    │  │  Knowledge Base    │    │       PostgreSQL        │   │
-    │  │  (RAPTOR trees,    │    │  (config, audit logs,   │   │
-    │  │   runbooks, docs)  │    │   investigations)       │   │
-    │  └────────────────────┘    └─────────────────────────┘   │
-    │                                                          │
-    │  ┌────────────────────┐    ┌─────────────────────────┐   │
-    │  │  External APIs     │    │        Web UI           │   │
-    │  │  (K8s, AWS, Datadog│    │  (dashboard, settings,  │   │
-    │  │   Grafana, etc.)   │    │   team management)      │   │
-    │  └────────────────────┘    └─────────────────────────┘   │
-    └──────────────────────────────────────────────────────────┘
+          │       Agent         │◄──►│   Config Service    │◄──┐
+          │  (OpenAI/Claude SDK,│    │  (multi-tenant cfg, │   │
+          │   178+ tools,       │    │   RBAC, routing,    │   │
+          │   multi-agent)      │    │   team hierarchy)   │   │
+          └─────────┬───────────┘    └──────────┬─────────┘   │
+                    │                           │             │
+                    ▼                           ▼             │
+          ┌────────────────────┐    ┌─────────────────────┐   │
+          │  Knowledge Base    │    │     PostgreSQL      │   │
+          │  (RAPTOR trees,    │    │  (config, audit,    │   │
+          │   runbooks, docs)  │    │   investigations)   │   │
+          └────────────────────┘    └─────────────────────┘   │
+                    │                                         │
+                    ▼                                         │
+          ┌────────────────────┐    ┌─────────────────────┐   │
+          │   External APIs    │    │       Web UI        │───┘
+          │  (K8s, AWS, Datadog│    │  (dashboard, team   │
+          │   Grafana, etc.)   │    │   management)       │
+          └────────────────────┘    └─────────────────────┘
 ```
 
-### Quick Deploy
-
-```bash
-helm repo add incidentfox https://charts.incidentfox.ai
-helm install incidentfox incidentfox/incidentfox -n incidentfox --create-namespace
-```
-
-**Full deployment guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Helm chart docs:** [charts/incidentfox/README.md](charts/incidentfox/README.md)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/8c785a32-c46a-4d5b-8297-fe13f23a2392" alt="Web Console">
+  <br>
+  <em>Web Console — Easiest way to view and customize agents</em>
+</p>
 
 ---
 
-## Features
+## Under the Hood
+
+The engineering that makes IncidentFox actually work in production:
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/60934195-83bf-4d5d-ab7e-0c32e60dbe86" alt="Knowledge Base">
@@ -157,26 +159,35 @@ helm install incidentfox incidentfox/incidentfox -n incidentfox --create-namespa
   <em>Hierarchical RAG for your proprietary knowledge</em>
 </p>
 
-### Core Platform
+| Capability | What It Does | Why It Matters |
+|------------|--------------|----------------|
+| **RAPTOR Knowledge Base** | Hierarchical tree structure (ICLR 2024) — clusters → summarizes → abstracts | Standard RAG fails on 100-page runbooks. RAPTOR maintains context across long documents. |
+| **Smart Log Sampling** | Statistics first → sample errors → drill down on anomalies | Other tools load 100K lines and hit context limits. We sample intelligently to stay useful. |
+| **Alert Correlation Engine** | 3-layer analysis: temporal + topology + semantic | Groups alerts AND finds root cause. Reduces noise by 85-95%. |
+| **178+ Built-in Tools** | Kubernetes, AWS, Grafana, Datadog, Prometheus, GitHub, and more | No "bring your own tools" setup. Works out of the box with your stack. |
+| **MCP Protocol Support** | Connect to any MCP server for unlimited integrations | Add new tools in minutes via config, not code. |
+| **Multi-Agent Orchestration** | Planner routes to specialist agents (K8s, AWS, Metrics, Code, etc.) | Complex investigations get handled by the right expert, not a generic agent. |
 
-- **Slack-Native Interface** — Investigations stream directly to your channels with rich formatting
-- **178+ Built-in Tools** — Kubernetes, AWS, Grafana, Datadog, Prometheus, GitHub, and more
-- **MCP Protocol Support** — Connect to any MCP server for unlimited integrations
+[Full technical details →](docs/FEATURES.md)
 
-### AI Capabilities
+---
 
-- **RAPTOR Knowledge Base** — Hierarchical retrieval that learns from your runbooks and past incidents
-- **Alert Correlation Engine** — Temporal + topology + semantic analysis reduces alert noise by 85-95%
-- **Smart Log Sampling** — Prevents context overflow with intelligent sampling strategies
+## Enterprise Ready
 
-### Enterprise
+Security and compliance for production deployments:
 
-- **Deployment Options** — SaaS, Kubernetes (Helm), or fully on-premise
-- **SSO/OIDC** — Google, Azure AD, Okta
-- **Hierarchical Config** — Org → Team inheritance with overrides
-- **Audit Logging** — Full trail of all agent actions
+| Feature | Description |
+|---------|-------------|
+| **SOC 2 Compliant** | Audited security controls, data handling, and access management |
+| **Claude Sandbox** | Isolated Kubernetes sandboxes for agent execution — no shared state between runs |
+| **Secrets Proxy** | Credentials never touch the agent. Envoy proxy injects secrets at request time. |
+| **Approval Workflows** | Critical changes (prompts, tools, configs) require review before deployment |
+| **SSO/OIDC** | Google, Azure AD, Okta — per-organization configuration |
+| **Hierarchical Config** | Org → Business Unit → Team inheritance with override capabilities |
+| **Audit Logging** | Full trail of all agent actions, config changes, and investigations |
+| **On-Premise** | Deploy entirely in your environment — air-gapped support available |
 
-[Full feature details →](docs/FEATURES.md)
+[Enterprise deployment guide →](docs/DEPLOYMENT.md)
 
 ---
 
