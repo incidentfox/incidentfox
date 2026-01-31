@@ -53,80 +53,34 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 
 Get IncidentFox running locally with Docker and Slack in 5 minutes.
 
-**Prerequisites:** Docker, Slack workspace admin access, Anthropic API key
-
 <p align="center">
   <video src="https://github.com/user-attachments/assets/c51c51f2-3e1f-459e-8ce4-1e2a56c92971" width="700" controls autoplay loop muted></video>
 </p>
 
-### 1. Create a Slack App
+**1.** [Create a Slack app](https://api.slack.com/apps?new_app=1) using [this manifest](docs/slack-manifest.yaml)
 
-1. Go to [api.slack.com/apps](https://api.slack.com/apps?new_app=1) → **Create New App** → **From an app manifest**
-2. Select your workspace
-3. Paste this manifest:
-
-```yaml
-display_information:
-  name: IncidentFox
-  description: AI-powered SRE agent for incident investigation
-  background_color: "#4A154B"
-features:
-  bot_user:
-    display_name: IncidentFox
-    always_online: true
-oauth_config:
-  scopes:
-    bot:
-      - app_mentions:read
-      - channels:history
-      - channels:read
-      - chat:write
-      - files:read
-      - files:write
-      - users:read
-      - reactions:write
-      - im:history
-      - groups:history
-settings:
-  event_subscriptions:
-    bot_events:
-      - app_mention
-      - message.channels
-      - message.groups
-      - message.im
-  interactivity:
-    is_enabled: true
-  socket_mode_enabled: true
-```
-
-4. Click **Create** → **Install to Workspace** → **Allow**
-
-### 2. Get Your Tokens
-
-| Token | Where to Find It |
-|-------|------------------|
-| **Bot Token** (`xoxb-...`) | OAuth & Permissions → Bot User OAuth Token |
-| **App Token** (`xapp-...`) | Basic Information → App-Level Tokens → Generate with `connections:write` scope |
-| **Anthropic API Key** | [console.anthropic.com](https://console.anthropic.com) |
-
-### 3. Run IncidentFox
+**2.** Clone and configure:
 
 ```bash
-git clone https://github.com/incidentfox/incidentfox.git
-cd incidentfox
-
+git clone https://github.com/incidentfox/incidentfox.git && cd incidentfox
 cp .env.example .env
-# Edit .env with your tokens:
-#   SLACK_BOT_TOKEN=xoxb-...
-#   SLACK_APP_TOKEN=xapp-...
-#   ANTHROPIC_API_KEY=sk-ant-...
-
+# Add your tokens to .env (see below)
 docker-compose up -d
 ```
 
-### 4. Test It
+<details>
+<summary>Where to get your tokens</summary>
 
-In Slack:
+| Token | Where to Find It |
+|-------|------------------|
+| `SLACK_BOT_TOKEN` | Slack app → **OAuth & Permissions** → Bot User OAuth Token (`xoxb-...`) |
+| `SLACK_APP_TOKEN` | Slack app → **Basic Information** → App-Level Tokens → Generate with `connections:write` (`xapp-...`) |
+| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) |
+
+</details>
+
+**3.** Test it in Slack:
+
 ```
 /invite @IncidentFox
 @IncidentFox what pods are running in my cluster?
