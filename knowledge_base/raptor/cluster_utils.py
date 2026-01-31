@@ -193,7 +193,9 @@ def perform_clustering(
     # Cannot cluster fewer than 4 points meaningfully
     if n <= 3:
         if verbose:
-            logging.info(f"[clustering] Skip: only {n} points, returning single cluster")
+            logging.info(
+                f"[clustering] Skip: only {n} points, returning single cluster"
+            )
         # Return all points in a single cluster
         return [np.array([0]) for _ in range(n)]
 
