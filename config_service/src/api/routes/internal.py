@@ -11,9 +11,12 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+import json
+import uuid as uuid_lib
+
 from src.db import repository
 from src.db.config_models import NodeConfiguration
-from src.db.models import OrgNode
+from src.db.models import OrgNode, SlackInstallation
 from src.db.session import get_db
 
 logger = structlog.get_logger()
@@ -1798,3 +1801,236 @@ def get_recall_transcript_segments(
         segments=segments,
         total=len(segments),
     )
+
+
+# ==================== Slack Installation Storage ====================
+
+
+class SlackInstallationRequest(BaseModel):
+    """Request to save a Slack installation."""
+
+    enterprise_id: Optional[str] = None
+    team_id: str
+    user_id: Optional[str] = None
+    app_id: Optional[str] = None
+    bot_token: str
+    bot_id: Optional[str] = None
+    bot_user_id: Optional[str] = None
+    bot_scopes: Optional[List[str]] = None
+    user_token: Optional[str] = None
+    user_scopes: Optional[List[str]] = None
+    incoming_webhook_url: Optional[str] = None
+    incoming_webhook_channel: Optional[str] = None
+    incoming_webhook_channel_id: Optional[str] = None
+    incoming_webhook_configuration_url: Optional[str] = None
+    is_enterprise_install: bool = False
+    token_type: Optional[str] = None
+
+
+class SlackInstallationResponse(BaseModel):
+    """Response with Slack installation data."""
+
+    id: str
+    enterprise_id: Optional[str] = None
+    team_id: str
+    user_id: Optional[str] = None
+    app_id: Optional[str] = None
+    bot_token: str
+    bot_id: Optional[str] = None
+    bot_user_id: Optional[str] = None
+    bot_scopes: Optional[List[str]] = None
+    user_token: Optional[str] = None
+    user_scopes: Optional[List[str]] = None
+    incoming_webhook_url: Optional[str] = None
+    incoming_webhook_channel: Optional[str] = None
+    incoming_webhook_channel_id: Optional[str] = None
+    incoming_webhook_configuration_url: Optional[str] = None
+    is_enterprise_install: bool = False
+    token_type: Optional[str] = None
+    installed_at: datetime
+
+
+def _installation_to_response(installation: SlackInstallation) -> SlackInstallationResponse:
+    """Convert a SlackInstallation model to response."""
+    return SlackInstallationResponse(
+        id=installation.id,
+        enterprise_id=installation.enterprise_id,
+        team_id=installation.team_id,
+        user_id=installation.user_id,
+        app_id=installation.app_id,
+        bot_token=installation.bot_token,
+        bot_id=installation.bot_id,
+        bot_user_id=installation.bot_user_id,
+        bot_scopes=installation.bot_scopes.split(",") if installation.bot_scopes else None,
+        user_token=installation.user_token,
+        user_scopes=installation.user_scopes.split(",") if installation.user_scopes else None,
+        incoming_webhook_url=installation.incoming_webhook_url,
+        incoming_webhook_channel=installation.incoming_webhook_channel,
+        incoming_webhook_channel_id=installation.incoming_webhook_channel_id,
+        incoming_webhook_configuration_url=installation.incoming_webhook_configuration_url,
+        is_enterprise_install=installation.is_enterprise_install,
+        token_type=installation.token_type,
+        installed_at=installation.installed_at,
+    )
+
+
+@router.post("/slack/installations", response_model=SlackInstallationResponse)
+def save_slack_installation(
+    request: SlackInstallationRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Save a Slack OAuth installation.
+
+    This is an upsert operation - if an installation with the same
+    (enterprise_id, team_id, user_id) exists, it will be updated.
+    """
+    logger.info(
+        "save_slack_installation",
+        enterprise_id=request.enterprise_id,
+        team_id=request.team_id,
+        user_id=request.user_id,
+    )
+
+    # Look for existing installation
+    query = session.query(SlackInstallation).filter(
+        SlackInstallation.team_id == request.team_id,
+    )
+    if request.enterprise_id:
+        query = query.filter(SlackInstallation.enterprise_id == request.enterprise_id)
+    else:
+        query = query.filter(SlackInstallation.enterprise_id.is_(None))
+
+    if request.user_id:
+        query = query.filter(SlackInstallation.user_id == request.user_id)
+    else:
+        query = query.filter(SlackInstallation.user_id.is_(None))
+
+    existing = query.first()
+
+    if existing:
+        # Update existing installation
+        existing.app_id = request.app_id
+        existing.bot_token = request.bot_token
+        existing.bot_id = request.bot_id
+        existing.bot_user_id = request.bot_user_id
+        existing.bot_scopes = ",".join(request.bot_scopes) if request.bot_scopes else None
+        existing.user_token = request.user_token
+        existing.user_scopes = ",".join(request.user_scopes) if request.user_scopes else None
+        existing.incoming_webhook_url = request.incoming_webhook_url
+        existing.incoming_webhook_channel = request.incoming_webhook_channel
+        existing.incoming_webhook_channel_id = request.incoming_webhook_channel_id
+        existing.incoming_webhook_configuration_url = request.incoming_webhook_configuration_url
+        existing.is_enterprise_install = request.is_enterprise_install
+        existing.token_type = request.token_type
+        existing.raw_data = request.model_dump()
+        session.commit()
+
+        logger.info("slack_installation_updated", id=existing.id)
+        return _installation_to_response(existing)
+
+    # Create new installation
+    installation = SlackInstallation(
+        id=str(uuid_lib.uuid4()),
+        enterprise_id=request.enterprise_id,
+        team_id=request.team_id,
+        user_id=request.user_id,
+        app_id=request.app_id,
+        bot_token=request.bot_token,
+        bot_id=request.bot_id,
+        bot_user_id=request.bot_user_id,
+        bot_scopes=",".join(request.bot_scopes) if request.bot_scopes else None,
+        user_token=request.user_token,
+        user_scopes=",".join(request.user_scopes) if request.user_scopes else None,
+        incoming_webhook_url=request.incoming_webhook_url,
+        incoming_webhook_channel=request.incoming_webhook_channel,
+        incoming_webhook_channel_id=request.incoming_webhook_channel_id,
+        incoming_webhook_configuration_url=request.incoming_webhook_configuration_url,
+        is_enterprise_install=request.is_enterprise_install,
+        token_type=request.token_type,
+        raw_data=request.model_dump(),
+    )
+
+    session.add(installation)
+    session.commit()
+
+    logger.info("slack_installation_created", id=installation.id)
+    return _installation_to_response(installation)
+
+
+@router.get("/slack/installations/find", response_model=Optional[SlackInstallationResponse])
+def find_slack_installation(
+    team_id: str,
+    enterprise_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    is_enterprise_install: bool = False,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Find a Slack installation by team_id, enterprise_id, and user_id.
+
+    Returns None (null) if not found.
+    """
+    query = session.query(SlackInstallation).filter(
+        SlackInstallation.team_id == team_id,
+    )
+
+    if enterprise_id:
+        query = query.filter(SlackInstallation.enterprise_id == enterprise_id)
+    else:
+        query = query.filter(SlackInstallation.enterprise_id.is_(None))
+
+    if user_id:
+        query = query.filter(SlackInstallation.user_id == user_id)
+    else:
+        query = query.filter(SlackInstallation.user_id.is_(None))
+
+    installation = query.first()
+
+    if not installation:
+        return None
+
+    return _installation_to_response(installation)
+
+
+@router.delete("/slack/installations")
+def delete_slack_installation(
+    team_id: str,
+    enterprise_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Delete a Slack installation.
+    """
+    logger.info(
+        "delete_slack_installation",
+        enterprise_id=enterprise_id,
+        team_id=team_id,
+        user_id=user_id,
+    )
+
+    query = session.query(SlackInstallation).filter(
+        SlackInstallation.team_id == team_id,
+    )
+
+    if enterprise_id:
+        query = query.filter(SlackInstallation.enterprise_id == enterprise_id)
+    else:
+        query = query.filter(SlackInstallation.enterprise_id.is_(None))
+
+    if user_id:
+        query = query.filter(SlackInstallation.user_id == user_id)
+    else:
+        query = query.filter(SlackInstallation.user_id.is_(None))
+
+    deleted_count = query.delete()
+    session.commit()
+
+    if deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Installation not found")
+
+    return {"deleted": True, "count": deleted_count}

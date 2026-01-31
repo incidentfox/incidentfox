@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: slack-bot-svc
+  namespace: incidentfox-prod
+  labels:
+    app: slack-bot
+  annotations:
+    # Internet-facing NLB with HTTPS
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    # ACM certificate for slack.incidentfox.ai
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:us-west-2:103002841599:certificate/72d414bd-24e0-4e62-b579-b399a9eb2c9f"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 443
+      targetPort: 3000
+      protocol: TCP
+      name: https
+  selector:
+    app: slack-bot

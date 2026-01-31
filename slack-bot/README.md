@@ -123,9 +123,96 @@ The bot will:
 - Reuse the same sandbox for follow-ups in the thread
 - Add feedback buttons when done
 
+## Production Deployment
+
+### Prerequisites
+
+1. Slack App must be configured for HTTP mode (Event Subscriptions enabled)
+2. ECR repository created (done automatically via `../sre-agent/scripts/setup-prod.sh`)
+3. EKS cluster running with sre-agent deployed
+
+### Deploy to Production
+
+```bash
+cd slack-bot
+./scripts/deploy-prod.sh
+```
+
+This will:
+1. Build multi-platform Docker image (amd64/arm64)
+2. Push to ECR
+3. Deploy to EKS with LoadBalancer
+4. Output the public webhook URL
+
+### Configure Slack App for Production
+
+After deployment, configure your Slack app:
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps)
+2. Select your app
+3. **Disable Socket Mode** (Settings → Socket Mode → Toggle OFF)
+4. **Enable Event Subscriptions**:
+   - Toggle ON
+   - Request URL: `http://<LOADBALANCER_URL>/slack/events`
+   - Subscribe to bot events: `app_mention`, `message.channels`
+5. **OAuth & Permissions**: Ensure bot scopes are configured:
+   - `app_mentions:read`
+   - `chat:write`
+   - `channels:history`
+   - `files:write`
+6. Reinstall app to workspace if needed
+
+### Architecture (Production)
+
+```
+Slack User
+    │
+    │ @mention (HTTP webhook)
+    ▼
+Slack Bot (EKS LoadBalancer)
+    │
+    │ POST /investigate
+    │ {"prompt": "...", "thread_id": "slack-{channel}-{thread}"}
+    ▼
+SRE Agent (internal K8s service)
+    │
+    │ Streaming response
+    ▼
+Slack User (with feedback buttons)
+```
+
+### Environment Variables
+
+Production deployment sets:
+- `SLACK_APP_MODE=http` - Enables HTTP mode (Flask)
+- `PORT=3000` - HTTP server port
+- `SRE_AGENT_URL=http://incidentfox-server-svc.incidentfox-prod.svc.cluster.local:8000` - Internal K8s service URL
+
+### Monitoring
+
+```bash
+# Check deployment status
+kubectl get pods -n incidentfox-prod -l app=slack-bot
+
+# View logs
+kubectl logs -n incidentfox-prod -l app=slack-bot --tail=50 -f
+
+# Get public URL
+kubectl get svc slack-bot-svc -n incidentfox-prod -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+```
+
+### Secrets Management
+
+Required secrets (stored in `slack-bot-secrets`):
+- `SLACK_BOT_TOKEN` - Bot User OAuth Token
+- `SLACK_SIGNING_SECRET` - From Slack App settings
+- `INCIDENT_IO_API_KEY` - (Optional) Incident.io integration
+
+Set these in your `.env` file before deploying.
+
 ## Next Steps
 
 - [ ] Add interrupt button (stop current investigation)
 - [ ] Add loading states with fun messages
-- [ ] Switch to HTTP mode for production
+- [x] Switch to HTTP mode for production
 

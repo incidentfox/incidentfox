@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add IncidentFox to Slack</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, h4, h5, h6 { font-family: 'Space Grotesk', sans-serif; }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased min-h-screen flex items-center justify-center p-6">
+    <div class="max-w-md w-full">
+        <!-- Logo -->
+        <div class="flex justify-center mb-8">
+            <div class="w-20 h-20 rounded-2xl flex items-center justify-center">
+                <img src="/assets/logo.png" alt="IncidentFox" class="w-20 h-20">
+            </div>
+        </div>
+
+        <!-- Heading -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-white mb-3">Add IncidentFox to Slack</h1>
+            <p class="text-slate-400">
+                AI-powered incident investigation that debugs while you sleep
+            </p>
+        </div>
+
+        <!-- Features -->
+        <div class="glass-card rounded-xl p-6 mb-8 space-y-4">
+            <div class="flex items-start gap-3">
+                <div class="w-6 h-6 bg-orange-500 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <i data-lucide="check" class="w-4 h-4 text-white"></i>
+                </div>
+                <div class="text-sm text-slate-300">
+                    <span class="font-semibold text-white">Auto-investigate alerts</span> – IncidentFox listens to your alerts and investigates automatically
+                </div>
+            </div>
+            <div class="flex items-start gap-3">
+                <div class="w-6 h-6 bg-orange-500 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <i data-lucide="check" class="w-4 h-4 text-white"></i>
+                </div>
+                <div class="text-sm text-slate-300">
+                    <span class="font-semibold text-white">Root cause analysis</span> – Get comprehensive reports with logs, metrics, and fix scripts
+                </div>
+            </div>
+            <div class="flex items-start gap-3">
+                <div class="w-6 h-6 bg-orange-500 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <i data-lucide="check" class="w-4 h-4 text-white"></i>
+                </div>
+                <div class="text-sm text-slate-300">
+                    <span class="font-semibold text-white">Interactive debugging</span> – Ask follow-up questions and refine investigations in Slack
+                </div>
+            </div>
+        </div>
+
+        <!-- CTA Button -->
+        <div class="text-center mb-6">
+            <a href="{{ install_url }}" class="inline-flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-900 px-6 py-3 rounded-lg font-semibold transition-all shadow-lg">
+                <svg height="20" width="20" viewBox="0 0 54 54" xmlns="http://www.w3.org/2000/svg">
+                    <g fill="none" fill-rule="evenodd">
+                        <path d="M19.712.133a5.381 5.381 0 0 0-5.376 5.387 5.381 5.381 0 0 0 5.376 5.386h5.376V5.52A5.381 5.381 0 0 0 19.712.133m0 14.365H5.376A5.381 5.381 0 0 0 0 19.884a5.381 5.381 0 0 0 5.376 5.387h14.336a5.381 5.381 0 0 0 5.376-5.387 5.381 5.381 0 0 0-5.376-5.386" fill="#36C5F0"/>
+                        <path d="M53.76 19.884a5.381 5.381 0 0 0-5.376-5.386 5.381 5.381 0 0 0-5.376 5.386v5.387h5.376a5.381 5.381 0 0 0 5.376-5.387m-14.336 0V5.52A5.381 5.381 0 0 0 34.048.133a5.381 5.381 0 0 0-5.376 5.387v14.364a5.381 5.381 0 0 0 5.376 5.387 5.381 5.381 0 0 0 5.376-5.387" fill="#2EB67D"/>
+                        <path d="M34.048 54a5.381 5.381 0 0 0 5.376-5.387 5.381 5.381 0 0 0-5.376-5.386h-5.376v5.386A5.381 5.381 0 0 0 34.048 54m0-14.365h14.336a5.381 5.381 0 0 0 5.376-5.386 5.381 5.381 0 0 0-5.376-5.387H34.048a5.381 5.381 0 0 0-5.376 5.387 5.381 5.381 0 0 0 5.376 5.386" fill="#ECB22E"/>
+                        <path d="M0 34.249a5.381 5.381 0 0 0 5.376 5.386 5.381 5.381 0 0 0 5.376-5.386v-5.387H5.376A5.381 5.381 0 0 0 0 34.25m14.336 0v14.364A5.381 5.381 0 0 0 19.712 54a5.381 5.381 0 0 0 5.376-5.387V34.25a5.381 5.381 0 0 0-5.376-5.387 5.381 5.381 0 0 0-5.376 5.387" fill="#E01E5A"/>
+                    </g>
+                </svg>
+                Add to Slack
+            </a>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center">
+            <p class="text-slate-500 text-xs">
+                By installing, you agree to our <a href="https://incidentfox.ai/terms" class="text-orange-400 hover:underline">Terms of Service</a> and <a href="https://incidentfox.ai/privacy" class="text-orange-400 hover:underline">Privacy Policy</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

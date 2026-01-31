@@ -64,6 +64,7 @@ COPY sandbox_server.py .
 COPY server.py .
 COPY sandbox_manager.py .
 COPY events.py .
+COPY auth.py .
 COPY pyproject.toml .
 COPY uv.lock .
 COPY .claude/ ./.claude/

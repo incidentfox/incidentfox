@@ -1367,3 +1367,63 @@ class VisitorSession(Base):
         Index("ix_visitor_sessions_status_created", "status", "created_at"),
         Index("ix_visitor_sessions_last_heartbeat", "last_heartbeat_at"),
     )
+
+
+class SlackInstallation(Base):
+    """
+    Slack OAuth installation storage.
+
+    Stores bot tokens and user tokens for Slack workspaces that have
+    installed our Slack app. Used by the slack-bot service for multi-tenant
+    OAuth support.
+
+    The combination of (enterprise_id, team_id, user_id) uniquely identifies
+    an installation:
+    - enterprise_id: For Enterprise Grid installs (nullable for regular workspaces)
+    - team_id: The Slack workspace ID
+    - user_id: For user-level tokens (nullable for workspace-level installs)
+    """
+
+    __tablename__ = "slack_installations"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    enterprise_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    team_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+
+    app_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    bot_token: Mapped[str] = mapped_column(Text, nullable=False)
+    bot_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    bot_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    bot_scopes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Comma-separated
+
+    user_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    user_scopes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Comma-separated
+
+    incoming_webhook_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    incoming_webhook_channel: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    incoming_webhook_channel_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    incoming_webhook_configuration_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    is_enterprise_install: Mapped[bool] = mapped_column(Boolean, default=False)
+    token_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    installed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    # Store full installation data as JSON for future-proofing
+    raw_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_slack_installations_lookup",
+            "enterprise_id",
+            "team_id",
+            "user_id",
+            unique=True,
+        ),
+    )

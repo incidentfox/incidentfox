@@ -72,11 +72,36 @@ fi
 eksctl utils write-kubeconfig --cluster=$CLUSTER_NAME --region=$REGION
 echo ""
 
-# Step 2: Create ECR Repository
-echo "2️⃣  Creating ECR repository..."
+# Step 2: Create ECR Repositories
+echo "2️⃣  Creating ECR repositories..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+# Create incidentfox-agent repository
 REPO_NAME="incidentfox-agent"
+if aws ecr describe-repositories --repository-names $REPO_NAME --region $REGION >/dev/null 2>&1; then
+    echo "✅ Repository already exists: $REPO_NAME"
+else
+    aws ecr create-repository \
+        --repository-name $REPO_NAME \
+        --region $REGION \
+        --image-scanning-configuration scanOnPush=true >/dev/null
+    echo "✅ Repository created: $REPO_NAME"
+fi
+
+# Create credential-resolver repository
+REPO_NAME="credential-resolver"
+if aws ecr describe-repositories --repository-names $REPO_NAME --region $REGION >/dev/null 2>&1; then
+    echo "✅ Repository already exists: $REPO_NAME"
+else
+    aws ecr create-repository \
+        --repository-name $REPO_NAME \
+        --region $REGION \
+        --image-scanning-configuration scanOnPush=true >/dev/null
+    echo "✅ Repository created: $REPO_NAME"
+fi
+
+# Create slack-bot repository
+REPO_NAME="slack-bot"
 if aws ecr describe-repositories --repository-names $REPO_NAME --region $REGION >/dev/null 2>&1; then
     echo "✅ Repository already exists: $REPO_NAME"
 else
@@ -237,7 +262,7 @@ echo "╚═══════════════════════�
 echo ""
 echo "📊 What was created:"
 echo "  ✅ EKS cluster: $CLUSTER_NAME"
-echo "  ✅ ECR repository: $REPO_NAME"
+echo "  ✅ ECR repositories: incidentfox-agent, credential-resolver, slack-bot"
 echo "  ✅ agent-sandbox controller"
 echo "  ✅ gVisor runtime"
 echo "  ✅ Namespace: $NAMESPACE"

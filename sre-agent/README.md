@@ -244,6 +244,19 @@ Get production URL: `make prod-url`
 
 See [DEPLOYMENT_QUICK_START.md](DEPLOYMENT_QUICK_START.md) for detailed instructions.
 
+**CI/CD deployment:**
+Deployment via GitHub Actions (manual trigger only):
+- Run from GitHub UI: Actions → Deploy SRE Agent to Production → Run workflow
+- Or via CLI: `gh workflow run deploy-sre-agent-prod.yml`
+
+Configure required secrets in GitHub repository settings:
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` - AWS credentials with ECR and EKS access
+- `ANTHROPIC_API_KEY` - Claude API key
+- `JWT_SECRET` - JWT signing secret (generate with: `openssl rand -hex 32`)
+- Optional: `LMNR_PROJECT_API_KEY`, `CORALOGIX_API_KEY`, `CORALOGIX_DOMAIN`
+
+See [../.github/GITHUB_SECRETS.md](../.github/GITHUB_SECRETS.md) for detailed setup instructions.
+
 **Production architecture:**
 - AWS EKS cluster with gVisor-enabled sandboxes
 - LoadBalancer service for external access (NLB auto-provisioned)

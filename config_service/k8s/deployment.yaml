@@ -1,0 +1,136 @@
+# Config Service Deployment for EKS (incidentfox-prod namespace)
+# Multi-tenant configuration management with PostgreSQL backend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-service
+  namespace: incidentfox-prod
+  labels:
+    app: config-service
+    component: sre-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: config-service
+  template:
+    metadata:
+      labels:
+        app: config-service
+        component: sre-agent
+    spec:
+      serviceAccountName: config-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: config-service
+        image: 103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-config-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        # Database connection (from Secret)
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: db-host
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: db-name
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: db-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: db-password
+        - name: DB_SSLMODE
+          value: "require"
+        # Security
+        - name: TOKEN_PEPPER
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: token-pepper
+        - name: ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: admin-token
+        # Disable .env autoload in container
+        - name: DOTENV_AUTOLOAD
+          value: "0"
+        # Logging
+        - name: LOG_LEVEL
+          value: "INFO"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false  # Needs write for alembic migrations
+          capabilities:
+            drop:
+            - ALL
+      imagePullSecrets:
+      - name: ecr-registry-secret
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: config-service
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: config-service-svc
+  namespace: incidentfox-prod
+  labels:
+    app: config-service
+spec:
+  type: ClusterIP
+  selector:
+    app: config-service
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: config-service
+  namespace: incidentfox-prod
