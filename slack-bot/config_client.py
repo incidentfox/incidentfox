@@ -98,7 +98,11 @@ class ConfigServiceClient:
             trial_info = None
             org_already_existed = org_response.get("exists", False)
 
-            if FREE_TRIAL_ENABLED and INCIDENTFOX_ANTHROPIC_API_KEY and not org_already_existed:
+            if (
+                FREE_TRIAL_ENABLED
+                and INCIDENTFOX_ANTHROPIC_API_KEY
+                and not org_already_existed
+            ):
                 trial_info = self._setup_free_trial(org_id, team_node_id)
                 logger.info(
                     f"Free trial enabled for {org_id}: expires {trial_info.get('expires_at')}"
