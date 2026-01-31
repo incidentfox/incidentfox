@@ -45,13 +45,12 @@ spec:
             secretKeyRef:
               name: incidentfox-secrets
               key: jwt-secret
-        # Laminar API key for OUR observability tracing (optional, not customer's)
+        # Laminar API key for OUR observability tracing (required for telemetry)
         - name: LMNR_PROJECT_API_KEY
           valueFrom:
             secretKeyRef:
               name: incidentfox-secrets
               key: laminar-api-key
-              optional: true
         # Note: Customer API keys (Anthropic, Coralogix, etc.) are NOT needed here.
         # Sandboxes get credentials from credential-resolver at runtime via envoy sidecar.
         resources:

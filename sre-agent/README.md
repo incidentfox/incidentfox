@@ -251,9 +251,8 @@ Deployment via GitHub Actions (manual trigger only):
 
 Configure required secrets in GitHub repository settings:
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` - AWS credentials with ECR and EKS access
-- `ANTHROPIC_API_KEY` - Claude API key
 - `JWT_SECRET` - JWT signing secret (generate with: `openssl rand -hex 32`)
-- Optional: `LMNR_PROJECT_API_KEY`, `CORALOGIX_API_KEY`, `CORALOGIX_DOMAIN`
+- `LMNR_PROJECT_API_KEY` - Laminar API key for observability tracing
 
 See [../.github/GITHUB_SECRETS.md](../.github/GITHUB_SECRETS.md) for detailed setup instructions.
 
