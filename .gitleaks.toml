@@ -8,6 +8,12 @@ title = "Custom Gitleaks Configuration"
 useDefault = true
 
 [allowlist]
+# False positive: "incidentfox/prod/anthropic" is an AWS Secrets Manager path/name,
+# not an actual API key. The code uses this path to fetch the real secret from AWS.
+commits = [
+    "b9ae522ede6c7bf7b468048c9a89924c242c36d8",
+]
+
 paths = [
     # Conductor workspace files (gitignored, local only)
     '''\.context/.*''',
