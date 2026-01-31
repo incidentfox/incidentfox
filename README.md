@@ -30,7 +30,6 @@ IncidentFox integrates with your observability stack, infrastructure, and collab
 - [Features](#features)
 - [Integrations](#integrations)
 - [Documentation](#documentation)
-- [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -181,23 +180,6 @@ In Slack:
 | [Quick Start](#quick-start) | [Features](docs/FEATURES.md) | [Dev Guide](DEVELOPMENT_KNOWLEDGE.md) |
 | [Deployment Guide](docs/DEPLOYMENT.md) | [Integrations](docs/INTEGRATIONS.md) | [Agent Architecture](agent/README.md) |
 | [Slack Setup (detailed)](docs/SLACK_SETUP.md) | [Architecture](docs/ARCHITECTURE.md) | [Tools Catalog](agent/docs/TOOLS_CATALOG.md) |
-
----
-
-## Roadmap
-
-### Completed
-- Multi-agent architecture with 178+ tools
-- Slack, GitHub, PagerDuty integrations
-- RAPTOR knowledge base
-- Alert correlation engine
-- Enterprise features (SSO, RBAC, audit)
-- Dual agent runtime (OpenAI + Claude)
-
-### In Progress
-- Custom tool generation
-- Enhanced A2A protocol
-- Additional MCP integrations
 
 ---
 
