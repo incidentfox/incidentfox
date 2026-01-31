@@ -16,6 +16,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from .reranker import (
+    CohereReranker,
     CrossEncoderReranker,
     EnsembleReranker,
     ImportanceReranker,
@@ -152,19 +153,26 @@ class UltimateRetriever:
             "query_decomposition": QueryDecompositionStrategy(),
         }
 
-        # Initialize rerankers with cross-encoder for better precision
+        # Initialize rerankers - Cohere is SOTA, use as primary
         rerankers_list = [ImportanceReranker(self.config.rerank_config)]
         
-        # Try to add cross-encoder reranker (requires sentence-transformers)
-        try:
-            from sentence_transformers import CrossEncoder
-            cross_encoder_model = CrossEncoder("BAAI/bge-reranker-base")
-            rerankers_list.append(CrossEncoderReranker(model=cross_encoder_model))
-            logger.info("Cross-encoder reranker enabled (BAAI/bge-reranker-base)")
-        except ImportError:
-            logger.warning("sentence-transformers not installed, cross-encoder disabled")
-        except Exception as e:
-            logger.warning(f"Failed to load cross-encoder model: {e}")
+        # Try Cohere reranker first (SOTA quality)
+        import os
+        cohere_key = os.environ.get("COHERE_API_KEY")
+        if cohere_key:
+            rerankers_list.append(CohereReranker(api_key=cohere_key))
+            logger.info("Cohere reranker enabled (rerank-english-v3.0)")
+        else:
+            # Fall back to cross-encoder if no Cohere key
+            try:
+                from sentence_transformers import CrossEncoder
+                cross_encoder_model = CrossEncoder("BAAI/bge-reranker-base")
+                rerankers_list.append(CrossEncoderReranker(model=cross_encoder_model))
+                logger.info("Cross-encoder reranker enabled (BAAI/bge-reranker-base)")
+            except ImportError:
+                logger.warning("No reranker available (install sentence-transformers or set COHERE_API_KEY)")
+            except Exception as e:
+                logger.warning(f"Failed to load cross-encoder model: {e}")
         
         self._reranker = EnsembleReranker(rerankers=rerankers_list)
 
