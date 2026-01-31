@@ -238,14 +238,15 @@ async def get_credentials(
 def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
     """Build authentication headers for the integration.
 
-    For Anthropic trial users, adds attribution metadata for cost tracking.
+    For customers using our shared Anthropic key, adds attribution metadata for cost tracking.
     """
     api_key = creds.get("api_key", "")
 
     if integration_id == "anthropic":
         headers = {"x-api-key": api_key}
 
-        # Add attribution for trial users (for cost tracking/billing)
+        # Add attribution for customers using our shared key (for cost tracking/billing)
+        # This includes both trial users and paid users who choose not to bring their own key
         if creds.get("is_trial") and creds.get("workspace_attribution"):
             workspace = creds["workspace_attribution"]
             # Anthropic supports custom metadata in headers

@@ -79,7 +79,7 @@ class EncryptionService:
 
         try:
             encrypted_bytes = self.fernet.encrypt(plaintext.encode())
-            # Prefix with "fernet:" to distinguish from old base64-encoded values
+            # Prefix with "fernet:" for version identification
             return f"fernet:{encrypted_bytes.decode()}"
         except Exception as e:
             raise EncryptionError(f"Encryption failed: {e}")
@@ -89,7 +89,7 @@ class EncryptionService:
         Decrypt an encrypted string value.
 
         Args:
-            ciphertext: The encrypted string (with or without "fernet:" prefix)
+            ciphertext: The encrypted string (must have "fernet:" prefix)
 
         Returns:
             Decrypted plaintext string
@@ -98,16 +98,9 @@ class EncryptionService:
             return ""
 
         try:
-            # Handle old base64-encoded values (backwards compatibility)
-            if ciphertext.startswith("enc:"):
-                # Old format from base64 encoding - decode directly
-                import base64
-
-                return base64.b64decode(ciphertext[4:]).decode()
-
-            # New Fernet-encrypted format
+            # Fernet-encrypted format (strip prefix if present)
             if ciphertext.startswith("fernet:"):
-                ciphertext = ciphertext[7:]  # Strip prefix
+                ciphertext = ciphertext[7:]
 
             decrypted_bytes = self.fernet.decrypt(ciphertext.encode())
             return decrypted_bytes.decode()
@@ -176,9 +169,7 @@ class EncryptionService:
         decrypted = {}
 
         for key, value in data.items():
-            if isinstance(value, str) and (
-                value.startswith("fernet:") or value.startswith("enc:")
-            ):
+            if isinstance(value, str) and value.startswith("fernet:"):
                 try:
                     decrypted[key] = self.decrypt(value)
                 except EncryptionError:

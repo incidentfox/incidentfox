@@ -41,17 +41,6 @@ def test_encrypt_empty_string():
     assert decrypt("") == ""
 
 
-def test_decrypt_backwards_compat():
-    """Test backwards compatibility with old base64 format."""
-    # Old format: enc:BASE64
-    import base64
-
-    from src.crypto import decrypt
-
-    old_encrypted = "enc:" + base64.b64encode(b"secret").decode()
-    assert decrypt(old_encrypted) == "secret"
-
-
 def test_encrypt_dict_sensitive_keys():
     """Test dictionary encryption of sensitive keys."""
     from src.crypto import decrypt_dict, encrypt_dict
