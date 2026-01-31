@@ -94,12 +94,18 @@ class ConfigServiceClient:
             )
             logger.info(f"Issued team token for {org_id}")
 
-            # Step 4: Set up free trial if enabled
+            # Step 4: Set up free trial if enabled (only for NEW orgs)
             trial_info = None
-            if FREE_TRIAL_ENABLED and INCIDENTFOX_ANTHROPIC_API_KEY:
+            org_already_existed = org_response.get("exists", False)
+
+            if FREE_TRIAL_ENABLED and INCIDENTFOX_ANTHROPIC_API_KEY and not org_already_existed:
                 trial_info = self._setup_free_trial(org_id, team_node_id)
                 logger.info(
                     f"Free trial enabled for {org_id}: expires {trial_info.get('expires_at')}"
+                )
+            elif org_already_existed:
+                logger.info(
+                    f"Org {org_id} already exists - skipping free trial setup (no double trials!)"
                 )
 
             return {
