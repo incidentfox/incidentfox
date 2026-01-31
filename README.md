@@ -45,7 +45,7 @@ For teams that need more, we offer **managed deployments**, **premium features**
 |---|--------------|------------------|---------------|-------------|
 | **Best for** | Quick exploration | Evaluating with your team | Production, full control | Production, premium features |
 | **How** | Join our Slack | Docker Compose | Kubernetes (Helm) | On-prem or SaaS |
-| **Setup time** | Instant | 5 minutes | 30 minutes | [Contact us](mailto:founders@incidentfox.ai) |
+| **Setup time** | Instant | 5 minutes | 30 minutes | 30 minutes |
 | **Cost** | Free | Free | Free (open source) | Custom pricing |
 |  | [Join Slack →](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ) | [Quick Start ↓](#quick-start) | [Deployment Guide →](docs/DEPLOYMENT.md) | [Get in Touch →](mailto:founders@incidentfox.ai) |
 
@@ -105,31 +105,37 @@ For production deployments, use our Helm charts to deploy IncidentFox on Kuberne
 ### Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Slack / GitHub / API                     │
-└─────────────────────────────────┬───────────────────────────────┘
-                                  │
-┌─────────────────────────────────▼───────────────────────────────┐
-│                         Orchestrator                             │
-│              (routes requests, manages agent lifecycle)          │
-└───────────┬─────────────────────────────────────┬───────────────┘
-            │                                     │
-┌───────────▼───────────┐           ┌─────────────▼─────────────┐
-│        Agents         │           │      Config Service        │
-│  (investigates issues,│           │  (team settings, prompts,  │
-│   calls tools, reasons)│           │   tool configs, SSO)       │
-└───────────┬───────────┘           └─────────────┬─────────────┘
-            │                                     │
-┌───────────▼─────────────────────────────────────▼───────────────┐
-│                         PostgreSQL                               │
-│            (investigations, knowledge base, audit logs)          │
-└───────────┬─────────────────────────────────────────────────────┘
-            │
-┌───────────▼───────────┐           ┌─────────────────────────────┐
-│     RAG / RAPTOR      │           │         Web UI              │
-│  (runbooks, past      │           │  (dashboard, investigations,│
-│   incidents, context) │           │   config management)        │
-└───────────────────────┘           └─────────────────────────────┘
+                    ┌─────────────────────────────────────┐
+                    │   Slack · GitHub · PagerDuty · API   │
+                    └──────────────────┬──────────────────┘
+                                       │ webhooks
+                    ┌──────────────────▼──────────────────┐
+                    │            Orchestrator              │
+                    │   (routes webhooks, team lookup,     │
+                    │    token auth, audit logging)        │
+                    └───────┬─────────────────┬───────────┘
+                            │                 │
+          ┌─────────────────▼───┐    ┌────────▼────────────┐
+          │       Agent         │    │   Config Service    │
+          │  (OpenAI/Claude SDK,│    │  (multi-tenant cfg, │
+          │   178+ tools,       │    │   RBAC, routing,    │
+          │   multi-agent)      │    │   team hierarchy)   │
+          └─────────┬───────────┘    └──────────┬─────────┘
+                    │                           │
+    ┌───────────────┼───────────────────────────┼──────────────┐
+    │               ▼                           ▼              │
+    │  ┌────────────────────┐    ┌─────────────────────────┐   │
+    │  │  Knowledge Base    │    │       PostgreSQL        │   │
+    │  │  (RAPTOR trees,    │    │  (config, audit logs,   │   │
+    │  │   runbooks, docs)  │    │   investigations)       │   │
+    │  └────────────────────┘    └─────────────────────────┘   │
+    │                                                          │
+    │  ┌────────────────────┐    ┌─────────────────────────┐   │
+    │  │  External APIs     │    │        Web UI           │   │
+    │  │  (K8s, AWS, Datadog│    │  (dashboard, settings,  │   │
+    │  │   Grafana, etc.)   │    │   team management)      │   │
+    │  └────────────────────┘    └─────────────────────────┘   │
+    └──────────────────────────────────────────────────────────┘
 ```
 
 ### Quick Deploy
