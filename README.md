@@ -1,10 +1,10 @@
 # IncidentFox
 
-> **Build the world's best AI SRE.**
+> **Open-source AI SRE that actually investigates.**
 
-AI-powered incident investigation and infrastructure automation. IncidentFox integrates with your observability stack, infrastructure, and collaboration tools to automatically investigate incidents, find root causes, and suggest fixes.
+IncidentFox connects to your existing tools — Kubernetes, AWS, Grafana, Datadog, GitHub, Slack — and automatically investigates incidents. It reads logs, queries metrics, traces through service dependencies, and finds root causes. Not just alert correlation. Actual debugging.
 
-**Try it locally in 60 seconds, or deploy for your team in 5 minutes.**
+**Self-host in 5 minutes. Keep your data in your environment.**
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/b6892fe8-0a19-40f9-9d86-465aa3387108" width="600" alt="Slack Investigation">
@@ -162,12 +162,82 @@ You should see a streaming response! 🎉
 
 ## Why IncidentFox?
 
-| Challenge | How IncidentFox Solves It |
-|-----------|---------------------------|
-| **Alert fatigue** | Smart correlation reduces noise by 85-95% using temporal, topology, and semantic analysis |
-| **Context switching** | Rich Slack UI with progressive investigation updates — stay in your workflow |
-| **Tribal knowledge** | RAPTOR knowledge base learns your runbooks and past incidents |
-| **Tool sprawl** | MCP protocol connects to any tool in minutes, not weeks |
+Most AI SRE tools stop at alert correlation — grouping alerts into incidents. IncidentFox goes further: it **actually investigates**. It reads logs, queries metrics, traces service dependencies, analyzes recent deployments, and finds the root cause.
+
+### The Problem with Current Tools
+
+| Tool Category | What They Do | What's Missing |
+|---------------|--------------|----------------|
+| **Observability AI** (Datadog Bits AI, Dynatrace Davis) | Deep investigation, but only within their ecosystem | Locked to one vendor. If you use Grafana + Datadog + custom tools, you're out of luck |
+| **AIOps** (BigPanda, Moogsoft, PagerDuty) | Alert correlation and noise reduction | Stops at grouping. Human still debugs. AI features often cost $699+/mo extra |
+| **Incident Management** (incident.io, Rootly) | Great workflows, status pages, postmortems | Rely on human expertise for technical debugging |
+| **Runbook Automation** (Shoreline, Kubiya) | Execute predefined runbooks | Only works when runbooks exist. 85% of orgs have stale or incomplete runbooks |
+
+### How IncidentFox Is Different
+
+**1. Investigation, not just correlation**
+
+Other tools: "These 5 alerts are related"
+IncidentFox: "Database connection pool exhausted at 10:32 UTC causing cascading failures. Recent deployment `abc123` increased connection timeout from 5s to 30s, holding connections longer. Here's the git blame and rollback command."
+
+**2. Works with your existing stack**
+
+| Category | Integrations |
+|----------|-------------|
+| Observability | Grafana, Datadog, New Relic, Prometheus, Coralogix, Splunk, Elastic |
+| Infrastructure | Kubernetes, AWS, Azure, GCP, Docker |
+| Code & CI/CD | GitHub, GitLab, Git |
+| Incident Mgmt | PagerDuty, OpsGenie, incident.io, Jira |
+| Data | Snowflake, BigQuery, PostgreSQL, Kafka |
+
+Add new integrations via **MCP protocol** in 5 minutes — no code changes, just config.
+
+**3. Intelligent log analysis (not bulk loading)**
+
+Most AI tools load 100K log lines, hit context limits, and fail. IncidentFox uses **progressive discovery**:
+1. Get statistics first (error rate, severity distribution, top patterns)
+2. Sample intelligently (errors only, or around specific timestamp)
+3. Drill down based on findings
+
+**4. Seasonality-aware anomaly detection**
+
+Basic tools use Z-score: "This value is 3 standard deviations from mean = anomaly"
+IncidentFox uses **Prophet**: Knows 3am traffic is normally low. Knows Monday morning spikes are expected. Separates trend from seasonal patterns.
+
+**5. Knowledge base that learns**
+
+| Standard RAG | RAPTOR (IncidentFox) |
+|--------------|---------------------|
+| Flat vector search | Hierarchical tree with multi-level abstractions |
+| Static embeddings | Learns from incident outcomes — what worked gets boosted |
+| No context | Indexes runbooks, postmortems, tribal knowledge |
+| Query similarity only | Tracks contradictions, gaps, stale content |
+
+**6. Transparent reasoning**
+
+See exactly what the AI checked:
+- Which logs it read and what patterns it found
+- Which metrics it queried and what anomalies it detected
+- Which services it traced and how dependencies connect
+- Why it reached its conclusion
+
+**7. Self-hosted, your data stays yours**
+
+| Deployment | Data Location |
+|------------|---------------|
+| SaaS | Managed (if you want convenience) |
+| Self-hosted | Your VPC, your control |
+| Air-gapped | Zero internet, local LLM support |
+
+Critical for: financial services, healthcare, government, anyone with data residency requirements.
+
+**8. Enterprise-ready from day one**
+
+- **Hierarchical config**: Org → Business Unit → Team with inheritance
+- **OIDC/SSO**: Google, Azure AD, Okta
+- **Audit logging**: Append-only, versioned, with rollback
+- **Approval workflows**: Per-field approval for sensitive changes
+- **Telemetry controls**: Opt-in only, no PII ever collected
 
 ---
 
