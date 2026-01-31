@@ -10,8 +10,9 @@ from .usage_log import _Timer, log_usage
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
-# OpenAI embeddings API limit: max 2048 texts per batch request
-OPENAI_BATCH_LIMIT = 2048
+# OpenAI embeddings API limits
+OPENAI_BATCH_LIMIT = 2048  # Max texts per batch
+OPENAI_TOKEN_LIMIT = 100000  # Max tokens per batch (300K is limit, use 100K for safety)
 
 
 class BaseEmbeddingModel(ABC):
@@ -25,7 +26,7 @@ class BaseEmbeddingModel(ABC):
 
 
 class OpenAIEmbeddingModel(BaseEmbeddingModel):
-    def __init__(self, model="text-embedding-ada-002"):
+    def __init__(self, model="text-embedding-3-large"):
         self.model = model
         # The OpenAI client uses an underlying HTTP client that may not be safe to share
         # across threads. Create one client per thread (important when building embeddings
@@ -40,8 +41,12 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
         return c
 
     def _normalize_text(self, text: str) -> str:
-        """Normalize text for embedding: replace newlines and handle empty strings."""
+        """Normalize text for embedding: replace newlines, truncate, handle empty strings."""
         text = (text or "").replace("\n", " ").strip()
+        # Truncate to ~8000 tokens (32000 chars) to stay under model's 8192 token limit
+        max_chars = 32000
+        if len(text) > max_chars:
+            text = text[:max_chars]
         return text if text else " "
 
     # Embeddings can hit rate limits; use more patient exponential backoff.
@@ -92,11 +97,36 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
         # Normalize all texts
         normalized = [self._normalize_text(t) for t in texts]
 
-        # Process in chunks of OPENAI_BATCH_LIMIT
+        # Process in token-aware chunks to respect OpenAI's token limits
+        # Rough estimate: 1 token ≈ 4 chars for English text
         all_embeddings: List[List[float]] = []
-        for i in range(0, len(normalized), OPENAI_BATCH_LIMIT):
-            chunk = normalized[i : i + OPENAI_BATCH_LIMIT]
-            chunk_embeddings = self._embed_batch_chunk(chunk)
+        current_batch = []
+        current_tokens = 0
+
+        for text in normalized:
+            # Estimate tokens (roughly 1 token per 4 chars)
+            text_tokens = len(text) // 4 + 1
+
+            # If adding this text would exceed token limit, process current batch first
+            if current_tokens + text_tokens > OPENAI_TOKEN_LIMIT and current_batch:
+                chunk_embeddings = self._embed_batch_chunk(current_batch)
+                all_embeddings.extend(chunk_embeddings)
+                current_batch = []
+                current_tokens = 0
+
+            # Also respect text count limit
+            if len(current_batch) >= OPENAI_BATCH_LIMIT:
+                chunk_embeddings = self._embed_batch_chunk(current_batch)
+                all_embeddings.extend(chunk_embeddings)
+                current_batch = []
+                current_tokens = 0
+
+            current_batch.append(text)
+            current_tokens += text_tokens
+
+        # Process remaining batch
+        if current_batch:
+            chunk_embeddings = self._embed_batch_chunk(current_batch)
             all_embeddings.extend(chunk_embeddings)
 
         return all_embeddings

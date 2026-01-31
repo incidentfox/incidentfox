@@ -59,11 +59,21 @@ def global_cluster_embeddings(
     metric: str = "cosine",
     random_state: Optional[int] = None,
 ) -> np.ndarray:
+    n = len(embeddings)
+    # Need at least 4 points for UMAP with n_neighbors >= 2
+    if n <= 3:
+        if _progress_enabled():
+            logging.info(f"[clustering] UMAP global skip: n={n} too small")
+        return embeddings[:, : min(dim, embeddings.shape[1])]
+
     if n_neighbors is None:
-        n_neighbors = int((len(embeddings) - 1) ** 0.5)
+        n_neighbors = int((n - 1) ** 0.5)
+    # Clamp n_neighbors to valid range
+    n_neighbors = max(2, min(n_neighbors, n - 1))
+
     if _progress_enabled():
         logging.info(
-            f"[clustering] UMAP global start: n={len(embeddings)} n_neighbors={n_neighbors} dim={dim} metric={metric}"
+            f"[clustering] UMAP global start: n={n} n_neighbors={n_neighbors} dim={dim} metric={metric}"
         )
         t0 = time.time()
     rs = _seed() if random_state is None else int(random_state)
@@ -83,15 +93,26 @@ def local_cluster_embeddings(
     metric: str = "cosine",
     random_state: Optional[int] = None,
 ) -> np.ndarray:
+    n = len(embeddings)
+    # n_neighbors must be >= 2 and < n
+    # If cluster is too small, skip UMAP and return identity (no dimensionality reduction)
+    if n <= 3:
+        if _progress_enabled():
+            logging.info(f"[clustering] UMAP local skip: n={n} too small")
+        return embeddings[:, : min(dim, embeddings.shape[1])]
+
+    # Clamp n_neighbors to valid range
+    actual_neighbors = max(2, min(num_neighbors, n - 1))
+
     if _progress_enabled():
         logging.info(
-            f"[clustering] UMAP local start: n={len(embeddings)} n_neighbors={num_neighbors} dim={dim} metric={metric}"
+            f"[clustering] UMAP local start: n={n} n_neighbors={actual_neighbors} dim={dim} metric={metric}"
         )
         t0 = time.time()
     rs = _seed() if random_state is None else int(random_state)
     _set_global_seeds(rs)
     reduced_embeddings = umap.UMAP(
-        n_neighbors=num_neighbors, n_components=dim, metric=metric, random_state=rs
+        n_neighbors=actual_neighbors, n_components=dim, metric=metric, random_state=rs
     ).fit_transform(embeddings)
     if _progress_enabled():
         logging.info(f"[clustering] UMAP local done in {time.time() - t0:.2f}s")
@@ -168,8 +189,20 @@ def perform_clustering(
     _set_global_seeds(rs)
 
     n = len(embeddings)
+
+    # Cannot cluster fewer than 4 points meaningfully
+    if n <= 3:
+        if verbose:
+            logging.info(
+                f"[clustering] Skip: only {n} points, returning single cluster"
+            )
+        # Return all points in a single cluster
+        return [np.array([0]) for _ in range(n)]
+
+    # Ensure dimension is at least 1
+    effective_dim = max(1, min(dim, n - 2))
     reduced_embeddings_global = global_cluster_embeddings(
-        embeddings, min(dim, n - 2), random_state=rs
+        embeddings, effective_dim, random_state=rs
     )
     global_clusters, n_global_clusters = GMM_cluster(
         reduced_embeddings_global, threshold, max_clusters=max_clusters, random_state=rs

@@ -16,6 +16,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from .reranker import (
+    CrossEncoderReranker,
     EnsembleReranker,
     ImportanceReranker,
     RerankConfig,
@@ -151,12 +152,24 @@ class UltimateRetriever:
             "incident": IncidentAwareStrategy(),
         }
 
-        # Initialize rerankers
-        self._reranker = EnsembleReranker(
-            rerankers=[
-                ImportanceReranker(self.config.rerank_config),
-            ]
-        )
+        # Initialize rerankers with optional cross-encoder for better precision
+        rerankers_list = [ImportanceReranker(self.config.rerank_config)]
+
+        # Try to add cross-encoder reranker (requires sentence-transformers)
+        try:
+            from sentence_transformers import CrossEncoder
+
+            cross_encoder_model = CrossEncoder("BAAI/bge-reranker-base")
+            rerankers_list.append(CrossEncoderReranker(model=cross_encoder_model))
+            logger.info("Cross-encoder reranker enabled (BAAI/bge-reranker-base)")
+        except ImportError:
+            logger.warning(
+                "sentence-transformers not installed, cross-encoder reranker disabled"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load cross-encoder model: {e}")
+
+        self._reranker = EnsembleReranker(rerankers=rerankers_list)
 
         # Stats
         self._query_count = 0
