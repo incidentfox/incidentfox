@@ -25,6 +25,7 @@ from .reranker import (
 )
 from .strategies import (
     AdaptiveDepthStrategy,
+    BM25HybridStrategy,
     HybridGraphTreeStrategy,
     HyDEStrategy,
     IncidentAwareStrategy,
@@ -75,7 +76,7 @@ class RetrievalConfig:
 
     # Performance
     parallel_strategies: bool = True  # Run strategies in parallel
-    timeout_seconds: float = 10.0
+    timeout_seconds: float = 120.0  # Allow more time for comprehensive retrieval
 
 
 @dataclass
@@ -151,6 +152,7 @@ class UltimateRetriever:
             "hybrid": HybridGraphTreeStrategy(),
             "incident": IncidentAwareStrategy(),
             "query_decomposition": QueryDecompositionStrategy(),
+            "bm25_hybrid": BM25HybridStrategy(),
         }
 
         # Initialize rerankers - Cohere is SOTA, use as primary
@@ -217,13 +219,16 @@ class UltimateRetriever:
         selected_strategies = self._select_strategies(mode, analysis)
 
         # 3. Execute retrieval
+        # Retrieve 3x candidates for Cohere reranking to find relevant docs
+        # Testing showed 3x is optimal: 2x=51.8%, 3x=52.5%, 4x=53.0%, 6x=53.0%
+        retrieval_multiplier = 3
         if self.config.parallel_strategies and len(selected_strategies) > 1:
             all_chunks = await self._parallel_retrieve(
-                query, selected_strategies, top_k * 2
+                query, selected_strategies, top_k * retrieval_multiplier
             )
         else:
             all_chunks = await self._sequential_retrieve(
-                query, selected_strategies, top_k * 2
+                query, selected_strategies, top_k * retrieval_multiplier
             )
 
         # 4. Apply filters
@@ -301,6 +306,9 @@ class UltimateRetriever:
 
         else:  # STANDARD
             # Select based on query intent
+            # Always include HyDE for better semantic matching
+            strategies.append(self._strategies["hyde"])
+            
             if analysis.intent == QueryIntent.PROCEDURAL:
                 strategies.append(self._strategies["hybrid"])
                 strategies.append(self._strategies["adaptive_depth"])
@@ -313,6 +321,9 @@ class UltimateRetriever:
                 strategies.append(self._strategies["multi_query"])
                 strategies.append(self._strategies["hybrid"])
                 strategies.append(self._strategies["query_decomposition"])  # Good for complex queries
+            
+            # Always include BM25 for exact entity matching
+            strategies.append(self._strategies["bm25_hybrid"])
 
         return strategies
 

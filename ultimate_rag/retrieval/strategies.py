@@ -894,14 +894,14 @@ class AdaptiveDepthStrategy(RetrievalStrategy):
 
                 for idx in sorted_indices[:top_k]:
                     node = valid_nodes[idx]
-                    chunks.append(
-                        RetrievedChunk(
-                            node_id=node.index,
-                            text=node.text,
+                chunks.append(
+                    RetrievedChunk(
+                        node_id=node.index,
+                        text=node.text,
                             tree_id=tree.tree_id,
                             score=scores[idx],
-                            importance=node.get_importance(),
-                            strategy=self.name,
+                        importance=node.get_importance(),
+                        strategy=self.name,
                             layer=depth,
                             metadata={
                                 "source_url": getattr(node, "source_url", None),
@@ -1503,7 +1503,7 @@ Focus on infrastructure components, databases, APIs, microservices, etc.""",
             return json.loads(content)
         except Exception as e:
             logger.warning(f"LLM service extraction failed: {e}")
-            return []
+        return []
 
     async def _tree_search(
         self,
@@ -1538,22 +1538,36 @@ class QueryDecompositionStrategy(RetrievalStrategy):
 
     name = "query_decomposition"
 
-    DECOMPOSITION_PROMPT = """Analyze this complex question and break it into simpler sub-questions.
+    DECOMPOSITION_PROMPT = """Analyze this complex question and extract key information.
 
 Question: {query}
 
+Your task:
+1. Extract all NAMED ENTITIES (people, organizations, publications) mentioned
+2. Break into simpler sub-questions if the question has multiple parts
+3. Create focused search queries for each entity
+
 Rules:
-- Identify distinct information needs (entities, facts, relationships)
+- ALWAYS include a simple entity-only search for each person/organization mentioned
 - Each sub-question should be answerable independently
-- Output 2-4 focused sub-questions
-- Format: one question per line, no numbering
+- Output 3-5 focused search queries, one per line
 
 Example:
-Input: "Which company acquired the startup founded by the person who invented the iPhone?"
+Input: "Does the FOX News article featuring Sherri Geerts focus on a corporate merger?"
 Output:
-Who invented the iPhone?
-What startup did Steve Jobs found?
-Which company acquired that startup?
+Sherri Geerts
+Sherri Geerts FOX News article
+What is the FOX News article about Sherri Geerts about?
+Is there a corporate merger involving Sherri Geerts?
+
+Example 2:
+Input: "After The Age reported on Travis Kelce's victories, did Yardbarker maintain consistency?"
+Output:
+Travis Kelce
+Travis Kelce The Age article Super Bowl
+Travis Kelce Yardbarker coverage
+What did The Age report about Travis Kelce?
+What did Yardbarker report about Travis Kelce?
 """
 
     def __init__(self, model: str = "gpt-4o-mini"):
@@ -1591,7 +1605,7 @@ Which company acquired that startup?
                 for line in response.choices[0].message.content.split("\n")
                 if line.strip()
             ]
-            logger.info(f"Query decomposed into {len(sub_queries)} sub-queries")
+            logger.info(f"Query decomposed into {len(sub_queries)} sub-queries: {sub_queries}")
             return [query] + sub_queries  # Include original
         except Exception as e:
             logger.error(f"LLM query decomposition failed: {e}")
@@ -1634,4 +1648,179 @@ Which company acquired that startup?
             reverse=True
         )[:top_k]
 
+        return results
+
+
+class BM25HybridStrategy(RetrievalStrategy):
+    """
+    Hybrid BM25 + Dense retrieval strategy.
+    
+    Combines sparse (BM25 keyword) and dense (embedding) retrieval for
+    better coverage. This is the standard approach for SOTA retrieval.
+    
+    BM25 excels at:
+    - Exact keyword matching
+    - Rare/specific terms
+    - Named entities
+    
+    Dense excels at:
+    - Semantic similarity
+    - Paraphrases
+    - Conceptual matching
+    
+    Combining both gives the best of both worlds.
+    """
+
+    name = "bm25_hybrid"
+
+    def __init__(self, bm25_weight: float = 0.4, dense_weight: float = 0.6):
+        """
+        Args:
+            bm25_weight: Weight for BM25 scores (default 0.4)
+            dense_weight: Weight for dense scores (default 0.6)
+        """
+        self.bm25_weight = bm25_weight
+        self.dense_weight = dense_weight
+        self._bm25_index = None
+        self._node_texts = {}  # node_id -> text
+        self._tokenized_corpus = []
+
+    async def retrieve(
+        self,
+        query: str,
+        forest: "TreeForest",
+        graph: Optional["KnowledgeGraph"] = None,
+        top_k: int = 10,
+        **kwargs,
+    ) -> List[RetrievedChunk]:
+        """Retrieve using BM25 + dense hybrid."""
+        # Ensure BM25 index is built
+        self._ensure_bm25_index(forest)
+        
+        if not self._bm25_index:
+            # Fall back to dense only if BM25 not available
+            return await self.search_trees(query, forest, top_k)
+        
+        # Get BM25 results
+        bm25_results = self._bm25_search(query, top_k * 2)
+        
+        # Get dense results
+        dense_results = await self.search_trees(query, forest, top_k * 2)
+        
+        # Combine results with weighted fusion
+        combined = self._reciprocal_rank_fusion(
+            bm25_results, 
+            dense_results,
+            bm25_weight=self.bm25_weight,
+            dense_weight=self.dense_weight
+        )
+        
+        return combined[:top_k]
+
+    def _ensure_bm25_index(self, forest: "TreeForest") -> None:
+        """Build BM25 index if not already built."""
+        if self._bm25_index is not None:
+            return
+            
+        try:
+            from rank_bm25 import BM25Okapi
+        except ImportError:
+            logger.warning("rank_bm25 not installed, BM25 hybrid disabled")
+            return
+        
+        # Collect all node texts
+        self._node_texts = {}
+        self._tokenized_corpus = []
+        
+        for tree_name, tree in forest.trees.items():
+            if not hasattr(tree, 'all_nodes'):
+                continue
+            for node_id, node in tree.all_nodes.items():
+                text = getattr(node, 'text', '') or getattr(node, 'content', '')
+                if text:
+                    self._node_texts[node_id] = text
+                    # Simple tokenization
+                    tokens = text.lower().split()
+                    self._tokenized_corpus.append(tokens)
+        
+        if self._tokenized_corpus:
+            self._bm25_index = BM25Okapi(self._tokenized_corpus)
+            logger.info(f"BM25 index built with {len(self._tokenized_corpus)} documents")
+        else:
+            logger.warning("No documents found for BM25 index")
+
+    def _bm25_search(self, query: str, top_k: int) -> List[RetrievedChunk]:
+        """Search using BM25."""
+        if not self._bm25_index:
+            return []
+        
+        # Tokenize query
+        query_tokens = query.lower().split()
+        
+        # Get BM25 scores
+        scores = self._bm25_index.get_scores(query_tokens)
+        
+        # Get top-k indices
+        node_ids = list(self._node_texts.keys())
+        scored_nodes = [(node_ids[i], scores[i]) for i in range(len(scores))]
+        scored_nodes.sort(key=lambda x: x[1], reverse=True)
+        
+        # Convert to RetrievedChunk
+        results = []
+        for node_id, score in scored_nodes[:top_k]:
+            if score > 0:
+                # Normalize BM25 score to 0-1 range
+                normalized_score = min(1.0, score / 10.0)
+                results.append(RetrievedChunk(
+                    node_id=node_id,
+                    text=self._node_texts[node_id],
+                    score=normalized_score,
+                    importance=0.5,  # Default importance
+                    strategy=self.name,
+                    tree_id="",
+                    layer=0,
+                ))
+        
+        return results
+
+    def _reciprocal_rank_fusion(
+        self,
+        bm25_results: List[RetrievedChunk],
+        dense_results: List[RetrievedChunk],
+        bm25_weight: float,
+        dense_weight: float,
+        k: int = 60,
+    ) -> List[RetrievedChunk]:
+        """
+        Combine results using Reciprocal Rank Fusion (RRF).
+        
+        RRF is robust to different score scales and works well
+        for combining different retrieval methods.
+        """
+        rrf_scores: Dict[int, float] = {}
+        node_chunks: Dict[int, RetrievedChunk] = {}
+        
+        # Add BM25 results with RRF formula
+        for rank, chunk in enumerate(bm25_results):
+            rrf_score = bm25_weight * (1.0 / (k + rank + 1))
+            rrf_scores[chunk.node_id] = rrf_scores.get(chunk.node_id, 0) + rrf_score
+            if chunk.node_id not in node_chunks:
+                node_chunks[chunk.node_id] = chunk
+        
+        # Add dense results with RRF formula
+        for rank, chunk in enumerate(dense_results):
+            rrf_score = dense_weight * (1.0 / (k + rank + 1))
+            rrf_scores[chunk.node_id] = rrf_scores.get(chunk.node_id, 0) + rrf_score
+            if chunk.node_id not in node_chunks:
+                node_chunks[chunk.node_id] = chunk
+        
+        # Sort by RRF score and update chunk scores
+        sorted_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)
+        
+        results = []
+        for node_id in sorted_ids:
+            chunk = node_chunks[node_id]
+            chunk.score = rrf_scores[node_id]
+            results.append(chunk)
+        
         return results
