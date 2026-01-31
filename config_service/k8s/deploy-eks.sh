@@ -45,20 +45,32 @@ DB_NAME=$(echo $RDS_SECRET | jq -r '.dbname')
 DB_USERNAME=$(echo $RDS_SECRET | jq -r '.username')
 DB_PASSWORD=$(echo $RDS_SECRET | jq -r '.password')
 
-# Get config-service secrets (token pepper, admin token)
+# Get config-service secrets (token pepper, admin token, encryption key)
 CONFIG_SECRET=$(aws secretsmanager get-secret-value --secret-id "incidentfox/prod/config-service" --region $REGION --query 'SecretString' --output text 2>/dev/null || echo "{}")
 if [ "$CONFIG_SECRET" == "{}" ]; then
   echo "   ⚠️  Config service secrets not found, generating new ones..."
   TOKEN_PEPPER=$(openssl rand -base64 32)
   ADMIN_TOKEN=$(openssl rand -base64 32)
+  # Generate Fernet encryption key (32 bytes, base64-encoded = 44 chars)
+  ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
   aws secretsmanager create-secret \
     --name "incidentfox/prod/config-service" \
-    --description "Config service secrets" \
-    --secret-string "{\"token_pepper\":\"$TOKEN_PEPPER\",\"admin_token\":\"$ADMIN_TOKEN\"}" \
+    --description "Config service secrets (auth + column encryption)" \
+    --secret-string "{\"token_pepper\":\"$TOKEN_PEPPER\",\"admin_token\":\"$ADMIN_TOKEN\",\"encryption_key\":\"$ENCRYPTION_KEY\"}" \
     --region $REGION > /dev/null
 else
   TOKEN_PEPPER=$(echo $CONFIG_SECRET | jq -r '.token_pepper')
   ADMIN_TOKEN=$(echo $CONFIG_SECRET | jq -r '.admin_token')
+  # Get encryption key, or generate if missing (for existing deployments)
+  ENCRYPTION_KEY=$(echo $CONFIG_SECRET | jq -r '.encryption_key')
+  if [ "$ENCRYPTION_KEY" == "null" ] || [ -z "$ENCRYPTION_KEY" ]; then
+    echo "   ⚠️  Encryption key missing, generating and updating secret..."
+    ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+    aws secretsmanager update-secret \
+      --secret-id "incidentfox/prod/config-service" \
+      --secret-string "{\"token_pepper\":\"$TOKEN_PEPPER\",\"admin_token\":\"$ADMIN_TOKEN\",\"encryption_key\":\"$ENCRYPTION_KEY\"}" \
+      --region $REGION > /dev/null
+  fi
 fi
 
 kubectl create secret generic config-service-secrets \
@@ -69,6 +81,7 @@ kubectl create secret generic config-service-secrets \
   --from-literal=db-password="$DB_PASSWORD" \
   --from-literal=token-pepper="$TOKEN_PEPPER" \
   --from-literal=admin-token="$ADMIN_TOKEN" \
+  --from-literal=encryption-key="$ENCRYPTION_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo "   ✅ Secrets created"

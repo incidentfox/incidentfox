@@ -808,20 +808,17 @@ class SSOTestResponse(BaseModel):
 
 
 def _encrypt_secret(secret: str) -> str:
-    """Simple encryption for client secrets. In production, use AWS KMS or similar."""
-    import base64
+    """Encrypt client secrets using Fernet (AES-128-CBC with HMAC)."""
+    from src.crypto import encrypt
 
-    # For demo, just base64 encode with a marker. In prod, use proper encryption.
-    return "enc:" + base64.b64encode(secret.encode()).decode()
+    return encrypt(secret)
 
 
 def _decrypt_secret(encrypted: str) -> str:
     """Decrypt a client secret."""
-    import base64
+    from src.crypto import decrypt
 
-    if encrypted.startswith("enc:"):
-        return base64.b64decode(encrypted[4:]).decode()
-    return encrypted
+    return decrypt(encrypted)
 
 
 @router.get("/sso-config", response_model=SSOConfigResponse)

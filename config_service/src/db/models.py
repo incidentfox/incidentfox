@@ -20,6 +20,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from src.crypto import EncryptedJSONB, EncryptedText
+
 from .base import Base
 
 
@@ -496,9 +498,8 @@ class Integration(Base):
         String(32), nullable=False, default="not_configured"
     )
     display_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    config: Mapped[dict] = mapped_column(
-        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=dict
-    )
+    # Encrypted JSONB - automatically encrypts sensitive fields (api_key, tokens, secrets)
+    config: Mapped[dict] = mapped_column(EncryptedJSONB, nullable=False, default=dict)
 
     last_checked_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -868,7 +869,10 @@ class SSOConfig(Base):
     # OIDC Configuration
     issuer: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     client_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    client_secret_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Encrypted using Fernet (replaces old base64 "encryption")
+    client_secret_encrypted: Mapped[Optional[str]] = mapped_column(
+        EncryptedText, nullable=True
+    )
     scopes: Mapped[Optional[str]] = mapped_column(
         String(512), nullable=True, default="openid email profile"
     )
@@ -1396,19 +1400,23 @@ class SlackInstallation(Base):
     )
 
     app_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    bot_token: Mapped[str] = mapped_column(Text, nullable=False)
+    # Encrypted Slack OAuth tokens using Fernet
+    bot_token: Mapped[str] = mapped_column(EncryptedText, nullable=False)
     bot_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     bot_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     bot_scopes: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )  # Comma-separated
 
-    user_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    user_token: Mapped[Optional[str]] = mapped_column(EncryptedText, nullable=True)
     user_scopes: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )  # Comma-separated
 
-    incoming_webhook_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Encrypted webhook URL (contains sensitive token parameter)
+    incoming_webhook_url: Mapped[Optional[str]] = mapped_column(
+        EncryptedText, nullable=True
+    )
     incoming_webhook_channel: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True
     )

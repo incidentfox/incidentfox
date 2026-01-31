@@ -69,6 +69,12 @@ spec:
             secretKeyRef:
               name: config-service-secrets
               key: admin-token
+        # Column-level encryption key (Fernet)
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: encryption-key
         # Disable .env autoload in container
         - name: DOTENV_AUTOLOAD
           value: "0"
