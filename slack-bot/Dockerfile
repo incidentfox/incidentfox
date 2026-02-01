@@ -16,9 +16,8 @@ COPY *.py .
 COPY assets/ assets/
 COPY templates/ templates/
 
-# Create non-root user and data directories for OAuth
+# Create non-root user (OAuth tokens are now stored in config-service)
 RUN useradd -m -u 1000 slackbot && \
-    mkdir -p /app/data/installations /app/data/states && \
     chown -R slackbot:slackbot /app
 
 USER slackbot

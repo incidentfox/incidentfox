@@ -111,8 +111,7 @@ class ConfigServiceClient:
         try:
             # Call Config Service to get team's effective config
             response = await self._client.get(
-                f"{self.base_url}/api/v2/config/effective",
-                params={"org_id": tenant_id, "team_node_id": team_id},
+                f"{self.base_url}/api/v2/config/me",
                 headers={
                     "Accept": "application/json",
                     "X-Org-Id": tenant_id,
@@ -157,14 +156,17 @@ class ConfigServiceClient:
     ) -> dict | None:
         """Resolve Anthropic credentials with subscription + trial support.
 
-        Access control logic:
-        1. Valid trial (not expired) -> allow with shared key
-        2. Active subscription + custom api_key -> allow with their key
-        3. Expired trial without subscription -> DENY (even with BYOK)
-        4. No trial, no subscription -> DENY
+        New access control logic (subscription-first):
+        1. Check if customer has ACCESS (valid trial OR active subscription)
+        2. If access granted, determine which API key to use:
+           - Customer BYOK (api_key configured) -> use their key
+           - No BYOK -> use our shared key with attribution
+        3. If no access, DENY
 
-        This ensures users can't use the software forever for free by just
-        bringing their own API key after trial expires.
+        This allows:
+        - Trial users to use our key OR bring their own
+        - Paid users to use our key OR bring their own
+        - Expired trials without subscription are blocked
 
         Args:
             config: Anthropic integration config from Config Service
@@ -174,13 +176,13 @@ class ConfigServiceClient:
             Dict with api_key and optional attribution metadata, or None if access denied
         """
         creds = self._extract_credentials(config)
-        api_key = creds.get("api_key")
+        customer_api_key = creds.get("api_key")
         is_trial = config.get("is_trial", False)
         trial_expires_at = config.get("trial_expires_at")
         subscription_status = config.get("subscription_status", "none")
 
-        # Helper to check if trial is valid (not expired)
-        trial_valid = False
+        # Step 1: Check if customer has valid access (trial OR subscription)
+        has_valid_trial = False
         if is_trial and trial_expires_at:
             try:
                 expires_at = datetime.fromisoformat(
@@ -189,47 +191,46 @@ class ConfigServiceClient:
                 now = datetime.utcnow()
                 if hasattr(expires_at, "tzinfo") and expires_at.tzinfo:
                     now = now.replace(tzinfo=expires_at.tzinfo)
-                trial_valid = now < expires_at
+                has_valid_trial = now < expires_at
             except (ValueError, TypeError) as e:
                 logger.error(f"Invalid trial_expires_at format: {e}")
-                trial_valid = False
+                has_valid_trial = False
 
-        # Case 1: Valid trial - use shared key
-        if trial_valid:
-            shared_key = get_shared_anthropic_key()
-            if shared_key:
-                logger.info(f"Using shared Anthropic key for trial tenant={tenant_id}")
-                return {
-                    "api_key": shared_key,
-                    "is_trial": True,
-                    "workspace_attribution": tenant_id,
-                }
-            else:
-                logger.error(
-                    f"Trial active but shared key not available for "
-                    f"tenant={tenant_id}"
-                )
-                return None
+        has_active_subscription = subscription_status == "active"
 
-        # Case 2: Active subscription with custom API key
-        if subscription_status == "active" and api_key:
-            logger.info(f"Using custom Anthropic key for subscribed tenant={tenant_id}")
-            return {"api_key": api_key}
-
-        # Case 3: Trial expired, no active subscription
-        if is_trial and not trial_valid:
+        # Deny access if neither trial nor subscription
+        if not has_valid_trial and not has_active_subscription:
             logger.warning(
-                f"Trial expired for tenant={tenant_id}, no active subscription. "
-                f"Access denied (upgrade required)."
+                f"Access denied for tenant={tenant_id}: "
+                f"trial_valid={has_valid_trial}, subscription={subscription_status}"
             )
             return None
 
-        # Case 4: No trial, no subscription, no access
-        logger.warning(
-            f"No valid trial or subscription for tenant={tenant_id}. "
-            f"Subscription status: {subscription_status}"
+        # Step 2: Customer has access - determine which API key to use
+        # If they configured their own key, use it (BYOK)
+        if customer_api_key:
+            logger.info(
+                f"Using customer's own Anthropic key for tenant={tenant_id} "
+                f"(trial={has_valid_trial}, subscription={subscription_status})"
+            )
+            return {"api_key": customer_api_key}
+
+        # Otherwise, use our shared key with attribution for cost tracking
+        shared_key = get_shared_anthropic_key()
+        if not shared_key:
+            logger.error(
+                f"Shared Anthropic key not configured but needed for tenant={tenant_id}"
+            )
+            return None
+
+        logger.info(
+            f"Using shared Anthropic key for tenant={tenant_id} "
+            f"(trial={has_valid_trial}, subscription={subscription_status})"
         )
-        return None
+        return {
+            "api_key": shared_key,
+            "workspace_attribution": tenant_id,
+        }
 
     def _extract_credentials(self, config: dict) -> dict:
         """Extract credential fields from integration config.

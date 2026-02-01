@@ -15,7 +15,6 @@ The following database columns are transparently encrypted/decrypted:
 
 2. **`sso_configs.client_secret_encrypted`** (EncryptedText)
    - OAuth/OIDC client secrets
-   - Replaces old base64 "encryption" with real Fernet encryption
 
 3. **`slack_installations.bot_token`** (EncryptedText)
    - Slack bot OAuth token
@@ -71,21 +70,6 @@ The key is automatically:
 - Fetched by `deploy-eks.sh` during deployment
 - Mounted as K8s secret `config-service-secrets.encryption-key`
 - Loaded by the application as `ENCRYPTION_KEY` environment variable
-
-## Backwards Compatibility
-
-The encryption layer supports:
-
-1. **Old base64 format**: `enc:BASE64_DATA` (from old security.py)
-   - Automatically decrypted when read
-   - Re-encrypted with Fernet on next write
-
-2. **Plaintext**: Legacy data without encryption
-   - Read as-is (backwards compatible)
-   - Encrypted on next write
-
-3. **New Fernet format**: `fernet:ENCRYPTED_DATA`
-   - Current standard
 
 ## Security Considerations
 
@@ -163,7 +147,7 @@ This implementation helps meet:
 
 ## Troubleshooting
 
-### "ENCRYPTION_KEY or TOKEN_PEPPER must be set"
+### "ENCRYPTION_KEY must be set"
 
 Set the environment variable:
 ```bash

@@ -3,7 +3,7 @@ Column-level encryption for sensitive data using Fernet (symmetric encryption).
 
 Encryption key management:
 - Development: Generated key stored in .env (ENCRYPTION_KEY)
-- Production: Fetched from AWS Secrets Manager or K8s secret (TOKEN_PEPPER can be reused)
+- Production: Fetched from AWS Secrets Manager or K8s secret
 
 Security notes:
 - Fernet uses AES-128 in CBC mode with HMAC for authentication
@@ -28,39 +28,28 @@ class EncryptionService:
     """
     Handles encryption and decryption of sensitive data using Fernet.
 
-    The encryption key is loaded from the ENCRYPTION_KEY environment variable.
-    If not set, falls back to TOKEN_PEPPER for backwards compatibility.
+    The encryption key MUST be loaded from the ENCRYPTION_KEY environment variable.
+    The deployment script (deploy-eks.sh) automatically ensures this is set.
     """
 
     def __init__(self):
-        # Try ENCRYPTION_KEY first, fallback to TOKEN_PEPPER
-        key_material = os.getenv("ENCRYPTION_KEY") or os.getenv("TOKEN_PEPPER")
+        key_material = os.getenv("ENCRYPTION_KEY")
         if not key_material:
             raise EncryptionError(
-                "ENCRYPTION_KEY or TOKEN_PEPPER must be set for column encryption"
+                "ENCRYPTION_KEY must be set for column encryption. "
+                "Generate one with: python scripts/generate-encryption-key.py"
             )
 
-        # Ensure key is valid Fernet format (32 bytes, base64-encoded)
-        try:
-            # If key_material is not base64, derive a key from it
-            if len(key_material) != 44:  # Fernet keys are 44 chars when base64-encoded
-                # Derive a Fernet key from the pepper using SHA256
-                from cryptography.hazmat.primitives import hashes
-                from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        # Validate key is in proper Fernet format (44 chars, base64-encoded)
+        if len(key_material) != 44:
+            raise EncryptionError(
+                f"ENCRYPTION_KEY must be 44 characters (base64-encoded 32-byte key), "
+                f"got {len(key_material)} characters. "
+                f"Generate a valid key with: python scripts/generate-encryption-key.py"
+            )
 
-                kdf = PBKDF2HMAC(
-                    algorithm=hashes.SHA256(),
-                    length=32,
-                    salt=b"incidentfox-config-service",  # Static salt for deterministic key
-                    iterations=100000,
-                )
-                derived_key = base64.urlsafe_b64encode(
-                    kdf.derive(key_material.encode())
-                )
-                self.fernet = Fernet(derived_key)
-            else:
-                # Assume it's already a valid Fernet key
-                self.fernet = Fernet(key_material.encode())
+        try:
+            self.fernet = Fernet(key_material.encode())
         except Exception as e:
             raise EncryptionError(f"Failed to initialize encryption: {e}")
 

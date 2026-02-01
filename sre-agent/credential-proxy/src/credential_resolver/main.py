@@ -239,22 +239,22 @@ def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
     """Build authentication headers for the integration.
 
     For customers using our shared Anthropic key, adds attribution metadata for cost tracking.
+    This applies to ALL customers using our key (trial users AND paid users who don't BYOK).
     """
     api_key = creds.get("api_key", "")
 
     if integration_id == "anthropic":
         headers = {"x-api-key": api_key}
 
-        # Add attribution for customers using our shared key (for cost tracking/billing)
-        # This includes both trial users and paid users who choose not to bring their own key
-        if creds.get("is_trial") and creds.get("workspace_attribution"):
-            workspace = creds["workspace_attribution"]
-            # Anthropic supports custom metadata in headers
-            # Using anthropic-beta header for attribution tracking
-            headers["anthropic-beta"] = "max-tokens-3-5-sonnet-2024-07-15"
-            # Custom header for internal attribution (stripped by Anthropic but logged)
+        # Add attribution for ALL customers using our shared key (for cost tracking/billing)
+        # This includes: trial users + paid users who choose not to bring their own key
+        workspace = creds.get("workspace_attribution")
+        if workspace:
+            # Use custom header for internal attribution tracking
+            # Note: Anthropic forwards custom headers in their logs for cost analysis
             headers["x-incidentfox-workspace"] = workspace
-            logger.info(f"Added trial attribution for workspace: {workspace}")
+            headers["x-incidentfox-tenant"] = workspace  # Redundant but explicit
+            logger.info(f"Added cost attribution for workspace: {workspace}")
 
         return headers
 
