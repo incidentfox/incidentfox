@@ -204,11 +204,11 @@ kubectl get svc slack-bot-svc -n incidentfox-prod -o jsonpath='{.status.loadBala
 ### Secrets Management
 
 Required secrets (stored in `slack-bot-secrets`):
-- `SLACK_BOT_TOKEN` - Bot User OAuth Token
 - `SLACK_SIGNING_SECRET` - From Slack App settings
-- `INCIDENT_IO_API_KEY` - (Optional) Incident.io integration
+- `SLACK_CLIENT_ID` - OAuth client ID
+- `SLACK_CLIENT_SECRET` - OAuth client secret
 
-Set these in your `.env` file before deploying.
+OAuth credentials and integrations are managed via config-service.
 
 ## Next Steps
 

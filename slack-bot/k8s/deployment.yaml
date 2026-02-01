@@ -61,12 +61,6 @@ spec:
               value: "true"
             - name: FREE_TRIAL_DAYS
               value: "7"
-            - name: INCIDENTFOX_ANTHROPIC_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: slack-bot-secrets
-                  key: anthropic-api-key
-                  optional: true
           resources:
             requests:
               memory: "256Mi"

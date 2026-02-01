@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # AWS region for Secrets Manager
 AWS_REGION = os.getenv("AWS_REGION", "us-west-2")
 
-# Shared API key secret name for free trials
+# AWS Secrets Manager secret name for shared Anthropic API key
 SHARED_ANTHROPIC_SECRET = os.getenv(
     "SHARED_ANTHROPIC_SECRET", "incidentfox/prod/anthropic"
 )
