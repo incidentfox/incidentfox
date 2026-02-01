@@ -256,6 +256,83 @@ class CrossEncoderReranker(Reranker):
         return sorted(chunks, key=lambda c: c.score, reverse=True)[:top_k]
 
 
+class CohereReranker(Reranker):
+    """
+    Cohere reranker for state-of-the-art reranking.
+
+    Uses Cohere's rerank API which is one of the best commercial rerankers.
+    Significant improvement over cross-encoders for many benchmarks.
+    """
+
+    name = "cohere"
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "rerank-english-v3.0",
+    ):
+        self.api_key = api_key
+        self.model = model
+        self._client = None
+
+    def _get_client(self):
+        """Lazy initialization of Cohere client."""
+        if self._client is None:
+            try:
+                import os
+
+                import cohere
+
+                api_key = self.api_key or os.environ.get("COHERE_API_KEY")
+                if api_key:
+                    self._client = cohere.Client(api_key)
+                else:
+                    logger.warning("No Cohere API key found")
+            except ImportError:
+                logger.warning("cohere package not installed")
+        return self._client
+
+    async def rerank(
+        self,
+        chunks: List[RetrievedChunk],
+        query: str,
+        top_k: int = 10,
+        **kwargs,
+    ) -> List[RetrievedChunk]:
+        """Rerank using Cohere API."""
+        client = self._get_client()
+        if not client:
+            logger.warning("Cohere client not available, returning original order")
+            return chunks[:top_k]
+
+        try:
+            # Prepare documents for Cohere
+            documents = [chunk.text for chunk in chunks]
+
+            # Call Cohere rerank API
+            response = client.rerank(
+                model=self.model,
+                query=query,
+                documents=documents,
+                top_n=min(top_k, len(chunks)),
+            )
+
+            # Map results back to chunks with updated scores
+            reranked = []
+            for result in response.results:
+                chunk = chunks[result.index]
+                # Cohere returns relevance_score in [0, 1]
+                chunk.score = result.relevance_score
+                reranked.append(chunk)
+
+            logger.debug(f"Cohere reranked {len(chunks)} -> {len(reranked)} chunks")
+            return reranked
+
+        except Exception as e:
+            logger.warning(f"Cohere rerank failed: {e}, returning original order")
+            return chunks[:top_k]
+
+
 class ContextualReranker(Reranker):
     """
     Contextual reranker that considers conversation history.
