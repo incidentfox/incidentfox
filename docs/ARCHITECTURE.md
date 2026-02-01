@@ -286,7 +286,7 @@ See: `/docs/TECH_DEBT.md` for scaling improvements.
 
 ### Tool Categories
 
-IncidentFox includes 178+ built-in tools organized across these categories:
+IncidentFox includes 300+ built-in tools organized across these categories:
 
 | Category | Tools | Description |
 |----------|-------|-------------|

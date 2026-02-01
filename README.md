@@ -1,10 +1,8 @@
 # IncidentFox
 
-> **Build the world's best AI SRE.**
-
 AI-powered incident investigation and infrastructure automation. IncidentFox integrates with your observability stack, infrastructure, and collaboration tools to automatically investigate incidents, find root causes, and suggest fixes.
 
-**Try it locally in 60 seconds, or deploy for your team in 5 minutes.**
+**[Try it for free right now](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ), or [spin up the docker locally](#quick-start) in 5 minutes.**
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/b6892fe8-0a19-40f9-9d86-465aa3387108" width="600" alt="Slack Investigation">
@@ -14,336 +12,195 @@ AI-powered incident investigation and infrastructure automation. IncidentFox int
 
 ---
 
-## Quick Start
+## Table of Contents
 
-### Option 1: Individual Developers - Claude Code Pack
-
-**Claude Code plugin with ~100 DevOps & SRE tools** to investigate incidents, analyze costs, and debug CI/CD from your terminal.
-
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/0965d78d-3d6a-4fd4-809e-d9ada9d9ce2c" width="700" controls autoplay loop muted></video>
-</p>
-
-
-```bash
-cd local/claude_code_pack
-./install.sh
-claude
-```
-
-**Try it out:**
-```
-> Check my Kubernetes cluster health
-> Show my Grafana dashboards
-> Help me triage this alert: [paste alert]
-> Find AWS costs and explore reduction opportunities
-```
-
-**Full docs:** [local/claude_code_pack/README.md](local/claude_code_pack/README.md)
+- [What is IncidentFox?](#what-is-incidentfox)
+- [Get Started](#get-started)
+- [Quick Start: Local Docker + Slack](#quick-start)
+- [Deploy for Your Team](#deploy-for-your-team)
+- [Under the Hood](#under-the-hood)
+- [Enterprise Ready](#enterprise-ready)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-### Option 2: Teams - Self-Hosted Slack Bot
+## What is IncidentFox?
+
+An **AI SRE** that helps root cause and propose mitigations for production on-call issues. It automatically forms hypotheses, collects info from your infrastructure, observability tools, and code, and reasons through to an answer.
+
+**Slack-first** ([see screenshot above](#incidentfox)), but also works on web UI, GitHub, PagerDuty, and API.
+
+**Highly customizable** — set up in minutes, and it self-improves by automatically learning and persisting your team's context.
+
+---
+
+## Get Started
+
+IncidentFox is **open source** (Apache 2.0). All core features are free — deploy anywhere, no restrictions.
+
+For teams that need more, we offer **managed deployments**, **premium features** (advanced analytics, priority support), and **professional services**. [Contact us →](mailto:founders@incidentfox.ai)
+
+|  | **Try Free** | **Local Docker** | **Self-Host** | **Managed** |
+|---|--------------|------------------|---------------|-------------|
+| **Best for** | Quick exploration | Evaluating with your team | Production, full control | Production, premium features |
+| **How** | Join our Slack | Docker Compose | Kubernetes (Helm) | On-prem or SaaS |
+| **Setup time** | Instant | 5 minutes | 30 minutes | 30 minutes |
+| **Cost** | Free | Free | Free (open source) | Custom pricing |
+|  | [Join Slack →](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ) | [Quick Start ↓](#quick-start) | [Deployment Guide →](docs/DEPLOYMENT.md) | [Get in Touch →](mailto:founders@incidentfox.ai) |
+
+---
+
+## Quick Start
+
+Run IncidentFox on your local machine with Docker. Perfect for individual evaluation or small team trials.
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/c51c51f2-3e1f-459e-8ce4-1e2a56c92971" width="700" controls autoplay loop muted></video>
 </p>
 
-Get IncidentFox running in your Slack workspace in under 5 minutes.
+**1.** [Create a Slack app](https://api.slack.com/apps?new_app=1) using [this manifest](docs/slack-manifest.yaml)
 
-**Prerequisites:** Docker, Slack workspace, Anthropic API key
-
-#### 1. Create Slack App (2 min)
-
-1. **<a href="https://api.slack.com/apps?new_app=1" target="_blank" rel="noopener noreferrer">
-   Click here to create your app
-   </a>** → Choose "From an app manifest"
-
-   <img width="1355" height="923" alt="image" src="https://github.com/user-attachments/assets/dfeadd58-a6c2-4b13-8df3-e7b8ac69c886" />
-
-
-2. Select your workspace
-   
-   <img width="550" height="380" alt="image" src="https://github.com/user-attachments/assets/0eb2ee77-deb8-4959-841b-8e7d0ede91b2" />
-
-3. Copy
-```yaml
-display_information:
-  name: IncidentFox
-  description: AI-powered SRE agent for incident investigation
-  background_color: "#4A154B"
-features:
-  bot_user:
-    display_name: IncidentFox
-    always_online: true
-oauth_config:
-  scopes:
-    bot:
-      - app_mentions:read
-      - channels:history
-      - channels:read
-      - chat:write
-      - files:read
-      - files:write
-      - users:read
-      - reactions:write
-      - im:history
-      - groups:history
-settings:
-  event_subscriptions:
-    bot_events:
-      - app_mention
-      - message.channels
-      - message.groups
-      - message.im
-  interactivity:
-    is_enabled: true
-  org_deploy_enabled: false
-  socket_mode_enabled: true
-  token_rotation_enabled: false
-
-```
-4. Paste into the YAML field
-   
-   <img width="532" height="1007" alt="image" src="https://github.com/user-attachments/assets/2b926f88-9f2d-4f66-bb50-cc539b888353" />
-
-5. Click "Create" → "Install App" → "Install to Workspace" → "Allow"
-   
-<img width="989" height="343" alt="image" src="https://github.com/user-attachments/assets/54cdb087-497c-498a-86f9-31d133ec18c4" />
-
-
-#### 2. Get Your Tokens (1 min)
-
-**Bot Token:**
-- Click **OAuth & Permissions** → Copy "Bot User OAuth Token" (starts with `xoxb-`)
-<img width="744" height="559" alt="image" src="https://github.com/user-attachments/assets/0d7ea70c-394d-4787-a3b4-e32f395d44e1" />
-
-
-**App Token:**
-- Click **Basic Information** → **App-Level Tokens**
-- Generate token with `connections:write` scope
-- Copy token (starts with `xapp-`)
-<img width="697" height="747" alt="image" src="https://github.com/user-attachments/assets/620bb92b-db49-4d50-8c22-70682ba008d2" />
-
-**Anthropic API Key**
-- [Go to Anthropic console to generate an API Key](https://platform.claude.com/settings/keys)
-
-#### 3. Configure & Run (2 min)
+**2.** Clone and configure:
 
 ```bash
-git clone https://github.com/incidentfox/incidentfox.git
-cd incidentfox
-
-# Create config
+git clone https://github.com/incidentfox/incidentfox.git && cd incidentfox
 cp .env.example .env
-
-# Edit .env and add:
-# - SLACK_BOT_TOKEN=xoxb-...
-# - SLACK_APP_TOKEN=xapp-...
-# - ANTHROPIC_API_KEY=sk-ant-...
-
-# Start everything
+# Add your tokens to .env (see below)
 docker-compose up -d
 ```
 
-#### 4. Test It
+<details>
+<summary>Where to get your tokens</summary>
+
+| Token | Where to Find It |
+|-------|------------------|
+| `SLACK_BOT_TOKEN` | Slack app → **OAuth & Permissions** → Bot User OAuth Token (`xoxb-...`) |
+| `SLACK_APP_TOKEN` | Slack app → **Basic Information** → App-Level Tokens → Generate with `connections:write` (`xapp-...`) |
+| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) |
+
+</details>
+
+**3.** Test it in Slack:
 
 ```
-# In Slack:
 /invite @IncidentFox
-@IncidentFox what's 2+2?
+@IncidentFox what pods are running in my cluster?
 ```
 
-You should see a streaming response! 🎉
-
-**Detailed setup:** [Slack Integration Guide](docs/INTEGRATIONS.md#slack-bot-primary-interface) | [Deployment Options](docs/DEPLOYMENT.md)
+**Need help?** See the [detailed setup guide](docs/SLACK_SETUP.md) with screenshots.
 
 ---
 
-## Why IncidentFox?
+## Deploy for Your Team
 
-| Challenge | How IncidentFox Solves It |
-|-----------|---------------------------|
-| **Alert fatigue** | Smart correlation reduces noise by 85-95% using temporal, topology, and semantic analysis |
-| **Context switching** | Rich Slack UI with progressive investigation updates — stay in your workflow |
-| **Tribal knowledge** | RAPTOR knowledge base learns your runbooks and past incidents |
-| **Tool sprawl** | MCP protocol connects to any tool in minutes, not weeks |
+For production deployments, use our Helm charts to deploy IncidentFox on Kubernetes.
 
----
+### Quick Deploy
 
-## Features
-
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/60934195-83bf-4d5d-ab7e-0c32e60dbe86" alt="Knowledge Base">
-  <br>
-  <em>Hierarchical RAG for your proprietary knowledge</em>
-</p>
-
-### Core Capabilities
-
-- **Dual Agent Runtime** - OpenAI Agents SDK (production) + Claude SDK with K8s sandboxing (exploratory)
-- **178+ Built-in Tools** - Kubernetes, AWS, Grafana, Datadog, New Relic, GitHub, Elasticsearch, and more
-- **Multiple Triggers** - Slack, GitHub Bot, PagerDuty, A2A Protocol, REST API
-- **MCP Protocol** - Connect to 100+ MCP servers for unlimited integrations without code changes
-
-### Advanced AI Features
-
-- **RAPTOR Knowledge Base** - Hierarchical retrieval that learns your proprietary knowledge (ICLR 2024 paper)
-- **Alert Correlation Engine** - 3-layer analysis (temporal + topology + semantic) with LLM-generated summaries
-- **Dependency Discovery** - Auto-maps service dependencies from distributed traces
-- **Continuous Learning Pipeline** - Analyzes team patterns and proposes prompt/tool improvements
-- **Smart Log Sampling** - Prevents context overflow with intelligent sampling strategies
-
-### Enterprise Ready
-
-- **Hierarchical Config** - Org → Business Unit → Team inheritance with override capabilities
-- **SSO/OIDC** - Google, Azure AD, Okta per-organization
-- **Approval Workflows** - Require review for prompt/tool changes
-- **Audit Logging** - Full trail of all changes and agent runs
-- **Privacy First** - Optional telemetry with org-level opt-out, no PII collected
-
-### Extensible
-
-- **Beyond SRE** - Configure for CI/CD fix, cloud cost optimization, security scanning, or any automation
-- **A2A Protocol** - Agent-to-agent communication for multi-agent orchestration
-- **Custom Prompts** - Per-team agent behavior customization
-- **MCP Servers** - Add any integration via Model Context Protocol
-
-**Full feature details:** [docs/FEATURES.md](docs/FEATURES.md)
-
----
-
-## Integrations
-
-### Primary Interface: Slack Bot
-
-Mention the bot in any channel to start an investigation:
-
-```
-@incidentfox why is the payments service slow?
-@incidentfox investigate pod nginx-abc123 crashing
+```bash
+helm repo add incidentfox https://charts.incidentfox.ai
+helm install incidentfox incidentfox/incidentfox -n incidentfox --create-namespace
 ```
 
-### Additional Integrations
+**Full deployment guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Helm chart docs:** [charts/incidentfox/README.md](charts/incidentfox/README.md)
 
-| Integration | Trigger | Use Case |
-|-------------|---------|----------|
-| **GitHub Bot** | Comment on PRs/issues | CI/CD debugging, code analysis |
-| **PagerDuty** | Webhook on alert | Auto-investigation when incidents fire |
-| **A2A Protocol** | API call from another agent | Multi-agent orchestration |
-| **REST API** | Direct HTTP | Custom integrations, automation |
+### Architecture Overview
 
-### Observability & Infrastructure
-
-Kubernetes • AWS • Grafana • Datadog • New Relic • Prometheus • Elasticsearch • Coralogix
-
-**Setup guides:** [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)
-
----
-
-## Deployment
+```
+  ┌───────────────────────────────────┐    ┌─────────────────────┐
+  │   Slack · GitHub · PagerDuty · API │    │       Web UI        │
+  └─────────────────┬─────────────────┘    │  (dashboard, team   │
+                    │ webhooks             │   management)       │
+  ┌─────────────────▼─────────────────┐    └──────────┬──────────┘
+  │            Orchestrator            │               │
+  │   (routes webhooks, team lookup,   │               │
+  │    token auth, audit logging)      │               │
+  └───────┬───────────────────┬───────┘               │
+          │                   │                       │
+  ┌───────▼───────┐    ┌──────▼───────────────────────▼──┐
+  │     Agent     │◄──►│        Config Service           │
+  │ (Claude/OpenAI│    │  (multi-tenant cfg, RBAC,       │
+  │  300+ tools,  │    │   routing, team hierarchy)      │
+  │  multi-agent) │    └──────────────┬─────────────────┘
+  └───┬───────┬───┘                   │
+      │       │                       ▼
+      │       │           ┌─────────────────────┐
+      │       │           │     PostgreSQL      │
+      │       │           │  (config, audit,    │
+      │       │           │   investigations)   │
+      │       │           └─────────────────────┘
+      │       │
+      ▼       ▼
+  ┌────────┐ ┌────────────────────┐
+  │Knowledge│ │   External APIs    │
+  │  Base   │ │  (K8s, AWS, Datadog│
+  │ (RAPTOR)│ │   Grafana, etc.)   │
+  └─────────┘ └────────────────────┘
+```
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/8c785a32-c46a-4d5b-8297-fe13f23a2392" alt="Web Console">
   <br>
-  <em>Web Console — View and manage multi-agent workflows</em>
+  <em>Web Console — Easiest way to view and customize agents</em>
 </p>
 
-### Deployment Options
+---
 
-| Option | Best For | Get Started |
-|--------|----------|-------------|
-| **SaaS** | Teams that want to get started immediately — no infrastructure to manage | [ui.incidentfox.ai](https://ui.incidentfox.ai) |
-| **Kubernetes (Helm)** | Teams with existing K8s clusters who want full control | [Helm Chart Docs](charts/incidentfox/README.md) |
-| **On-Premise** | Organizations with strict security requirements — everything in your environment | [Contact us](mailto:founders@incidentfox.ai) |
+## Under the Hood
 
-### Quick Deploy with Helm
+The engineering that makes IncidentFox actually work in production:
 
-```bash
-# Create namespace
-kubectl create namespace incidentfox
+| Capability | What It Does | Why It Matters |
+|------------|--------------|----------------|
+| **RAPTOR Knowledge Base** | Hierarchical tree structure (ICLR 2024) — clusters → summarizes → abstracts | Standard RAG fails on 100-page runbooks. RAPTOR maintains context across long documents. |
+| **Smart Log Sampling** | Statistics first → sample errors → drill down on anomalies | Other tools load 100K lines and hit context limits. We sample intelligently to stay useful. |
+| **Alert Correlation Engine** | 3-layer analysis: temporal + topology + semantic | Groups alerts AND finds root cause. Reduces noise by 85-95%. |
+| **Prophet Anomaly Detection** | Meta's Prophet algorithm with seasonality-aware forecasting | Detects anomalies that account for daily/weekly patterns, not just static thresholds. |
+| **Dependency Discovery** | Automatic service topology mapping with blast radius analysis | Know what's affected before you start investigating. No manual service maps needed. |
+| **300+ Built-in Tools** | Kubernetes, AWS, Azure, GCP, Grafana, Datadog, Prometheus, GitHub, and more | No "bring your own tools" setup. Works out of the box with your stack. |
+| **MCP Protocol Support** | Connect to any MCP server for unlimited integrations | Add new tools in minutes via config, not code. |
+| **Multi-Agent Orchestration** | Planner routes to specialist agents (K8s, AWS, Metrics, Code, etc.) | Complex investigations get handled by the right expert, not a generic agent. |
+| **Model Flexibility** | Supports OpenAI and Claude SDKs — use the model that fits your needs | No vendor lock-in. Switch models or use different models for different tasks. |
+| **Continuous Self-Improvement** | Learns from investigations, persists patterns, builds team context | Gets smarter over time. Your past incidents inform future investigations. |
 
-# Create secrets
-kubectl create secret generic incidentfox-database-url \
-  --from-literal=DATABASE_URL="postgresql://user:pass@host:5432/incidentfox" \
-  -n incidentfox
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/60934195-83bf-4d5d-ab7e-0c32e60dbe86" alt="Knowledge Base">
+  <br>
+  <em>RAPTOR knowledge base storing 50K+ docs as your proprietary knowledge</em>
+</p>
 
-kubectl create secret generic incidentfox-openai \
-  --from-literal=api_key="sk-your-openai-key" \
-  -n incidentfox
+[Full technical details →](docs/FEATURES.md)
 
-# Deploy
-helm upgrade --install incidentfox ./charts/incidentfox \
-  -n incidentfox \
-  -f charts/incidentfox/values.yaml
+---
 
-# Check status
-kubectl get pods -n incidentfox
-```
+## Enterprise Ready
 
-**Deployment guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+Security and compliance for production deployments:
+
+| Feature | Description |
+|---------|-------------|
+| **SOC 2 Compliant** | Audited security controls, data handling, and access management |
+| **Claude Sandbox** | Isolated Kubernetes sandboxes for agent execution — no shared state between runs |
+| **Secrets Proxy** | Credentials never touch the agent. Envoy proxy injects secrets at request time. |
+| **Approval Workflows** | Critical changes (prompts, tools, configs) require review before deployment |
+| **SSO/OIDC** | Google, Azure AD, Okta — per-organization configuration |
+| **Hierarchical Config** | Org → Business Unit → Team inheritance with override capabilities |
+| **Audit Logging** | Full trail of all agent actions, config changes, and investigations |
+| **On-Premise** | Deploy entirely in your environment — air-gapped support available |
+
+[Enterprise deployment guide →](docs/DEPLOYMENT.md)
 
 ---
 
 ## Documentation
 
-### Getting Started
-- **[Quick Start](#quick-start)** - Try locally or self-host in 5 minutes
-- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Complete deployment guide
-- **[local/claude_code_pack/README.md](local/claude_code_pack/README.md)** - Local CLI for developers
-
-### Core Documentation
-- **[docs/FEATURES.md](docs/FEATURES.md)** - Detailed feature overview
-- **[docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)** - Integration setup guides
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture and design
-- **[docs/EVALUATION.md](docs/EVALUATION.md)** - Evaluation framework
-
-### Development
-- **[DEVELOPMENT_KNOWLEDGE.md](DEVELOPMENT_KNOWLEDGE.md)** - Comprehensive dev reference
-- **[agent/README.md](agent/README.md)** - Agent architecture and tools
-- **[config_service/README.md](config_service/README.md)** - API and configuration
-- **[web_ui/README.md](web_ui/README.md)** - Frontend development
-
-### Advanced Topics
-- **[docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md)** - Key ADRs and rationale
-- **[agent/docs/TOOLS_CATALOG.md](agent/docs/TOOLS_CATALOG.md)** - Complete list of 178 built-in tools
-- **[agent/docs/A2A_PROTOCOL.md](agent/docs/A2A_PROTOCOL.md)** - Agent-to-agent communication
-- **[agent/docs/MCP_CLIENT_IMPLEMENTATION.md](agent/docs/MCP_CLIENT_IMPLEMENTATION.md)** - Dynamic tool loading via MCP
-
----
-
-## Commercial Options
-
-IncidentFox is open source and free to use. For teams that need more:
-
-| Option | What You Get |
-|--------|--------------|
-| **SaaS** | Fully managed at [ui.incidentfox.ai](https://ui.incidentfox.ai) |
-| **On-Premise Enterprise** | Maximum security — all data stays in your environment |
-| **Premium Features** | Correlation engine, learning pipeline, dependency discovery |
-| **Professional Services** | Custom integrations, training, dedicated support |
-
-**Contact:** [founders@incidentfox.ai](mailto:founders@incidentfox.ai)
-
----
-
-## Roadmap
-
-### Completed
-- [x] Multi-agent architecture with Agent-as-Tool pattern
-- [x] 178+ tools across K8s, AWS, Grafana, GitHub, etc.
-- [x] Slack, GitHub, PagerDuty, A2A integrations
-- [x] Enterprise governance (SSO, RBAC, audit)
-- [x] RAPTOR knowledge base (hierarchical retrieval)
-- [x] Alert correlation engine (temporal + topology + semantic)
-- [x] Dual agent support (OpenAI + Claude with sandboxing)
-- [x] Continuous learning pipeline
-- [x] Evaluation framework with fault injection scoring
-
-### In Progress
-- [ ] Custom tool generation from descriptions
-- [ ] Enhanced A2A protocol documentation
-- [ ] More MCP server integrations
+| Getting Started | Reference | Development |
+|----------------|-----------|-------------|
+| [Quick Start](#quick-start) | [Features](docs/FEATURES.md) | [Dev Guide](DEVELOPMENT_KNOWLEDGE.md) |
+| [Deployment Guide](docs/DEPLOYMENT.md) | [Integrations](docs/INTEGRATIONS.md) | [Agent Architecture](agent/README.md) |
+| [Slack Setup (detailed)](docs/SLACK_SETUP.md) | [Architecture](docs/ARCHITECTURE.md) | [Tools Catalog](agent/docs/TOOLS_CATALOG.md) |
 
 ---
 
@@ -351,14 +208,16 @@ IncidentFox is open source and free to use. For teams that need more:
 
 We welcome contributions! See issues labeled **good first issue** to get started.
 
-For bugs or feature requests, please open an issue at [GitHub Issues](https://github.com/incidentfox/incidentfox/issues).
+For bugs or feature requests, open an issue on [GitHub](https://github.com/incidentfox/incidentfox/issues).
 
 ---
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE)
 
 ---
 
-**Enjoy investigating! 🦊**
+## See Also
+
+**[Claude Code Plugin](local/claude_code_pack/)** — Standalone SRE tools for individual developers using Claude Code CLI. Not connected to the IncidentFox platform above.

@@ -24,7 +24,7 @@ IncidentFox supports two agent frameworks to meet different operational needs:
 
 This dual-runtime approach provides flexibility for different investigation scenarios while maintaining production stability.
 
-### 178+ Built-in Tools
+### 300+ Built-in Tools
 
 IncidentFox comes with an extensive toolset covering your entire infrastructure and development stack:
 
