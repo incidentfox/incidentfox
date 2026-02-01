@@ -236,11 +236,27 @@ async def get_credentials(
 
 
 def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
-    """Build authentication headers for the integration."""
+    """Build authentication headers for the integration.
+
+    For customers using our shared Anthropic key, adds attribution metadata for cost tracking.
+    This applies to ALL customers using our key (trial users AND paid users who don't BYOK).
+    """
     api_key = creds.get("api_key", "")
 
     if integration_id == "anthropic":
-        return {"x-api-key": api_key}
+        headers = {"x-api-key": api_key}
+
+        # Add attribution for ALL customers using our shared key (for cost tracking/billing)
+        # This includes: trial users + paid users who choose not to bring their own key
+        workspace = creds.get("workspace_attribution")
+        if workspace:
+            # Use custom header for internal attribution tracking
+            # Note: Anthropic forwards custom headers in their logs for cost analysis
+            headers["x-incidentfox-workspace"] = workspace
+            headers["x-incidentfox-tenant"] = workspace  # Redundant but explicit
+            logger.info(f"Added cost attribution for workspace: {workspace}")
+
+        return headers
 
     elif integration_id == "coralogix":
         # Coralogix uses Bearer token

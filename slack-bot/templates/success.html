@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Successfully Installed!</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, h4, h5, h6 { font-family: 'Space Grotesk', sans-serif; }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        @keyframes checkmark {
+            0% { transform: scale(0) rotate(0deg); opacity: 0; }
+            50% { transform: scale(1.1) rotate(5deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        .animate-checkmark {
+            animation: checkmark 0.5s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased min-h-screen flex items-center justify-center p-6">
+    <div class="max-w-md w-full">
+        <!-- Success Icon -->
+        <div class="flex justify-center mb-8">
+            <div class="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/40 animate-checkmark">
+                <i data-lucide="check" class="w-12 h-12 text-white"></i>
+            </div>
+        </div>
+
+        <!-- Heading -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-white mb-3">Successfully Installed!</h1>
+            <p class="text-slate-400">
+                IncidentFox is now ready to help <span class="text-white font-semibold">{{ team_name }}</span> investigate incidents
+            </p>
+        </div>
+
+        <!-- Trial Badge -->
+        {%- if trial_enabled %}
+        <div class="glass-card rounded-xl p-4 mb-6 border-green-500/30">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                    <i data-lucide="gift" class="w-5 h-5 text-green-400"></i>
+                </div>
+                <div>
+                    <p class="text-green-400 font-semibold text-sm">7-Day Free Trial Active</p>
+                    <p class="text-slate-400 text-xs">Start using IncidentFox immediately!</p>
+                </div>
+            </div>
+        </div>
+        {%- endif %}
+
+        <!-- Next Steps -->
+        <div class="glass-card rounded-xl p-6 mb-8">
+            <h2 class="text-white font-semibold mb-4">Next Steps</h2>
+            <div class="space-y-4">
+                <div class="flex items-start gap-3">
+                    <div class="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center shrink-0 text-sm font-bold text-white">
+                        1
+                    </div>
+                    <div class="text-sm text-slate-300">
+                        <span class="font-semibold text-white">Invite IncidentFox to channels</span> where you want to receive incident reports
+                    </div>
+                </div>
+                <div class="flex items-start gap-3">
+                    <div class="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center shrink-0 text-sm font-bold text-white">
+                        2
+                    </div>
+                    <div class="text-sm text-slate-300">
+                        <span class="font-semibold text-white">Mention @IncidentFox</span> in any channel to start investigating an issue
+                    </div>
+                </div>
+                <div class="flex items-start gap-3">
+                    <div class="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center shrink-0 text-sm font-bold text-white">
+                        3
+                    </div>
+                    <div class="text-sm text-slate-300">
+                        <span class="font-semibold text-white">Configure integrations</span> (optional) – Connect your observability tools for richer investigations
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-col gap-3 mb-6">
+            {%- if team_id %}
+            <a href="slack://app?team={{ team_id }}&id=A01234567&tab=home" class="bg-white hover:bg-slate-100 text-slate-900 px-6 py-3 rounded-lg font-semibold text-center transition-all shadow-lg">
+                Open in Slack App
+            </a>
+            <a href="https://app.slack.com/client/{{ team_id }}" class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-lg font-semibold text-center transition-all border border-slate-600">
+                Open in Browser
+            </a>
+            {%- else %}
+            <a href="https://slack.com" class="bg-white hover:bg-slate-100 text-slate-900 px-6 py-3 rounded-lg font-semibold text-center transition-all shadow-lg">
+                Open Slack
+            </a>
+            {%- endif %}
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center">
+            <p class="text-slate-500 text-xs">
+                Need help? Check out our <a href="https://incidentfox.mintlify.app/" target="_blank" class="text-orange-400 hover:underline">documentation</a> or <a href="mailto:support@incidentfox.ai" class="text-orange-400 hover:underline">contact support</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // Auto-redirect to Slack after 3 seconds
+        {%- if team_id %}
+        setTimeout(function() {
+            window.location.href = 'slack://app?team={{ team_id }}&id=A01234567&tab=home';
+        }, 3000);
+        {%- endif %}
+    </script>
+</body>
+</html>

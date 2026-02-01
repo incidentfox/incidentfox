@@ -18,10 +18,29 @@ from typing import Dict, Optional
 
 import requests
 from dotenv import load_dotenv
+from flask import Flask, make_response, redirect, render_template, request
+from installation_store import ConfigServiceInstallationStore
 from slack_bolt import App
+from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_bolt.oauth.oauth_settings import OAuthSettings
+from slack_sdk.oauth.state_store import FileOAuthStateStore
 
 load_dotenv()
+
+
+# Import onboarding modules (lazy import to avoid circular deps)
+def get_config_client():
+    from config_client import get_config_client as _get_config_client
+
+    return _get_config_client()
+
+
+def get_onboarding_modules():
+    import onboarding
+
+    return onboarding
+
 
 # Configure logging
 logging.basicConfig(
@@ -30,11 +49,47 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize app
-app = App(
-    token=os.environ.get("SLACK_BOT_TOKEN"),
-    signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
-)
+# OAuth configuration for multi-workspace support
+SLACK_CLIENT_ID = os.environ.get("SLACK_CLIENT_ID")
+SLACK_CLIENT_SECRET = os.environ.get("SLACK_CLIENT_SECRET")
+SLACK_SCOPES = [
+    "app_mentions:read",
+    "chat:write",
+    "channels:history",
+    "files:write",
+]
+
+# Check if OAuth is configured (for public distribution)
+oauth_enabled = bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET)
+
+if oauth_enabled:
+    # Multi-workspace OAuth mode with database-backed installation store
+    # This enables horizontal scaling (multiple replicas) and persistence
+    oauth_settings = OAuthSettings(
+        client_id=SLACK_CLIENT_ID,
+        client_secret=SLACK_CLIENT_SECRET,
+        scopes=SLACK_SCOPES,
+        installation_store=ConfigServiceInstallationStore(
+            client_id=SLACK_CLIENT_ID,
+        ),
+        # State store is ephemeral (CSRF tokens) - file store is fine
+        state_store=FileOAuthStateStore(
+            expiration_seconds=600, base_dir="/tmp/slack-oauth-states"
+        ),
+        redirect_uri="https://slack.incidentfox.ai/slack/oauth_redirect",
+    )
+    app = App(
+        signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
+        oauth_settings=oauth_settings,
+    )
+    logger.info("OAuth mode enabled (multi-workspace, database-backed)")
+else:
+    # Single-workspace mode (dev/testing)
+    app = App(
+        token=os.environ.get("SLACK_BOT_TOKEN"),
+        signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
+    )
+    logger.info("Single-workspace mode (dev/testing)")
 
 # SRE Agent configuration
 SRE_AGENT_URL = os.environ.get("SRE_AGENT_URL", "http://localhost:8000")
@@ -45,6 +100,9 @@ INCIDENT_IO_API_BASE = "https://api.incident.io"
 
 # Rate limit updates to avoid Slack API throttling
 UPDATE_INTERVAL_SECONDS = 0.5
+
+# Deployment mode: "socket" for local dev, "http" for production
+SLACK_APP_MODE = os.environ.get("SLACK_APP_MODE", "socket")
 
 
 @dataclass
@@ -1462,6 +1520,11 @@ def handle_mention(event, say, client, context):
     text = event.get("text", "").strip()
     channel_id = event["channel"]
     team_id = event.get("team") or context.get("team_id", "unknown")
+
+    # Check workspace setup (API key configured or active trial)
+    if not check_workspace_setup(client, team_id, channel_id, user_id):
+        logger.info(f"Workspace {team_id} not set up, prompted for API key")
+        return
 
     # Thread context: use existing thread or create new one
     thread_ts = event.get("thread_ts") or event["ts"]
@@ -3727,12 +3790,367 @@ def action_button_click(body, ack, say):
     say(f"<@{body['user']['id']}> clicked the button")
 
 
+# =============================================================================
+# Onboarding: API Key Setup Modal
+# =============================================================================
+
+
+@app.action("open_api_key_modal")
+def handle_open_api_key_modal(ack, body, client):
+    """Open the API key setup modal."""
+    ack()
+
+    team_id = body.get("team", {}).get("id")
+    if not team_id:
+        logger.error("No team_id in body for API key modal")
+        return
+
+    try:
+        # Get trial status
+        config_client = get_config_client()
+        trial_info = config_client.get_trial_status(team_id)
+
+        # Build and open modal
+        onboarding = get_onboarding_modules()
+        modal = onboarding.build_api_key_modal(team_id, trial_info=trial_info)
+
+        client.views_open(trigger_id=body["trigger_id"], view=modal)
+        logger.info(f"Opened API key modal for team {team_id}")
+    except Exception as e:
+        logger.error(f"Failed to open API key modal: {e}", exc_info=True)
+
+
+@app.action("dismiss_setup_message")
+def handle_dismiss_setup(ack, body, client):
+    """Dismiss the setup prompt message."""
+    ack()
+    # Optionally delete or update the message
+    try:
+        channel = body.get("channel", {}).get("id")
+        message_ts = body.get("message", {}).get("ts")
+        if channel and message_ts:
+            client.chat_update(
+                channel=channel,
+                ts=message_ts,
+                text="You can still use me! Mention me anytime you need help.",
+                blocks=[
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": (
+                                ":wave: No problem! You can still mention me and I'll help you investigate issues.\n\n"
+                                "This was just a nudge to set up more integrations for better insights. "
+                                "You can always configure them later!"
+                            ),
+                        },
+                    }
+                ],
+            )
+    except Exception as e:
+        logger.warning(f"Failed to update dismissed message: {e}")
+
+
+@app.view("api_key_submission")
+def handle_api_key_submission(ack, body, client, view):
+    """Handle API key modal submission."""
+    team_id = view.get("private_metadata")
+    values = view.get("state", {}).get("values", {})
+
+    # Extract values
+    api_key = (
+        values.get("api_key_block", {})
+        .get("api_key_input", {})
+        .get("value", "")
+        .strip()
+    )
+    api_endpoint = (
+        values.get("api_endpoint_block", {})
+        .get("api_endpoint_input", {})
+        .get("value", "")
+    )
+    if api_endpoint:
+        api_endpoint = api_endpoint.strip()
+
+    # Validate API key
+    onboarding = get_onboarding_modules()
+    is_valid, error_message = onboarding.validate_api_key(api_key)
+
+    if not is_valid:
+        # Return validation error to keep modal open
+        ack(response_action="errors", errors={"api_key_block": error_message})
+        return
+
+    ack()
+
+    # Save the API key
+    try:
+        config_client = get_config_client()
+        success = config_client.save_api_key(
+            slack_team_id=team_id,
+            api_key=api_key,
+            api_endpoint=api_endpoint if api_endpoint else None,
+        )
+
+        if success:
+            # Send success message to user
+            user_id = body.get("user", {}).get("id")
+            if user_id:
+                try:
+                    # Open a DM with the user
+                    dm_response = client.conversations_open(users=[user_id])
+                    dm_channel = dm_response.get("channel", {}).get("id")
+
+                    if dm_channel:
+                        success_blocks = onboarding.build_setup_complete_message()
+                        client.chat_postMessage(
+                            channel=dm_channel,
+                            text="Setup complete! Your API key has been saved.",
+                            blocks=success_blocks,
+                        )
+                except Exception as dm_error:
+                    logger.warning(f"Failed to send DM confirmation: {dm_error}")
+
+            logger.info(f"API key saved for team {team_id}")
+        else:
+            logger.error(f"Failed to save API key for team {team_id}")
+
+    except Exception as e:
+        logger.error(f"Error saving API key: {e}", exc_info=True)
+
+
+def check_workspace_setup(client, team_id: str, channel_id: str, user_id: str) -> bool:
+    """
+    Check if workspace has access to the service.
+
+    Access is granted if:
+    1. Active free trial (not expired), OR
+    2. Active subscription (API key optional - can use shared key)
+
+    If no access, posts appropriate setup/upgrade prompt and returns False.
+    Returns True if access is granted.
+    """
+    try:
+        config_client = get_config_client()
+        status = config_client.get_subscription_status(team_id)
+
+        # Has access - allow usage
+        if status.get("can_access"):
+            return True
+
+        # No access - determine why and show appropriate message
+        onboarding = get_onboarding_modules()
+        trial_info = status.get("trial_info")
+
+        if trial_info and trial_info.get("expired"):
+            # Trial expired - need subscription + API key
+            if status.get("has_api_key"):
+                # Has API key but no subscription - need to upgrade
+                blocks = onboarding.build_upgrade_required_message(
+                    trial_info=trial_info
+                )
+                client.chat_postMessage(
+                    channel=channel_id,
+                    text="Your free trial has ended. Please upgrade to continue using IncidentFox.",
+                    blocks=blocks,
+                )
+            else:
+                # Trial expired, no API key - need both subscription and key
+                blocks = onboarding.build_setup_required_message(
+                    trial_info=trial_info, show_upgrade=True
+                )
+                client.chat_postMessage(
+                    channel=channel_id,
+                    text="Your free trial has ended. Please upgrade and set up your API key.",
+                    blocks=blocks,
+                )
+        else:
+            # No trial info or not on trial - just need setup
+            blocks = onboarding.build_setup_required_message(trial_info=trial_info)
+            client.chat_postMessage(
+                channel=channel_id,
+                text="Welcome to IncidentFox! Please set up your API key to get started.",
+                blocks=blocks,
+            )
+
+        return False
+
+    except Exception as e:
+        logger.warning(f"Error checking workspace setup: {e}")
+        # On error, allow usage (fail open for better UX)
+        return True
+
+
 if __name__ == "__main__":
     logger.info("=" * 50)
     logger.info("IncidentFox Slack Bot v2.0.0")
     logger.info("=" * 50)
-    logger.info("Mode: Socket Mode")
+    logger.info(f"Mode: {SLACK_APP_MODE.upper()}")
     logger.info(f"SRE Agent URL: {SRE_AGENT_URL}")
     logger.info("Starting...")
-    handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
-    handler.start()
+
+    if SLACK_APP_MODE == "http":
+        # Production: HTTP mode with Flask
+        # Configure Flask to find templates and assets
+        import os as os_module
+
+        base_dir = os_module.path.dirname(os_module.path.abspath(__file__))
+        flask_app = Flask(
+            __name__,
+            template_folder=os_module.path.join(base_dir, "templates"),
+            static_folder=os_module.path.join(base_dir, "assets"),
+            static_url_path="/assets",
+        )
+        handler = SlackRequestHandler(app)
+
+        @flask_app.route("/slack/events", methods=["POST"])
+        def slack_events():
+            """Handle incoming Slack events via HTTP."""
+            return handler.handle(request)
+
+        @flask_app.route("/slack/install", methods=["GET"])
+        def slack_install():
+            """Initiate OAuth flow for new workspace installation."""
+            if not oauth_enabled:
+                return {"error": "OAuth not configured"}, 400
+
+            # Generate the OAuth URL using the Slack SDK
+            import uuid
+
+            from slack_sdk.oauth.authorize_url_generator import AuthorizeUrlGenerator
+
+            authorize_url_generator = AuthorizeUrlGenerator(
+                client_id=SLACK_CLIENT_ID,
+                scopes=SLACK_SCOPES,
+                redirect_uri=oauth_settings.redirect_uri,
+            )
+
+            # Generate state for CSRF protection
+            state = str(uuid.uuid4())
+            install_url = authorize_url_generator.generate(state)
+
+            # Render custom branded installation page
+            return render_template("install.html", install_url=install_url)
+
+        @flask_app.route("/slack/oauth_redirect", methods=["GET"])
+        def slack_oauth_redirect():
+            """Handle OAuth callback after workspace authorization."""
+            if not oauth_enabled:
+                return {"error": "OAuth not configured"}, 400
+
+            code = request.args.get("code")
+            if not code:
+                error = request.args.get("error", "unknown_error")
+                logger.error(f"OAuth error: {error}")
+                return (
+                    f"<html><body><h1>Installation Failed</h1><p>Error: {error}</p></body></html>",
+                    400,
+                )
+
+            try:
+                # Exchange code for token and install the app
+                from slack_sdk import WebClient
+
+                client = WebClient()
+
+                oauth_response = client.oauth_v2_access(
+                    client_id=SLACK_CLIENT_ID,
+                    client_secret=SLACK_CLIENT_SECRET,
+                    code=code,
+                    redirect_uri=oauth_settings.redirect_uri,
+                )
+
+                if not oauth_response.get("ok"):
+                    error_msg = oauth_response.get("error", "unknown_error")
+                    logger.error(f"OAuth v2 access failed: {error_msg}")
+                    return (
+                        f"<html><body><h1>Installation Failed</h1><p>Error: {error_msg}</p></body></html>",
+                        400,
+                    )
+
+                # Store the installation
+                from slack_sdk.oauth.installation_store import Bot, Installation
+
+                team_id = oauth_response["team"]["id"]
+                team_name = oauth_response["team"]["name"]
+                bot_token = oauth_response["access_token"]
+                bot_id = oauth_response["bot_user_id"]
+                bot_user_id = oauth_response["bot_user_id"]
+
+                # Handle None values for enterprise and authed_user
+                enterprise = oauth_response.get("enterprise") or {}
+                authed_user = oauth_response.get("authed_user") or {}
+
+                installation = Installation(
+                    app_id=oauth_response.get("app_id"),
+                    enterprise_id=enterprise.get("id"),
+                    team_id=team_id,
+                    bot_token=bot_token,
+                    bot_id=bot_id,
+                    bot_user_id=bot_user_id,
+                    bot_scopes=oauth_response.get("scope", "").split(","),
+                    user_id=authed_user.get("id"),
+                    user_token=authed_user.get("access_token"),
+                    user_scopes=(authed_user.get("scope") or "").split(","),
+                )
+
+                oauth_settings.installation_store.save(installation)
+                logger.info(
+                    f"Successfully installed app for team {team_name} ({team_id})"
+                )
+
+                # Provision workspace in config_service for multi-tenancy
+                trial_enabled = False
+                try:
+                    config_client = get_config_client()
+                    provision_result = config_client.provision_workspace(
+                        slack_team_id=team_id,
+                        slack_team_name=team_name,
+                        installer_user_id=authed_user.get("id"),
+                    )
+                    logger.info(
+                        f"Provisioned workspace in config_service: {provision_result}"
+                    )
+                    trial_enabled = provision_result.get("trial_info", {}).get(
+                        "enabled", False
+                    )
+                except Exception as provision_error:
+                    # Log but don't fail OAuth - workspace can be provisioned later
+                    logger.warning(
+                        f"Failed to provision workspace in config_service: {provision_error}"
+                    )
+
+                # Render custom success page with trial info
+                return render_template(
+                    "success.html",
+                    team_name=team_name,
+                    team_id=team_id,
+                    trial_enabled=trial_enabled,
+                )
+
+            except Exception as e:
+                logger.error(f"OAuth error: {e}", exc_info=True)
+                return (
+                    "<html><body><h1>Installation Failed</h1><p>An unexpected error occurred. Please try again.</p></body></html>",
+                    500,
+                )
+
+        @flask_app.route("/health", methods=["GET"])
+        def health():
+            """Health check endpoint."""
+            return {"status": "healthy"}, 200
+
+        port = int(os.environ.get("PORT", 3000))
+        logger.info(f"Starting HTTP server on port {port}")
+        logger.info(f"OAuth mode: {'enabled' if oauth_enabled else 'disabled'}")
+        if oauth_enabled:
+            logger.info("Install URL: http://<your-domain>/slack/install")
+            logger.info("OAuth Redirect URL: http://<your-domain>/slack/oauth_redirect")
+        flask_app.run(host="0.0.0.0", port=port)
+    else:
+        # Local dev: Socket Mode
+        if "SLACK_APP_TOKEN" not in os.environ:
+            logger.error("SLACK_APP_TOKEN not found. Set it in .env for Socket Mode.")
+            exit(1)
+        handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
+        handler.start()

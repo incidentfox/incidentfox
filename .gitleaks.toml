@@ -49,3 +49,9 @@ paths = [
     '''CORALOGIX_TEST_RESULTS\.md''',
     '''test_coralogix_prod_ready\.py''',
 ]
+
+regexes = [
+    # AWS Secrets Manager path names - these are metadata, not actual secrets
+    # e.g., "incidentfox/prod/anthropic" is the secret NAME, not the secret VALUE
+    '''incidentfox/prod/anthropic''',
+]

@@ -34,9 +34,12 @@ spec:
           name: http
           protocol: TCP
         env:
-        # Use environment-based credentials (from K8s Secret)
+        # Use config_service for multi-tenant credential resolution
         - name: CREDENTIAL_SOURCE
-          value: "environment"
+          value: "config_service"
+        # Config service URL
+        - name: CONFIG_SERVICE_URL
+          value: "http://config-service-svc.incidentfox-prod.svc.cluster.local:8080"
         # JWT validation mode: "strict" requires valid JWT for all requests
         - name: JWT_MODE
           value: "strict"
@@ -46,23 +49,15 @@ spec:
             secretKeyRef:
               name: incidentfox-secrets
               key: jwt-secret
-        # Anthropic credentials
-        - name: ANTHROPIC_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: incidentfox-secrets
-              key: anthropic-api-key
-        # Coralogix credentials
-        - name: CORALOGIX_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: incidentfox-secrets
-              key: coralogix-api-key
-        - name: CORALOGIX_DOMAIN
-          valueFrom:
-            secretKeyRef:
-              name: incidentfox-secrets
-              key: coralogix-domain
+        # AWS region for Secrets Manager (shared API key for free trials)
+        - name: AWS_REGION
+          value: "us-west-2"
+        - name: SHARED_ANTHROPIC_SECRET
+          value: "incidentfox/prod/anthropic"
+        # Multi-tenant credential flow:
+        # - Customer API keys (Anthropic BYOK, Coralogix, Datadog) -> stored in config-service RDS
+        # - Shared Anthropic key (for free trials) -> fetched from AWS Secrets Manager
+        # - No integration credentials stored in K8s secrets or environment variables
         resources:
           requests:
             cpu: 100m

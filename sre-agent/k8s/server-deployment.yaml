@@ -39,22 +39,20 @@ spec:
           value: "true"  # Production uses gVisor for enhanced isolation
         - name: CREDENTIAL_RESOLVER_NAMESPACE
           value: "incidentfox-prod"  # Where credential-resolver service runs
+        # JWT secret for signing tokens passed to sandboxes (required)
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
               name: incidentfox-secrets
               key: jwt-secret
-        - name: ANTHROPIC_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: incidentfox-secrets
-              key: anthropic-api-key
+        # Laminar API key for OUR observability tracing (required for telemetry)
         - name: LMNR_PROJECT_API_KEY
           valueFrom:
             secretKeyRef:
               name: incidentfox-secrets
               key: laminar-api-key
-              optional: true
+        # Note: Customer API keys (Anthropic, Coralogix, etc.) are NOT needed here.
+        # Sandboxes get credentials from credential-resolver at runtime via envoy sidecar.
         resources:
           requests:
             cpu: "250m"
@@ -78,24 +76,20 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
 ---
-# Service for the server - LoadBalancer for external access
-# Works on AWS (creates NLB), GCP, Azure, and on-prem (with MetalLB)
+# Service for the server - ClusterIP (internal only)
+# Only accessible from within the cluster (via slack-bot)
 apiVersion: v1
 kind: Service
 metadata:
   name: incidentfox-server-svc
   namespace: incidentfox-prod
-  annotations:
-    # AWS-specific optimizations (optional, ignored on other clouds)
-    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
-    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
 spec:
-  type: LoadBalancer
+  type: ClusterIP  # Internal only - accessed via slack-bot
   selector:
     app: incidentfox-server
   ports:
   - name: http
-    port: 80
+    port: 8000
     targetPort: 8000
     protocol: TCP
 ---

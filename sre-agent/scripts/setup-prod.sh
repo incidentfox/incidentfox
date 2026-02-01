@@ -72,11 +72,36 @@ fi
 eksctl utils write-kubeconfig --cluster=$CLUSTER_NAME --region=$REGION
 echo ""
 
-# Step 2: Create ECR Repository
-echo "2️⃣  Creating ECR repository..."
+# Step 2: Create ECR Repositories
+echo "2️⃣  Creating ECR repositories..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+# Create incidentfox-agent repository
 REPO_NAME="incidentfox-agent"
+if aws ecr describe-repositories --repository-names $REPO_NAME --region $REGION >/dev/null 2>&1; then
+    echo "✅ Repository already exists: $REPO_NAME"
+else
+    aws ecr create-repository \
+        --repository-name $REPO_NAME \
+        --region $REGION \
+        --image-scanning-configuration scanOnPush=true >/dev/null
+    echo "✅ Repository created: $REPO_NAME"
+fi
+
+# Create credential-resolver repository
+REPO_NAME="credential-resolver"
+if aws ecr describe-repositories --repository-names $REPO_NAME --region $REGION >/dev/null 2>&1; then
+    echo "✅ Repository already exists: $REPO_NAME"
+else
+    aws ecr create-repository \
+        --repository-name $REPO_NAME \
+        --region $REGION \
+        --image-scanning-configuration scanOnPush=true >/dev/null
+    echo "✅ Repository created: $REPO_NAME"
+fi
+
+# Create slack-bot repository
+REPO_NAME="slack-bot"
 if aws ecr describe-repositories --repository-names $REPO_NAME --region $REGION >/dev/null 2>&1; then
     echo "✅ Repository already exists: $REPO_NAME"
 else
@@ -123,18 +148,42 @@ fi
 # Get API keys
 if [ -z "$ANTHROPIC_API_KEY" ]; then
     echo "⚠️  ANTHROPIC_API_KEY not set in .env"
-    echo "Please enter your Anthropic API key:"
+    echo "Please enter your shared Anthropic API key (for free tier and non-BYOK customers):"
     read -r ANTHROPIC_API_KEY
 fi
 
-# Create secrets
+if [ -z "$JWT_SECRET" ]; then
+    echo "⚠️  JWT_SECRET not set in .env, generating..."
+    JWT_SECRET=$(openssl rand -hex 32)
+    echo "💡 Add this to your .env file: JWT_SECRET=$JWT_SECRET"
+fi
+
+# Multi-tenant architecture secrets setup:
+# 1. Shared Anthropic key -> AWS Secrets Manager (accessed via IRSA by credential-resolver)
+# 2. Platform secrets -> K8s secrets (JWT for auth, Laminar for our observability)
+# 3. Customer BYOK keys -> config-service RDS (set by customers via UI/API)
+
+echo ""
+echo "Writing shared Anthropic key to AWS Secrets Manager..."
+aws secretsmanager create-secret \
+    --name incidentfox/prod/anthropic \
+    --description "Shared Anthropic API key for free tier and non-BYOK customers" \
+    --secret-string "$ANTHROPIC_API_KEY" \
+    --region $REGION 2>/dev/null && echo "✅ Created secret in Secrets Manager" || \
+aws secretsmanager update-secret \
+    --secret-id incidentfox/prod/anthropic \
+    --secret-string "$ANTHROPIC_API_KEY" \
+    --region $REGION >/dev/null && echo "✅ Updated secret in Secrets Manager"
+
+echo ""
+echo "Creating K8s platform secrets (JWT + Laminar)..."
 kubectl create secret generic incidentfox-secrets \
     --namespace=$NAMESPACE \
-    --from-literal=anthropic-api-key="$ANTHROPIC_API_KEY" \
+    --from-literal=jwt-secret="$JWT_SECRET" \
     --from-literal=laminar-api-key="${LMNR_PROJECT_API_KEY:-}" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
-echo "✅ Secrets created"
+echo "✅ Platform secrets created"
 echo ""
 
 # Step 6: Create ECR pull secret
@@ -237,7 +286,7 @@ echo "╚═══════════════════════�
 echo ""
 echo "📊 What was created:"
 echo "  ✅ EKS cluster: $CLUSTER_NAME"
-echo "  ✅ ECR repository: $REPO_NAME"
+echo "  ✅ ECR repositories: incidentfox-agent, credential-resolver, slack-bot"
 echo "  ✅ agent-sandbox controller"
 echo "  ✅ gVisor runtime"
 echo "  ✅ Namespace: $NAMESPACE"

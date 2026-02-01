@@ -33,3 +33,24 @@ clean: ## Remove virtual environment and cache files
 	rm -rf .venv __pycache__ *.egg-info uv.lock
 	@echo "🧹 Cleaned up"
 
+deploy-prod: ## Deploy to production (builds, pushes to ECR, deploys to EKS)
+	@./scripts/deploy-prod.sh
+
+prod-url: ## Get production LoadBalancer URL
+	@CONTEXT=$$(kubectl config current-context 2>/dev/null); \
+	if ! echo "$$CONTEXT" | grep -q "incidentfox-prod"; then \
+		echo "⚠️  Current context: $$CONTEXT"; \
+		echo "💡 Switch to production: kubectl config use-context arn:aws:eks:us-west-2:103002841599:cluster/incidentfox-prod"; \
+		echo ""; \
+	fi; \
+	URL=$$(kubectl get svc slack-bot-svc -n incidentfox-prod -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null); \
+	if [ -z "$$URL" ]; then \
+		echo "❌ Not deployed or context not set to production"; \
+	else \
+		echo "Slack Webhook URL:"; \
+		echo "  http://$$URL/slack/events"; \
+		echo ""; \
+		echo "Health Check:"; \
+		echo "  http://$$URL/health"; \
+	fi
+

@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "pyjwt>=2.8.0",
+    "boto3>=1.34.0",  # For AWS Secrets Manager (shared API key for trials)
 ]
 
 [project.optional-dependencies]

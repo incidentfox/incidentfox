@@ -1,0 +1,116 @@
+name: Deploy Slack Bot to Production
+
+on:
+  workflow_dispatch:  # Manual trigger only from GitHub UI
+
+env:
+  AWS_REGION: us-west-2
+  EKS_CLUSTER_NAME: incidentfox-prod
+  ECR_REGISTRY: 103002841599.dkr.ecr.us-west-2.amazonaws.com
+  NAMESPACE: incidentfox-prod
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+          echo "✅ AWS credentials configured"
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}
+          kubectl config current-context
+          echo "✅ kubectl configured"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+          echo "✅ Logged in to ECR"
+
+      - name: Build and push Docker image
+        working-directory: slack-bot
+        run: |
+          docker buildx create --use --name multiplatform 2>/dev/null || docker buildx use multiplatform
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t ${{ env.ECR_REGISTRY }}/slack-bot:latest \
+            --push \
+            .
+          echo "✅ Docker image pushed to ECR"
+
+      - name: Refresh ECR credentials in K8s
+        run: |
+          kubectl create secret docker-registry ecr-registry-secret \
+            --docker-server=${{ env.ECR_REGISTRY }} \
+            --docker-username=AWS \
+            --docker-password=$(aws ecr get-login-password --region ${{ env.AWS_REGION }}) \
+            --namespace=${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+          echo "✅ ECR credentials refreshed"
+
+      - name: Deploy to Kubernetes
+        working-directory: slack-bot/k8s
+        run: |
+          kubectl apply -f serviceaccount.yaml
+          kubectl apply -f deployment.yaml
+          kubectl apply -f service-https.yaml
+          kubectl apply -f hpa.yaml
+          echo "✅ Kubernetes manifests applied"
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/slack-bot -n ${{ env.NAMESPACE }} --timeout=3m
+          echo "✅ Rollout complete"
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=slack-bot
+
+          # Check pod health
+          kubectl wait --for=condition=ready pod \
+            -l app=slack-bot \
+            -n ${{ env.NAMESPACE }} \
+            --timeout=120s
+
+          echo "✅ All pods are healthy"
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Service:** Slack Bot" >> $GITHUB_STEP_SUMMARY
+          echo "**Cluster:** ${{ env.EKS_CLUSTER_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Region:** ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Namespace:** ${{ env.NAMESPACE }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pod Status" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=slack-bot >> $GITHUB_STEP_SUMMARY || true
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          SERVICE_URL=$(kubectl get svc slack-bot-svc -n ${{ env.NAMESPACE }} \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "ClusterIP (internal)")
+          echo "**Service URL:** $SERVICE_URL" >> $GITHUB_STEP_SUMMARY

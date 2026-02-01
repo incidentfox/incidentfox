@@ -20,6 +20,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from src.crypto import EncryptedJSONB, EncryptedText
+
 from .base import Base
 
 
@@ -496,9 +498,8 @@ class Integration(Base):
         String(32), nullable=False, default="not_configured"
     )
     display_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    config: Mapped[dict] = mapped_column(
-        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=dict
-    )
+    # Encrypted JSONB - automatically encrypts sensitive fields (api_key, tokens, secrets)
+    config: Mapped[dict] = mapped_column(EncryptedJSONB, nullable=False, default=dict)
 
     last_checked_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -868,7 +869,10 @@ class SSOConfig(Base):
     # OIDC Configuration
     issuer: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     client_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    client_secret_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Encrypted using Fernet (replaces old base64 "encryption")
+    client_secret_encrypted: Mapped[Optional[str]] = mapped_column(
+        EncryptedText, nullable=True
+    )
     scopes: Mapped[Optional[str]] = mapped_column(
         String(512), nullable=True, default="openid email profile"
     )
@@ -1366,4 +1370,85 @@ class VisitorSession(Base):
     __table_args__ = (
         Index("ix_visitor_sessions_status_created", "status", "created_at"),
         Index("ix_visitor_sessions_last_heartbeat", "last_heartbeat_at"),
+    )
+
+
+class SlackInstallation(Base):
+    """
+    Slack OAuth installation storage.
+
+    Stores bot tokens and user tokens for Slack workspaces that have
+    installed our Slack app. Used by the slack-bot service for multi-tenant
+    OAuth support.
+
+    The combination of (enterprise_id, team_id, user_id) uniquely identifies
+    an installation:
+    - enterprise_id: For Enterprise Grid installs (nullable for regular workspaces)
+    - team_id: The Slack workspace ID
+    - user_id: For user-level tokens (nullable for workspace-level installs)
+    """
+
+    __tablename__ = "slack_installations"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    enterprise_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    team_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+
+    app_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Encrypted Slack OAuth tokens using Fernet
+    bot_token: Mapped[str] = mapped_column(EncryptedText, nullable=False)
+    bot_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    bot_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    bot_scopes: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )  # Comma-separated
+
+    user_token: Mapped[Optional[str]] = mapped_column(EncryptedText, nullable=True)
+    user_scopes: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )  # Comma-separated
+
+    # Encrypted webhook URL (contains sensitive token parameter)
+    incoming_webhook_url: Mapped[Optional[str]] = mapped_column(
+        EncryptedText, nullable=True
+    )
+    incoming_webhook_channel: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
+    incoming_webhook_channel_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
+    incoming_webhook_configuration_url: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+
+    is_enterprise_install: Mapped[bool] = mapped_column(Boolean, default=False)
+    token_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    installed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    # Store full installation data as JSON for future-proofing
+    raw_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_slack_installations_lookup",
+            "enterprise_id",
+            "team_id",
+            "user_id",
+            unique=True,
+        ),
     )

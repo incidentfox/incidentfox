@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slack-bot
+  namespace: incidentfox-prod
+  labels:
+    app: slack-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: slack-bot
+  template:
+    metadata:
+      labels:
+        app: slack-bot
+    spec:
+      serviceAccountName: slack-bot
+      containers:
+        - name: slack-bot
+          image: 103002841599.dkr.ecr.us-west-2.amazonaws.com/slack-bot:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: SLACK_APP_MODE
+              value: "http"
+            - name: PORT
+              value: "3000"
+            - name: SRE_AGENT_URL
+              value: "http://incidentfox-server-svc.incidentfox-prod.svc.cluster.local:8000"
+            # OAuth credentials (for public distribution)
+            - name: SLACK_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: slack-bot-secrets
+                  key: slack-client-id
+                  optional: true
+            - name: SLACK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: slack-bot-secrets
+                  key: slack-client-secret
+                  optional: true
+            - name: SLACK_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: slack-bot-secrets
+                  key: slack-signing-secret
+            # Config service for multi-tenancy
+            - name: CONFIG_SERVICE_URL
+              value: "http://config-service-svc.incidentfox-prod.svc.cluster.local:8080"
+            - name: CONFIG_SERVICE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: config-service-secrets
+                  key: admin-token
+            # Free trial settings
+            - name: FREE_TRIAL_ENABLED
+              value: "true"
+            - name: FREE_TRIAL_DAYS
+              value: "7"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      imagePullSecrets:
+        - name: ecr-registry-secret
