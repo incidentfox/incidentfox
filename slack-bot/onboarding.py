@@ -302,17 +302,11 @@ def build_upgrade_required_message(trial_info: Optional[Dict] = None) -> list:
                     "action_id": "open_upgrade_page",
                     "text": {
                         "type": "plain_text",
-                        "text": ":credit_card: Upgrade Now",
+                        "text": ":credit_card: Upgrade",
                         "emoji": True,
                     },
                     "style": "primary",
-                    "url": "https://incidentfox.ai/pricing",
-                },
-                {
-                    "type": "button",
-                    "action_id": "contact_sales",
-                    "text": {"type": "plain_text", "text": "Contact Sales"},
-                    "url": "https://incidentfox.ai/contact",
+                    "url": "https://calendly.com/d/cxd2-4hb-qgp/30-minute-demo-call-w-incidentfox",
                 },
             ],
         }

@@ -3832,13 +3832,17 @@ def handle_dismiss_setup(ack, body, client):
             client.chat_update(
                 channel=channel,
                 ts=message_ts,
-                text="Setup dismissed. Mention me when you're ready to set up!",
+                text="You can still use me! Mention me anytime you need help.",
                 blocks=[
                     {
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": ":wave: Setup dismissed. Mention me anytime to get started!",
+                            "text": (
+                                ":wave: No problem! You can still mention me and I'll help you investigate issues.\n\n"
+                                "This was just a nudge to set up more integrations for better insights. "
+                                "You can always configure them later!"
+                            ),
                         },
                     }
                 ],
@@ -3921,7 +3925,7 @@ def check_workspace_setup(client, team_id: str, channel_id: str, user_id: str) -
 
     Access is granted if:
     1. Active free trial (not expired), OR
-    2. Active subscription + API key configured
+    2. Active subscription (API key optional - can use shared key)
 
     If no access, posts appropriate setup/upgrade prompt and returns False.
     Returns True if access is granted.

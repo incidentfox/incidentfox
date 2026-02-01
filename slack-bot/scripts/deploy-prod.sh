@@ -62,7 +62,6 @@ kubectl create secret generic slack-bot-secrets \
     --from-literal=slack-signing-secret="${SLACK_SIGNING_SECRET}" \
     --from-literal=slack-client-id="${SLACK_CLIENT_ID}" \
     --from-literal=slack-client-secret="${SLACK_CLIENT_SECRET}" \
-    --from-literal=incident-io-api-key="${INCIDENT_IO_API_KEY:-}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
 # Deploy slack-bot
