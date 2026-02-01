@@ -1629,3 +1629,193 @@ Focus on infrastructure components, databases, APIs, microservices, etc.""",
             if node_id in tree.all_nodes:
                 return tree.all_nodes[node_id]
         return None
+
+
+class BM25HybridStrategy(RetrievalStrategy):
+    """
+    Hybrid BM25 + Dense retrieval strategy.
+
+    Combines sparse (BM25 keyword) and dense (embedding) retrieval for
+    better coverage. This is the standard approach for SOTA retrieval.
+
+    BM25 excels at:
+    - Exact keyword matching
+    - Rare/specific terms
+    - Named entities (person names, service names)
+
+    Dense excels at:
+    - Semantic similarity
+    - Paraphrases
+    - Conceptual matching
+
+    Combining both gives the best of both worlds.
+    """
+
+    name = "bm25_hybrid"
+
+    def __init__(self, bm25_weight: float = 0.4, dense_weight: float = 0.6):
+        """
+        Args:
+            bm25_weight: Weight for BM25 scores (default 0.4)
+            dense_weight: Weight for dense scores (default 0.6)
+        """
+        self.bm25_weight = bm25_weight
+        self.dense_weight = dense_weight
+        self._bm25_index = None
+        self._node_texts: Dict[int, str] = {}
+        self._node_ids: List[int] = []
+        self._tokenized_corpus: List[List[str]] = []
+        self._forest_hash: Optional[int] = None
+
+    async def retrieve(
+        self,
+        query: str,
+        forest: "TreeForest",
+        graph: Optional["KnowledgeGraph"] = None,
+        top_k: int = 10,
+        **kwargs,
+    ) -> List[RetrievedChunk]:
+        """Retrieve using BM25 + dense hybrid."""
+        # Ensure BM25 index is built (rebuild if forest changed)
+        self._ensure_bm25_index(forest)
+
+        if not self._bm25_index:
+            # Fall back to dense only if BM25 not available
+            return await self.search_trees(query, forest, top_k)
+
+        # Get BM25 results
+        bm25_results = self._bm25_search(query, forest, top_k * 2)
+
+        # Get dense results
+        dense_results = await self.search_trees(query, forest, top_k * 2)
+
+        # Combine results with reciprocal rank fusion
+        combined = self._reciprocal_rank_fusion(
+            bm25_results,
+            dense_results,
+        )
+
+        return combined[:top_k]
+
+    def _get_forest_hash(self, forest: "TreeForest") -> int:
+        """Get a hash to detect if forest has changed."""
+        total_nodes = sum(
+            len(tree.all_nodes)
+            for tree in forest.trees.values()
+            if hasattr(tree, "all_nodes")
+        )
+        return hash((tuple(forest.trees.keys()), total_nodes))
+
+    def _ensure_bm25_index(self, forest: "TreeForest") -> None:
+        """Build BM25 index if not already built or if forest changed."""
+        current_hash = self._get_forest_hash(forest)
+        if self._bm25_index is not None and self._forest_hash == current_hash:
+            return
+
+        try:
+            from rank_bm25 import BM25Okapi
+        except ImportError:
+            logger.warning("rank_bm25 not installed, BM25 hybrid disabled")
+            return
+
+        # Collect all node texts
+        self._node_texts = {}
+        self._node_ids = []
+        self._tokenized_corpus = []
+
+        for tree in forest.trees.values():
+            if not hasattr(tree, "all_nodes"):
+                continue
+            for node_id, node in tree.all_nodes.items():
+                text = getattr(node, "text", "") or getattr(node, "content", "")
+                if text:
+                    self._node_texts[node_id] = text
+                    self._node_ids.append(node_id)
+                    # Simple tokenization
+                    tokens = text.lower().split()
+                    self._tokenized_corpus.append(tokens)
+
+        if self._tokenized_corpus:
+            self._bm25_index = BM25Okapi(self._tokenized_corpus)
+            self._forest_hash = current_hash
+            logger.info(
+                f"BM25 index built with {len(self._tokenized_corpus)} documents"
+            )
+        else:
+            logger.warning("No documents found for BM25 index")
+
+    def _bm25_search(
+        self, query: str, forest: "TreeForest", top_k: int
+    ) -> List[RetrievedChunk]:
+        """Search using BM25."""
+        if not self._bm25_index:
+            return []
+
+        # Tokenize query
+        query_tokens = query.lower().split()
+
+        # Get BM25 scores
+        scores = self._bm25_index.get_scores(query_tokens)
+
+        # Get top-k indices
+        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[
+            :top_k
+        ]
+
+        results = []
+        for idx in top_indices:
+            if scores[idx] <= 0:
+                continue
+
+            node_id = self._node_ids[idx]
+            text = self._node_texts[node_id]
+
+            # Normalize BM25 score to [0, 1]
+            max_score = max(scores) if max(scores) > 0 else 1
+            normalized_score = scores[idx] / max_score
+
+            results.append(
+                RetrievedChunk(
+                    node_id=node_id,
+                    text=text,
+                    score=normalized_score,
+                    importance=0.5,
+                    strategy=self.name,
+                )
+            )
+
+        return results
+
+    def _reciprocal_rank_fusion(
+        self,
+        bm25_results: List[RetrievedChunk],
+        dense_results: List[RetrievedChunk],
+        k: int = 60,
+    ) -> List[RetrievedChunk]:
+        """
+        Combine results using Reciprocal Rank Fusion.
+
+        RRF score = sum(1 / (k + rank)) for each result list
+        """
+        scores: Dict[int, float] = {}
+        chunks: Dict[int, RetrievedChunk] = {}
+
+        # Score BM25 results
+        for rank, chunk in enumerate(bm25_results):
+            rrf_score = self.bm25_weight / (k + rank + 1)
+            scores[chunk.node_id] = scores.get(chunk.node_id, 0) + rrf_score
+            if chunk.node_id not in chunks:
+                chunks[chunk.node_id] = chunk
+
+        # Score dense results
+        for rank, chunk in enumerate(dense_results):
+            rrf_score = self.dense_weight / (k + rank + 1)
+            scores[chunk.node_id] = scores.get(chunk.node_id, 0) + rrf_score
+            if chunk.node_id not in chunks:
+                chunks[chunk.node_id] = chunk
+
+        # Update chunk scores and sort
+        for node_id, chunk in chunks.items():
+            chunk.score = scores[node_id]
+
+        return sorted(chunks.values(), key=lambda c: c.score, reverse=True)

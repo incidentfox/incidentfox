@@ -16,6 +16,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from .reranker import (
+    CohereReranker,
     CrossEncoderReranker,
     EnsembleReranker,
     ImportanceReranker,
@@ -24,6 +25,7 @@ from .reranker import (
 )
 from .strategies import (
     AdaptiveDepthStrategy,
+    BM25HybridStrategy,
     HybridGraphTreeStrategy,
     HyDEStrategy,
     IncidentAwareStrategy,
@@ -150,24 +152,34 @@ class UltimateRetriever:
             "adaptive_depth": AdaptiveDepthStrategy(),
             "hybrid": HybridGraphTreeStrategy(),
             "incident": IncidentAwareStrategy(),
+            "bm25_hybrid": BM25HybridStrategy(),
         }
 
-        # Initialize rerankers with optional cross-encoder for better precision
+        # Initialize rerankers - prioritize Cohere if available, fallback to cross-encoder
         rerankers_list = [ImportanceReranker(self.config.rerank_config)]
 
-        # Try to add cross-encoder reranker (requires sentence-transformers)
-        try:
-            from sentence_transformers import CrossEncoder
+        # Try Cohere reranker first (SOTA performance)
+        import os
 
-            cross_encoder_model = CrossEncoder("BAAI/bge-reranker-base")
-            rerankers_list.append(CrossEncoderReranker(model=cross_encoder_model))
-            logger.info("Cross-encoder reranker enabled (BAAI/bge-reranker-base)")
-        except ImportError:
-            logger.warning(
-                "sentence-transformers not installed, cross-encoder reranker disabled"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to load cross-encoder model: {e}")
+        cohere_key = os.environ.get("COHERE_API_KEY")
+        if cohere_key:
+            rerankers_list.append(CohereReranker(api_key=cohere_key))
+            logger.info("Cohere reranker enabled (rerank-english-v3.0)")
+        else:
+            # Fallback to cross-encoder reranker (requires sentence-transformers)
+            try:
+                from sentence_transformers import CrossEncoder
+
+                cross_encoder_model = CrossEncoder("BAAI/bge-reranker-base")
+                rerankers_list.append(CrossEncoderReranker(model=cross_encoder_model))
+                logger.info("Cross-encoder reranker enabled (BAAI/bge-reranker-base)")
+            except ImportError:
+                logger.warning(
+                    "No reranker available: COHERE_API_KEY not set and "
+                    "sentence-transformers not installed"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to load cross-encoder model: {e}")
 
         self._reranker = EnsembleReranker(rerankers=rerankers_list)
 
@@ -284,27 +296,34 @@ class UltimateRetriever:
             strategies.append(self._strategies["incident"])
 
         elif mode == RetrievalMode.THOROUGH:
-            # Use all strategies
+            # Use all strategies including BM25 for comprehensive coverage
             strategies.extend(
                 [
                     self._strategies["multi_query"],
                     self._strategies["hyde"],
                     self._strategies["hybrid"],
+                    self._strategies["query_decomposition"],
+                    self._strategies["bm25_hybrid"],
                 ]
             )
 
         else:  # STANDARD
             # Select based on query intent
+            # Always include BM25 for exact entity matching
             if analysis.intent == QueryIntent.PROCEDURAL:
                 strategies.append(self._strategies["hybrid"])
                 strategies.append(self._strategies["adaptive_depth"])
             elif analysis.intent == QueryIntent.RELATIONAL:
                 strategies.append(self._strategies["hybrid"])
+                strategies.append(self._strategies["query_decomposition"])
             elif analysis.intent == QueryIntent.TROUBLESHOOTING:
                 strategies.append(self._strategies["incident"])
             else:
                 strategies.append(self._strategies["multi_query"])
                 strategies.append(self._strategies["hybrid"])
+
+            # Add BM25 hybrid for better entity name matching
+            strategies.append(self._strategies["bm25_hybrid"])
 
         return strategies
 
