@@ -586,7 +586,7 @@ effective = deep_merge_dicts([
 **After merging, apply tool filtering:**
 ```python
 # Get all available tools
-all_tools = get_tools_catalog()['tools']  # 178 built-in tools
+all_tools = get_tools_catalog()['tools']  # 300+ built-in tools
 
 # Apply team_disabled_tool_ids (blacklist)
 disabled_ids = effective.get('team_disabled_tool_ids', [])

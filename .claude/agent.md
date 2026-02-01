@@ -82,7 +82,7 @@ Use EnterPlanMode when:
 
 | Service | Tech | Port | Purpose |
 |---------|------|------|---------|
-| **agent** | Python/Poetry | 8080 | Multi-agent runtime (6 agents, 178 tools) |
+| **agent** | Python/Poetry | 8080 | Multi-agent runtime (6 agents, 300+ tools) |
 | **config_service** | Python/FastAPI | 8080 | Control plane (org tree, tokens, configs) |
 | **orchestrator** | Python/FastAPI | 8080 | Webhook routing & provisioning |
 | **web_ui** | Next.js/pnpm | 3000 | Admin & Team console |
@@ -95,7 +95,7 @@ Use EnterPlanMode when:
 - Cache invalidation via org epoch
 
 **Tool Pool:**
-- 178 built-in tools from catalog
+- 300+ built-in tools from catalog
 - MCP servers per team
 - Team-level enable/disable lists
 - Execution context: `{org_id, team_node_id, user_id}`

@@ -40,7 +40,7 @@ This is **IncidentFox v0** - an enterprise AI SRE system **running in production
    - Port: 8080
    - Image: `103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest`
    - 6 agents: Planner, K8s, AWS, Metrics, Coding, Investigation
-   - 178 built-in tools + MCP servers
+   - 300+ built-in tools + MCP servers
 
 2. **config_service** (Python/FastAPI) - Control plane
    - Port: 8080
@@ -68,7 +68,7 @@ This is **IncidentFox v0** - an enterprise AI SRE system **running in production
 - Cache invalidation: Via org epoch increment
 
 **2. Tool Pool Architecture**
-- Built-in tools: 178 tools from catalog
+- Built-in tools: 300+ tools from catalog
 - MCP servers: Model Context Protocol servers per team
 - Team-disabled: Blacklist specific tool IDs
 - Team-enabled: Whitelist for restricted tools

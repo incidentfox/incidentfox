@@ -109,36 +109,35 @@ helm install incidentfox incidentfox/incidentfox -n incidentfox --create-namespa
 ### Architecture Overview
 
 ```
-                    ┌─────────────────────────────────────┐
-                    │   Slack · GitHub · PagerDuty · API   │
-                    └──────────────────┬──────────────────┘
-                                       │ webhooks
-                    ┌──────────────────▼──────────────────┐
-                    │            Orchestrator              │
-                    │   (routes webhooks, team lookup,     │
-                    │    token auth, audit logging)        │
-                    └───────┬─────────────────┬───────────┘
-                            │                 │
-          ┌─────────────────▼───┐    ┌────────▼────────────┐
-          │       Agent         │◄──►│   Config Service    │◄──┐
-          │  (OpenAI/Claude SDK,│    │  (multi-tenant cfg, │   │
-          │   178+ tools,       │    │   RBAC, routing,    │   │
-          │   multi-agent)      │    │   team hierarchy)   │   │
-          └─────────┬───────────┘    └──────────┬─────────┘   │
-                    │                           │             │
-                    ▼                           ▼             │
-          ┌────────────────────┐    ┌─────────────────────┐   │
-          │  Knowledge Base    │    │     PostgreSQL      │   │
-          │  (RAPTOR trees,    │    │  (config, audit,    │   │
-          │   runbooks, docs)  │    │   investigations)   │   │
-          └────────────────────┘    └─────────────────────┘   │
-                    │                                         │
-                    ▼                                         │
-          ┌────────────────────┐    ┌─────────────────────┐   │
-          │   External APIs    │    │       Web UI        │───┘
-          │  (K8s, AWS, Datadog│    │  (dashboard, team   │
-          │   Grafana, etc.)   │    │   management)       │
-          └────────────────────┘    └─────────────────────┘
+  ┌───────────────────────────────────┐    ┌─────────────────────┐
+  │   Slack · GitHub · PagerDuty · API │    │       Web UI        │
+  └─────────────────┬─────────────────┘    │  (dashboard, team   │
+                    │ webhooks             │   management)       │
+  ┌─────────────────▼─────────────────┐    └──────────┬──────────┘
+  │            Orchestrator            │               │
+  │   (routes webhooks, team lookup,   │               │
+  │    token auth, audit logging)      │               │
+  └───────┬───────────────────┬───────┘               │
+          │                   │                       │
+  ┌───────▼───────┐    ┌──────▼───────────────────────▼──┐
+  │     Agent     │◄──►│        Config Service           │
+  │ (Claude/OpenAI│    │  (multi-tenant cfg, RBAC,       │
+  │  300+ tools,  │    │   routing, team hierarchy)      │
+  │  multi-agent) │    └──────────────┬─────────────────┘
+  └───┬───────┬───┘                   │
+      │       │                       ▼
+      │       │           ┌─────────────────────┐
+      │       │           │     PostgreSQL      │
+      │       │           │  (config, audit,    │
+      │       │           │   investigations)   │
+      │       │           └─────────────────────┘
+      │       │
+      ▼       ▼
+  ┌────────┐ ┌────────────────────┐
+  │Knowledge│ │   External APIs    │
+  │  Base   │ │  (K8s, AWS, Datadog│
+  │ (RAPTOR)│ │   Grafana, etc.)   │
+  └─────────┘ └────────────────────┘
 ```
 
 <p align="center">
@@ -160,7 +159,7 @@ The engineering that makes IncidentFox actually work in production:
 | **Alert Correlation Engine** | 3-layer analysis: temporal + topology + semantic | Groups alerts AND finds root cause. Reduces noise by 85-95%. |
 | **Prophet Anomaly Detection** | Meta's Prophet algorithm with seasonality-aware forecasting | Detects anomalies that account for daily/weekly patterns, not just static thresholds. |
 | **Dependency Discovery** | Automatic service topology mapping with blast radius analysis | Know what's affected before you start investigating. No manual service maps needed. |
-| **178+ Built-in Tools** | Kubernetes, AWS, Grafana, Datadog, Prometheus, GitHub, and more | No "bring your own tools" setup. Works out of the box with your stack. |
+| **300+ Built-in Tools** | Kubernetes, AWS, Azure, GCP, Grafana, Datadog, Prometheus, GitHub, and more | No "bring your own tools" setup. Works out of the box with your stack. |
 | **MCP Protocol Support** | Connect to any MCP server for unlimited integrations | Add new tools in minutes via config, not code. |
 | **Multi-Agent Orchestration** | Planner routes to specialist agents (K8s, AWS, Metrics, Code, etc.) | Complex investigations get handled by the right expert, not a generic agent. |
 | **Model Flexibility** | Supports OpenAI and Claude SDKs — use the model that fits your needs | No vendor lock-in. Switch models or use different models for different tasks. |
