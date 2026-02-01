@@ -1738,7 +1738,9 @@ class BM25HybridStrategy(RetrievalStrategy):
         if self._tokenized_corpus:
             self._bm25_index = BM25Okapi(self._tokenized_corpus)
             self._forest_hash = current_hash
-            logger.info(f"BM25 index built with {len(self._tokenized_corpus)} documents")
+            logger.info(
+                f"BM25 index built with {len(self._tokenized_corpus)} documents"
+            )
         else:
             logger.warning("No documents found for BM25 index")
 
