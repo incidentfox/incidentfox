@@ -29,12 +29,12 @@ SHARED_KEY_CACHE_TTL_SECONDS = 300  # 5 minutes
 
 
 def get_shared_anthropic_key() -> Optional[str]:
-    """Get shared Anthropic API key for free trial users.
+    """Get shared Anthropic API key from AWS Secrets Manager.
 
-    First tries environment variable (simpler, no IRSA needed).
-    Falls back to AWS Secrets Manager if configured.
+    Fetches key from AWS Secrets Manager for production security.
+    For self-hosting, customers should use BYOK instead of relying on a shared key.
 
-    Returns None if not configured.
+    Returns None if not configured or fetch fails.
     """
     cache_key = "anthropic"
     now = datetime.utcnow()
@@ -46,14 +46,7 @@ def get_shared_anthropic_key() -> Optional[str]:
         if age_seconds < SHARED_KEY_CACHE_TTL_SECONDS:
             return cached_key
 
-    # First: try environment variable (simpler, no IRSA setup required)
-    env_key = os.getenv("SHARED_ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-    if env_key:
-        _shared_key_cache[cache_key] = (env_key, now)
-        logger.info("Using shared Anthropic key from environment")
-        return env_key
-
-    # Fallback: try AWS Secrets Manager (requires IRSA)
+    # Fetch from AWS Secrets Manager (requires IRSA)
     try:
         client = boto3.client("secretsmanager", region_name=AWS_REGION)
         response = client.get_secret_value(SecretId=SHARED_ANTHROPIC_SECRET)
@@ -71,8 +64,9 @@ def get_shared_anthropic_key() -> Optional[str]:
             return None
 
     except Exception as e:
-        logger.warning(
-            f"Failed to fetch from Secrets Manager (expected without IRSA): {e}"
+        logger.error(
+            f"Failed to fetch shared Anthropic key from Secrets Manager: {e}. "
+            f"Ensure IRSA is configured or customer uses BYOK."
         )
         return None
 

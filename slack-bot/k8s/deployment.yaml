@@ -48,19 +48,6 @@ spec:
                 secretKeyRef:
                   name: slack-bot-secrets
                   key: slack-signing-secret
-            # Single workspace mode (fallback if OAuth not configured)
-            - name: SLACK_BOT_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: slack-bot-secrets
-                  key: slack-bot-token
-                  optional: true
-            - name: INCIDENT_IO_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: slack-bot-secrets
-                  key: incident-io-api-key
-                  optional: true
             # Config service for multi-tenancy
             - name: CONFIG_SERVICE_URL
               value: "http://config-service-svc.incidentfox-prod.svc.cluster.local:8080"
