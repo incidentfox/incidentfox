@@ -1,8 +1,18 @@
-# IncidentFox
+# IncidentFox 🦊
 
-AI-powered incident investigation and infrastructure automation. IncidentFox integrates with your observability stack, infrastructure, and collaboration tools to automatically investigate incidents, find root causes, and suggest fixes.
+<p align="center">
+  <strong>Your AI Copilot for Incident Response</strong>
+  <br><br>
+  <em>Investigate incidents, find root causes, and suggest fixes — automatically</em>
+  <br><br>
+  <a href="https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ">Try Free in Slack</a> · <a href="#quick-start">5-Min Docker Setup</a> · <a href="docs/DEPLOYMENT.md">Deploy for Your Team</a>
+</p>
 
-**[Try it for free right now](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ), or [spin up the docker locally](#quick-start) in 5 minutes.**
+---
+
+IncidentFox is an **open-source AI SRE** that integrates with your observability stack, infrastructure, and collaboration tools. It automatically forms hypotheses, collects data from your systems, and reasons through to find root causes — all while you focus on the fix.
+
+**Built for production on-call** — handles log sampling, alert correlation, anomaly detection, and dependency mapping so you don't have to.
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/b6892fe8-0a19-40f9-9d86-465aa3387108" width="600" alt="Slack Investigation">

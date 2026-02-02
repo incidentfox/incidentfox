@@ -1,0 +1,105 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this bug! Please provide as much detail as possible.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear description of what the bug is
+      placeholder: Tell us what happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Set up IncidentFox with '...'
+        2. Run command '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen
+      placeholder: Tell us what you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened (include error messages, stack traces, logs)
+      placeholder: Tell us what happened instead
+      render: shell
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment type
+      description: How are you running IncidentFox?
+      options:
+        - Docker Compose (local)
+        - Kubernetes (self-hosted)
+        - Managed (SaaS)
+        - Slack community instance
+        - Other (please specify)
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        Please provide details about your environment:
+        - IncidentFox version (git commit or release tag)
+        - Python version
+        - Operating system
+        - Any relevant integrations (Datadog, Grafana, etc.)
+      placeholder: |
+        - IncidentFox version: v1.2.3 or commit abc123
+        - Python: 3.11.5
+        - OS: Ubuntu 22.04 / macOS 14 / etc.
+        - Integrations: Datadog, Kubernetes, etc.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Please paste any relevant logs (sanitize sensitive information)
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Any other context about the problem (screenshots, related issues, etc.)
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have provided all requested information
+          required: true
