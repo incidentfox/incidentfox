@@ -91,7 +91,7 @@ IncidentFox is **open source** (Apache 2.0). You can try it instantly in Slack, 
 │    token auth, audit logging)     │                │
 └────────┬─────────────────┬────────┘                │
          │                 │                         │
-┌────────▼────────┐   ┌────▼─────────────────────────▼────┐
+┌────────▼────────┐   ┌────▼─────────────────────────▼───┐
 │      Agent      │<->│          Config Service          │
 │ (Claude/OpenAI, │   │    (multi-tenant cfg, RBAC,      │
 │   300+ tools,   │   │     routing, team hierarchy)     │
