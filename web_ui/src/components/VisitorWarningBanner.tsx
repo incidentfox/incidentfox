@@ -61,7 +61,7 @@ export function VisitorWarningBanner() {
                 Leave now
               </button>
               <a
-                href="mailto:hello@incidentfox.io?subject=IncidentFox Demo Interest"
+                href="mailto:support@incidentfox.ai?subject=IncidentFox Demo Interest"
                 className="text-xs text-orange-100 hover:text-white underline"
               >
                 Contact us for a team account
