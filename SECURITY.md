@@ -154,7 +154,7 @@ IncidentFox includes security features for production:
 - **Approval workflows** for critical changes
 - **Isolated sandboxes** (Kubernetes namespaces per agent)
 
-See [Enterprise Security](docs/DEPLOYMENT.md#enterprise-security) for details.
+See [Enterprise Ready](README.md#enterprise-ready) for details.
 
 ## Vulnerability Disclosure Policy
 
@@ -189,4 +189,4 @@ We recognize security researchers who help keep IncidentFox secure:
 
 - [Deployment Guide](docs/DEPLOYMENT.md) — production deployment best practices
 - [Architecture](docs/ARCHITECTURE.md) — system design and security architecture
-- [Enterprise Security](docs/DEPLOYMENT.md#enterprise-security) — advanced security features
+- [Enterprise Ready](README.md#enterprise-ready) — advanced security features
