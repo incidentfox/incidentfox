@@ -1,8 +1,18 @@
-# IncidentFox
+# IncidentFox 🦊
 
-AI-powered incident investigation and infrastructure automation. IncidentFox integrates with your observability stack, infrastructure, and collaboration tools to automatically investigate incidents, find root causes, and suggest fixes.
+<p align="center">
+  <strong>Your AI Copilot for Incident Response</strong>
+  <br><br>
+  <em>Investigate incidents, find root causes, and suggest fixes — automatically</em>
+  <br><br>
+  <a href="https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ">Try Free in Slack</a> · <a href="#quick-start">5-Min Docker Setup</a> · <a href="docs/DEPLOYMENT.md">Deploy for Your Team</a>
+</p>
 
-**[Try it for free right now](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ), or [spin up the docker locally](#quick-start) in 5 minutes.**
+---
+
+IncidentFox is an **open-source AI SRE** that integrates with your observability stack, infrastructure, and collaboration tools. It automatically forms hypotheses, collects data from your systems, and reasons through to find root causes — all while you focus on the fix.
+
+**Built for production on-call** — handles log sampling, alert correlation, anomaly detection, and dependency mapping so you don't have to.
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/b6892fe8-0a19-40f9-9d86-465aa3387108" width="600" alt="Slack Investigation">
@@ -42,22 +52,45 @@ IncidentFox is **open source** (Apache 2.0). All core features are free — depl
 
 For teams that need more, we offer **managed deployments**, **premium features** (advanced analytics, priority support), and **professional services**. [Contact us →](mailto:founders@incidentfox.ai)
 
+### 🚀 Try IncidentFox Now
+
+<p align="center">
+  <a href="https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ"><img src="https://img.shields.io/badge/Try%20Free-Join%20Our%20Slack-611f69?style=for-the-badge&logo=slack" alt="Join our Slack"></a>
+  &nbsp;&nbsp;
+  <a href="https://slack.com/oauth/v2/authorize?client_id=9967324357443.10323403264580&scope=app_mentions:read,channels:history,channels:join,channels:read,chat:write,chat:write.customize,commands,files:read,files:write,groups:history,groups:read,im:history,im:read,im:write,links:read,links:write,metadata.message:read,mpim:history,mpim:read,reactions:read,reactions:write,usergroups:read,users:read&user_scope="><img alt="Add to Slack" height="40" width="139" src="https://platform.slack-edge.com/img/add_to_slack.png" srcSet="https://platform.slack-edge.com/img/add_to_slack.png 1x, https://platform.slack-edge.com/img/add_to_slack@2x.png 2x" /></a>
+</p>
+
+**1️⃣ Try Free in Our Workspace** (Easiest)
+No setup required. Join our public Slack and start investigating right away. IncidentFox is already installed and connected to our playground telemetry.
+
+**2️⃣ Add to Your Workspace** (Recommended)
+Install IncidentFox in your own Slack with 1-click. **7-day free trial** included. Connect to your own infrastructure and telemetry. Don't have permission to install in your company Slack? Create a new workspace and try it there!
+
+---
+
+### 📦 All Deployment Options
+
 |  | **Try Free** | **Local Docker** | **Self-Host** | **Managed** |
 |---|--------------|------------------|---------------|-------------|
 | **Best for** | Quick exploration | Evaluating with your team | Production, full control | Production, premium features |
 | **How** | Join our Slack | Docker Compose | Kubernetes (Helm) | On-prem or SaaS |
 | **Setup time** | Instant | 5 minutes | 30 minutes | 30 minutes |
 | **Cost** | Free | Free | Free (open source) | Custom pricing |
+| **Privacy** | Playground telemetry | Everything local | Everything local | Your choice |
 |  | [Join Slack →](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ) | [Quick Start ↓](#quick-start) | [Deployment Guide →](docs/DEPLOYMENT.md) | [Get in Touch →](mailto:founders@incidentfox.ai) |
+
+**Security-conscious?** Use **Local Docker** or **Self-Host** for complete data control. Everything runs locally — your telemetry, logs, and infrastructure never leave your environment. You can also bring your own API key or internal router URL, so no data leaves your company. [Watch setup video →](#quick-start)
 
 ---
 
-## Quick Start
+## Quick Start: Local Docker + Slack Bot
 
-Run IncidentFox on your local machine with Docker. Perfect for individual evaluation or small team trials.
+Run IncidentFox **100% locally** with Docker. Everything stays on your machine — no data leaves your environment. Perfect for security-conscious teams or individual evaluation.
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/c51c51f2-3e1f-459e-8ce4-1e2a56c92971" width="700" controls autoplay loop muted></video>
+  <br>
+  <em>Watch: Setting up IncidentFox locally with Slack in 5 minutes</em>
 </p>
 
 **1.** [Create a Slack app](https://api.slack.com/apps?new_app=1) using [this manifest](docs/slack-manifest.yaml)
@@ -90,6 +123,15 @@ docker-compose up -d
 ```
 
 **Need help?** See the [detailed setup guide](docs/SLACK_SETUP.md) with screenshots.
+
+### 🔒 Maximum Privacy: Bring Your Own Key
+
+For organizations with strict data governance:
+- **Use your own API key** — Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to use your own LLM account
+- **Use your internal router** — Point to your company's internal LLM router URL
+- **No data leaves your company** — All requests stay within your environment
+
+See [deployment guide](docs/DEPLOYMENT.md) for details.
 
 ---
 
@@ -221,3 +263,21 @@ For bugs or feature requests, open an issue on [GitHub](https://github.com/incid
 ## See Also
 
 **[Claude Code Plugin](local/claude_code_pack/)** — Standalone SRE tools for individual developers using Claude Code CLI. Not connected to the IncidentFox platform above.
+
+---
+
+## Connect with Us
+
+<p align="center">
+  <a href="https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ"><img src="https://img.shields.io/badge/Slack-Community-611f69?style=for-the-badge&logo=slack" alt="Slack"></a>
+  &nbsp;
+  <a href="https://www.linkedin.com/company/incidentfox/"><img src="https://img.shields.io/badge/LinkedIn-Company-0077B5?style=for-the-badge&logo=linkedin" alt="LinkedIn"></a>
+  &nbsp;
+  <a href="https://x.com/jimmyweiiiii"><img src="https://img.shields.io/badge/X-@jimmyweiiiii-000000?style=for-the-badge&logo=x" alt="X - Jimmy"></a>
+  &nbsp;
+  <a href="https://x.com/LongYi1207"><img src="https://img.shields.io/badge/X-@LongYi1207-000000?style=for-the-badge&logo=x" alt="X - LongYi"></a>
+</p>
+
+<p align="center">
+  <em>Built with ❤️ by the IncidentFox team</em>
+</p>

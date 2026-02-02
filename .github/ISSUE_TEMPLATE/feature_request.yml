@@ -1,0 +1,82 @@
+name: 💡 Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Before creating this issue, please check if a similar idea exists in [Discussions](https://github.com/incidentfox/incidentfox/discussions).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem does this feature solve? What's the use case?
+      placeholder: |
+        I'm always frustrated when...
+        During incidents, I need to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like this to work?
+      placeholder: Describe your ideal solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you considered any alternative solutions or workarounds?
+      placeholder: What else have you tried or thought about?
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature area
+      description: Which part of IncidentFox does this relate to?
+      options:
+        - Agent / AI capabilities
+        - Integrations (observability, cloud, etc.)
+        - Slack bot / UI
+        - Web console / dashboard
+        - Alert correlation / anomaly detection
+        - Knowledge base / RAPTOR
+        - Configuration / RBAC
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: How important is this to you?
+      options:
+        - Critical (blocker for adoption)
+        - High (would significantly improve workflows)
+        - Medium (nice to have)
+        - Low (minor improvement)
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots, mockups, examples from other tools, etc.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues and discussions to avoid duplicates
+          required: true
+        - label: This feature aligns with IncidentFox's mission (AI-powered incident response)
+          required: true
