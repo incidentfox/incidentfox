@@ -52,6 +52,21 @@ IncidentFox is **open source** (Apache 2.0). All core features are free — depl
 
 For teams that need more, we offer **managed deployments**, **premium features** (advanced analytics, priority support), and **professional services**. [Contact us →](mailto:founders@incidentfox.ai)
 
+### 🚀 Try IncidentFox Now
+
+<p align="center">
+  <a href="https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ"><img src="https://img.shields.io/badge/Try%20Free-Join%20Our%20Slack-611f69?style=for-the-badge&logo=slack" alt="Join our Slack"></a>
+  &nbsp;&nbsp;
+  <a href="https://slack.com/oauth/v2/authorize?client_id=9967324357443.10323403264580&scope=app_mentions:read,channels:history,channels:join,channels:read,chat:write,chat:write.customize,commands,files:read,files:write,groups:history,groups:read,im:history,im:read,im:write,links:read,links:write,metadata.message:read,mpim:history,mpim:read,reactions:read,reactions:write,usergroups:read,users:read&user_scope="><img alt="Add to Slack" height="40" width="139" src="https://platform.slack-edge.com/img/add_to_slack.png" srcSet="https://platform.slack-edge.com/img/add_to_slack.png 1x, https://platform.slack-edge.com/img/add_to_slack@2x.png 2x" /></a>
+</p>
+
+**Try Free in Our Workspace** — No setup required. Join our public Slack and start investigating right away.
+**Add to Your Workspace** — Install IncidentFox in your own Slack to connect your infrastructure.
+
+---
+
+### 📦 Deployment Options
+
 |  | **Try Free** | **Local Docker** | **Self-Host** | **Managed** |
 |---|--------------|------------------|---------------|-------------|
 | **Best for** | Quick exploration | Evaluating with your team | Production, full control | Production, premium features |
@@ -231,3 +246,21 @@ For bugs or feature requests, open an issue on [GitHub](https://github.com/incid
 ## See Also
 
 **[Claude Code Plugin](local/claude_code_pack/)** — Standalone SRE tools for individual developers using Claude Code CLI. Not connected to the IncidentFox platform above.
+
+---
+
+## Connect with Us
+
+<p align="center">
+  <a href="https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ"><img src="https://img.shields.io/badge/Slack-Community-611f69?style=for-the-badge&logo=slack" alt="Slack"></a>
+  &nbsp;
+  <a href="https://www.linkedin.com/company/incidentfox/"><img src="https://img.shields.io/badge/LinkedIn-Company-0077B5?style=for-the-badge&logo=linkedin" alt="LinkedIn"></a>
+  &nbsp;
+  <a href="https://x.com/jimmyweiiiii"><img src="https://img.shields.io/badge/X-@jimmyweiiiii-000000?style=for-the-badge&logo=x" alt="X - Jimmy"></a>
+  &nbsp;
+  <a href="https://x.com/LongYi1207"><img src="https://img.shields.io/badge/X-@LongYi1207-000000?style=for-the-badge&logo=x" alt="X - LongYi"></a>
+</p>
+
+<p align="center">
+  <em>Built with ❤️ by the IncidentFox team</em>
+</p>
