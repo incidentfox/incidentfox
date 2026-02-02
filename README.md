@@ -26,8 +26,8 @@ IncidentFox is an **open-source AI SRE** that integrates with your observability
 
 - [What is IncidentFox?](#what-is-incidentfox)
 - [Get Started](#get-started)
-- [Quick Start: Local Docker + Slack](#quick-start)
-- [Deploy for Your Team](#deploy-for-your-team)
+- [Why IncidentFox](#why-incidentfox)
+- [Architecture Overview](#architecture-overview)
 - [Under the Hood](#under-the-hood)
 - [Enterprise Ready](#enterprise-ready)
 - [Documentation](#documentation)
@@ -48,138 +48,68 @@ An **AI SRE** that helps root cause and propose mitigations for production on-ca
 
 ## Get Started
 
-IncidentFox is **open source** (Apache 2.0). All core features are free — deploy anywhere, no restrictions.
+IncidentFox is **open source** (Apache 2.0). You can try it instantly in Slack, or deploy it yourself for full control. Pick the option that fits your needs:
 
-For teams that need more, we offer **managed deployments**, **premium features** (advanced analytics, priority support), and **professional services**. [Contact us →](mailto:founders@incidentfox.ai)
+| Option | Best For | Setup Time | Cost | Privacy | |
+|--------|----------|------------|------|---------|---|
+| **Try Free** | See it in action | Instant | Free | Our playground environment | [![Join Slack](https://img.shields.io/badge/Join_Slack-4A154B?logo=slack&logoColor=white)](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ) |
+| **Local Docker** | Evaluate with your infra | 5 minutes | Free | Everything local | [Setup Guide →](docs/SLACK_SETUP.md) |
+| **Managed (premium features)** | Production, we handle ops | 30 minutes | [Contact us (7-day free trial)](mailto:founders@incidentfox.ai) | SaaS or on-prem, SOC2 | [![Add to Slack](https://img.shields.io/badge/Add_to_Slack-4A154B?logo=slack&logoColor=white)](https://slack.com/oauth/v2/authorize?client_id=9967324357443.10323403264580&scope=app_mentions:read,channels:history,channels:join,channels:read,chat:write,chat:write.customize,commands,files:read,files:write,groups:history,groups:read,im:history,im:read,im:write,links:read,links:write,metadata.message:read,mpim:history,mpim:read,reactions:read,reactions:write,usergroups:read,users:read&user_scope=) |
+| **Self-Host (Open Core)** | Production, full control | 30 minutes | Free | Everything local | [Deployment Guide →](docs/DEPLOYMENT.md) |
 
-### 🚀 Try IncidentFox Now
-
-<p align="center">
-  <a href="https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ"><img src="https://img.shields.io/badge/Try%20Free-Join%20Our%20Slack-611f69?style=for-the-badge&logo=slack" alt="Join our Slack"></a>
-  &nbsp;&nbsp;
-  <a href="https://slack.com/oauth/v2/authorize?client_id=9967324357443.10323403264580&scope=app_mentions:read,channels:history,channels:join,channels:read,chat:write,chat:write.customize,commands,files:read,files:write,groups:history,groups:read,im:history,im:read,im:write,links:read,links:write,metadata.message:read,mpim:history,mpim:read,reactions:read,reactions:write,usergroups:read,users:read&user_scope="><img alt="Add to Slack" height="40" width="139" src="https://platform.slack-edge.com/img/add_to_slack.png" srcSet="https://platform.slack-edge.com/img/add_to_slack.png 1x, https://platform.slack-edge.com/img/add_to_slack@2x.png 2x" /></a>
-</p>
-
-**1️⃣ Try Free in Our Workspace** (Easiest)
-No setup required. Join our public Slack and start investigating right away. IncidentFox is already installed and connected to our playground telemetry.
-
-**2️⃣ Add to Your Workspace** (Recommended)
-Install IncidentFox in your own Slack with 1-click. **7-day free trial** included. Connect to your own infrastructure and telemetry. Don't have permission to install in your company Slack? Create a new workspace and try it there!
+**New to IncidentFox?** We recommend trying it in our Slack first — no setup required, see how it works instantly. [![Join Slack](https://img.shields.io/badge/Join_Slack-4A154B?logo=slack&logoColor=white)](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ)
 
 ---
 
-### 📦 All Deployment Options
+## Why IncidentFox
 
-|  | **Try Free** | **Local Docker** | **Self-Host** | **Managed** |
-|---|--------------|------------------|---------------|-------------|
-| **Best for** | Quick exploration | Evaluating with your team | Production, full control | Production, premium features |
-| **How** | Join our Slack | Docker Compose | Kubernetes (Helm) | On-prem or SaaS |
-| **Setup time** | Instant | 5 minutes | 30 minutes | 30 minutes |
-| **Cost** | Free | Free | Free (open source) | Custom pricing |
-| **Privacy** | Playground telemetry | Everything local | Everything local | Your choice |
-|  | [Join Slack →](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ) | [Quick Start ↓](#quick-start) | [Deployment Guide →](docs/DEPLOYMENT.md) | [Get in Touch →](mailto:founders@incidentfox.ai) |
+**For Engineering Leaders:** What this means for your team.
 
-**Security-conscious?** Use **Local Docker** or **Self-Host** for complete data control. Everything runs locally — your telemetry, logs, and infrastructure never leave your environment. You can also bring your own API key or internal router URL, so no data leaves your company. [Watch setup video →](#quick-start)
+| Outcome | Impact |
+|---------|--------|
+| **Faster Incident Resolution** | Hours → minutes. Auto-correlates alerts, analyzes logs, traces dependencies. |
+| **85-95% Less Alert Noise** | Smart correlation finds root cause. Engineers focus on real problems. |
+| **Knowledge Retention** | Learns your systems and runbooks. Knowledge stays when people leave. |
+| **Works on Day One** | 300+ integrations. No months of setup — connect and go. |
+| **No Vendor Lock-In** | Open source, bring your own LLM keys, deploy anywhere. |
+| **Gets Smarter Over Time** | Learns from every investigation. Your expertise compounds. |
 
----
-
-## Quick Start: Local Docker + Slack Bot
-
-Run IncidentFox **100% locally** with Docker. Everything stays on your machine — no data leaves your environment. Perfect for security-conscious teams or individual evaluation.
-
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/c51c51f2-3e1f-459e-8ce4-1e2a56c92971" width="700" controls autoplay loop muted></video>
-  <br>
-  <em>Watch: Setting up IncidentFox locally with Slack in 5 minutes</em>
-</p>
-
-**1.** [Create a Slack app](https://api.slack.com/apps?new_app=1) using [this manifest](docs/slack-manifest.yaml)
-
-**2.** Clone and configure:
-
-```bash
-git clone https://github.com/incidentfox/incidentfox.git && cd incidentfox
-cp .env.example .env
-# Add your tokens to .env (see below)
-docker-compose up -d
-```
-
-<details>
-<summary>Where to get your tokens</summary>
-
-| Token | Where to Find It |
-|-------|------------------|
-| `SLACK_BOT_TOKEN` | Slack app → **OAuth & Permissions** → Bot User OAuth Token (`xoxb-...`) |
-| `SLACK_APP_TOKEN` | Slack app → **Basic Information** → App-Level Tokens → Generate with `connections:write` (`xapp-...`) |
-| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) |
-
-</details>
-
-**3.** Test it in Slack:
-
-```
-/invite @IncidentFox
-@IncidentFox what pods are running in my cluster?
-```
-
-**Need help?** See the [detailed setup guide](docs/SLACK_SETUP.md) with screenshots.
-
-### 🔒 Maximum Privacy: Bring Your Own Key
-
-For organizations with strict data governance:
-- **Use your own API key** — Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to use your own LLM account
-- **Use your internal router** — Point to your company's internal LLM router URL
-- **No data leaves your company** — All requests stay within your environment
-
-See [deployment guide](docs/DEPLOYMENT.md) for details.
+**The bottom line:** Less time firefighting, more time building.
 
 ---
 
-## Deploy for Your Team
-
-For production deployments, use our Helm charts to deploy IncidentFox on Kubernetes.
-
-### Quick Deploy
-
-```bash
-helm repo add incidentfox https://charts.incidentfox.ai
-helm install incidentfox incidentfox/incidentfox -n incidentfox --create-namespace
-```
-
-**Full deployment guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Helm chart docs:** [charts/incidentfox/README.md](charts/incidentfox/README.md)
-
-### Architecture Overview
+## Architecture Overview
 
 ```
-  ┌───────────────────────────────────┐    ┌─────────────────────┐
-  │   Slack · GitHub · PagerDuty · API │    │       Web UI        │
-  └─────────────────┬─────────────────┘    │  (dashboard, team   │
-                    │ webhooks             │   management)       │
-  ┌─────────────────▼─────────────────┐    └──────────┬──────────┘
-  │            Orchestrator            │               │
-  │   (routes webhooks, team lookup,   │               │
-  │    token auth, audit logging)      │               │
-  └───────┬───────────────────┬───────┘               │
-          │                   │                       │
-  ┌───────▼───────┐    ┌──────▼───────────────────────▼──┐
-  │     Agent     │◄──►│        Config Service           │
-  │ (Claude/OpenAI│    │  (multi-tenant cfg, RBAC,       │
-  │  300+ tools,  │    │   routing, team hierarchy)      │
-  │  multi-agent) │    └──────────────┬─────────────────┘
-  └───┬───────┬───┘                   │
-      │       │                       ▼
-      │       │           ┌─────────────────────┐
-      │       │           │     PostgreSQL      │
-      │       │           │  (config, audit,    │
-      │       │           │   investigations)   │
-      │       │           └─────────────────────┘
-      │       │
-      ▼       ▼
-  ┌────────┐ ┌────────────────────┐
-  │Knowledge│ │   External APIs    │
-  │  Base   │ │  (K8s, AWS, Datadog│
-  │ (RAPTOR)│ │   Grafana, etc.)   │
-  └─────────┘ └────────────────────┘
+┌───────────────────────────────────┐     ┌──────────────────────┐
+│ Slack / GitHub / PagerDuty / API  │     │       Web UI         │
+└─────────────────┬─────────────────┘     │   (dashboard, team   │
+                  │ webhooks              │    management)       │
+┌─────────────────▼─────────────────┐     └──────────┬───────────┘
+│           Orchestrator            │                │
+│  (routes webhooks, team lookup,   │                │
+│    token auth, audit logging)     │                │
+└────────┬─────────────────┬────────┘                │
+         │                 │                         │
+┌────────▼────────┐   ┌────▼─────────────────────────▼───┐
+│      Agent      │<->│          Config Service          │
+│ (Claude/OpenAI, │   │    (multi-tenant cfg, RBAC,      │
+│   300+ tools,   │   │     routing, team hierarchy)     │
+│   multi-agent)  │   └─────────────────┬────────────────┘
+└────┬───────┬────┘                     │
+     │       │                          ▼
+     │       │              ┌───────────────────────┐
+     │       │              │      PostgreSQL       │
+     │       │              │    (config, audit,    │
+     │       │              │    investigations)    │
+     │       │              └───────────────────────┘
+     │       │
+     ▼       ▼
+┌──────────┐ ┌─────────────────────────┐
+│ Knowledge│ │      External APIs      │
+│   Base   │ │   (K8s, AWS, Datadog,   │
+│ (RAPTOR) │ │     Grafana, etc.)      │
+└──────────┘ └─────────────────────────┘
 ```
 
 <p align="center">
