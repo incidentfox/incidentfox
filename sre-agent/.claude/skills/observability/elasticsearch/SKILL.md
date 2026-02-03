@@ -5,27 +5,63 @@ description: Elasticsearch/OpenSearch log analysis using Lucene query syntax and
 
 # Elasticsearch Analysis
 
-## Core Principle: Statistics Before Samples
+## Authentication
 
-**NEVER start by reading raw logs.** Always begin with aggregated statistics:
-
-1. **Volume**: How many documents in the time window?
-2. **Distribution**: Which services/levels/error types?
-3. **Trends**: Is it increasing, stable, or decreasing?
-4. **THEN sample**: Get specific entries after understanding the landscape
+**IMPORTANT**: Credentials are injected automatically by a proxy layer. Do NOT check for `ELASTICSEARCH_URL`, `ES_USER`, or `ES_PASSWORD` in environment variables - they won't be visible to you. Just run the scripts directly; authentication is handled transparently.
 
 ---
 
-## Available Tools
+## MANDATORY: Statistics-First Investigation
 
-| Tool | Purpose |
-|------|---------|
-| `search_logs` | Simple Lucene query search |
-| `search_elasticsearch` | Full Query DSL search |
-| `aggregate_errors_by_field` | Group errors by a field |
-| `elasticsearch_list_indices` | List available indices |
-| `elasticsearch_get_mapping` | Get index schema/fields |
-| `get_elasticsearch_stats` | Cluster and index stats |
+**NEVER dump raw logs.** Always follow this pattern:
+
+```
+STATISTICS → SAMPLE → PATTERNS → CORRELATE
+```
+
+1. **Statistics First** - Know volume, error rate, and top patterns before sampling
+2. **Strategic Sampling** - Choose the right strategy based on statistics
+3. **Pattern Extraction** - Cluster similar errors to find root causes
+4. **Context Correlation** - Investigate around anomaly timestamps
+
+## Available Scripts
+
+All scripts are in `.claude/skills/observability/elasticsearch/scripts/`
+
+### PRIMARY INVESTIGATION SCRIPTS
+
+#### get_statistics.py - ALWAYS START HERE
+Comprehensive statistics with pattern extraction.
+```bash
+python .claude/skills/observability/elasticsearch/scripts/get_statistics.py [--index INDEX] [--time-range MINUTES]
+
+# Examples:
+python .claude/skills/observability/elasticsearch/scripts/get_statistics.py --time-range 60
+python .claude/skills/observability/elasticsearch/scripts/get_statistics.py --index logs-production
+```
+
+Output includes:
+- Total count, error count, error rate percentage
+- Status distribution (info, warn, error)
+- Top services/sources by log volume
+- **Top error patterns** (crucial for quick triage)
+- Actionable recommendation
+
+#### sample_logs.py - Strategic Sampling
+Choose the right sampling strategy based on statistics.
+```bash
+python .claude/skills/observability/elasticsearch/scripts/sample_logs.py --strategy STRATEGY [--index INDEX] [--limit N]
+
+# Strategies:
+#   errors_only   - Only error logs (default for incidents)
+#   warnings_up   - Warning and error logs
+#   around_time   - Logs around a specific timestamp
+#   all           - All log levels
+
+# Examples:
+python .claude/skills/observability/elasticsearch/scripts/sample_logs.py --strategy errors_only --index logs-production
+python .claude/skills/observability/elasticsearch/scripts/sample_logs.py --strategy around_time --timestamp "2026-01-27T05:00:00Z" --window 5
+```
 
 ---
 
@@ -157,84 +193,38 @@ error NOT debug
 
 ## Investigation Workflow
 
-### Step 1: Discover Available Data
+### Standard Incident Investigation
 
-```python
-# List indices
-elasticsearch_list_indices(pattern="logs-*")
-
-# Check index mapping (what fields exist)
-elasticsearch_get_mapping(index="logs-production")
-
-# Get cluster health and stats
-get_elasticsearch_stats(index="logs-*")
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. STATISTICS FIRST (mandatory)                              │
+│    python get_statistics.py --index <index>                  │
+│    → Know volume, error rate, top patterns                   │
+└─────────────────────────────────────────────────────────────┘
+                             │
+                             ▼
+                     High Error Rate?
+               ┌─────────────┴─────────────┐
+               │                           │
+       YES (>5%)                           NO
+               │                           │
+               ▼                           ▼
+┌─────────────────────────────┐  ┌───────────────────────────────────────────┐
+│ 2. FAST PATH                │  │ 2. TARGETED INVESTIGATION                 │
+│    Sample errors directly   │  │    Filter by specific criteria            │
+│    python sample_logs.py    │  │    python sample_logs.py --strategy all   │
+│    --strategy errors_only   │  │    → Look for anomalies                   │
+└─────────────────────────────┘  └───────────────────────────────────────────┘
 ```
 
-### Step 2: Get Statistics
+### Quick Commands Reference
 
-```python
-# Count errors by service
-aggregate_errors_by_field(
-    field="service.keyword",
-    index="logs-*",
-    time_range="1h",
-    min_level="error"
-)
-
-# Or with full Query DSL
-search_elasticsearch(
-    index="logs-*",
-    query={
-        "size": 0,
-        "query": {"term": {"level": "ERROR"}},
-        "aggs": {
-            "by_service": {"terms": {"field": "service.keyword", "size": 20}}
-        }
-    },
-    time_range="1h"
-)
-```
-
-### Step 3: Analyze Error Patterns
-
-```python
-# Search for errors with Lucene syntax
-search_logs(
-    query="level:ERROR AND service:api-gateway",
-    index="logs-*",
-    time_range="1h",
-    size=50
-)
-
-# Or with Query DSL for more control
-search_elasticsearch(
-    index="logs-*",
-    query={
-        "query": {
-            "bool": {
-                "must": [
-                    {"term": {"level": "ERROR"}},
-                    {"term": {"service.keyword": "api-gateway"}}
-                ]
-            }
-        }
-    },
-    time_range="1h",
-    size=50
-)
-```
-
-### Step 4: Sample Specific Errors
-
-```python
-# Get sample error messages
-search_logs(
-    query='level:ERROR AND message:"connection refused"',
-    index="logs-*",
-    time_range="1h",
-    size=10
-)
-```
+| Goal | Command |
+|------|---------|
+| Start investigation | `get_statistics.py --index X` |
+| Sample errors only | `sample_logs.py --strategy errors_only --index X` |
+| Investigate spike | `sample_logs.py --strategy around_time --timestamp T` |
+| All logs | `sample_logs.py --strategy all --index X --limit 20` |
 
 ---
 
@@ -292,48 +282,6 @@ search_logs(
 }
 ```
 
-### Percentile Latencies
-
-```json
-{
-  "size": 0,
-  "aggs": {
-    "latency_percentiles": {
-      "percentiles": {
-        "field": "duration_ms",
-        "percents": [50, 90, 95, 99]
-      }
-    }
-  }
-}
-```
-
----
-
-## Index Patterns
-
-### Common Index Naming
-
-```
-# Date-based indices
-logs-2024.01.15
-logs-production-2024.01.15
-
-# Patterns for searching
-logs-*              # All logs
-logs-production-*   # Production logs
-logs-*-2024.01.*    # January 2024
-```
-
-### Discovering Indices
-
-```python
-# List all log indices
-elasticsearch_list_indices(pattern="logs-*")
-
-# Returns: name, doc_count, size, health, status
-```
-
 ---
 
 ## Field Types
@@ -351,143 +299,13 @@ elasticsearch_list_indices(pattern="logs-*")
 "match": {"message": "connection error"}
 ```
 
-### Getting Field Info
-
-```python
-# Check what fields exist and their types
-elasticsearch_get_mapping(index="logs-production")
-```
-
 ---
 
-## Output Format
+## Anti-Patterns to Avoid
 
-```markdown
-## Elasticsearch Analysis Summary
-
-### Time Window
-- **Start**: [timestamp]
-- **End**: [timestamp]
-- **Duration**: X hours
-
-### Index Statistics
-- **Indices searched**: [list of indices]
-- **Total documents**: X events
-- **Error count**: Y events (Z%)
-- **Cluster health**: [green/yellow/red]
-
-### Error Distribution
-| Service | Error Count |
-|---------|-------------|
-| [service1] | N |
-| [service2] | M |
-
-### Error Timeline
-[When errors started, peaked, etc.]
-
-### Top Error Messages
-1. [message]: N occurrences
-2. [message]: M occurrences
-
-### Sample Errors
-[Quote 2-3 representative error messages with stack traces if available]
-
-### Root Cause Hypothesis
-[Based on patterns observed]
-```
-
----
-
-## Performance Tips
-
-### Use Filters for Exact Matches
-
-```json
-// GOOD - filter is cached and faster
-"bool": {
-  "filter": [
-    {"term": {"level": "ERROR"}}
-  ]
-}
-
-// LESS OPTIMAL - must clauses calculate score
-"bool": {
-  "must": [
-    {"term": {"level": "ERROR"}}
-  ]
-}
-```
-
-### Limit Result Size
-
-```python
-# GOOD - only get what you need
-search_logs(..., size=50)
-
-# BAD - retrieving too many documents
-search_logs(..., size=10000)
-```
-
-### Use Aggregations Instead of Large Results
-
-```python
-# GOOD - aggregate in Elasticsearch
-search_elasticsearch(
-    query={"size": 0, "aggs": {"by_service": ...}},
-    ...
-)
-
-# BAD - retrieve all docs and aggregate in Python
-search_logs(..., size=10000)  # Then group manually
-```
-
-### Specify Source Fields
-
-```json
-// Only return needed fields
-{
-  "_source": ["@timestamp", "level", "message", "service"],
-  "query": {...}
-}
-```
-
----
-
-## Anti-Patterns
-
-1. **Searching without index pattern** - Always specify `index="logs-*"` or narrower
-2. **Large size without aggregation** - Use `size: 0` with aggs for stats
-3. **Text field in aggregation** - Use `.keyword` suffix for terms aggs
-4. **Wildcard prefix** - `*error` is expensive, prefer `error*` or exact match
-5. **Unbounded time ranges** - Always specify `time_range` parameter
-
----
-
-## Pro Tips
-
-**Field discovery:**
-```python
-# Run this first to understand available fields
-elasticsearch_get_mapping(index="logs-production")
-```
-
-**Keyword suffix:**
-Most text fields have a `.keyword` subfield for exact matches:
-- `message` → full-text search
-- `message.keyword` → exact match, aggregation
-
-**Date math in ranges:**
-```json
-"range": {
-  "@timestamp": {
-    "gte": "now-1h",
-    "lte": "now"
-  }
-}
-```
-
-**Index lifecycle:**
-Indices are often rotated daily. Search recent indices for faster queries:
-```python
-elasticsearch_list_indices(pattern="logs-*")  # Check date-based names
-```
+1. ❌ **NEVER skip statistics** - `get_statistics.py` is MANDATORY first step
+2. ❌ **Unbounded queries** - Always specify time ranges and limits
+3. ❌ **Fetching all logs** - Use sampling strategies, not unbounded searches
+4. ❌ **Ignoring error rate** - High error rate means immediate investigation
+5. ❌ **Text field in aggregation** - Use `.keyword` suffix for terms aggs
+6. ❌ **Wildcard prefix** - `*error` is expensive, prefer `error*` or exact match

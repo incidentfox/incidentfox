@@ -5,25 +5,65 @@ description: Splunk log analysis using SPL (Search Processing Language). Use whe
 
 # Splunk Analysis
 
-## Core Principle: Statistics Before Samples
+## Authentication
 
-**NEVER start by reading raw logs.** Always begin with aggregated statistics:
-
-1. **Volume**: How many events in the time window?
-2. **Distribution**: Which sources/hosts/error types?
-3. **Trends**: Is it increasing, stable, or decreasing?
-4. **THEN sample**: Get specific entries after understanding the landscape
+**IMPORTANT**: Credentials are injected automatically by a proxy layer. Do NOT check for `SPLUNK_HOST`, `SPLUNK_TOKEN`, or other credentials in environment variables - they won't be visible to you. Just run the scripts directly; authentication is handled transparently.
 
 ---
 
-## Available Tools
+## MANDATORY: Statistics-First Investigation
 
-| Tool | Purpose |
-|------|---------|
-| `splunk_search` | Execute SPL queries |
-| `splunk_list_indexes` | List available indexes |
-| `splunk_get_saved_searches` | Get saved searches/reports |
-| `splunk_get_alerts` | Get triggered alerts |
+**NEVER dump raw logs.** Always follow this pattern:
+
+```
+STATISTICS → SAMPLE → PATTERNS → CORRELATE
+```
+
+1. **Statistics First** - Know volume, error rate, and top patterns before sampling
+2. **Strategic Sampling** - Choose the right strategy based on statistics
+3. **Pattern Extraction** - Cluster similar errors to find root causes
+4. **Context Correlation** - Investigate around anomaly timestamps
+
+## Available Scripts
+
+All scripts are in `.claude/skills/observability/splunk/scripts/`
+
+### PRIMARY INVESTIGATION SCRIPTS
+
+#### get_statistics.py - ALWAYS START HERE
+Comprehensive statistics with pattern extraction.
+```bash
+python .claude/skills/observability/splunk/scripts/get_statistics.py [--index INDEX] [--sourcetype SOURCETYPE] [--time-range MINUTES]
+
+# Examples:
+python .claude/skills/observability/splunk/scripts/get_statistics.py --time-range 60
+python .claude/skills/observability/splunk/scripts/get_statistics.py --index main
+python .claude/skills/observability/splunk/scripts/get_statistics.py --sourcetype access_combined
+```
+
+Output includes:
+- Total count, error count, error rate percentage
+- Status distribution (info, warn, error)
+- Top sourcetypes and hosts by log volume
+- **Top error patterns** (crucial for quick triage)
+- Actionable recommendation
+
+#### sample_logs.py - Strategic Sampling
+Choose the right sampling strategy based on statistics.
+```bash
+python .claude/skills/observability/splunk/scripts/sample_logs.py --strategy STRATEGY [--index INDEX] [--sourcetype SOURCETYPE] [--limit N]
+
+# Strategies:
+#   errors_only   - Only error logs (default for incidents)
+#   warnings_up   - Warning and error logs
+#   around_time   - Logs around a specific timestamp
+#   all           - All log levels
+
+# Examples:
+python .claude/skills/observability/splunk/scripts/sample_logs.py --strategy errors_only --index main
+python .claude/skills/observability/splunk/scripts/sample_logs.py --strategy around_time --timestamp "2026-01-27T05:00:00" --window 5
+python .claude/skills/observability/splunk/scripts/sample_logs.py --strategy all --sourcetype access_combined --limit 20
+```
 
 ---
 
@@ -82,63 +122,38 @@ earliest=-1d@d  # 1 day ago, rounded to day
 
 ## Investigation Workflow
 
-### Step 1: Get the Big Picture
+### Standard Incident Investigation
 
-```python
-# Count events by source
-splunk_search(
-    query='index=main | stats count by source | sort -count | head 10',
-    earliest_time="-1h",
-    max_results=20
-)
-
-# Error count over time
-splunk_search(
-    query='index=main level=ERROR | timechart span=5m count',
-    earliest_time="-1h"
-)
-
-# Top error messages
-splunk_search(
-    query='index=main level=ERROR | stats count by message | sort -count | head 10',
-    earliest_time="-1h"
-)
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. STATISTICS FIRST (mandatory)                              │
+│    python get_statistics.py --index <index>                  │
+│    → Know volume, error rate, top patterns                   │
+└─────────────────────────────────────────────────────────────┘
+                             │
+                             ▼
+                     High Error Rate?
+               ┌─────────────┴─────────────┐
+               │                           │
+       YES (>5%)                           NO
+               │                           │
+               ▼                           ▼
+┌─────────────────────────────┐  ┌───────────────────────────────────────────┐
+│ 2. FAST PATH                │  │ 2. TARGETED INVESTIGATION                 │
+│    Sample errors directly   │  │    Filter by specific criteria            │
+│    python sample_logs.py    │  │    python sample_logs.py --strategy all   │
+│    --strategy errors_only   │  │    → Look for anomalies                   │
+└─────────────────────────────┘  └───────────────────────────────────────────┘
 ```
 
-### Step 2: Focus on Problem Area
+### Quick Commands Reference
 
-```python
-# Errors from specific service
-splunk_search(
-    query='index=main service=api-gateway level=ERROR | stats count by message | sort -count',
-    earliest_time="-1h"
-)
-
-# Timeline of specific error
-splunk_search(
-    query='index=main "connection refused" | timechart span=1m count',
-    earliest_time="-1h"
-)
-```
-
-### Step 3: Sample Strategically
-
-```python
-# Get sample error events
-splunk_search(
-    query='index=main service=api-gateway level=ERROR | head 10',
-    earliest_time="-1h",
-    max_results=10
-)
-
-# Get context around a specific time
-splunk_search(
-    query='index=main service=api-gateway',
-    earliest_time="01/15/2024:14:30:00",
-    latest_time="01/15/2024:14:35:00",
-    max_results=50
-)
-```
+| Goal | Command |
+|------|---------|
+| Start investigation | `get_statistics.py --index X` |
+| Sample errors only | `sample_logs.py --strategy errors_only --index X` |
+| Investigate spike | `sample_logs.py --strategy around_time --timestamp T` |
+| All logs | `sample_logs.py --strategy all --index X --limit 20` |
 
 ---
 
@@ -210,14 +225,6 @@ index=main sourcetype=access_combined
 | sort -avg_rt
 ```
 
-### Transaction Analysis (Multi-Event)
-
-```spl
-index=main
-| transaction request_id maxspan=5m
-| stats avg(duration) as avg_duration, count as transaction_count
-```
-
 ### Anomaly Detection
 
 ```spl
@@ -231,145 +238,11 @@ index=main
 
 ---
 
-## Working with Indexes and Saved Searches
+## Anti-Patterns to Avoid
 
-### Discover Available Data
-
-```python
-# List all indexes
-splunk_list_indexes()
-
-# Check index sizes and event counts
-# Returns: name, total_event_count, current_db_size_mb
-```
-
-### Use Saved Searches
-
-```python
-# Get existing searches (often have proven queries)
-splunk_get_saved_searches()
-
-# Returns: name, search query, schedule, alert_type
-```
-
-### Check Triggered Alerts
-
-```python
-# Get recent alerts
-splunk_get_alerts(earliest_time="-24h")
-
-# Returns: alert_name, trigger_time, severity
-```
-
----
-
-## Output Format
-
-```markdown
-## Splunk Analysis Summary
-
-### Time Window
-- **Start**: [earliest_time]
-- **End**: [latest_time]
-- **Duration**: X hours
-
-### Query Statistics
-- **Total events**: X events
-- **Error count**: Y events (Z%)
-- **Sources**: N distinct sources
-- **Error rate trend**: [increasing/stable/decreasing]
-
-### Top Error Sources
-| Source | Count |
-|--------|-------|
-| [source1] | N |
-| [source2] | M |
-
-### Error Timeline
-[Describe when errors started, peaked, etc.]
-
-### Top Error Messages
-1. [message]: N occurrences
-2. [message]: M occurrences
-
-### Sample Errors
-[Quote 2-3 representative error messages]
-
-### Root Cause Hypothesis
-[Based on patterns observed]
-```
-
----
-
-## Performance Tips
-
-### Always Specify Index
-
-```spl
-# GOOD - fast
-index=main error
-
-# BAD - scans all indexes (slow)
-error
-```
-
-### Use Time Filters
-
-```python
-# GOOD - bounded time
-splunk_search(query="...", earliest_time="-1h")
-
-# BAD - unbounded (scans everything)
-splunk_search(query="...")
-```
-
-### Filter Early
-
-```spl
-# GOOD - filter before aggregation
-index=main level=ERROR | stats count by host
-
-# BAD - stats on all events, then filter
-index=main | stats count by host, level | where level="ERROR"
-```
-
-### Limit Results
-
-```spl
-# Use head/tail to limit before returning
-index=main error | stats count by message | sort -count | head 20
-```
-
----
-
-## Anti-Patterns
-
-1. **No index specified** - Always use `index=X` for performance
-2. **Unbounded time range** - Always specify `earliest_time`
-3. **Returning too many raw events** - Use `stats`, `timechart`, or `head/tail`
-4. **Complex rex on all events** - Filter first, then extract
-5. **Ignoring saved searches** - Others may have solved your query already
-
----
-
-## Pro Tips
-
-**Start broad, narrow down:**
-1. Get counts first (`| stats count by source`)
-2. Identify problematic source
-3. Then filter to that source
-4. Finally sample events
-
-**Use subsearch for correlation:**
-```spl
-index=main error [search index=deployments | head 1 | fields version]
-```
-
-**Leverage lookups:**
-If you have service metadata, join it:
-```spl
-index=main | lookup services.csv service_id OUTPUT service_name, team
-```
-
-**Check field extraction:**
-Run `| fieldsummary` to see what fields are available and their coverage.
+1. ❌ **NEVER skip statistics** - `get_statistics.py` is MANDATORY first step
+2. ❌ **No index specified** - Always use `index=X` for performance
+3. ❌ **Unbounded time range** - Always specify time ranges
+4. ❌ **Fetching all logs** - Use sampling strategies, not unbounded searches
+5. ❌ **Ignoring error rate** - High error rate means immediate investigation
+6. ❌ **Complex rex on all events** - Filter first, then extract
