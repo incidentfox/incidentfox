@@ -239,7 +239,11 @@ def calculate_mttr(
     Returns:
         MTTR statistics
     """
-    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat().replace("+00:00", "Z")
+    since = (
+        (datetime.now(timezone.utc) - timedelta(days=days))
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
     until = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     params = {

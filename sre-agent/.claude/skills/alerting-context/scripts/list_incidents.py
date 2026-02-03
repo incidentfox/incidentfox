@@ -50,7 +50,11 @@ def main():
     args = parser.parse_args()
 
     try:
-        since = (datetime.now(timezone.utc) - timedelta(days=args.days)).isoformat().replace("+00:00", "Z")
+        since = (
+            (datetime.now(timezone.utc) - timedelta(days=args.days))
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
         until = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
         service_ids = [args.service] if args.service else None
