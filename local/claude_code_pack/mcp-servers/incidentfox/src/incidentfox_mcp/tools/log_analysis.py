@@ -591,18 +591,16 @@ class CoralogixBackend(LogBackend):
             if sev in error_severities:
                 error_count += cnt
 
-        # Use numeric severity filter: 5=ERROR, 6=CRITICAL
-        pattern_query = "source logs | filter $m.severity >= 5 | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
+        # Filter errors by message content, group by body for top patterns
+        pattern_query = "source logs | filter $d.logRecord.body:string ~ 'error' || $d.logRecord.body:string ~ 'Error' || $d.logRecord.body:string ~ 'failed' || $d.logRecord.body:string ~ 'Failed' || $d.logRecord.body:string ~ 'exception' || $d.logRecord.body:string ~ 'Exception' | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
         if service:
-            pattern_query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity >= 5 | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
+            pattern_query = f"source logs | filter $l.subsystemname == '{service}' | filter $d.logRecord.body:string ~ 'error' || $d.logRecord.body:string ~ 'Error' || $d.logRecord.body:string ~ 'failed' || $d.logRecord.body:string ~ 'Failed' || $d.logRecord.body:string ~ 'exception' || $d.logRecord.body:string ~ 'Exception' | groupby $d.logRecord.body:string aggregate count() as cnt | orderby cnt desc | limit 10"
 
         pattern_results = self._query(pattern_query, start_time, end_time, limit=10)
         top_patterns = []
         for r in pattern_results:
-            # GroupBy result may use different field names - try multiple
-            body = (
-                r.get("logRecord.body") or r.get("body") or self._extract_body(r) or ""
-            )
+            # GroupBy expression result is stored in '_expr0' field
+            body = r.get("_expr0", "") or ""
             top_patterns.append({"pattern": str(body)[:100], "count": r.get("cnt", 0)})
 
         return {
@@ -627,11 +625,11 @@ class CoralogixBackend(LogBackend):
         **kwargs,
     ) -> dict[str, Any]:
         """Sample Coralogix logs."""
-        # Severity levels: 5=ERROR, 6=CRITICAL (numeric in metadata)
+        # Filter errors by message content - severity filtering has syntax issues
         if strategy == "errors_only":
-            query = f"source logs | filter $m.severity >= 5 | limit {sample_size}"
+            query = f"source logs | filter $d.logRecord.body:string ~ 'error' || $d.logRecord.body:string ~ 'Error' || $d.logRecord.body:string ~ 'ERROR' || $d.logRecord.body:string ~ 'exception' || $d.logRecord.body:string ~ 'Exception' || $d.logRecord.body:string ~ 'failed' || $d.logRecord.body:string ~ 'Failed' | limit {sample_size}"
             if service:
-                query = f"source logs | filter $l.subsystemname == '{service}' | filter $m.severity >= 5 | limit {sample_size}"
+                query = f"source logs | filter $l.subsystemname == '{service}' | filter $d.logRecord.body:string ~ 'error' || $d.logRecord.body:string ~ 'Error' || $d.logRecord.body:string ~ 'ERROR' || $d.logRecord.body:string ~ 'exception' || $d.logRecord.body:string ~ 'Exception' || $d.logRecord.body:string ~ 'failed' || $d.logRecord.body:string ~ 'Failed' | limit {sample_size}"
         else:
             query = f"source logs | limit {sample_size}"
             if service:

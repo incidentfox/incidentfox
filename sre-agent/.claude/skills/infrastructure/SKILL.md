@@ -9,24 +9,24 @@ description: Infrastructure debugging for Kubernetes and AWS. Use when investiga
 
 ### Kubernetes
 For pod crashes, deployment issues, resource problems, container failures.
-See: `.claude/skills/infrastructure/kubernetes/SKILL.md`
+Use: `/infrastructure-kubernetes`
 
 ### AWS (future)
 For EC2, ECS, Lambda, and CloudWatch issues.
-See: `.claude/skills/infrastructure/aws/SKILL.md`
+Coming soon.
 
 ## Quick Reference
 
 ### Kubernetes Issues
 ```bash
 # List pods in namespace
-python .claude/skills/infrastructure/kubernetes/scripts/list_pods.py -n otel-demo
+python .claude/skills/infrastructure-kubernetes/scripts/list_pods.py -n otel-demo
 
 # Get pod events (ALWAYS check first!)
-python .claude/skills/infrastructure/kubernetes/scripts/get_events.py <pod-name> -n otel-demo
+python .claude/skills/infrastructure-kubernetes/scripts/get_events.py <pod-name> -n otel-demo
 
 # Get pod logs
-python .claude/skills/infrastructure/kubernetes/scripts/get_logs.py <pod-name> -n otel-demo --tail 100
+python .claude/skills/infrastructure-kubernetes/scripts/get_logs.py <pod-name> -n otel-demo --tail 100
 ```
 
 ### Common Patterns
