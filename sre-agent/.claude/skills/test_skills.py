@@ -44,7 +44,9 @@ class TestResult:
 SKILLS_DIR = Path(__file__).parent
 
 
-def run_script(skill_dir: str, script: str, args: list[str] = None, env_override: dict = None) -> TestResult:
+def run_script(
+    skill_dir: str, script: str, args: list[str] = None, env_override: dict = None
+) -> TestResult:
     """Run a skill script and capture output."""
     script_path = SKILLS_DIR / skill_dir / "scripts" / script
 
@@ -54,7 +56,7 @@ def run_script(skill_dir: str, script: str, args: list[str] = None, env_override
             script=script,
             passed=False,
             output="",
-            error=f"Script not found: {script_path}"
+            error=f"Script not found: {script_path}",
         )
 
     cmd = [sys.executable, str(script_path)]
@@ -72,7 +74,7 @@ def run_script(skill_dir: str, script: str, args: list[str] = None, env_override
             text=True,
             timeout=30,
             env=env,
-            cwd=str(SKILLS_DIR / skill_dir / "scripts")
+            cwd=str(SKILLS_DIR / skill_dir / "scripts"),
         )
 
         if result.returncode != 0:
@@ -81,14 +83,11 @@ def run_script(skill_dir: str, script: str, args: list[str] = None, env_override
                 script=script,
                 passed=False,
                 output=result.stdout,
-                error=result.stderr or f"Exit code: {result.returncode}"
+                error=result.stderr or f"Exit code: {result.returncode}",
             )
 
         return TestResult(
-            skill=skill_dir,
-            script=script,
-            passed=True,
-            output=result.stdout
+            skill=skill_dir, script=script, passed=True, output=result.stdout
         )
     except subprocess.TimeoutExpired:
         return TestResult(
@@ -96,15 +95,11 @@ def run_script(skill_dir: str, script: str, args: list[str] = None, env_override
             script=script,
             passed=False,
             output="",
-            error="Timeout after 30 seconds"
+            error="Timeout after 30 seconds",
         )
     except Exception as e:
         return TestResult(
-            skill=skill_dir,
-            script=script,
-            passed=False,
-            output="",
-            error=str(e)
+            skill=skill_dir, script=script, passed=False, output="", error=str(e)
         )
 
 
@@ -119,7 +114,9 @@ def validate_json_output(result: TestResult) -> TestResult:
         if isinstance(data, dict):
             if data.get("error") or data.get("errors"):
                 result.passed = False
-                result.error = f"API error in response: {data.get('error') or data.get('errors')}"
+                result.error = (
+                    f"API error in response: {data.get('error') or data.get('errors')}"
+                )
         return result
     except json.JSONDecodeError as e:
         # Not JSON output - that's OK for non-json mode
@@ -136,19 +133,22 @@ def check_env_vars(required: list[str]) -> tuple[bool, list[str]]:
 # Skill Test Definitions
 # =============================================================================
 
+
 def test_coralogix() -> list[TestResult]:
     """Test Coralogix skill."""
     results = []
 
     ok, missing = check_env_vars(["CORALOGIX_DOMAIN", "CORALOGIX_API_KEY"])
     if not ok:
-        return [TestResult(
-            skill="observability-coralogix",
-            script="(env check)",
-            passed=False,
-            output="",
-            error=f"Missing env vars: {', '.join(missing)}"
-        )]
+        return [
+            TestResult(
+                skill="observability-coralogix",
+                script="(env check)",
+                passed=False,
+                output="",
+                error=f"Missing env vars: {', '.join(missing)}",
+            )
+        ]
 
     # Test list_services.py
     result = run_script("observability-coralogix", "list_services.py", ["--json"])
@@ -156,7 +156,9 @@ def test_coralogix() -> list[TestResult]:
     results.append(result)
 
     # Test get_statistics.py
-    result = run_script("observability-coralogix", "get_statistics.py", ["--time-range", "30", "--json"])
+    result = run_script(
+        "observability-coralogix", "get_statistics.py", ["--time-range", "30", "--json"]
+    )
     result = validate_json_output(result)
     results.append(result)
 
@@ -169,16 +171,20 @@ def test_datadog() -> list[TestResult]:
 
     ok, missing = check_env_vars(["DATADOG_SITE", "DATADOG_API_KEY", "DATADOG_APP_KEY"])
     if not ok:
-        return [TestResult(
-            skill="observability-datadog",
-            script="(env check)",
-            passed=False,
-            output="",
-            error=f"Missing env vars: {', '.join(missing)}"
-        )]
+        return [
+            TestResult(
+                skill="observability-datadog",
+                script="(env check)",
+                passed=False,
+                output="",
+                error=f"Missing env vars: {', '.join(missing)}",
+            )
+        ]
 
     # Test get_statistics.py
-    result = run_script("observability-datadog", "get_statistics.py", ["--time-range", "30", "--json"])
+    result = run_script(
+        "observability-datadog", "get_statistics.py", ["--time-range", "30", "--json"]
+    )
     result = validate_json_output(result)
     results.append(result)
 
@@ -191,16 +197,22 @@ def test_elasticsearch() -> list[TestResult]:
 
     ok, missing = check_env_vars(["ELASTICSEARCH_URL"])
     if not ok:
-        return [TestResult(
-            skill="observability-elasticsearch",
-            script="(env check)",
-            passed=False,
-            output="",
-            error=f"Missing env vars: {', '.join(missing)}"
-        )]
+        return [
+            TestResult(
+                skill="observability-elasticsearch",
+                script="(env check)",
+                passed=False,
+                output="",
+                error=f"Missing env vars: {', '.join(missing)}",
+            )
+        ]
 
     # Test get_statistics.py
-    result = run_script("observability-elasticsearch", "get_statistics.py", ["--time-range", "30", "--json"])
+    result = run_script(
+        "observability-elasticsearch",
+        "get_statistics.py",
+        ["--time-range", "30", "--json"],
+    )
     result = validate_json_output(result)
     results.append(result)
 
@@ -213,13 +225,15 @@ def test_jaeger() -> list[TestResult]:
 
     ok, missing = check_env_vars(["JAEGER_URL"])
     if not ok:
-        return [TestResult(
-            skill="observability-jaeger",
-            script="(env check)",
-            passed=False,
-            output="",
-            error=f"Missing env vars: {', '.join(missing)}"
-        )]
+        return [
+            TestResult(
+                skill="observability-jaeger",
+                script="(env check)",
+                passed=False,
+                output="",
+                error=f"Missing env vars: {', '.join(missing)}",
+            )
+        ]
 
     # Test list_services.py
     result = run_script("observability-jaeger", "list_services.py", ["--json"])
@@ -232,7 +246,11 @@ def test_jaeger() -> list[TestResult]:
             data = json.loads(result.output)
             services = data.get("services", [])
             if services:
-                result2 = run_script("observability-jaeger", "list_operations.py", [services[0], "--json"])
+                result2 = run_script(
+                    "observability-jaeger",
+                    "list_operations.py",
+                    [services[0], "--json"],
+                )
                 result2 = validate_json_output(result2)
                 results.append(result2)
         except:
@@ -247,13 +265,15 @@ def test_prometheus() -> list[TestResult]:
 
     ok, missing = check_env_vars(["PROMETHEUS_URL"])
     if not ok:
-        return [TestResult(
-            skill="metrics-analysis",
-            script="(env check)",
-            passed=False,
-            output="",
-            error=f"Missing env vars: {', '.join(missing)}"
-        )]
+        return [
+            TestResult(
+                skill="metrics-analysis",
+                script="(env check)",
+                passed=False,
+                output="",
+                error=f"Missing env vars: {', '.join(missing)}",
+            )
+        ]
 
     # Test query_prometheus.py with a simple query
     result = run_script("metrics-analysis", "query_prometheus.py", ["up", "--json"])
@@ -269,13 +289,15 @@ def test_grafana() -> list[TestResult]:
 
     ok, missing = check_env_vars(["GRAFANA_URL", "GRAFANA_API_KEY"])
     if not ok:
-        return [TestResult(
-            skill="metrics-analysis",
-            script="(env check)",
-            passed=False,
-            output="",
-            error=f"Missing env vars: {', '.join(missing)}"
-        )]
+        return [
+            TestResult(
+                skill="metrics-analysis",
+                script="(env check)",
+                passed=False,
+                output="",
+                error=f"Missing env vars: {', '.join(missing)}",
+            )
+        ]
 
     # Test list_dashboards.py
     result = run_script("metrics-analysis", "list_dashboards.py", ["--json"])
@@ -316,10 +338,15 @@ def print_result(result: TestResult):
 
 def main():
     parser = argparse.ArgumentParser(description="Test SRE Agent skills")
-    parser.add_argument("--skill", "-s", choices=list(SKILL_TESTS.keys()),
-                        help="Test specific skill only")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Show full output for passed tests")
+    parser.add_argument(
+        "--skill",
+        "-s",
+        choices=list(SKILL_TESTS.keys()),
+        help="Test specific skill only",
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Show full output for passed tests"
+    )
     args = parser.parse_args()
 
     print("=" * 60)

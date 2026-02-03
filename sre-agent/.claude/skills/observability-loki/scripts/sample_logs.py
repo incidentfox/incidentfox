@@ -61,18 +61,25 @@ def main():
                 for entry in stream.get("values", []):
                     ts_ns, line = entry
                     ts = datetime.fromtimestamp(int(ts_ns) / 1e9, tz=timezone.utc)
-                    entries.append({
-                        "timestamp": ts.isoformat(),
-                        "labels": labels,
-                        "line": line,
-                    })
+                    entries.append(
+                        {
+                            "timestamp": ts.isoformat(),
+                            "labels": labels,
+                            "line": line,
+                        }
+                    )
             # Sort by timestamp descending
             entries.sort(key=lambda x: x["timestamp"], reverse=True)
-            print(json.dumps({
-                "query": logql,
-                "count": len(entries),
-                "entries": entries[:args.limit],
-            }, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "query": logql,
+                        "count": len(entries),
+                        "entries": entries[: args.limit],
+                    },
+                    indent=2,
+                )
+            )
         else:
             print(f"Logs matching: {logql}")
             print(f"Time window: last {args.lookback}h")
@@ -92,12 +99,14 @@ def main():
                 print("No logs found matching the query.")
                 return
 
-            for labels, entry in all_entries[:args.limit]:
+            for labels, entry in all_entries[: args.limit]:
                 print(format_log_entry(labels, entry))
                 print()
 
             print("-" * 60)
-            print(f"Showing {min(len(all_entries), args.limit)} of {len(all_entries)} entries")
+            print(
+                f"Showing {min(len(all_entries), args.limit)} of {len(all_entries)} entries"
+            )
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

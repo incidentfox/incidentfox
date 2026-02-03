@@ -6,8 +6,8 @@ Tests that each backend API is accessible and returns valid data.
 
 import json
 import ssl
-import urllib.request
 import urllib.error
+import urllib.request
 from base64 import b64encode
 from datetime import datetime, timedelta, timezone
 
@@ -24,19 +24,16 @@ def test_result(name: str, success: bool, message: str, data: any = None):
 # ELASTICSEARCH
 # =============================================================================
 def test_elasticsearch():
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("ELASTICSEARCH")
-    print("="*60)
+    print("=" * 60)
 
     url = "https://a6f123d4974844f938d66fd05676392b-1823852830.us-west-2.elb.amazonaws.com:9200"
     user = "elastic"
     password = "0LDCTr7cf1PzvYES"
 
     auth = b64encode(f"{user}:{password}".encode()).decode()
-    headers = {
-        "Authorization": f"Basic {auth}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Basic {auth}", "Content-Type": "application/json"}
 
     # Skip SSL verification for self-signed certs
     ctx = ssl.create_default_context()
@@ -48,7 +45,11 @@ def test_elasticsearch():
         req = urllib.request.Request(f"{url}/_cluster/health", headers=headers)
         with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
             data = json.loads(resp.read())
-            test_result("Cluster Health", True, f"Status: {data.get('status')}, Nodes: {data.get('number_of_nodes')}")
+            test_result(
+                "Cluster Health",
+                True,
+                f"Status: {data.get('status')}, Nodes: {data.get('number_of_nodes')}",
+            )
     except Exception as e:
         test_result("Cluster Health", False, str(e))
 
@@ -65,11 +66,10 @@ def test_elasticsearch():
 
     # Test 3: Search logs
     try:
-        search_body = json.dumps({
-            "query": {"match_all": {}},
-            "size": 5
-        }).encode()
-        req = urllib.request.Request(f"{url}/logs-*/_search", data=search_body, headers=headers, method="POST")
+        search_body = json.dumps({"query": {"match_all": {}}, "size": 5}).encode()
+        req = urllib.request.Request(
+            f"{url}/logs-*/_search", data=search_body, headers=headers, method="POST"
+        )
         with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
             data = json.loads(resp.read())
             hits = data.get("hits", {}).get("total", {})
@@ -79,7 +79,9 @@ def test_elasticsearch():
         if e.code == 404:
             test_result("Search Logs", True, "No logs-* index (expected if no data)")
         else:
-            test_result("Search Logs", False, f"HTTP {e.code}: {e.read().decode()[:100]}")
+            test_result(
+                "Search Logs", False, f"HTTP {e.code}: {e.read().decode()[:100]}"
+            )
     except Exception as e:
         test_result("Search Logs", False, str(e))
 
@@ -88,19 +90,18 @@ def test_elasticsearch():
 # GRAFANA
 # =============================================================================
 def test_grafana():
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("GRAFANA")
-    print("="*60)
+    print("=" * 60)
 
-    url = "http://abffcf5b990ec4bd685aef627eb2daf1-1789943242.us-west-2.elb.amazonaws.com"
+    url = (
+        "http://abffcf5b990ec4bd685aef627eb2daf1-1789943242.us-west-2.elb.amazonaws.com"
+    )
     user = "admin"
     password = "uDrDN1nix1zFBpdrAUF1"
 
     auth = b64encode(f"{user}:{password}".encode()).decode()
-    headers = {
-        "Authorization": f"Basic {auth}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Basic {auth}", "Content-Type": "application/json"}
 
     # Test 1: Health check
     try:
@@ -138,28 +139,32 @@ def test_grafana():
 # CORALOGIX
 # =============================================================================
 def test_coralogix():
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("CORALOGIX")
-    print("="*60)
+    print("=" * 60)
 
     api_key = "cxtp_3yj3bxsoKG58al9qh4X8z7oursWOwZ"
     api_url = "https://ng-api-http.cx498.coralogix.com"
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     # Test 1: Query logs
     try:
-        query_body = json.dumps({
-            "query": "source logs | limit 5"
-        }).encode()
-        req = urllib.request.Request(f"{api_url}/api/v1/dataprime/query", data=query_body, headers=headers, method="POST")
+        query_body = json.dumps({"query": "source logs | limit 5"}).encode()
+        req = urllib.request.Request(
+            f"{api_url}/api/v1/dataprime/query",
+            data=query_body,
+            headers=headers,
+            method="POST",
+        )
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read())
             if "queryId" in data:
-                test_result("Query Logs", True, f"Query ID: {data['queryId'].get('queryId', 'N/A')[:20]}...")
+                test_result(
+                    "Query Logs",
+                    True,
+                    f"Query ID: {data['queryId'].get('queryId', 'N/A')[:20]}...",
+                )
             else:
                 test_result("Query Logs", True, f"Response: {str(data)[:100]}")
     except Exception as e:
@@ -167,10 +172,17 @@ def test_coralogix():
 
     # Test 2: Check services (aggregation)
     try:
-        query_body = json.dumps({
-            "query": "source logs | groupby $l.subsystemname aggregate count() as cnt | limit 10"
-        }).encode()
-        req = urllib.request.Request(f"{api_url}/api/v1/dataprime/query", data=query_body, headers=headers, method="POST")
+        query_body = json.dumps(
+            {
+                "query": "source logs | groupby $l.subsystemname aggregate count() as cnt | limit 10"
+            }
+        ).encode()
+        req = urllib.request.Request(
+            f"{api_url}/api/v1/dataprime/query",
+            data=query_body,
+            headers=headers,
+            method="POST",
+        )
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read())
             test_result("List Services", True, "Aggregation query accepted")
@@ -182,9 +194,9 @@ def test_coralogix():
 # DATADOG
 # =============================================================================
 def test_datadog():
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("DATADOG")
-    print("="*60)
+    print("=" * 60)
 
     api_key = "e6226b3acf72e50fd9905559e1ccd2f4"
     app_key = "08a8a6b503e98818a43dcd7e0a3f4055d20d2915"
@@ -193,21 +205,29 @@ def test_datadog():
     headers = {
         "DD-API-KEY": api_key,
         "DD-APPLICATION-KEY": app_key,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
     # Test 1: Validate keys
     try:
-        req = urllib.request.Request(f"https://api.{site}/api/v1/validate", headers=headers)
+        req = urllib.request.Request(
+            f"https://api.{site}/api/v1/validate", headers=headers
+        )
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
-            test_result("Validate API Keys", data.get("valid", False), f"Valid: {data.get('valid')}")
+            test_result(
+                "Validate API Keys",
+                data.get("valid", False),
+                f"Valid: {data.get('valid')}",
+            )
     except Exception as e:
         test_result("Validate API Keys", False, str(e))
 
     # Test 2: List monitors
     try:
-        req = urllib.request.Request(f"https://api.{site}/api/v1/monitor", headers=headers)
+        req = urllib.request.Request(
+            f"https://api.{site}/api/v1/monitor", headers=headers
+        )
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
             count = len(data) if isinstance(data, list) else 0
@@ -219,15 +239,22 @@ def test_datadog():
     try:
         now = datetime.now(timezone.utc)
         start = now - timedelta(minutes=15)
-        query_body = json.dumps({
-            "filter": {
-                "query": "*",
-                "from": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "to": now.strftime("%Y-%m-%dT%H:%M:%SZ")
-            },
-            "page": {"limit": 5}
-        }).encode()
-        req = urllib.request.Request(f"https://api.{site}/api/v2/logs/events/search", data=query_body, headers=headers, method="POST")
+        query_body = json.dumps(
+            {
+                "filter": {
+                    "query": "*",
+                    "from": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "to": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+                "page": {"limit": 5},
+            }
+        ).encode()
+        req = urllib.request.Request(
+            f"https://api.{site}/api/v2/logs/events/search",
+            data=query_body,
+            headers=headers,
+            method="POST",
+        )
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read())
             logs = data.get("data", [])
@@ -243,9 +270,9 @@ def test_datadog():
 # JAEGER (skipped - ingress routing issue)
 # =============================================================================
 def test_jaeger():
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("JAEGER")
-    print("="*60)
+    print("=" * 60)
 
     url = "http://k8s-oteldemo-jaegerpu-ddab1a4609-a8c87825ebcf8ab1.elb.us-west-2.amazonaws.com"
 
@@ -259,7 +286,9 @@ def test_jaeger():
                 content_type = resp.headers.get("Content-Type", "")
                 if "json" in content_type:
                     data = json.loads(resp.read())
-                    test_result(f"API {path}", True, f"Found services: {data.get('data', [])}")
+                    test_result(
+                        f"API {path}", True, f"Found services: {data.get('data', [])}"
+                    )
                     return
                 else:
                     # HTML response = wrong path
@@ -267,17 +296,21 @@ def test_jaeger():
         except Exception as e:
             continue
 
-    test_result("Jaeger API", False, "All API paths return HTML (ingress routing issue)")
-    print("   ⚠️  Jaeger needs ingress configuration to expose /api/* separately from UI")
+    test_result(
+        "Jaeger API", False, "All API paths return HTML (ingress routing issue)"
+    )
+    print(
+        "   ⚠️  Jaeger needs ingress configuration to expose /api/* separately from UI"
+    )
 
 
 # =============================================================================
 # MAIN
 # =============================================================================
 if __name__ == "__main__":
-    print("="*60)
+    print("=" * 60)
     print("SRE Agent - Direct Backend Validation")
-    print("="*60)
+    print("=" * 60)
 
     test_elasticsearch()
     test_grafana()
@@ -285,9 +318,9 @@ if __name__ == "__main__":
     test_datadog()
     test_jaeger()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("SUMMARY")
-    print("="*60)
+    print("=" * 60)
     print("""
 ✅ Elasticsearch - Working (has logs-test index)
 ✅ Grafana - Working (v12.2.0)
