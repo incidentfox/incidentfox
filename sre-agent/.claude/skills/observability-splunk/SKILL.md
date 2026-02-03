@@ -27,19 +27,19 @@ STATISTICS → SAMPLE → PATTERNS → CORRELATE
 
 ## Available Scripts
 
-All scripts are in `.claude/skills/observability/splunk/scripts/`
+All scripts are in `.claude/skills/observability-splunk/scripts/`
 
 ### PRIMARY INVESTIGATION SCRIPTS
 
 #### get_statistics.py - ALWAYS START HERE
 Comprehensive statistics with pattern extraction.
 ```bash
-python .claude/skills/observability/splunk/scripts/get_statistics.py [--index INDEX] [--sourcetype SOURCETYPE] [--time-range MINUTES]
+python .claude/skills/observability-splunk/scripts/get_statistics.py [--index INDEX] [--sourcetype SOURCETYPE] [--time-range MINUTES]
 
 # Examples:
-python .claude/skills/observability/splunk/scripts/get_statistics.py --time-range 60
-python .claude/skills/observability/splunk/scripts/get_statistics.py --index main
-python .claude/skills/observability/splunk/scripts/get_statistics.py --sourcetype access_combined
+python .claude/skills/observability-splunk/scripts/get_statistics.py --time-range 60
+python .claude/skills/observability-splunk/scripts/get_statistics.py --index main
+python .claude/skills/observability-splunk/scripts/get_statistics.py --sourcetype access_combined
 ```
 
 Output includes:
@@ -52,7 +52,7 @@ Output includes:
 #### sample_logs.py - Strategic Sampling
 Choose the right sampling strategy based on statistics.
 ```bash
-python .claude/skills/observability/splunk/scripts/sample_logs.py --strategy STRATEGY [--index INDEX] [--sourcetype SOURCETYPE] [--limit N]
+python .claude/skills/observability-splunk/scripts/sample_logs.py --strategy STRATEGY [--index INDEX] [--sourcetype SOURCETYPE] [--limit N]
 
 # Strategies:
 #   errors_only   - Only error logs (default for incidents)
@@ -61,9 +61,9 @@ python .claude/skills/observability/splunk/scripts/sample_logs.py --strategy STR
 #   all           - All log levels
 
 # Examples:
-python .claude/skills/observability/splunk/scripts/sample_logs.py --strategy errors_only --index main
-python .claude/skills/observability/splunk/scripts/sample_logs.py --strategy around_time --timestamp "2026-01-27T05:00:00" --window 5
-python .claude/skills/observability/splunk/scripts/sample_logs.py --strategy all --sourcetype access_combined --limit 20
+python .claude/skills/observability-splunk/scripts/sample_logs.py --strategy errors_only --index main
+python .claude/skills/observability-splunk/scripts/sample_logs.py --strategy around_time --timestamp "2026-01-27T05:00:00" --window 5
+python .claude/skills/observability-splunk/scripts/sample_logs.py --strategy all --sourcetype access_combined --limit 20
 ```
 
 ---

@@ -27,18 +27,18 @@ STATISTICS → SAMPLE → PATTERNS → CORRELATE
 
 ## Available Scripts
 
-All scripts are in `.claude/skills/observability/elasticsearch/scripts/`
+All scripts are in `.claude/skills/observability-elasticsearch/scripts/`
 
 ### PRIMARY INVESTIGATION SCRIPTS
 
 #### get_statistics.py - ALWAYS START HERE
 Comprehensive statistics with pattern extraction.
 ```bash
-python .claude/skills/observability/elasticsearch/scripts/get_statistics.py [--index INDEX] [--time-range MINUTES]
+python .claude/skills/observability-elasticsearch/scripts/get_statistics.py [--index INDEX] [--time-range MINUTES]
 
 # Examples:
-python .claude/skills/observability/elasticsearch/scripts/get_statistics.py --time-range 60
-python .claude/skills/observability/elasticsearch/scripts/get_statistics.py --index logs-production
+python .claude/skills/observability-elasticsearch/scripts/get_statistics.py --time-range 60
+python .claude/skills/observability-elasticsearch/scripts/get_statistics.py --index logs-production
 ```
 
 Output includes:
@@ -51,7 +51,7 @@ Output includes:
 #### sample_logs.py - Strategic Sampling
 Choose the right sampling strategy based on statistics.
 ```bash
-python .claude/skills/observability/elasticsearch/scripts/sample_logs.py --strategy STRATEGY [--index INDEX] [--limit N]
+python .claude/skills/observability-elasticsearch/scripts/sample_logs.py --strategy STRATEGY [--index INDEX] [--limit N]
 
 # Strategies:
 #   errors_only   - Only error logs (default for incidents)
@@ -60,8 +60,8 @@ python .claude/skills/observability/elasticsearch/scripts/sample_logs.py --strat
 #   all           - All log levels
 
 # Examples:
-python .claude/skills/observability/elasticsearch/scripts/sample_logs.py --strategy errors_only --index logs-production
-python .claude/skills/observability/elasticsearch/scripts/sample_logs.py --strategy around_time --timestamp "2026-01-27T05:00:00Z" --window 5
+python .claude/skills/observability-elasticsearch/scripts/sample_logs.py --strategy errors_only --index logs-production
+python .claude/skills/observability-elasticsearch/scripts/sample_logs.py --strategy around_time --timestamp "2026-01-27T05:00:00Z" --window 5
 ```
 
 ---

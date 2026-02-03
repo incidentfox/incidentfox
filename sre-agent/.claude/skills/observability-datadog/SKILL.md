@@ -30,18 +30,18 @@ STATISTICS → SAMPLE → PATTERNS → CORRELATE
 
 ## Available Scripts
 
-All scripts are in `.claude/skills/observability/datadog/scripts/`
+All scripts are in `.claude/skills/observability-datadog/scripts/`
 
 ### PRIMARY INVESTIGATION SCRIPTS
 
 #### get_statistics.py - ALWAYS START HERE
 Comprehensive statistics with pattern extraction.
 ```bash
-python .claude/skills/observability/datadog/scripts/get_statistics.py [--service SERVICE] [--time-range MINUTES]
+python .claude/skills/observability-datadog/scripts/get_statistics.py [--service SERVICE] [--time-range MINUTES]
 
 # Examples:
-python .claude/skills/observability/datadog/scripts/get_statistics.py --time-range 60
-python .claude/skills/observability/datadog/scripts/get_statistics.py --service payment
+python .claude/skills/observability-datadog/scripts/get_statistics.py --time-range 60
+python .claude/skills/observability-datadog/scripts/get_statistics.py --service payment
 ```
 
 Output includes:
@@ -54,7 +54,7 @@ Output includes:
 #### sample_logs.py - Strategic Sampling
 Choose the right sampling strategy based on statistics.
 ```bash
-python .claude/skills/observability/datadog/scripts/sample_logs.py --strategy STRATEGY [--service SERVICE] [--limit N]
+python .claude/skills/observability-datadog/scripts/sample_logs.py --strategy STRATEGY [--service SERVICE] [--limit N]
 
 # Strategies:
 #   errors_only   - Only error logs (default for incidents)
@@ -63,8 +63,8 @@ python .claude/skills/observability/datadog/scripts/sample_logs.py --strategy ST
 #   all           - All log levels
 
 # Examples:
-python .claude/skills/observability/datadog/scripts/sample_logs.py --strategy errors_only --service payment
-python .claude/skills/observability/datadog/scripts/sample_logs.py --strategy around_time --timestamp "2026-01-27T05:00:00Z" --window 5
+python .claude/skills/observability-datadog/scripts/sample_logs.py --strategy errors_only --service payment
+python .claude/skills/observability-datadog/scripts/sample_logs.py --strategy around_time --timestamp "2026-01-27T05:00:00Z" --window 5
 ```
 
 ---

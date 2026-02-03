@@ -38,18 +38,18 @@ STATISTICS → SAMPLE → SIGNATURES → CORRELATE
 
 ## Available Scripts
 
-All scripts are in `.claude/skills/observability/coralogix/scripts/`
+All scripts are in `.claude/skills/observability-coralogix/scripts/`
 
 ### PRIMARY INVESTIGATION SCRIPTS
 
 #### get_statistics.py - ALWAYS START HERE
 Comprehensive statistics with pattern extraction and anomaly detection.
 ```bash
-python .claude/skills/observability/coralogix/scripts/get_statistics.py [--service SERVICE] [--app APP] [--time-range MINUTES]
+python .claude/skills/observability-coralogix/scripts/get_statistics.py [--service SERVICE] [--app APP] [--time-range MINUTES]
 
 # Examples:
-python .claude/skills/observability/coralogix/scripts/get_statistics.py --time-range 60
-python .claude/skills/observability/coralogix/scripts/get_statistics.py --service payment --app otel-demo
+python .claude/skills/observability-coralogix/scripts/get_statistics.py --time-range 60
+python .claude/skills/observability-coralogix/scripts/get_statistics.py --service payment --app otel-demo
 ```
 
 Output includes:
@@ -63,7 +63,7 @@ Output includes:
 #### sample_logs.py - Strategic Sampling
 Choose the right sampling strategy based on statistics.
 ```bash
-python .claude/skills/observability/coralogix/scripts/sample_logs.py --strategy STRATEGY [--service SERVICE] [--app APP]
+python .claude/skills/observability-coralogix/scripts/sample_logs.py --strategy STRATEGY [--service SERVICE] [--app APP]
 
 # Strategies:
 #   errors_only   - Only ERROR/CRITICAL logs (default for incidents)
@@ -73,19 +73,19 @@ python .claude/skills/observability/coralogix/scripts/sample_logs.py --strategy 
 #   all           - All severity levels (use sparingly)
 
 # Examples:
-python .claude/skills/observability/coralogix/scripts/sample_logs.py --strategy errors_only --service payment
-python .claude/skills/observability/coralogix/scripts/sample_logs.py --strategy around_anomaly --timestamp "2026-01-27T05:00:00Z" --window 60
-python .claude/skills/observability/coralogix/scripts/sample_logs.py --strategy first_last --service checkout --limit 50
+python .claude/skills/observability-coralogix/scripts/sample_logs.py --strategy errors_only --service payment
+python .claude/skills/observability-coralogix/scripts/sample_logs.py --strategy around_anomaly --timestamp "2026-01-27T05:00:00Z" --window 60
+python .claude/skills/observability-coralogix/scripts/sample_logs.py --strategy first_last --service checkout --limit 50
 ```
 
 #### extract_signatures.py - Pattern Clustering
 Normalize and cluster log messages to see unique issue patterns.
 ```bash
-python .claude/skills/observability/coralogix/scripts/extract_signatures.py --service SERVICE [--severity SEVERITY] [--max-signatures N]
+python .claude/skills/observability-coralogix/scripts/extract_signatures.py --service SERVICE [--severity SEVERITY] [--max-signatures N]
 
 # Examples:
-python .claude/skills/observability/coralogix/scripts/extract_signatures.py --service payment --severity ERROR
-python .claude/skills/observability/coralogix/scripts/extract_signatures.py --app otel-demo --max-signatures 30
+python .claude/skills/observability-coralogix/scripts/extract_signatures.py --service payment --severity ERROR
+python .claude/skills/observability-coralogix/scripts/extract_signatures.py --app otel-demo --max-signatures 30
 ```
 
 Normalizes variable parts (UUIDs, IPs, timestamps, numbers) to find:
@@ -97,23 +97,23 @@ Normalizes variable parts (UUIDs, IPs, timestamps, numbers) to find:
 
 #### list_services.py - Service Discovery
 ```bash
-python .claude/skills/observability/coralogix/scripts/list_services.py [--time-range MINUTES]
+python .claude/skills/observability-coralogix/scripts/list_services.py [--time-range MINUTES]
 ```
 
 #### get_health.py - Quick Health Check
 ```bash
-python .claude/skills/observability/coralogix/scripts/get_health.py <service> [--time-range MINUTES]
+python .claude/skills/observability-coralogix/scripts/get_health.py <service> [--time-range MINUTES]
 ```
 
 #### get_errors.py - Quick Error Fetch
 ```bash
-python .claude/skills/observability/coralogix/scripts/get_errors.py <service> [--app APPLICATION] [--time-range MINUTES]
+python .claude/skills/observability-coralogix/scripts/get_errors.py <service> [--app APPLICATION] [--time-range MINUTES]
 ```
 
 #### query_logs.py - Raw DataPrime Queries
 For custom queries not covered by other scripts.
 ```bash
-python .claude/skills/observability/coralogix/scripts/query_logs.py "<dataprime_query>" [--time-range MINUTES] [--limit N]
+python .claude/skills/observability-coralogix/scripts/query_logs.py "<dataprime_query>" [--time-range MINUTES] [--limit N]
 ```
 
 ## DataPrime Syntax Quick Reference
@@ -285,12 +285,12 @@ source logs | wildfind 'timeout'
 
 ```bash
 # Step 1: Statistics first - ALWAYS
-python .claude/skills/observability/coralogix/scripts/get_statistics.py --service payment --time-range 60
+python .claude/skills/observability-coralogix/scripts/get_statistics.py --service payment --time-range 60
 # Output: 15,432 logs, 847 errors (5.5%), top pattern: "Connection timeout to downstream"
 
 # IF dominant pattern found:
 # Step 2: Verify with samples
-python .claude/skills/observability/coralogix/scripts/sample_logs.py --strategy errors_only --service payment --limit 10
+python .claude/skills/observability-coralogix/scripts/sample_logs.py --strategy errors_only --service payment --limit 10
 ```
 
 ### Quick Commands Reference
@@ -325,25 +325,25 @@ Use traces to understand **request flow** and **latency** across services.
 #### get_traces.py - Find Spans
 ```bash
 # Get spans for a service
-python .claude/skills/observability/coralogix/scripts/get_traces.py --service checkout --time-range 30
+python .claude/skills/observability-coralogix/scripts/get_traces.py --service checkout --time-range 30
 
 # Get all spans for a trace ID
-python .claude/skills/observability/coralogix/scripts/get_traces.py --trace-id abc123def456
+python .claude/skills/observability-coralogix/scripts/get_traces.py --trace-id abc123def456
 
 # Filter by operation
-python .claude/skills/observability/coralogix/scripts/get_traces.py --operation "/api/checkout" --service checkout
+python .claude/skills/observability-coralogix/scripts/get_traces.py --operation "/api/checkout" --service checkout
 ```
 
 #### get_slow_spans.py - Latency Analysis
 ```bash
 # Find spans slower than 500ms
-python .claude/skills/observability/coralogix/scripts/get_slow_spans.py --min-duration 500
+python .claude/skills/observability-coralogix/scripts/get_slow_spans.py --min-duration 500
 
 # Find slow spans in specific service
-python .claude/skills/observability/coralogix/scripts/get_slow_spans.py --min-duration 200 --service checkout
+python .claude/skills/observability-coralogix/scripts/get_slow_spans.py --min-duration 200 --service checkout
 
 # Get latency statistics by service (recommended first step)
-python .claude/skills/observability/coralogix/scripts/get_slow_spans.py --stats
+python .claude/skills/observability-coralogix/scripts/get_slow_spans.py --stats
 ```
 
 ### DataPrime Spans Syntax

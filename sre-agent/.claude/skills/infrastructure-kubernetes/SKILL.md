@@ -15,52 +15,52 @@ description: Kubernetes debugging methodology and scripts. Use for pod crashes, 
 
 ## Available Scripts
 
-All scripts are in `.claude/skills/infrastructure/kubernetes/scripts/`
+All scripts are in `.claude/skills/infrastructure-kubernetes/scripts/`
 
 ### list_pods.py - List pods with status
 ```bash
-python .claude/skills/infrastructure/kubernetes/scripts/list_pods.py -n <namespace> [--label <selector>]
+python .claude/skills/infrastructure-kubernetes/scripts/list_pods.py -n <namespace> [--label <selector>]
 
 # Examples:
-python .claude/skills/infrastructure/kubernetes/scripts/list_pods.py -n otel-demo
-python .claude/skills/infrastructure/kubernetes/scripts/list_pods.py -n otel-demo --label app.kubernetes.io/name=payment
+python .claude/skills/infrastructure-kubernetes/scripts/list_pods.py -n otel-demo
+python .claude/skills/infrastructure-kubernetes/scripts/list_pods.py -n otel-demo --label app.kubernetes.io/name=payment
 ```
 
 ### get_events.py - Get pod events (USE FIRST!)
 ```bash
-python .claude/skills/infrastructure/kubernetes/scripts/get_events.py <pod-name> -n <namespace>
+python .claude/skills/infrastructure-kubernetes/scripts/get_events.py <pod-name> -n <namespace>
 
 # Example:
-python .claude/skills/infrastructure/kubernetes/scripts/get_events.py payment-7f8b9c6d5-x2k4m -n otel-demo
+python .claude/skills/infrastructure-kubernetes/scripts/get_events.py payment-7f8b9c6d5-x2k4m -n otel-demo
 ```
 
 ### get_logs.py - Get pod logs
 ```bash
-python .claude/skills/infrastructure/kubernetes/scripts/get_logs.py <pod-name> -n <namespace> [--tail N] [--container NAME]
+python .claude/skills/infrastructure-kubernetes/scripts/get_logs.py <pod-name> -n <namespace> [--tail N] [--container NAME]
 
 # Examples:
-python .claude/skills/infrastructure/kubernetes/scripts/get_logs.py payment-7f8b9c6d5-x2k4m -n otel-demo --tail 100
-python .claude/skills/infrastructure/kubernetes/scripts/get_logs.py payment-7f8b9c6d5-x2k4m -n otel-demo --container payment
+python .claude/skills/infrastructure-kubernetes/scripts/get_logs.py payment-7f8b9c6d5-x2k4m -n otel-demo --tail 100
+python .claude/skills/infrastructure-kubernetes/scripts/get_logs.py payment-7f8b9c6d5-x2k4m -n otel-demo --container payment
 ```
 
 ### describe_pod.py - Detailed pod info
 ```bash
-python .claude/skills/infrastructure/kubernetes/scripts/describe_pod.py <pod-name> -n <namespace>
+python .claude/skills/infrastructure-kubernetes/scripts/describe_pod.py <pod-name> -n <namespace>
 ```
 
 ### get_resources.py - Resource usage vs limits
 ```bash
-python .claude/skills/infrastructure/kubernetes/scripts/get_resources.py <pod-name> -n <namespace>
+python .claude/skills/infrastructure-kubernetes/scripts/get_resources.py <pod-name> -n <namespace>
 ```
 
 ### describe_deployment.py - Deployment status
 ```bash
-python .claude/skills/infrastructure/kubernetes/scripts/describe_deployment.py <deployment-name> -n <namespace>
+python .claude/skills/infrastructure-kubernetes/scripts/describe_deployment.py <deployment-name> -n <namespace>
 ```
 
 ### get_history.py - Rollout history
 ```bash
-python .claude/skills/infrastructure/kubernetes/scripts/get_history.py <deployment-name> -n <namespace>
+python .claude/skills/infrastructure-kubernetes/scripts/get_history.py <deployment-name> -n <namespace>
 ```
 
 ## Debugging Workflows

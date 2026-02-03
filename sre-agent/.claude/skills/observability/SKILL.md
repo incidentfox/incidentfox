@@ -18,21 +18,19 @@ description: Log, metric, and trace analysis methodology. Use when analyzing log
 
 **IMPORTANT**: Credentials are injected automatically by a proxy layer. Do NOT check for API keys in environment variables - they won't be there. Just use the backend scripts directly; authentication is handled transparently.
 
-Available backends:
-- **Coralogix** (DataPrime) - Use the scripts in `.claude/skills/observability/coralogix/scripts/`
-- **Datadog** (future) - Coming soon
-- **CloudWatch** (future) - Coming soon
+Available backends (invoke with `/skill-name`):
+- **Coralogix** (DataPrime) - `/observability-coralogix`
+- **Datadog** - `/observability-datadog`
+- **Splunk** (SPL) - `/observability-splunk`
+- **Elasticsearch/OpenSearch** - `/observability-elasticsearch`
 
 To check if a backend is working, try a simple query rather than checking env vars.
 
-### Coralogix
-For DataPrime query syntax, see: `.claude/skills/observability/coralogix/SKILL.md`
-
-### Datadog (future)
-See: `.claude/skills/observability/datadog/SKILL.md`
-
-### CloudWatch (future)
-See: `.claude/skills/observability/cloudwatch/SKILL.md`
+### Backend-Specific Skills
+- **Coralogix**: `/observability-coralogix` - DataPrime syntax, log/trace analysis
+- **Datadog**: `/observability-datadog` - DQL syntax, metrics and APM
+- **Splunk**: `/observability-splunk` - SPL syntax, saved searches
+- **Elasticsearch**: `/observability-elasticsearch` - Lucene/Query DSL
 
 ## Analysis Framework
 
