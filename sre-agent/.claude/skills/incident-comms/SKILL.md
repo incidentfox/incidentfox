@@ -1,6 +1,7 @@
 ---
 name: incident-comms
 description: Slack integration for incident communication. Use when searching for context in incident channels, posting status updates, or finding discussions about issues.
+allowed-tools: Bash(python *)
 ---
 
 # Incident Communications
@@ -24,6 +25,8 @@ Before diving into technical investigation:
 All scripts are in `.claude/skills/incident-comms/scripts/`
 
 ### search_messages.py - Search Across Channels
+> **Note**: Requires a Slack **user token** (xoxu-*), not a bot token. Bot tokens cannot use the search API.
+
 ```bash
 python .claude/skills/incident-comms/scripts/search_messages.py --query SEARCH_QUERY [--count N]
 

@@ -7,7 +7,7 @@ PAGERDUTY_API_KEY in environment variables.
 
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -239,8 +239,8 @@ def calculate_mttr(
     Returns:
         MTTR statistics
     """
-    since = (datetime.utcnow() - timedelta(days=days)).isoformat() + "Z"
-    until = datetime.utcnow().isoformat() + "Z"
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat().replace("+00:00", "Z")
+    until = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     params = {
         "since": since,

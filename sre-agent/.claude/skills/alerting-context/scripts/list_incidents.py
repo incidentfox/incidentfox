@@ -14,7 +14,7 @@ Examples:
 import argparse
 import json
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from pagerduty_client import format_incident, list_incidents
 
@@ -50,8 +50,8 @@ def main():
     args = parser.parse_args()
 
     try:
-        since = (datetime.utcnow() - timedelta(days=args.days)).isoformat() + "Z"
-        until = datetime.utcnow().isoformat() + "Z"
+        since = (datetime.now(timezone.utc) - timedelta(days=args.days)).isoformat().replace("+00:00", "Z")
+        until = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
         service_ids = [args.service] if args.service else None
 

@@ -1,6 +1,7 @@
 ---
 name: elasticsearch-analysis
 description: Elasticsearch/OpenSearch log analysis using Lucene query syntax and Query DSL. Use when investigating issues via ELK stack, OpenSearch, or any Elasticsearch-based logging.
+allowed-tools: Bash(python *)
 ---
 
 # Elasticsearch Analysis

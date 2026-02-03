@@ -1,6 +1,7 @@
 ---
 name: datadog-analysis
 description: Datadog log and metrics analysis. Use when querying Datadog logs, metrics, or APM data. Provides scripts and query syntax reference.
+allowed-tools: Bash(python *)
 ---
 
 # Datadog Analysis
