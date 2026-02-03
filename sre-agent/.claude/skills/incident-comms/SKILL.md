@@ -5,6 +5,12 @@ description: Slack integration for incident communication. Use when searching fo
 
 # Incident Communications
 
+## Authentication
+
+**IMPORTANT**: Credentials are injected automatically by a proxy layer. Do NOT check for `SLACK_BOT_TOKEN` in environment variables - it won't be visible to you. Just run the scripts directly; authentication is handled transparently.
+
+---
+
 ## Why Slack Context Matters
 
 Before diving into technical investigation:
@@ -13,36 +19,41 @@ Before diving into technical investigation:
 - **Who's working on it?** Find active responders
 - **What's the impact?** Look for customer reports
 
-## Available Tools
+## Available Scripts
 
-| Tool | Purpose |
-|------|---------|
-| `slack_search_messages` | Search across channels |
-| `slack_get_channel_history` | Get recent messages in a channel |
-| `slack_get_thread_replies` | Get all replies in a thread |
-| `slack_post_message` | Post status updates |
+All scripts are in `.claude/skills/incident-comms/scripts/`
+
+### search_messages.py - Search Across Channels
+```bash
+python .claude/skills/incident-comms/scripts/search_messages.py --query SEARCH_QUERY [--count N]
+
+# Examples:
+python .claude/skills/incident-comms/scripts/search_messages.py --query "error timeout"
+python .claude/skills/incident-comms/scripts/search_messages.py --query "in:#incidents api error"
+python .claude/skills/incident-comms/scripts/search_messages.py --query "from:@oncall database" --count 30
+```
+
+### get_channel_history.py - Read Channel Messages
+```bash
+python .claude/skills/incident-comms/scripts/get_channel_history.py --channel CHANNEL_ID [--limit N]
+
+# Examples:
+python .claude/skills/incident-comms/scripts/get_channel_history.py --channel C123ABC456
+python .claude/skills/incident-comms/scripts/get_channel_history.py --channel C123ABC456 --limit 100
+```
+
+### post_message.py - Post Status Updates
+```bash
+python .claude/skills/incident-comms/scripts/post_message.py --channel CHANNEL_ID --text MESSAGE [--thread THREAD_TS]
+
+# Examples:
+python .claude/skills/incident-comms/scripts/post_message.py --channel C123ABC456 --text "Investigation update: found root cause"
+python .claude/skills/incident-comms/scripts/post_message.py --channel C123ABC456 --text "Rollback completed" --thread 1705320123.456789
+```
 
 ---
 
-## Searching for Context
-
-### Find Related Discussions
-
-```python
-# Search for error messages
-slack_search_messages(query="NullPointerException", count=20)
-
-# Search in specific channel
-slack_search_messages(query="in:#incidents api timeout", count=20)
-
-# Search by user
-slack_search_messages(query="from:@oncall-engineer database", count=20)
-
-# Search by time range (natural language)
-slack_search_messages(query="deployment after:2024-01-15 before:2024-01-16", count=20)
-```
-
-### Slack Search Operators
+## Slack Search Operators
 
 | Operator | Example | Purpose |
 |----------|---------|---------|
@@ -51,60 +62,70 @@ slack_search_messages(query="deployment after:2024-01-15 before:2024-01-16", cou
 | `has:reaction` | `has::eyes:` | Messages with reactions |
 | `after:date` | `after:2024-01-15` | After a date |
 | `before:date` | `before:2024-01-16` | Before a date |
-| `during:month` | `during:january` | During a time period |
 
 ---
 
-## Reading Channel History
+## Common Workflows
 
-### Get Incident Channel Context
+### 1. Gather Context for New Incident
 
-```python
-# Get recent messages from an incident channel
-slack_get_channel_history(channel_id="C123ABC", limit=100)
+```bash
+# Step 1: Search for similar issues
+python search_messages.py --query "api timeout in:#incidents"
 
-# Get messages since a specific time (Unix timestamp)
-slack_get_channel_history(
-    channel_id="C123ABC",
-    limit=50,
-    oldest="1705320000"  # Timestamp when incident started
-)
+# Step 2: Check the incident channel for recent activity
+python get_channel_history.py --channel C_INCIDENTS --limit 50
+
+# Step 3: Read a specific thread
+python get_thread_replies.py --channel C_INCIDENTS --thread 1705320123.456789
 ```
 
-### Follow a Thread
+### 2. Find What's Been Tried
 
-```python
-# Get all replies in a discussion thread
-slack_get_thread_replies(
-    channel_id="C123ABC",
-    thread_ts="1705320123.456789"  # Thread parent timestamp
-)
+```bash
+# Search for actions taken during this incident
+python search_messages.py --query "in:#incident-123 (restart OR rollback OR revert OR tried)"
 ```
 
-**Finding thread_ts**: Look for the `thread_ts` field in channel history results, or click "Copy link" on a Slack message and extract the timestamp.
+### 3. Check Customer Impact
+
+```bash
+# Search support/customer channels
+python search_messages.py --query "in:#support error OR issue"
+```
+
+### 4. Post Investigation Summary
+
+```bash
+python post_message.py --channel C_INCIDENTS --thread 1705320123.456789 --text ":clipboard: *Investigation Summary*
+
+*Timeline:*
+• 14:00 - Alerts started firing
+• 14:05 - Investigation began
+• 14:15 - Root cause identified
+• 14:20 - Fix deployed
+
+*Root Cause:*
+Connection pool exhaustion due to unclosed connections.
+
+*Resolution:*
+Rolled back to v2.3.4, deployed fix in v2.3.5."
+```
 
 ---
 
-## Posting Updates
+## Quick Commands Reference
 
-### Status Update to Incident Channel
+| Goal | Command |
+|------|---------|
+| Search messages | `search_messages.py --query "error"` |
+| Channel history | `get_channel_history.py --channel C123ABC` |
+| Post update | `post_message.py --channel C123ABC --text "Update"` |
+| Reply to thread | `post_message.py --channel C123ABC --text "..." --thread TS` |
 
-```python
-# Post an update to the incident channel
-slack_post_message(
-    channel_id="C123ABC",
-    text=":mag: *Investigation Update*\n\nIdentified the issue: Database connection pool exhaustion caused by connection leak in commit abc123.\n\nNext step: Rolling back to previous version."
-)
+---
 
-# Reply to an existing thread
-slack_post_message(
-    channel_id="C123ABC",
-    text="Rollback completed. Monitoring for recovery.",
-    thread_ts="1705320123.456789"
-)
-```
-
-### Status Update Templates
+## Status Update Templates
 
 **Investigation Started:**
 ```
@@ -141,122 +162,27 @@ Follow-up: [Next steps, postmortem timing]
 
 ---
 
-## Common Workflows
-
-### 1. Gather Context for New Incident
-
-```python
-# Step 1: Search for similar issues
-similar = slack_search_messages(query="api timeout in:#incidents", count=20)
-
-# Step 2: Check the incident channel for recent activity
-history = slack_get_channel_history(channel_id="C_INCIDENTS", limit=50)
-
-# Step 3: Look for the original alert/report thread
-thread = slack_get_thread_replies(channel_id="C_INCIDENTS", thread_ts="...")
-```
-
-### 2. Find What's Been Tried
-
-```python
-# Search for actions taken during this incident
-slack_search_messages(
-    query="in:#incident-123 (restart OR rollback OR revert OR tried)",
-    count=30
-)
-```
-
-### 3. Check Customer Impact
-
-```python
-# Search support/customer channels
-slack_search_messages(query="in:#support error OR issue", count=20)
-slack_search_messages(query="in:#customer-feedback outage OR slow", count=20)
-```
-
-### 4. Post Investigation Summary
-
-```python
-# Post summary to incident channel
-slack_post_message(
-    channel_id="C_INCIDENTS",
-    text="""
-:clipboard: *Investigation Summary*
-
-*Timeline:*
-• 14:00 - Alerts started firing
-• 14:05 - Investigation began
-• 14:15 - Root cause identified (connection leak)
-• 14:20 - Fix deployed
-
-*Root Cause:*
-Connection pool exhaustion due to unclosed connections in new payment flow (commit abc123).
-
-*Resolution:*
-Rolled back to v2.3.4, deployed fix in v2.3.5.
-
-*Action Items:*
-1. Add connection pool monitoring
-2. Code review for connection handling
-""",
-    thread_ts="1705320123.456789"
-)
-```
-
----
-
-## Output Format
-
-```markdown
-## Slack Context Summary
-
-### Related Discussions Found
-- **[#channel]** [timestamp]: [Summary of message]
-- **[#channel]** [timestamp]: [Summary of message]
-
-### Active Incident Threads
-- **Thread**: [link/timestamp]
-- **Started by**: [user]
-- **Replies**: [count]
-- **Last activity**: [timestamp]
-
-### Key Information Gathered
-- [What responders have already tried]
-- [Customer reports or impact mentions]
-- [Relevant past incidents referenced]
-
-### Recommendations
-- [Post update to thread X]
-- [Check with user Y who mentioned similar issue]
-- [Review past incident Z for resolution steps]
-```
-
----
-
 ## Best Practices
 
 ### Searching
 - **Be specific**: Use channel filters (`in:#channel`) to reduce noise
 - **Use operators**: Combine `from:`, `after:`, `has:` for precision
-- **Check multiple channels**: Incidents might be discussed in #support, #engineering, or service-specific channels
+- **Check multiple channels**: Incidents might be discussed in #support, #engineering, etc.
 
 ### Posting Updates
 - **Use threads**: Keep updates in the incident thread, not the main channel
 - **Be concise**: Busy responders scan updates quickly
-- **Use formatting**: Bold key info, use lists, add emojis for status
 - **Include next steps**: Always say what's happening next
 
 ### Finding Channel IDs
 - Channel IDs look like `C123ABC456`
 - Get them from channel settings or by right-clicking → "Copy link"
-- The link format is: `slack.com/archives/CHANNEL_ID/...`
 
 ---
 
-## Anti-Patterns
+## Anti-Patterns to Avoid
 
-1. **Posting before reading** - Check what's already been discussed
-2. **Top-posting in threads** - Reply in the thread, not the channel
-3. **Vague updates** - "Working on it" tells responders nothing
-4. **Missing timestamps** - Include when things happened
-5. **Forgetting customer channels** - Support and customer feedback often have valuable context
+1. ❌ **Posting before reading** - Check what's already been discussed
+2. ❌ **Top-posting in threads** - Reply in the thread, not the channel
+3. ❌ **Vague updates** - "Working on it" tells responders nothing
+4. ❌ **Missing timestamps** - Include when things happened

@@ -5,6 +5,12 @@ description: Prometheus/Grafana metrics analysis and PromQL queries. Use when in
 
 # Metrics Analysis
 
+## Authentication
+
+**IMPORTANT**: Credentials are injected automatically by a proxy layer. Do NOT check for `GRAFANA_API_KEY` or `PROMETHEUS_URL` in environment variables - they won't be visible to you. Just run the scripts directly; authentication is handled transparently.
+
+---
+
 ## Core Principle: USE & RED Methods
 
 **USE Method** (for infrastructure):
@@ -17,16 +23,37 @@ description: Prometheus/Grafana metrics analysis and PromQL queries. Use when in
 - **E**rrors - Error rate
 - **D**uration - Latency distribution
 
-## Available Tools
+## Available Scripts
 
-| Tool | Purpose |
-|------|---------|
-| `grafana_query_prometheus` | Execute PromQL queries |
-| `grafana_list_dashboards` | Find relevant dashboards |
-| `grafana_get_dashboard` | Get dashboard panels and queries |
-| `grafana_list_datasources` | Discover metric sources |
-| `grafana_get_annotations` | Find deployment/incident markers |
-| `grafana_get_alerts` | Check firing alerts |
+All scripts are in `.claude/skills/metrics-analysis/scripts/`
+
+### query_prometheus.py - Execute PromQL Queries
+```bash
+python .claude/skills/metrics-analysis/scripts/query_prometheus.py --query PROMQL [--time-range MINUTES] [--step STEP]
+
+# Examples:
+python .claude/skills/metrics-analysis/scripts/query_prometheus.py --query "up"
+python .claude/skills/metrics-analysis/scripts/query_prometheus.py --query "rate(http_requests_total[5m])" --time-range 60
+python .claude/skills/metrics-analysis/scripts/query_prometheus.py --query "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))"
+```
+
+### list_dashboards.py - Find Grafana Dashboards
+```bash
+python .claude/skills/metrics-analysis/scripts/list_dashboards.py [--query SEARCH_TERM]
+
+# Examples:
+python .claude/skills/metrics-analysis/scripts/list_dashboards.py
+python .claude/skills/metrics-analysis/scripts/list_dashboards.py --query "api"
+```
+
+### get_alerts.py - Check Firing Alerts
+```bash
+python .claude/skills/metrics-analysis/scripts/get_alerts.py [--state STATE]
+
+# Examples:
+python .claude/skills/metrics-analysis/scripts/get_alerts.py
+python .claude/skills/metrics-analysis/scripts/get_alerts.py --state alerting
+```
 
 ---
 
@@ -99,243 +126,78 @@ http_requests_total{service="api", status=~"5.."}
 
 ### 1. Latency Investigation
 
-```python
+```bash
 # Step 1: Check overall latency trend
-grafana_query_prometheus(
-    query='histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{service="api"}[5m]))',
-    time_range="1h"
-)
+python query_prometheus.py --query 'histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{service="api"}[5m]))' --time-range 60
 
-# Step 2: Compare p50 vs p99 (is it a few slow requests or systemic?)
-grafana_query_prometheus(
-    query='histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{service="api"}[5m]))',
-    time_range="1h"
-)
+# Step 2: Compare p50 vs p99
+python query_prometheus.py --query 'histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{service="api"}[5m]))'
 
 # Step 3: Break down by endpoint
-grafana_query_prometheus(
-    query='histogram_quantile(0.95, sum by (endpoint) (rate(http_request_duration_seconds_bucket{service="api"}[5m])))',
-    time_range="1h"
-)
+python query_prometheus.py --query 'histogram_quantile(0.95, sum by (endpoint) (rate(http_request_duration_seconds_bucket{service="api"}[5m])))'
 ```
 
 ### 2. Error Rate Investigation
 
-```python
+```bash
 # Step 1: Overall error rate
-grafana_query_prometheus(
-    query='sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))',
-    time_range="1h"
-)
+python query_prometheus.py --query 'sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))'
 
 # Step 2: Errors by status code
-grafana_query_prometheus(
-    query='sum by (status) (rate(http_requests_total{status=~"[45].."}[5m]))',
-    time_range="1h"
-)
+python query_prometheus.py --query 'sum by (status) (rate(http_requests_total{status=~"[45].."}[5m]))'
 
 # Step 3: Errors by service
-grafana_query_prometheus(
-    query='sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))',
-    time_range="1h"
-)
+python query_prometheus.py --query 'sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))'
 ```
 
 ### 3. Resource Investigation (CPU/Memory)
 
-```python
+```bash
 # CPU usage
-grafana_query_prometheus(
-    query='avg by (instance) (rate(container_cpu_usage_seconds_total{pod=~"api-.*"}[5m]))',
-    time_range="1h"
-)
+python query_prometheus.py --query 'avg by (instance) (rate(container_cpu_usage_seconds_total{pod=~"api-.*"}[5m]))'
 
-# Memory usage
-grafana_query_prometheus(
-    query='container_memory_usage_bytes{pod=~"api-.*"} / container_spec_memory_limit_bytes{pod=~"api-.*"}',
-    time_range="1h"
-)
-
-# Memory trend (is it growing?)
-grafana_query_prometheus(
-    query='deriv(container_memory_usage_bytes{pod=~"api-.*"}[30m])',
-    time_range="2h"
-)
-```
-
-### 4. Saturation/Queue Investigation
-
-```python
-# Connection pool saturation
-grafana_query_prometheus(
-    query='db_connections_active / db_connections_max',
-    time_range="1h"
-)
-
-# Pending requests (queued work)
-grafana_query_prometheus(
-    query='sum(http_requests_pending{service="api"})',
-    time_range="1h"
-)
-
-# Thread pool usage
-grafana_query_prometheus(
-    query='executor_active_threads / executor_pool_size',
-    time_range="1h"
-)
+# Memory usage percentage
+python query_prometheus.py --query 'container_memory_usage_bytes{pod=~"api-.*"} / container_spec_memory_limit_bytes{pod=~"api-.*"}'
 ```
 
 ---
 
-## Finding Existing Dashboards
+## Quick Commands Reference
 
-```python
-# Search for dashboards by name
-grafana_list_dashboards(query="api")
-grafana_list_dashboards(query="kubernetes")
-
-# Get dashboard details (see what queries are used)
-grafana_get_dashboard(dashboard_uid="abc123")
-```
-
-**Pro tip**: Look at existing dashboards to find the correct metric names and labels.
-
----
-
-## Correlating with Events
-
-```python
-# Check for deployment annotations around the issue time
-grafana_get_annotations(time_range="24h", tags="deployment")
-
-# Check what alerts fired
-grafana_get_alerts(state="alerting")
-```
+| Goal | Command |
+|------|---------|
+| Request rate | `query_prometheus.py --query "sum(rate(http_requests_total[5m]))"` |
+| Error rate | `query_prometheus.py --query "sum(rate(http_requests_total{status=~'5..'}[5m]))"` |
+| P95 latency | `query_prometheus.py --query "histogram_quantile(0.95, ...)"` |
+| CPU usage | `query_prometheus.py --query "rate(container_cpu_usage_seconds_total[5m])"` |
+| Find dashboards | `list_dashboards.py --query "api"` |
+| Check alerts | `get_alerts.py --state alerting` |
 
 ---
 
 ## Common Metric Patterns
 
-### Request Metrics (Prometheus naming conventions)
-
+### Request Metrics
 ```promql
-# Total requests (counter)
-http_requests_total
-
-# Request duration histogram
-http_request_duration_seconds_bucket
-http_request_duration_seconds_count
-http_request_duration_seconds_sum
-
-# Active requests (gauge)
-http_requests_in_flight
+http_requests_total                    # Counter
+http_request_duration_seconds_bucket   # Histogram
+http_requests_in_flight               # Gauge
 ```
 
 ### Kubernetes Metrics
-
 ```promql
-# CPU usage
 container_cpu_usage_seconds_total
-node_cpu_seconds_total
-
-# Memory
 container_memory_usage_bytes
-container_memory_working_set_bytes
-node_memory_MemTotal_bytes
-
-# Pod restarts
 kube_pod_container_status_restarts_total
-
-# Pod status
 kube_pod_status_phase
 ```
 
-### Database Metrics
-
-```promql
-# Connection pool
-db_connections_active
-db_connections_idle
-db_connections_max
-
-# Query latency
-db_query_duration_seconds_bucket
-
-# Errors
-db_errors_total
-```
-
 ---
 
-## Output Format
+## Anti-Patterns to Avoid
 
-```markdown
-## Metrics Analysis Summary
-
-### Time Window
-- **Start**: [timestamp]
-- **End**: [timestamp]
-- **Duration**: X hours
-
-### Key Metrics
-
-#### Request Rate
-- **Current**: X req/s
-- **Peak**: Y req/s at [timestamp]
-- **Trend**: [increasing/stable/decreasing]
-
-#### Error Rate
-- **Current**: X%
-- **Peak**: Y% at [timestamp]
-- **Primary error type**: [status code or error]
-
-#### Latency (p95)
-- **Current**: X ms
-- **Peak**: Y ms at [timestamp]
-- **p50 vs p99 gap**: [normal/wide - indicates tail latency]
-
-#### Resource Utilization
-- **CPU**: X% (peak Y%)
-- **Memory**: X% (peak Y%)
-- **Trend**: [stable/growing/spiky]
-
-### Anomalies Detected
-1. [Metric spike/drop] at [timestamp]
-2. [Unusual pattern] observed
-
-### Correlation
-- Deployment at [timestamp] - [coincides/doesn't coincide] with anomaly
-- Alert [name] fired at [timestamp]
-
-### Hypothesis
-Based on metrics: [what the data suggests is happening]
-```
-
----
-
-## Anti-Patterns
-
-1. **Using `rate()` without range vector** - Always include `[5m]` or similar
-2. **Comparing counters directly** - Use `rate()` or `increase()` first
-3. **Wrong quantile math** - `histogram_quantile` requires `_bucket` metrics
-4. **Missing label filters** - Queries without filters return all series
-5. **Too-short time ranges** - Use at least 2x your scrape interval for `rate()`
-
----
-
-## Pro Tips
-
-**Choosing time ranges:**
-- `rate(...[5m])` for real-time monitoring
-- `rate(...[15m])` for smoother trends
-- Longer ranges smooth out noise but hide spikes
-
-**Debugging empty results:**
-- Check metric names: `grafana_list_datasources()` then explore
-- Verify labels exist in your environment
-- Try broader filters first, then narrow down
-
-**Performance:**
-- Avoid `{job=~".*"}` (matches everything)
-- Use `topk()` instead of returning all series
-- Shorter time ranges = faster queries
+1. ❌ **Using `rate()` without range vector** - Always include `[5m]` or similar
+2. ❌ **Comparing counters directly** - Use `rate()` or `increase()` first
+3. ❌ **Wrong quantile math** - `histogram_quantile` requires `_bucket` metrics
+4. ❌ **Missing label filters** - Queries without filters return all series
+5. ❌ **Too-short time ranges** - Use at least 2x your scrape interval for `rate()`
