@@ -7,19 +7,19 @@ import sys
 from collections import defaultdict
 
 from jaeger_client import (
-    search_traces,
-    get_operations,
+    calculate_latency_stats,
     extract_span_info,
     format_duration,
-    calculate_latency_stats,
+    get_operations,
+    search_traces,
 )
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Get latency statistics for a service"
+    parser = argparse.ArgumentParser(description="Get latency statistics for a service")
+    parser.add_argument(
+        "--service", "-s", required=True, help="Service name (required)"
     )
-    parser.add_argument("--service", "-s", required=True, help="Service name (required)")
     parser.add_argument("--operation", "-o", help="Filter to specific operation")
     parser.add_argument(
         "--lookback", type=float, default=1, help="Hours to look back (default: 1)"
@@ -84,7 +84,9 @@ def main():
                 return
 
             # Print header
-            print(f"{'Operation':<40} {'Count':>8} {'p50':>10} {'p95':>10} {'p99':>10} {'Max':>10}")
+            print(
+                f"{'Operation':<40} {'Count':>8} {'p50':>10} {'p95':>10} {'p99':>10} {'Max':>10}"
+            )
             print("-" * 98)
 
             # Sort by p99 descending
@@ -108,7 +110,9 @@ def main():
 
             print()
             print("Note: High p99 indicates tail latency issues.")
-            print("      Large gap between p50 and p99 suggests inconsistent performance.")
+            print(
+                "      Large gap between p50 and p99 suggests inconsistent performance."
+            )
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Shared Jaeger API client with proxy support."""
 
-import os
 import json
-import urllib.request
+import os
 import urllib.parse
-from datetime import datetime, timezone, timedelta
+import urllib.request
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
@@ -144,7 +144,9 @@ def format_duration(microseconds: int) -> str:
         return f"{microseconds / 1_000_000:.2f}s"
 
 
-def extract_span_info(span: dict[str, Any], processes: dict[str, Any]) -> dict[str, Any]:
+def extract_span_info(
+    span: dict[str, Any], processes: dict[str, Any]
+) -> dict[str, Any]:
     """Extract relevant info from a span.
 
     Args:

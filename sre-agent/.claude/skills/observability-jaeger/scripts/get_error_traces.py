@@ -5,12 +5,14 @@ import argparse
 import json
 import sys
 
-from jaeger_client import search_traces, extract_span_info
+from jaeger_client import extract_span_info, search_traces
 
 
 def main():
     parser = argparse.ArgumentParser(description="Find traces with errors in Jaeger")
-    parser.add_argument("--service", "-s", required=True, help="Service name (required)")
+    parser.add_argument(
+        "--service", "-s", required=True, help="Service name (required)"
+    )
     parser.add_argument("--operation", "-o", help="Operation name filter")
     parser.add_argument(
         "--limit", "-l", type=int, default=20, help="Max traces to return (default: 20)"
@@ -52,7 +54,11 @@ def main():
                     if not error_msg:
                         for log in info["logs"]:
                             for field in log.get("fields", []):
-                                if field.get("key") in ["message", "error", "error.message"]:
+                                if field.get("key") in [
+                                    "message",
+                                    "error",
+                                    "error.message",
+                                ]:
                                     error_msg = str(field.get("value", ""))[:200]
                                     break
                             if error_msg:
@@ -83,11 +89,15 @@ def main():
 
         if args.json:
             print(
-                json.dumps({"traces": error_traces, "count": len(error_traces)}, indent=2)
+                json.dumps(
+                    {"traces": error_traces, "count": len(error_traces)}, indent=2
+                )
             )
         else:
             print(f"Error traces for '{args.service}'")
-            print(f"Found {len(error_traces)} traces with errors in the last {args.lookback}h")
+            print(
+                f"Found {len(error_traces)} traces with errors in the last {args.lookback}h"
+            )
             print()
 
             if not error_traces:
@@ -100,8 +110,14 @@ def main():
                 print(f"  Operation: {t['operation']}")
                 print(f"  Error Spans ({len(t['error_spans'])}):")
                 for err_span in t["error_spans"][:3]:  # Limit to first 3
-                    status = f" (HTTP {err_span['http_status']})" if err_span["http_status"] else ""
-                    print(f"    - {err_span['service']}: {err_span['operation']}{status}")
+                    status = (
+                        f" (HTTP {err_span['http_status']})"
+                        if err_span["http_status"]
+                        else ""
+                    )
+                    print(
+                        f"    - {err_span['service']}: {err_span['operation']}{status}"
+                    )
                     if err_span["error_message"]:
                         msg = err_span["error_message"][:80]
                         if len(err_span["error_message"]) > 80:

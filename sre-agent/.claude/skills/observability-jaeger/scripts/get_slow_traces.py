@@ -5,12 +5,14 @@ import argparse
 import json
 import sys
 
-from jaeger_client import search_traces, extract_span_info, format_duration
+from jaeger_client import extract_span_info, format_duration, search_traces
 
 
 def main():
     parser = argparse.ArgumentParser(description="Find slow traces in Jaeger")
-    parser.add_argument("--service", "-s", required=True, help="Service name (required)")
+    parser.add_argument(
+        "--service", "-s", required=True, help="Service name (required)"
+    )
     parser.add_argument("--operation", "-o", help="Operation name filter")
     parser.add_argument(
         "--min-duration",
@@ -71,7 +73,9 @@ def main():
         trace_info.sort(key=lambda x: x["duration_us"], reverse=True)
 
         if args.json:
-            print(json.dumps({"traces": trace_info, "count": len(trace_info)}, indent=2))
+            print(
+                json.dumps({"traces": trace_info, "count": len(trace_info)}, indent=2)
+            )
         else:
             print(f"Slow traces for '{args.service}' (>{args.min_duration}ms)")
             print(f"Found {len(trace_info)} traces in the last {args.lookback}h")
@@ -87,7 +91,9 @@ def main():
                 print(f"  Total Duration: {t['duration']}{error_marker}")
                 print(f"  Operation: {t['operation']}")
                 print(f"  Spans: {t['span_count']}")
-                print(f"  Slowest Span: {t['slowest_span']['service']}: {t['slowest_span']['operation']} ({t['slowest_span']['duration']})")
+                print(
+                    f"  Slowest Span: {t['slowest_span']['service']}: {t['slowest_span']['operation']} ({t['slowest_span']['duration']})"
+                )
                 print()
 
     except Exception as e:

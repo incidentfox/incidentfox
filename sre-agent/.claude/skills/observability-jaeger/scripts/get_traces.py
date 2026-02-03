@@ -5,7 +5,7 @@ import argparse
 import json
 import sys
 
-from jaeger_client import search_traces, extract_span_info, format_duration
+from jaeger_client import extract_span_info, format_duration, search_traces
 
 
 def parse_tags(tag_strings: list[str] | None) -> dict[str, str]:
@@ -22,7 +22,9 @@ def parse_tags(tag_strings: list[str] | None) -> dict[str, str]:
 
 def main():
     parser = argparse.ArgumentParser(description="Search for traces in Jaeger")
-    parser.add_argument("--service", "-s", required=True, help="Service name (required)")
+    parser.add_argument(
+        "--service", "-s", required=True, help="Service name (required)"
+    )
     parser.add_argument("--operation", "-o", help="Operation name filter")
     parser.add_argument(
         "--tags", "-t", action="append", help="Tag filter (key=value, can repeat)"
@@ -58,7 +60,9 @@ def main():
                 spans = trace.get("spans", [])
                 processes = trace.get("processes", {})
                 if spans:
-                    root_span = min(spans, key=lambda s: s.get("startTime", float("inf")))
+                    root_span = min(
+                        spans, key=lambda s: s.get("startTime", float("inf"))
+                    )
                     info = extract_span_info(root_span, processes)
                     output.append(
                         {
@@ -86,7 +90,9 @@ def main():
                 spans = trace.get("spans", [])
                 processes = trace.get("processes", {})
                 if spans:
-                    root_span = min(spans, key=lambda s: s.get("startTime", float("inf")))
+                    root_span = min(
+                        spans, key=lambda s: s.get("startTime", float("inf"))
+                    )
                     info = extract_span_info(root_span, processes)
                     error_marker = " [ERROR]" if info["has_error"] else ""
                     print(f"Trace: {info['trace_id']}")

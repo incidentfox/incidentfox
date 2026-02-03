@@ -6,7 +6,7 @@ import json
 import sys
 from datetime import datetime, timezone
 
-from jaeger_client import get_trace, extract_span_info, format_duration
+from jaeger_client import extract_span_info, format_duration, get_trace
 
 
 def build_span_tree(spans: list[dict], processes: dict) -> list[dict]:
@@ -104,7 +104,11 @@ def main():
             tree = build_span_tree(spans, processes)
             print(
                 json.dumps(
-                    {"trace_id": args.trace_id, "span_count": len(spans), "spans": tree},
+                    {
+                        "trace_id": args.trace_id,
+                        "span_count": len(spans),
+                        "spans": tree,
+                    },
                     indent=2,
                     default=str,
                 )
@@ -143,7 +147,9 @@ def main():
                 for span in sorted_spans[:5]:
                     info = extract_span_info(span, processes)
                     error = " [ERROR]" if info["has_error"] else ""
-                    print(f"  {info['duration']:>10} - {info['service']}: {info['operation']}{error}")
+                    print(
+                        f"  {info['duration']:>10} - {info['service']}: {info['operation']}{error}"
+                    )
 
                 print("\nSpan Tree:")
                 print("-" * 60)
