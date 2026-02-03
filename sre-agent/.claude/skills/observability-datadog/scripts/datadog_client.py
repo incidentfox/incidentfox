@@ -40,10 +40,11 @@ def get_config() -> dict[str, str | None]:
 
 
 def get_api_url(endpoint: str) -> str:
-    """Build the Datadog API URL for proxy mode.
+    """Build the Datadog API URL.
 
-    Uses DATADOG_BASE_URL which routes through the credential proxy.
-    The proxy handles credential injection and forwards to the real Datadog API.
+    Supports two modes:
+    1. Proxy mode (production): Uses DATADOG_BASE_URL
+    2. Direct mode (testing): Uses DATADOG_SITE to build URL
 
     Args:
         endpoint: API path (e.g., "/api/v2/logs/events/search")
@@ -51,27 +52,46 @@ def get_api_url(endpoint: str) -> str:
     Returns:
         Full API URL
     """
+    # Proxy mode (production)
     base_url = os.getenv("DATADOG_BASE_URL")
-    if not base_url:
-        raise RuntimeError(
-            "DATADOG_BASE_URL not set. Agent must run through credential proxy."
-        )
-    return f"{base_url.rstrip('/')}{endpoint}"
+    if base_url:
+        return f"{base_url.rstrip('/')}{endpoint}"
+
+    # Direct mode (testing) - requires DATADOG_API_KEY
+    site = os.getenv("DATADOG_SITE", "datadoghq.com")
+    if os.getenv("DATADOG_API_KEY"):
+        return f"https://api.{site}{endpoint}"
+
+    raise RuntimeError(
+        "Either DATADOG_BASE_URL (proxy mode) or DATADOG_API_KEY (direct mode) must be set."
+    )
 
 
 def get_headers() -> dict[str, str]:
     """Get Datadog API headers.
 
-    Includes tenant context headers for credential-proxy to look up credentials.
-    API-KEY and APP-KEY headers will be injected by the proxy.
+    In proxy mode: includes tenant context for credential lookup.
+    In direct mode: includes API key and app key directly.
     """
     config = get_config()
-    return {
+    headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "X-Tenant-Id": config.get("tenant_id") or "local",
-        "X-Team-Id": config.get("team_id") or "local",
     }
+
+    # Direct mode - add API keys directly
+    api_key = os.getenv("DATADOG_API_KEY")
+    app_key = os.getenv("DATADOG_APP_KEY")
+    if api_key:
+        headers["DD-API-KEY"] = api_key
+        if app_key:
+            headers["DD-APPLICATION-KEY"] = app_key
+    else:
+        # Proxy mode - add tenant context
+        headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
+        headers["X-Team-Id"] = config.get("team_id") or "local"
+
+    return headers
 
 
 def search_logs(

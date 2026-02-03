@@ -107,10 +107,11 @@ def resolve_api_domain(config: dict[str, str | None]) -> str:
 
 
 def get_api_url(endpoint: str) -> str:
-    """Build the Coralogix API URL for proxy mode.
+    """Build the Coralogix API URL.
 
-    Uses CORALOGIX_BASE_URL which routes through the credential proxy.
-    The proxy handles credential injection and forwards to the real Coralogix API.
+    Supports two modes:
+    1. Proxy mode (production): Uses CORALOGIX_BASE_URL
+    2. Direct mode (testing): Uses CORALOGIX_DOMAIN or CORALOGIX_REGION
 
     Args:
         endpoint: API path (e.g., "/api/v1/dataprime/query")
@@ -118,26 +119,43 @@ def get_api_url(endpoint: str) -> str:
     Returns:
         Full API URL
     """
+    # Proxy mode (production)
     base_url = os.getenv("CORALOGIX_BASE_URL")
-    if not base_url:
-        raise RuntimeError(
-            "CORALOGIX_BASE_URL not set. Agent must run through credential proxy."
-        )
-    return f"{base_url.rstrip('/')}{endpoint}"
+    if base_url:
+        return f"{base_url.rstrip('/')}{endpoint}"
+
+    # Direct mode (testing) - requires CORALOGIX_API_KEY
+    if os.getenv("CORALOGIX_API_KEY"):
+        config = get_config()
+        api_domain = resolve_api_domain(config)
+        return f"https://ng-api-http.{api_domain}{endpoint}"
+
+    raise RuntimeError(
+        "Either CORALOGIX_BASE_URL (proxy mode) or CORALOGIX_API_KEY (direct mode) must be set."
+    )
 
 
 def get_headers() -> dict[str, str]:
     """Get Coralogix API headers.
 
-    Includes tenant context headers for credential-proxy to look up credentials.
-    Authorization header will be injected by the proxy.
+    In proxy mode: includes tenant context for credential lookup.
+    In direct mode: includes Bearer token directly.
     """
     config = get_config()
-    return {
+    headers = {
         "Content-Type": "application/json",
-        "X-Tenant-Id": config.get("tenant_id") or "local",
-        "X-Team-Id": config.get("team_id") or "local",
     }
+
+    # Direct mode - add API key as Bearer token
+    api_key = os.getenv("CORALOGIX_API_KEY")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    else:
+        # Proxy mode - add tenant context
+        headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
+        headers["X-Team-Id"] = config.get("team_id") or "local"
+
+    return headers
 
 
 def parse_result(result: dict[str, Any]) -> dict[str, Any]:
