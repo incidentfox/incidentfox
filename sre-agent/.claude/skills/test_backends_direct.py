@@ -30,7 +30,7 @@ def test_elasticsearch():
 
     url = "https://a6f123d4974844f938d66fd05676392b-1823852830.us-west-2.elb.amazonaws.com:9200"
     user = "elastic"
-    password = "***REMOVED***"
+    password = "REDACTED"  # Rotated - use env var or secrets manager
 
     auth = b64encode(f"{user}:{password}".encode()).decode()
     headers = {"Authorization": f"Basic {auth}", "Content-Type": "application/json"}
@@ -98,7 +98,7 @@ def test_grafana():
         "http://abffcf5b990ec4bd685aef627eb2daf1-1789943242.us-west-2.elb.amazonaws.com"
     )
     user = "admin"
-    password = "***REMOVED***"
+    password = "REDACTED"  # Rotated - use env var or secrets manager
 
     auth = b64encode(f"{user}:{password}".encode()).decode()
     headers = {"Authorization": f"Basic {auth}", "Content-Type": "application/json"}
@@ -143,7 +143,7 @@ def test_coralogix():
     print("CORALOGIX")
     print("=" * 60)
 
-    api_key = "***REMOVED***"
+    api_key = "REDACTED"  # Rotated - use env var or secrets manager
     api_url = "https://ng-api-http.cx498.coralogix.com"
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -198,8 +198,8 @@ def test_datadog():
     print("DATADOG")
     print("=" * 60)
 
-    api_key = "***REMOVED***"
-    app_key = "***REMOVED***"
+    api_key = "REDACTED"  # Rotated - use env var or secrets manager
+    app_key = "REDACTED"  # Rotated - use env var or secrets manager
     site = "us5.datadoghq.com"
 
     headers = {
