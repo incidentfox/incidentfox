@@ -17,9 +17,7 @@ from github_client import compare_commits, format_commit
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Compare two commits or branches"
-    )
+    parser = argparse.ArgumentParser(description="Compare two commits or branches")
     parser.add_argument(
         "--repo",
         required=True,
@@ -76,7 +74,9 @@ def main():
                 "commits": [
                     {
                         "sha": c.get("sha"),
-                        "message": c.get("commit", {}).get("message", "").split("\n")[0],
+                        "message": c.get("commit", {})
+                        .get("message", "")
+                        .split("\n")[0],
                         "author": c.get("commit", {}).get("author", {}).get("name"),
                         "date": c.get("commit", {}).get("author", {}).get("date"),
                     }
@@ -125,7 +125,9 @@ def main():
                     }.get(f.get("status", ""), "?")
                     additions = f.get("additions", 0)
                     deletions = f.get("deletions", 0)
-                    print(f"  [{status_icon}] {f.get('filename')} (+{additions}/-{deletions})")
+                    print(
+                        f"  [{status_icon}] {f.get('filename')} (+{additions}/-{deletions})"
+                    )
                 if len(files) > 30:
                     print(f"  ... and {len(files) - 30} more files")
 

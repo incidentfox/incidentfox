@@ -90,6 +90,7 @@ def get_headers() -> dict[str, str]:
         # Check if it's basic auth format (user:pass) or bearer token
         if ":" in api_key:
             import base64
+
             encoded = base64.b64encode(api_key.encode()).decode()
             headers["Authorization"] = f"Basic {encoded}"
         else:

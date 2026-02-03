@@ -17,9 +17,7 @@ from slack_client import post_message
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Post a message to a Slack channel"
-    )
+    parser = argparse.ArgumentParser(description="Post a message to a Slack channel")
     parser.add_argument(
         "--channel",
         required=True,

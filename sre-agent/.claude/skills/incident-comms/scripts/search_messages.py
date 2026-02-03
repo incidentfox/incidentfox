@@ -14,7 +14,7 @@ import argparse
 import json
 import sys
 
-from slack_client import search_messages, format_message
+from slack_client import format_message, search_messages
 
 
 def main():

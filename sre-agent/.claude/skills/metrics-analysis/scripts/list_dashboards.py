@@ -18,9 +18,7 @@ from grafana_client import list_dashboards
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="List Grafana dashboards"
-    )
+    parser = argparse.ArgumentParser(description="List Grafana dashboards")
     parser.add_argument(
         "--query",
         help="Search query to filter dashboards",

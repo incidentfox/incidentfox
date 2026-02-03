@@ -13,7 +13,7 @@ import argparse
 import json
 import sys
 
-from github_client import list_commits, format_commit
+from github_client import format_commit, list_commits
 
 
 def main():
@@ -75,7 +75,9 @@ def main():
                 "commits": [
                     {
                         "sha": c.get("sha"),
-                        "message": c.get("commit", {}).get("message", "").split("\n")[0],
+                        "message": c.get("commit", {})
+                        .get("message", "")
+                        .split("\n")[0],
                         "author": c.get("commit", {}).get("author", {}).get("name"),
                         "date": c.get("commit", {}).get("author", {}).get("date"),
                         "url": c.get("html_url"),

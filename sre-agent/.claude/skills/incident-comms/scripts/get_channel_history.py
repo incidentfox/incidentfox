@@ -13,7 +13,7 @@ import argparse
 import json
 import sys
 
-from slack_client import get_channel_history, format_message
+from slack_client import format_message, get_channel_history
 
 
 def main():
@@ -89,7 +89,9 @@ def main():
                 for msg in reversed(messages):
                     print(format_message(msg))
                     if msg.get("thread_ts") and msg.get("reply_count"):
-                        print(f"  └── Thread with {msg['reply_count']} replies (ts: {msg['thread_ts']})")
+                        print(
+                            f"  └── Thread with {msg['reply_count']} replies (ts: {msg['thread_ts']})"
+                        )
                     print()
 
     except Exception as e:

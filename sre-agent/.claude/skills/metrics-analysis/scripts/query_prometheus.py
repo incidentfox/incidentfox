@@ -16,9 +16,9 @@ import sys
 import time
 
 from grafana_client import (
+    format_metric_result,
     query_prometheus,
     query_prometheus_range,
-    format_metric_result,
 )
 
 

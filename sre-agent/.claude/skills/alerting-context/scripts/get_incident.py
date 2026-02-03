@@ -12,13 +12,11 @@ import argparse
 import json
 import sys
 
-from pagerduty_client import get_incident, get_incident_log_entries, format_incident
+from pagerduty_client import format_incident, get_incident, get_incident_log_entries
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Get details of a PagerDuty incident"
-    )
+    parser = argparse.ArgumentParser(description="Get details of a PagerDuty incident")
     parser.add_argument(
         "--id",
         required=True,
@@ -52,7 +50,9 @@ def main():
                     "urgency": incident.get("urgency"),
                     "created_at": incident.get("created_at"),
                     "service": incident.get("service", {}).get("summary"),
-                    "escalation_policy": incident.get("escalation_policy", {}).get("summary"),
+                    "escalation_policy": incident.get("escalation_policy", {}).get(
+                        "summary"
+                    ),
                     "assignments": [
                         a.get("assignee", {}).get("summary")
                         for a in incident.get("assignments", [])
@@ -84,7 +84,9 @@ def main():
             print("=" * 60)
             print(format_incident(incident))
             print()
-            print(f"Escalation Policy: {incident.get('escalation_policy', {}).get('summary', 'N/A')}")
+            print(
+                f"Escalation Policy: {incident.get('escalation_policy', {}).get('summary', 'N/A')}"
+            )
             print(f"URL: {incident.get('html_url', 'N/A')}")
 
             assignments = incident.get("assignments", [])
@@ -99,7 +101,9 @@ def main():
                 print()
                 print("ACKNOWLEDGEMENTS:")
                 for a in acks:
-                    print(f"  • {a.get('acknowledger', {}).get('summary', 'Unknown')} at {a.get('at', 'N/A')}")
+                    print(
+                        f"  • {a.get('acknowledger', {}).get('summary', 'Unknown')} at {a.get('at', 'N/A')}"
+                    )
 
             if log_entries:
                 print()

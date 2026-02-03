@@ -16,13 +16,11 @@ import json
 import sys
 from datetime import datetime, timedelta
 
-from pagerduty_client import list_incidents, format_incident
+from pagerduty_client import format_incident, list_incidents
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="List PagerDuty incidents"
-    )
+    parser = argparse.ArgumentParser(description="List PagerDuty incidents")
     parser.add_argument(
         "--status",
         choices=["triggered", "acknowledged", "resolved"],

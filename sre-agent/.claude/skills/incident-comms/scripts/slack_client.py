@@ -249,6 +249,7 @@ def format_message(message: dict[str, Any], include_user: bool = True) -> str:
     # Convert timestamp to readable format
     if ts:
         import datetime
+
         try:
             dt = datetime.datetime.fromtimestamp(float(ts))
             time_str = dt.strftime("%Y-%m-%d %H:%M:%S")

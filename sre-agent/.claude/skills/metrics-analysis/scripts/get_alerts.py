@@ -18,9 +18,7 @@ from grafana_client import get_alerts
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Get Grafana alerts"
-    )
+    parser = argparse.ArgumentParser(description="Get Grafana alerts")
     parser.add_argument(
         "--state",
         choices=["alerting", "pending", "ok", "paused", "no_data"],

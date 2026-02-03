@@ -13,7 +13,7 @@ import argparse
 import json
 import sys
 
-from github_client import get_commit, format_commit
+from github_client import format_commit, get_commit
 
 
 def main():
@@ -115,7 +115,9 @@ def main():
                     }.get(f.get("status", ""), "?")
                     additions = f.get("additions", 0)
                     deletions = f.get("deletions", 0)
-                    print(f"  [{status_icon}] {f.get('filename')} (+{additions}/-{deletions})")
+                    print(
+                        f"  [{status_icon}] {f.get('filename')} (+{additions}/-{deletions})"
+                    )
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
