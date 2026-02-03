@@ -167,7 +167,12 @@ def format_log_entry(result: dict[str, Any], max_message_length: int = 300) -> s
     """
     # Common Splunk field names
     timestamp = result.get("_time", "")
-    level = result.get("log_level") or result.get("level") or result.get("severity") or "INFO"
+    level = (
+        result.get("log_level")
+        or result.get("level")
+        or result.get("severity")
+        or "INFO"
+    )
     source = result.get("source", "")
     sourcetype = result.get("sourcetype", "")
     host = result.get("host", "")

@@ -71,15 +71,22 @@ def main():
 
         # Apply strategy filter
         if args.strategy == "errors_only":
-            search_parts.append("(log_level=ERROR OR log_level=error OR severity=ERROR OR severity=error)")
+            search_parts.append(
+                "(log_level=ERROR OR log_level=error OR severity=ERROR OR severity=error)"
+            )
         elif args.strategy == "warnings_up":
-            search_parts.append("(log_level=ERROR OR log_level=error OR log_level=WARN OR log_level=warn OR log_level=WARNING OR severity=ERROR OR severity=WARN)")
+            search_parts.append(
+                "(log_level=ERROR OR log_level=error OR log_level=WARN OR log_level=warn OR log_level=WARNING OR severity=ERROR OR severity=WARN)"
+            )
 
         # Handle around_time strategy
         time_range = args.time_range
         if args.strategy == "around_time":
             if not args.timestamp:
-                print("Error: --timestamp required for around_time strategy", file=sys.stderr)
+                print(
+                    "Error: --timestamp required for around_time strategy",
+                    file=sys.stderr,
+                )
                 sys.exit(1)
             # Splunk uses earliest/latest, handled in client
             time_range = args.window * 2
@@ -92,14 +99,18 @@ def main():
         # Build output
         logs = []
         for result in results:
-            logs.append({
-                "timestamp": result.get("_time"),
-                "level": result.get("log_level") or result.get("severity") or "INFO",
-                "sourcetype": result.get("sourcetype"),
-                "host": result.get("host"),
-                "source": result.get("source"),
-                "message": result.get("_raw"),
-            })
+            logs.append(
+                {
+                    "timestamp": result.get("_time"),
+                    "level": result.get("log_level")
+                    or result.get("severity")
+                    or "INFO",
+                    "sourcetype": result.get("sourcetype"),
+                    "host": result.get("host"),
+                    "source": result.get("source"),
+                    "message": result.get("_raw"),
+                }
+            )
 
         output = {
             "strategy": args.strategy,

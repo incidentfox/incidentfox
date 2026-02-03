@@ -120,16 +120,18 @@ def search_logs(
 
         for log in data.get("data", []):
             attrs = log.get("attributes", {})
-            logs.append({
-                "id": log.get("id"),
-                "timestamp": attrs.get("timestamp"),
-                "status": attrs.get("status"),
-                "service": attrs.get("service"),
-                "host": attrs.get("host"),
-                "message": attrs.get("message"),
-                "attributes": attrs.get("attributes", {}),
-                "tags": attrs.get("tags", []),
-            })
+            logs.append(
+                {
+                    "id": log.get("id"),
+                    "timestamp": attrs.get("timestamp"),
+                    "status": attrs.get("status"),
+                    "service": attrs.get("service"),
+                    "host": attrs.get("host"),
+                    "message": attrs.get("message"),
+                    "attributes": attrs.get("attributes", {}),
+                    "tags": attrs.get("tags", []),
+                }
+            )
 
         return logs
 

@@ -22,8 +22,8 @@ import sys
 
 from elasticsearch_client import (
     aggregate,
-    search,
     build_time_range_query,
+    search,
 )
 
 
@@ -44,17 +44,19 @@ def main():
         filters = []
         if args.service:
             # Try multiple common service field names
-            filters.append({
-                "bool": {
-                    "should": [
-                        {"term": {"service.name": args.service}},
-                        {"term": {"service": args.service}},
-                        {"term": {"application": args.service}},
-                        {"term": {"kubernetes.container.name": args.service}},
-                    ],
-                    "minimum_should_match": 1,
+            filters.append(
+                {
+                    "bool": {
+                        "should": [
+                            {"term": {"service.name": args.service}},
+                            {"term": {"service": args.service}},
+                            {"term": {"application": args.service}},
+                            {"term": {"kubernetes.container.name": args.service}},
+                        ],
+                        "minimum_should_match": 1,
+                    }
                 }
-            })
+            )
 
         query = build_time_range_query(args.time_range, filters)
 
@@ -88,9 +90,17 @@ def main():
         warn_count = 0
 
         # Try primary level field
-        buckets = level_result.get("aggregations", {}).get("level_distribution", {}).get("buckets", [])
+        buckets = (
+            level_result.get("aggregations", {})
+            .get("level_distribution", {})
+            .get("buckets", [])
+        )
         if not buckets:
-            buckets = level_result.get("aggregations", {}).get("level_alt", {}).get("buckets", [])
+            buckets = (
+                level_result.get("aggregations", {})
+                .get("level_alt", {})
+                .get("buckets", [])
+            )
 
         for bucket in buckets:
             level = bucket.get("key", "unknown")
@@ -123,39 +133,89 @@ def main():
         service_result = aggregate(query, service_aggs, index=args.index)
 
         top_services = []
-        buckets = service_result.get("aggregations", {}).get("services", {}).get("buckets", [])
+        buckets = (
+            service_result.get("aggregations", {})
+            .get("services", {})
+            .get("buckets", [])
+        )
         if not buckets:
-            buckets = service_result.get("aggregations", {}).get("services_alt", {}).get("buckets", [])
+            buckets = (
+                service_result.get("aggregations", {})
+                .get("services_alt", {})
+                .get("buckets", [])
+            )
 
         for bucket in buckets:
-            top_services.append({
-                "service": bucket.get("key"),
-                "count": bucket.get("doc_count", 0),
-            })
+            top_services.append(
+                {
+                    "service": bucket.get("key"),
+                    "count": bucket.get("doc_count", 0),
+                }
+            )
 
         # 3. Get sample error messages for pattern analysis
-        error_query = build_time_range_query(args.time_range, filters + [
-            {"bool": {"should": [
-                {"terms": {"level.keyword": ["error", "ERROR", "Error", "critical", "CRITICAL", "fatal", "FATAL"]}},
-                {"terms": {"log.level.keyword": ["error", "ERROR", "Error", "critical", "CRITICAL", "fatal", "FATAL"]}},
-            ], "minimum_should_match": 1}}
-        ])
+        error_query = build_time_range_query(
+            args.time_range,
+            filters
+            + [
+                {
+                    "bool": {
+                        "should": [
+                            {
+                                "terms": {
+                                    "level.keyword": [
+                                        "error",
+                                        "ERROR",
+                                        "Error",
+                                        "critical",
+                                        "CRITICAL",
+                                        "fatal",
+                                        "FATAL",
+                                    ]
+                                }
+                            },
+                            {
+                                "terms": {
+                                    "log.level.keyword": [
+                                        "error",
+                                        "ERROR",
+                                        "Error",
+                                        "critical",
+                                        "CRITICAL",
+                                        "fatal",
+                                        "FATAL",
+                                    ]
+                                }
+                            },
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                }
+            ],
+        )
 
         error_result = search(error_query, index=args.index, size=50)
         error_hits = error_result.get("hits", {}).get("hits", [])
 
         # Extract unique error patterns
-        from collections import Counter
         import re
+        from collections import Counter
+
         error_patterns = Counter()
 
         for hit in error_hits:
             source = hit.get("_source", {})
             msg = source.get("message") or source.get("log") or source.get("msg") or ""
             # Normalize variable parts
-            normalized = re.sub(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', '<UUID>', str(msg))
-            normalized = re.sub(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '<IP>', normalized)
-            normalized = re.sub(r'\b\d+\b', '<NUM>', normalized)
+            normalized = re.sub(
+                r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+                "<UUID>",
+                str(msg),
+            )
+            normalized = re.sub(
+                r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "<IP>", normalized
+            )
+            normalized = re.sub(r"\b\d+\b", "<NUM>", normalized)
             normalized = normalized[:100]
             error_patterns[normalized] += 1
 
@@ -170,11 +230,17 @@ def main():
         elif error_rate > 10:
             recommendation = f"HIGH error rate ({error_rate}%). Investigate top error patterns immediately."
         elif error_rate > 5:
-            recommendation = f"Elevated error rate ({error_rate}%). Review error patterns."
+            recommendation = (
+                f"Elevated error rate ({error_rate}%). Review error patterns."
+            )
         elif total_count > 100000:
-            recommendation = f"Very high volume ({total_count:,} logs). Use targeted service filter."
+            recommendation = (
+                f"Very high volume ({total_count:,} logs). Use targeted service filter."
+            )
         else:
-            recommendation = f"Normal volume ({total_count:,} logs). Error rate: {error_rate}%"
+            recommendation = (
+                f"Normal volume ({total_count:,} logs). Error rate: {error_rate}%"
+            )
 
         # Build result
         result = {

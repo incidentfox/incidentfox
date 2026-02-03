@@ -101,14 +101,22 @@ def main():
 
         # Extract unique error patterns
         from collections import Counter
+
         error_patterns = Counter()
         for log in error_logs:
             msg = log.get("message", "")
             # Normalize: remove timestamps, UUIDs, IPs, numbers for grouping
             import re
-            normalized = re.sub(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', '<UUID>', msg)
-            normalized = re.sub(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '<IP>', normalized)
-            normalized = re.sub(r'\b\d+\b', '<NUM>', normalized)
+
+            normalized = re.sub(
+                r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+                "<UUID>",
+                msg,
+            )
+            normalized = re.sub(
+                r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "<IP>", normalized
+            )
+            normalized = re.sub(r"\b\d+\b", "<NUM>", normalized)
             normalized = normalized[:100]  # Truncate for grouping
             error_patterns[normalized] += 1
 
@@ -123,11 +131,17 @@ def main():
         elif error_rate > 10:
             recommendation = f"HIGH error rate ({error_rate}%). Investigate top error patterns immediately."
         elif error_rate > 5:
-            recommendation = f"Elevated error rate ({error_rate}%). Review error patterns."
+            recommendation = (
+                f"Elevated error rate ({error_rate}%). Review error patterns."
+            )
         elif total_count > 10000:
-            recommendation = f"High volume ({total_count:,} logs). Use targeted service filter."
+            recommendation = (
+                f"High volume ({total_count:,} logs). Use targeted service filter."
+            )
         else:
-            recommendation = f"Normal volume ({total_count:,} logs). Error rate: {error_rate}%"
+            recommendation = (
+                f"Normal volume ({total_count:,} logs). Error rate: {error_rate}%"
+            )
 
         # Build result
         result = {

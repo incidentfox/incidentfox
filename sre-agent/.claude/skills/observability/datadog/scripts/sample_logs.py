@@ -23,7 +23,7 @@ import json
 import sys
 from datetime import datetime, timedelta, timezone
 
-from datadog_client import search_logs, format_log_entry
+from datadog_client import format_log_entry, search_logs
 
 
 def main():
@@ -78,7 +78,10 @@ def main():
         time_range = args.time_range
         if args.strategy == "around_time":
             if not args.timestamp:
-                print("Error: --timestamp required for around_time strategy", file=sys.stderr)
+                print(
+                    "Error: --timestamp required for around_time strategy",
+                    file=sys.stderr,
+                )
                 sys.exit(1)
             # Use smaller window around the timestamp
             time_range = args.window * 2
@@ -96,9 +99,18 @@ def main():
                 target = datetime.fromisoformat(args.timestamp.replace("Z", "+00:00"))
                 window = timedelta(minutes=args.window)
                 logs = [
-                    log for log in logs
-                    if log.get("timestamp") and
-                    abs((datetime.fromisoformat(log["timestamp"].replace("Z", "+00:00")) - target).total_seconds()) <= window.total_seconds()
+                    log
+                    for log in logs
+                    if log.get("timestamp")
+                    and abs(
+                        (
+                            datetime.fromisoformat(
+                                log["timestamp"].replace("Z", "+00:00")
+                            )
+                            - target
+                        ).total_seconds()
+                    )
+                    <= window.total_seconds()
                 ]
             except ValueError as e:
                 print(f"Error parsing timestamp: {e}", file=sys.stderr)

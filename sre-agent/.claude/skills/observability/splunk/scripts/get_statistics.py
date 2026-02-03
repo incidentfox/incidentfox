@@ -52,7 +52,7 @@ def main():
         base_search = " ".join(base_parts)
 
         # 1. Get total count and log level distribution
-        stats_query = f"{base_search} | stats count as total, count(eval(log_level=\"ERROR\" OR log_level=\"error\" OR severity=\"ERROR\")) as errors, count(eval(log_level=\"WARN\" OR log_level=\"warn\" OR log_level=\"WARNING\" OR severity=\"WARN\")) as warnings"
+        stats_query = f'{base_search} | stats count as total, count(eval(log_level="ERROR" OR log_level="error" OR severity="ERROR")) as errors, count(eval(log_level="WARN" OR log_level="warn" OR log_level="WARNING" OR severity="WARN")) as warnings'
 
         stats_results = execute_search(stats_query, args.time_range, max_results=1)
 
@@ -70,7 +70,7 @@ def main():
         warn_rate = round(warn_count / total_count * 100, 2) if total_count > 0 else 0
 
         # 2. Get level distribution
-        level_query = f"{base_search} | eval level=coalesce(log_level, severity, \"INFO\") | stats count by level | sort -count"
+        level_query = f'{base_search} | eval level=coalesce(log_level, severity, "INFO") | stats count by level | sort -count'
         level_results = execute_search(level_query, args.time_range, max_results=20)
 
         level_dist = {}
@@ -80,8 +80,12 @@ def main():
             level_dist[level] = count
 
         # 3. Get top sourcetypes
-        sourcetype_query = f"{base_search} | stats count by sourcetype | sort -count | head 10"
-        sourcetype_results = execute_search(sourcetype_query, args.time_range, max_results=10)
+        sourcetype_query = (
+            f"{base_search} | stats count by sourcetype | sort -count | head 10"
+        )
+        sourcetype_results = execute_search(
+            sourcetype_query, args.time_range, max_results=10
+        )
 
         top_sourcetypes = [
             {"sourcetype": r.get("sourcetype"), "count": int(r.get("count", 0))}
@@ -103,13 +107,20 @@ def main():
 
         # Extract unique error patterns
         import re
+
         error_patterns = Counter()
         for result in error_results:
             msg = result.get("_raw") or result.get("message") or ""
             # Normalize
-            normalized = re.sub(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', '<UUID>', str(msg))
-            normalized = re.sub(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '<IP>', normalized)
-            normalized = re.sub(r'\b\d+\b', '<NUM>', normalized)
+            normalized = re.sub(
+                r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+                "<UUID>",
+                str(msg),
+            )
+            normalized = re.sub(
+                r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "<IP>", normalized
+            )
+            normalized = re.sub(r"\b\d+\b", "<NUM>", normalized)
             normalized = normalized[:100]
             error_patterns[normalized] += 1
 
@@ -124,11 +135,15 @@ def main():
         elif error_rate > 10:
             recommendation = f"HIGH error rate ({error_rate}%). Investigate top error patterns immediately."
         elif error_rate > 5:
-            recommendation = f"Elevated error rate ({error_rate}%). Review error patterns."
+            recommendation = (
+                f"Elevated error rate ({error_rate}%). Review error patterns."
+            )
         elif total_count > 100000:
             recommendation = f"Very high volume ({total_count:,} logs). Use targeted sourcetype/index filter."
         else:
-            recommendation = f"Normal volume ({total_count:,} logs). Error rate: {error_rate}%"
+            recommendation = (
+                f"Normal volume ({total_count:,} logs). Error rate: {error_rate}%"
+            )
 
         # Build result
         result = {

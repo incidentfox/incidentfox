@@ -24,9 +24,9 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 from elasticsearch_client import (
-    search,
     build_time_range_query,
     format_log_entry,
+    search,
 )
 
 
@@ -67,45 +67,104 @@ def main():
 
         # Service filter
         if args.service:
-            filters.append({
-                "bool": {
-                    "should": [
-                        {"term": {"service.name": args.service}},
-                        {"term": {"service": args.service}},
-                        {"term": {"application": args.service}},
-                        {"term": {"kubernetes.container.name": args.service}},
-                    ],
-                    "minimum_should_match": 1,
+            filters.append(
+                {
+                    "bool": {
+                        "should": [
+                            {"term": {"service.name": args.service}},
+                            {"term": {"service": args.service}},
+                            {"term": {"application": args.service}},
+                            {"term": {"kubernetes.container.name": args.service}},
+                        ],
+                        "minimum_should_match": 1,
+                    }
                 }
-            })
+            )
 
         # Strategy-based level filter
         if args.strategy == "errors_only":
-            filters.append({
-                "bool": {
-                    "should": [
-                        {"terms": {"level.keyword": ["error", "ERROR", "Error", "critical", "CRITICAL", "fatal", "FATAL"]}},
-                        {"terms": {"log.level.keyword": ["error", "ERROR", "Error", "critical", "CRITICAL", "fatal", "FATAL"]}},
-                    ],
-                    "minimum_should_match": 1,
+            filters.append(
+                {
+                    "bool": {
+                        "should": [
+                            {
+                                "terms": {
+                                    "level.keyword": [
+                                        "error",
+                                        "ERROR",
+                                        "Error",
+                                        "critical",
+                                        "CRITICAL",
+                                        "fatal",
+                                        "FATAL",
+                                    ]
+                                }
+                            },
+                            {
+                                "terms": {
+                                    "log.level.keyword": [
+                                        "error",
+                                        "ERROR",
+                                        "Error",
+                                        "critical",
+                                        "CRITICAL",
+                                        "fatal",
+                                        "FATAL",
+                                    ]
+                                }
+                            },
+                        ],
+                        "minimum_should_match": 1,
+                    }
                 }
-            })
+            )
         elif args.strategy == "warnings_up":
-            filters.append({
-                "bool": {
-                    "should": [
-                        {"terms": {"level.keyword": ["warn", "WARN", "warning", "WARNING", "error", "ERROR", "critical", "CRITICAL"]}},
-                        {"terms": {"log.level.keyword": ["warn", "WARN", "warning", "WARNING", "error", "ERROR", "critical", "CRITICAL"]}},
-                    ],
-                    "minimum_should_match": 1,
+            filters.append(
+                {
+                    "bool": {
+                        "should": [
+                            {
+                                "terms": {
+                                    "level.keyword": [
+                                        "warn",
+                                        "WARN",
+                                        "warning",
+                                        "WARNING",
+                                        "error",
+                                        "ERROR",
+                                        "critical",
+                                        "CRITICAL",
+                                    ]
+                                }
+                            },
+                            {
+                                "terms": {
+                                    "log.level.keyword": [
+                                        "warn",
+                                        "WARN",
+                                        "warning",
+                                        "WARNING",
+                                        "error",
+                                        "ERROR",
+                                        "critical",
+                                        "CRITICAL",
+                                    ]
+                                }
+                            },
+                        ],
+                        "minimum_should_match": 1,
+                    }
                 }
-            })
+            )
 
         # Handle around_time strategy
         time_range = args.time_range
         if args.strategy == "around_time":
             if not args.timestamp:
-                print("Error: --timestamp required for around_time strategy", file=sys.stderr)
+                print(
+                    "Error: --timestamp required for around_time strategy",
+                    file=sys.stderr,
+                )
                 sys.exit(1)
             try:
                 target = datetime.fromisoformat(args.timestamp.replace("Z", "+00:00"))
@@ -114,15 +173,19 @@ def main():
                 end = target + window
 
                 # Override time range filter
-                filters = [f for f in filters if "range" not in str(f)]  # Remove default time range
-                filters.append({
-                    "range": {
-                        "@timestamp": {
-                            "gte": start.isoformat(),
-                            "lte": end.isoformat(),
+                filters = [
+                    f for f in filters if "range" not in str(f)
+                ]  # Remove default time range
+                filters.append(
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": start.isoformat(),
+                                "lte": end.isoformat(),
+                            }
                         }
                     }
-                })
+                )
                 time_range = args.window * 2
             except ValueError as e:
                 print(f"Error parsing timestamp: {e}", file=sys.stderr)
@@ -143,15 +206,21 @@ def main():
         logs = []
         for hit in hits:
             source = hit.get("_source", {})
-            logs.append({
-                "id": hit.get("_id"),
-                "index": hit.get("_index"),
-                "timestamp": source.get("@timestamp"),
-                "level": source.get("level") or source.get("log.level") or "INFO",
-                "service": source.get("service.name") or source.get("service") or source.get("kubernetes.container.name"),
-                "message": source.get("message") or source.get("log") or source.get("msg"),
-                "source": source,
-            })
+            logs.append(
+                {
+                    "id": hit.get("_id"),
+                    "index": hit.get("_index"),
+                    "timestamp": source.get("@timestamp"),
+                    "level": source.get("level") or source.get("log.level") or "INFO",
+                    "service": source.get("service.name")
+                    or source.get("service")
+                    or source.get("kubernetes.container.name"),
+                    "message": source.get("message")
+                    or source.get("log")
+                    or source.get("msg"),
+                    "source": source,
+                }
+            )
 
         result = {
             "strategy": args.strategy,

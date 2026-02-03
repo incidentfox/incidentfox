@@ -99,7 +99,9 @@ def search(
         "sort": sort or [{"@timestamp": {"order": "desc"}}],
     }
 
-    with httpx.Client(timeout=60.0, verify=False) as client:  # verify=False for self-signed certs
+    with httpx.Client(
+        timeout=60.0, verify=False
+    ) as client:  # verify=False for self-signed certs
         response = client.post(url, headers=get_headers(), json=body)
         response.raise_for_status()
         return response.json()
@@ -209,12 +211,7 @@ def format_log_entry(hit: dict[str, Any], max_message_length: int = 300) -> str:
     )
 
     # Common field names for message
-    message = (
-        source.get("message")
-        or source.get("log")
-        or source.get("msg")
-        or ""
-    )
+    message = source.get("message") or source.get("log") or source.get("msg") or ""
 
     # Format timestamp
     if "T" in str(timestamp):
