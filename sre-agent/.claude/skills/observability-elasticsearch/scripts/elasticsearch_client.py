@@ -78,6 +78,7 @@ def get_headers() -> dict[str, str]:
     password = os.getenv("ES_PASSWORD") or os.getenv("ELASTICSEARCH_PASSWORD")
     if user and password:
         import base64
+
         auth = base64.b64encode(f"{user}:{password}".encode()).decode()
         headers["Authorization"] = f"Basic {auth}"
     elif not os.getenv("ELASTICSEARCH_BASE_URL"):
