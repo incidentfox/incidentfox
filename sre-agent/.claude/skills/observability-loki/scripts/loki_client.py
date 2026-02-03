@@ -271,7 +271,12 @@ def format_log_entry(stream: dict, entry: list, max_length: int = 300) -> str:
     ts_str = ts.strftime("%Y-%m-%d %H:%M:%S")
 
     # Get key labels
-    app = stream.get("app") or stream.get("application") or stream.get("container") or "unknown"
+    app = (
+        stream.get("app")
+        or stream.get("application")
+        or stream.get("container")
+        or "unknown"
+    )
     pod = stream.get("pod") or stream.get("instance") or ""
     namespace = stream.get("namespace") or ""
 

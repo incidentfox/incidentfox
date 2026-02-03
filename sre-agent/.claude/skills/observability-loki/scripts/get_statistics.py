@@ -31,7 +31,7 @@ def main():
         start = now - timedelta(hours=args.lookback)
 
         # Get total log count
-        total_query = f'count_over_time({args.selector}[{args.lookback}h])'
+        total_query = f"count_over_time({args.selector}[{args.lookback}h])"
         total_result = query_instant(total_query)
 
         total_count = 0
@@ -42,7 +42,7 @@ def main():
 
         # Get error count
         error_selector = f'{args.selector} |~ "(?i)error|exception|fail|fatal"'
-        error_query = f'count_over_time({error_selector}[{args.lookback}h])'
+        error_query = f"count_over_time({error_selector}[{args.lookback}h])"
         error_result = query_instant(error_query)
 
         error_count = 0
@@ -53,7 +53,7 @@ def main():
 
         # Get warning count
         warn_selector = f'{args.selector} |~ "(?i)warn"'
-        warn_query = f'count_over_time({warn_selector}[{args.lookback}h])'
+        warn_query = f"count_over_time({warn_selector}[{args.lookback}h])"
         warn_result = query_instant(warn_query)
 
         warn_count = 0

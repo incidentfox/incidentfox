@@ -10,9 +10,7 @@ from loki_client import get_label_values, get_labels
 
 def main():
     parser = argparse.ArgumentParser(description="List Loki labels and values")
-    parser.add_argument(
-        "--label", "-l", help="Get values for a specific label"
-    )
+    parser.add_argument("--label", "-l", help="Get values for a specific label")
     parser.add_argument(
         "--lookback",
         type=float,

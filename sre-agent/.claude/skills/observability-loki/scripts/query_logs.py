@@ -92,11 +92,16 @@ def main():
             results = data.get("result", [])
 
             if args.json:
-                print(json.dumps({
-                    "query": args.query,
-                    "type": result_type,
-                    "result": results,
-                }, indent=2))
+                print(
+                    json.dumps(
+                        {
+                            "query": args.query,
+                            "type": result_type,
+                            "result": results,
+                        },
+                        indent=2,
+                    )
+                )
             else:
                 print(f"Metric Query: {args.query}")
                 print(f"Result Type: {result_type}")
@@ -121,17 +126,24 @@ def main():
                     for entry in stream.get("values", []):
                         ts_ns, line = entry
                         ts = datetime.fromtimestamp(int(ts_ns) / 1e9, tz=timezone.utc)
-                        entries.append({
-                            "timestamp": ts.isoformat(),
-                            "labels": labels,
-                            "line": line,
-                        })
+                        entries.append(
+                            {
+                                "timestamp": ts.isoformat(),
+                                "labels": labels,
+                                "line": line,
+                            }
+                        )
                 entries.sort(key=lambda x: x["timestamp"], reverse=True)
-                print(json.dumps({
-                    "query": args.query,
-                    "count": len(entries),
-                    "entries": entries,
-                }, indent=2))
+                print(
+                    json.dumps(
+                        {
+                            "query": args.query,
+                            "count": len(entries),
+                            "entries": entries,
+                        },
+                        indent=2,
+                    )
+                )
             else:
                 print(f"Log Query: {args.query}")
                 print(f"Time Range: {start.isoformat()} to {end.isoformat()}")
@@ -150,7 +162,7 @@ def main():
                     print("No logs found.")
                     return
 
-                for labels, entry in all_entries[:args.limit]:
+                for labels, entry in all_entries[: args.limit]:
                     print(format_log_entry(labels, entry))
                     print()
 
