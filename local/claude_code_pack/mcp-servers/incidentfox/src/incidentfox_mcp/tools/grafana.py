@@ -51,11 +51,23 @@ def _get_grafana_client():
         raise GrafanaConfigError("httpx not installed. Install with: pip install httpx")
 
     config = _get_grafana_config()
+    api_key = config["api_key"]
 
-    headers = {
-        "Authorization": f"Bearer {config['api_key']}",
-        "Content-Type": "application/json",
-    }
+    # Support both basic auth (user:pass) and Bearer token (glsa_...)
+    if ":" in api_key and not api_key.startswith("glsa_"):
+        # Basic auth format: username:password
+        import base64
+        credentials = base64.b64encode(api_key.encode()).decode()
+        headers = {
+            "Authorization": f"Basic {credentials}",
+            "Content-Type": "application/json",
+        }
+    else:
+        # Bearer token format
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
 
     return httpx.Client(base_url=config["url"], headers=headers, timeout=30.0)
 
