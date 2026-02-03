@@ -114,8 +114,7 @@ else:
 # SRE Agent configuration
 SRE_AGENT_URL = os.environ.get("SRE_AGENT_URL", "http://localhost:8000")
 
-# Incident.io API configuration
-INCIDENT_IO_API_KEY = os.environ.get("INCIDENT_IO_API_KEY")
+# Incident.io API configuration (API key fetched per-workspace from config-service)
 INCIDENT_IO_API_BASE = "https://api.incident.io"
 
 # Rate limit updates to avoid Slack API throttling
@@ -1861,7 +1860,9 @@ _nudge_sent: Dict[tuple, bool] = {}
 
 
 def fetch_incidentio_alert_details(
-    description: str = None, deduplication_key: str = None
+    description: str = None,
+    deduplication_key: str = None,
+    api_key: str = None,
 ) -> Optional[dict]:
     """
     Fetch alert details from Incident.io API.
@@ -1869,16 +1870,17 @@ def fetch_incidentio_alert_details(
     Args:
         description: Alert description to search for
         deduplication_key: Deduplication key from the alert
+        api_key: incident.io API key (must be configured per-workspace via config-service)
 
     Returns:
         Alert details dict or None if not found or API unavailable
     """
-    if not INCIDENT_IO_API_KEY:
-        logger.warning("INCIDENT_IO_API_KEY not configured, skipping alert enrichment")
+    if not api_key:
+        logger.info("No incident.io API key configured, skipping alert enrichment")
         return None
 
     headers = {
-        "Authorization": f"Bearer {INCIDENT_IO_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
@@ -1984,10 +1986,31 @@ def _trigger_incident_io_investigation(event, client, context):
                 if priority_match:
                     priority = priority_match.group(1)
 
+    # Get workspace-specific incident.io API key from config-service
+    team_id = event.get("team") or context.get("team_id")
+    incidentio_api_key = None
+    if team_id:
+        try:
+            config_client = get_config_client()
+            incidentio_config = config_client.get_integration_config(
+                team_id, "incident_io"
+            )
+            if incidentio_config and incidentio_config.get("api_key"):
+                incidentio_api_key = incidentio_config["api_key"]
+                logger.info(
+                    f"Using workspace-configured incident.io API key for team {team_id}"
+                )
+            else:
+                logger.info(f"No incident.io integration configured for team {team_id}")
+        except Exception as e:
+            logger.warning(f"Failed to get incident.io config from config-service: {e}")
+
     # Fetch enriched alert details from Incident.io API
     logger.info("Fetching alert details from Incident.io API...")
     incidentio_alert = fetch_incidentio_alert_details(
-        description=alert_title, deduplication_key=deduplication_key
+        description=alert_title,
+        deduplication_key=deduplication_key,
+        api_key=incidentio_api_key,
     )
 
     # Build enhanced context from Incident.io API

@@ -437,6 +437,27 @@ INTEGRATION_SCHEMAS: Dict[str, IntegrationSchema] = {
         docs_url="https://tavily.com/",
         setup_instructions="1. Sign up at https://tavily.com/\n2. Get your API key from the dashboard\n3. Add it to the integration settings",
     ),
+    "incident_io": IntegrationSchema(
+        id="incident_io",
+        name="incident.io",
+        description="Incident management and alerting platform",
+        level=IntegrationLevel.ORG,
+        locked=False,
+        required=False,
+        org_fields=[
+            IntegrationFieldSchema(
+                name="api_key",
+                type="secret",
+                required=True,
+                display_name="API Key",
+                description="incident.io API key with View data permission",
+                placeholder="inc_...",
+            ),
+        ],
+        team_fields=[],
+        docs_url="https://api-docs.incident.io/",
+        setup_instructions="1. Go to your incident.io dashboard\n2. Click settings > API keys\n3. Create a new key with View data permission\n4. Copy the API key",
+    ),
 }
 
 
@@ -615,6 +636,14 @@ def get_integration_config_for_tool(
         "read_github_file": "github",
         "search_slack_messages": "slack",
         "web_search": "tavily",
+        "incidentio_list_incidents": "incident_io",
+        "incidentio_get_incident": "incident_io",
+        "incidentio_get_incident_updates": "incident_io",
+        "incidentio_list_incidents_by_date_range": "incident_io",
+        "incidentio_list_severities": "incident_io",
+        "incidentio_list_incident_types": "incident_io",
+        "incidentio_get_alert_analytics": "incident_io",
+        "incidentio_calculate_mttr": "incident_io",
     }
 
     integration_id = tool_to_integration.get(tool_name)
