@@ -57,6 +57,7 @@ def _get_grafana_client():
     if ":" in api_key and not api_key.startswith("glsa_"):
         # Basic auth format: username:password
         import base64
+
         credentials = base64.b64encode(api_key.encode()).decode()
         headers = {
             "Authorization": f"Basic {credentials}",
