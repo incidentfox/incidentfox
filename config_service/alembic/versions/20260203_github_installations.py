@@ -4,7 +4,7 @@ Stores GitHub App installation data for SaaS model where customers
 install our GitHub App to grant repository access.
 
 Revision ID: 20260203_github_installations
-Revises: 20260131_slack_oauth_storage
+Revises: 20260203_token_audit
 Create Date: 2026-02-03
 """
 
@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 # revision identifiers, used by Alembic.
 revision = "20260203_github_installations"
-down_revision = "20260131_slack_oauth_storage"
+down_revision = "20260203_token_audit"
 branch_labels = None
 depends_on = None
 
