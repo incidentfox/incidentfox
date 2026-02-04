@@ -36,10 +36,11 @@ def get_config() -> dict[str, str | None]:
 
 
 def get_api_url(endpoint: str) -> str:
-    """Build the Splunk API URL for proxy mode.
+    """Build the Splunk API URL.
 
-    Uses SPLUNK_BASE_URL which routes through the credential proxy.
-    The proxy handles credential injection and forwards to the real Splunk instance.
+    Supports two modes:
+    1. Proxy mode (production): Uses SPLUNK_BASE_URL
+    2. Direct mode (testing): Uses SPLUNK_URL
 
     Args:
         endpoint: API path (e.g., "/services/search/jobs")
@@ -47,27 +48,61 @@ def get_api_url(endpoint: str) -> str:
     Returns:
         Full API URL
     """
+    # Proxy mode (production)
     base_url = os.getenv("SPLUNK_BASE_URL")
-    if not base_url:
-        raise RuntimeError(
-            "SPLUNK_BASE_URL not set. Agent must run through credential proxy."
-        )
-    return f"{base_url.rstrip('/')}{endpoint}"
+    if base_url:
+        return f"{base_url.rstrip('/')}{endpoint}"
+
+    # Direct mode (testing/enterprise)
+    direct_url = os.getenv("SPLUNK_URL")
+    if direct_url:
+        return f"{direct_url.rstrip('/')}{endpoint}"
+
+    raise RuntimeError(
+        "Either SPLUNK_BASE_URL (proxy mode) or SPLUNK_URL (direct mode) must be set."
+    )
 
 
 def get_headers() -> dict[str, str]:
     """Get Splunk API headers.
 
-    Includes tenant context headers for credential-proxy to look up credentials.
-    Authorization header will be injected by the proxy.
+    Supports multiple auth methods:
+    1. Bearer token - SPLUNK_TOKEN (Splunk Cloud / HEC token)
+    2. Basic auth - SPLUNK_USER + SPLUNK_PASSWORD
+    3. Proxy mode - tenant context headers
+
+    Environment variables:
+        SPLUNK_TOKEN: Bearer token (Splunk Cloud, HEC)
+        SPLUNK_USER + SPLUNK_PASSWORD: Basic auth
     """
     config = get_config()
-    return {
+    import base64
+
+    headers = {
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json",
-        "X-Tenant-Id": config.get("tenant_id") or "local",
-        "X-Team-Id": config.get("team_id") or "local",
     }
+
+    # Priority 1: Bearer token (Splunk Cloud / enterprise)
+    token = os.getenv("SPLUNK_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+        return headers
+
+    # Priority 2: Basic auth
+    user = os.getenv("SPLUNK_USER")
+    password = os.getenv("SPLUNK_PASSWORD")
+    if user and password:
+        encoded = base64.b64encode(f"{user}:{password}".encode()).decode()
+        headers["Authorization"] = f"Basic {encoded}"
+        return headers
+
+    # Priority 3: Proxy mode - add tenant context
+    if os.getenv("SPLUNK_BASE_URL"):
+        headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
+        headers["X-Team-Id"] = config.get("team_id") or "local"
+
+    return headers
 
 
 def execute_search(

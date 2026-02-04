@@ -61,27 +61,50 @@ def get_api_url(endpoint: str) -> str:
 def get_headers() -> dict[str, str]:
     """Get Loki API headers.
 
-    In proxy mode: includes tenant context for credential lookup.
-    In direct mode: includes X-Scope-OrgID if LOKI_ORG_ID provided.
+    Supports multiple auth methods:
+    1. Bearer token - LOKI_TOKEN
+    2. Basic auth - LOKI_USER + LOKI_PASSWORD
+    3. Multi-tenant org ID - LOKI_ORG_ID (X-Scope-OrgID header)
+    4. Proxy mode - tenant context headers
+
+    Environment variables:
+        LOKI_TOKEN: Bearer token (Grafana Cloud, enterprise)
+        LOKI_USER + LOKI_PASSWORD: Basic auth
+        LOKI_ORG_ID: Multi-tenant organization ID
     """
     config = get_config()
+    import base64
+
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
 
-    # Direct mode - add org ID if provided (multi-tenant Loki)
+    # Always add org ID if provided (multi-tenant Loki)
     org_id = os.getenv("LOKI_ORG_ID")
     if org_id:
         headers["X-Scope-OrgID"] = org_id
-    elif not os.getenv("LOKI_BASE_URL"):
-        # Direct mode without org ID (single-tenant Loki)
-        pass
-    else:
-        # Proxy mode - add tenant context
+
+    # Priority 1: Bearer token (Grafana Cloud / enterprise)
+    token = os.getenv("LOKI_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+        return headers
+
+    # Priority 2: Basic auth
+    user = os.getenv("LOKI_USER")
+    password = os.getenv("LOKI_PASSWORD")
+    if user and password:
+        encoded = base64.b64encode(f"{user}:{password}".encode()).decode()
+        headers["Authorization"] = f"Basic {encoded}"
+        return headers
+
+    # Priority 3: Proxy mode - add tenant context
+    if os.getenv("LOKI_BASE_URL"):
         headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
         headers["X-Team-Id"] = config.get("team_id") or "local"
 
+    # No auth (local Loki without security)
     return headers
 
 

@@ -10,8 +10,21 @@ from typing import Any
 
 
 def get_api_url() -> str:
-    """Get Jaeger API URL from environment or use proxy default."""
-    # Check for direct URL first
+    """Get Jaeger API URL from environment.
+
+    Supports two modes:
+    1. Proxy mode: JAEGER_BASE_URL (credential proxy)
+    2. Direct mode: JAEGER_URL
+
+    Returns:
+        Jaeger API base URL
+    """
+    # Proxy mode (production)
+    base_url = os.environ.get("JAEGER_BASE_URL")
+    if base_url:
+        return base_url.rstrip("/")
+
+    # Direct mode
     if os.environ.get("JAEGER_URL"):
         return os.environ["JAEGER_URL"].rstrip("/")
 
@@ -20,11 +33,46 @@ def get_api_url() -> str:
 
 
 def get_headers() -> dict[str, str]:
-    """Get headers for API requests (proxy handles auth)."""
-    return {
+    """Get headers for Jaeger API requests.
+
+    Supports multiple auth methods:
+    1. Bearer token - JAEGER_TOKEN
+    2. Basic auth - JAEGER_USER + JAEGER_PASSWORD
+    3. Proxy mode - tenant context headers
+    4. No auth (default for internal Jaeger)
+
+    Environment variables:
+        JAEGER_TOKEN: Bearer token
+        JAEGER_USER + JAEGER_PASSWORD: Basic auth
+    """
+    import base64
+
+    headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
+
+    # Priority 1: Bearer token
+    token = os.environ.get("JAEGER_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+        return headers
+
+    # Priority 2: Basic auth
+    user = os.environ.get("JAEGER_USER")
+    password = os.environ.get("JAEGER_PASSWORD")
+    if user and password:
+        encoded = base64.b64encode(f"{user}:{password}".encode()).decode()
+        headers["Authorization"] = f"Basic {encoded}"
+        return headers
+
+    # Priority 3: Proxy mode - add tenant context
+    if os.environ.get("JAEGER_BASE_URL"):
+        headers["X-Tenant-Id"] = os.environ.get("INCIDENTFOX_TENANT_ID", "local")
+        headers["X-Team-Id"] = os.environ.get("INCIDENTFOX_TEAM_ID", "local")
+
+    # No auth (internal Jaeger)
+    return headers
 
 
 def api_request(endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
