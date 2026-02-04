@@ -70,33 +70,97 @@ def get_prometheus_url(endpoint: str) -> str:
     return f"{base_url.rstrip('/')}{endpoint}"
 
 
-def get_headers() -> dict[str, str]:
-    """Get headers for API requests.
+def get_grafana_headers() -> dict[str, str]:
+    """Get headers for Grafana API requests.
 
-    The credential proxy will inject Authorization header.
+    Supports multiple auth methods:
+    1. Service Account token (Bearer) - GRAFANA_API_KEY or GRAFANA_TOKEN
+    2. Basic auth - GRAFANA_API_KEY="user:pass" or GRAFANA_USER + GRAFANA_PASSWORD
+    3. Proxy mode - tenant context headers
+
+    Environment variables:
+        GRAFANA_API_KEY: Service account token (glsa_xxx) or "user:pass"
+        GRAFANA_TOKEN: Service account token (alternative)
+        GRAFANA_USER + GRAFANA_PASSWORD: Basic auth credentials
     """
     config = get_config()
+    import base64
 
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "X-Tenant-Id": config.get("tenant_id") or "local",
-        "X-Team-Id": config.get("team_id") or "local",
     }
 
-    # For local development, allow direct auth
-    api_key = os.getenv("GRAFANA_API_KEY")
-    if api_key and not os.getenv("GRAFANA_BASE_URL"):
-        # Check if it's basic auth format (user:pass) or bearer token
+    # Priority 1: API key / Service Account token
+    api_key = os.getenv("GRAFANA_API_KEY") or os.getenv("GRAFANA_TOKEN")
+    if api_key:
         if ":" in api_key:
-            import base64
-
+            # Basic auth format (user:pass)
             encoded = base64.b64encode(api_key.encode()).decode()
             headers["Authorization"] = f"Basic {encoded}"
         else:
+            # Bearer token (service account)
             headers["Authorization"] = f"Bearer {api_key}"
+        return headers
+
+    # Priority 2: Explicit user/password
+    user = os.getenv("GRAFANA_USER")
+    password = os.getenv("GRAFANA_PASSWORD")
+    if user and password:
+        encoded = base64.b64encode(f"{user}:{password}".encode()).decode()
+        headers["Authorization"] = f"Basic {encoded}"
+        return headers
+
+    # Priority 3: Proxy mode - add tenant context
+    headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
+    headers["X-Team-Id"] = config.get("team_id") or "local"
 
     return headers
+
+
+def get_prometheus_headers() -> dict[str, str]:
+    """Get headers for Prometheus API requests.
+
+    Supports multiple auth methods:
+    1. Bearer token - PROMETHEUS_TOKEN
+    2. Basic auth - PROMETHEUS_USER + PROMETHEUS_PASSWORD
+    3. Falls back to Grafana auth (for Grafana datasource proxy)
+
+    Environment variables:
+        PROMETHEUS_TOKEN: Bearer token
+        PROMETHEUS_USER + PROMETHEUS_PASSWORD: Basic auth
+    """
+    import base64
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    # Priority 1: Bearer token
+    token = os.getenv("PROMETHEUS_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+        return headers
+
+    # Priority 2: Basic auth
+    user = os.getenv("PROMETHEUS_USER")
+    password = os.getenv("PROMETHEUS_PASSWORD")
+    if user and password:
+        encoded = base64.b64encode(f"{user}:{password}".encode()).decode()
+        headers["Authorization"] = f"Basic {encoded}"
+        return headers
+
+    # Priority 3: Fall back to Grafana auth (for datasource proxy pattern)
+    return get_grafana_headers()
+
+
+def get_headers() -> dict[str, str]:
+    """Get headers for API requests (backward compatible).
+
+    Uses Grafana headers by default.
+    """
+    return get_grafana_headers()
 
 
 def query_prometheus(
@@ -121,7 +185,7 @@ def query_prometheus(
         params["time"] = str(time_seconds)
 
     with httpx.Client(timeout=60.0) as client:
-        response = client.get(url, headers=get_headers(), params=params)
+        response = client.get(url, headers=get_prometheus_headers(), params=params)
 
         if response.status_code >= 400:
             raise RuntimeError(
@@ -161,7 +225,7 @@ def query_prometheus_range(
     }
 
     with httpx.Client(timeout=60.0) as client:
-        response = client.get(url, headers=get_headers(), params=params)
+        response = client.get(url, headers=get_prometheus_headers(), params=params)
 
         if response.status_code >= 400:
             raise RuntimeError(

@@ -64,8 +64,17 @@ def get_api_url(endpoint: str) -> str:
 def get_headers() -> dict[str, str]:
     """Get Elasticsearch API headers.
 
-    In proxy mode: includes tenant context for credential lookup.
-    In direct mode: includes Basic auth if credentials provided.
+    Supports multiple auth methods (checked in order):
+    1. API Key (Elastic Cloud / Enterprise) - ES_API_KEY or ELASTICSEARCH_API_KEY
+    2. Basic auth - ES_USER + ES_PASSWORD
+    3. Bearer token - ES_TOKEN or ELASTICSEARCH_TOKEN
+    4. Proxy mode - tenant context headers
+
+    Environment variables:
+        ES_API_KEY / ELASTICSEARCH_API_KEY: API key (id:secret or encoded)
+        ES_USER / ELASTICSEARCH_USER: Username for basic auth
+        ES_PASSWORD / ELASTICSEARCH_PASSWORD: Password for basic auth
+        ES_TOKEN / ELASTICSEARCH_TOKEN: Bearer token
     """
     config = get_config()
     headers = {
@@ -73,22 +82,39 @@ def get_headers() -> dict[str, str]:
         "Accept": "application/json",
     }
 
-    # Direct mode - add Basic auth if credentials provided
+    import base64
+
+    # Priority 1: API Key (Elastic Cloud / Enterprise pattern)
+    api_key = os.getenv("ES_API_KEY") or os.getenv("ELASTICSEARCH_API_KEY")
+    if api_key:
+        # API key can be provided as "id:secret" or already base64 encoded
+        if ":" in api_key:
+            encoded = base64.b64encode(api_key.encode()).decode()
+        else:
+            encoded = api_key  # Assume already encoded
+        headers["Authorization"] = f"ApiKey {encoded}"
+        return headers
+
+    # Priority 2: Basic auth (user:password)
     user = os.getenv("ES_USER") or os.getenv("ELASTICSEARCH_USER")
     password = os.getenv("ES_PASSWORD") or os.getenv("ELASTICSEARCH_PASSWORD")
     if user and password:
-        import base64
-
         auth = base64.b64encode(f"{user}:{password}".encode()).decode()
         headers["Authorization"] = f"Basic {auth}"
-    elif not os.getenv("ELASTICSEARCH_BASE_URL"):
-        # Direct mode without auth (for local ES without security)
-        pass
-    else:
-        # Proxy mode - add tenant context
+        return headers
+
+    # Priority 3: Bearer token
+    token = os.getenv("ES_TOKEN") or os.getenv("ELASTICSEARCH_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+        return headers
+
+    # Priority 4: Proxy mode - add tenant context
+    if os.getenv("ELASTICSEARCH_BASE_URL"):
         headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
         headers["X-Team-Id"] = config.get("team_id") or "local"
 
+    # No auth (local ES without security)
     return headers
 
 
