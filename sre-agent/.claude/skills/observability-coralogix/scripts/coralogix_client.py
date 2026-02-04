@@ -151,9 +151,14 @@ def get_headers() -> dict[str, str]:
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     else:
-        # Proxy mode - add tenant context
-        headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
-        headers["X-Team-Id"] = config.get("team_id") or "local"
+        # Proxy mode - use JWT for credential-resolver auth
+        sandbox_jwt = os.getenv("SANDBOX_JWT")
+        if sandbox_jwt:
+            headers["X-Sandbox-JWT"] = sandbox_jwt
+        else:
+            # Fallback for local dev
+            headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
+            headers["X-Team-Id"] = config.get("team_id") or "local"
 
     return headers
 

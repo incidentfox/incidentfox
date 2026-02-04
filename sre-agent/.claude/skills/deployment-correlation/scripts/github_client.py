@@ -63,9 +63,16 @@ def get_headers() -> dict[str, str]:
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "X-Tenant-Id": config.get("tenant_id") or "local",
-        "X-Team-Id": config.get("team_id") or "local",
     }
+
+    # Proxy mode - use JWT for credential-resolver auth
+    sandbox_jwt = os.getenv("SANDBOX_JWT")
+    if sandbox_jwt:
+        headers["X-Sandbox-JWT"] = sandbox_jwt
+    else:
+        # Fallback for local dev
+        headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
+        headers["X-Team-Id"] = config.get("team_id") or "local"
 
     # For local development, allow direct token usage
     token = os.getenv("GITHUB_TOKEN")

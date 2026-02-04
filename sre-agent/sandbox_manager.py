@@ -503,6 +503,32 @@ static_resources:
                                         "name": "CONFLUENCE_BASE_URL",
                                         "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/confluence",
                                     },
+                                    # Additional integrations with customer-specific URLs
+                                    # These all route through credential-resolver's reverse proxy
+                                    {
+                                        "name": "GRAFANA_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/grafana",
+                                    },
+                                    {
+                                        "name": "ELASTICSEARCH_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/elasticsearch",
+                                    },
+                                    {
+                                        "name": "PROMETHEUS_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/prometheus",
+                                    },
+                                    {
+                                        "name": "JAEGER_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/jaeger",
+                                    },
+                                    {
+                                        "name": "GITHUB_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/github",
+                                    },
+                                    {
+                                        "name": "DATADOG_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/datadog",
+                                    },
                                     # Configured integrations (non-sensitive metadata)
                                     # JSON list of {id, url?, domain?, region?} for each integration
                                     {

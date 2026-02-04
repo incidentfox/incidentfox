@@ -97,10 +97,15 @@ def get_headers() -> dict[str, str]:
         headers["Authorization"] = f"Basic {encoded}"
         return headers
 
-    # Priority 3: Proxy mode - add tenant context
+    # Priority 3: Proxy mode - use JWT for credential-resolver auth
     if os.getenv("SPLUNK_BASE_URL"):
-        headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
-        headers["X-Team-Id"] = config.get("team_id") or "local"
+        sandbox_jwt = os.getenv("SANDBOX_JWT")
+        if sandbox_jwt:
+            headers["X-Sandbox-JWT"] = sandbox_jwt
+        else:
+            # Fallback for local dev
+            headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
+            headers["X-Team-Id"] = config.get("team_id") or "local"
 
     return headers
 

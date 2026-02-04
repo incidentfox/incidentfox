@@ -66,10 +66,15 @@ def get_headers() -> dict[str, str]:
         headers["Authorization"] = f"Basic {encoded}"
         return headers
 
-    # Priority 3: Proxy mode - add tenant context
+    # Priority 3: Proxy mode - use JWT for credential-resolver auth
     if os.environ.get("JAEGER_BASE_URL"):
-        headers["X-Tenant-Id"] = os.environ.get("INCIDENTFOX_TENANT_ID", "local")
-        headers["X-Team-Id"] = os.environ.get("INCIDENTFOX_TEAM_ID", "local")
+        sandbox_jwt = os.environ.get("SANDBOX_JWT")
+        if sandbox_jwt:
+            headers["X-Sandbox-JWT"] = sandbox_jwt
+        else:
+            # Fallback for local dev
+            headers["X-Tenant-Id"] = os.environ.get("INCIDENTFOX_TENANT_ID", "local")
+            headers["X-Team-Id"] = os.environ.get("INCIDENTFOX_TEAM_ID", "local")
 
     # No auth (internal Jaeger)
     return headers
