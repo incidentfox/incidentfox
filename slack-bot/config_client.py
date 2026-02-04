@@ -70,8 +70,9 @@ class ConfigServiceClient:
         1. Organization node with slack_team_id as org_id
         2. Default team node
         3. Issues a team token for API access
+        4. Issues an org admin token for org-level management
 
-        Returns dict with org_id, team_node_id, team_token, and trial info.
+        Returns dict with org_id, team_node_id, team_token, org_admin_token, and trial info.
         """
         org_id = f"slack-{slack_team_id}"
         team_node_id = "default"
@@ -107,7 +108,11 @@ class ConfigServiceClient:
             )
             logger.info(f"Issued team token for {org_id}")
 
-            # Step 4: Set up free trial if enabled (only for NEW orgs)
+            # Step 4: Issue org admin token
+            org_admin_token_response = self._issue_org_admin_token(org_id=org_id)
+            logger.info(f"Issued org admin token for {org_id}")
+
+            # Step 5: Set up free trial if enabled (only for NEW orgs)
             trial_info = None
             org_already_existed = org_response.get("exists", False)
 
@@ -127,6 +132,7 @@ class ConfigServiceClient:
                 "org_id": org_id,
                 "team_node_id": team_node_id,
                 "team_token": token_response.get("token"),
+                "org_admin_token": org_admin_token_response.get("token"),
                 "trial_info": trial_info,
             }
 
@@ -190,6 +196,17 @@ class ConfigServiceClient:
     ) -> Dict[str, Any]:
         """Issue a team token for API access."""
         url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{team_node_id}/tokens"
+
+        response = requests.post(url, json={}, headers=self._headers(), timeout=10)
+        response.raise_for_status()
+        return response.json()
+
+    def _issue_org_admin_token(
+        self,
+        org_id: str,
+    ) -> Dict[str, Any]:
+        """Issue an org admin token for org-level management."""
+        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/admin-tokens"
 
         response = requests.post(url, json={}, headers=self._headers(), timeout=10)
         response.raise_for_status()
