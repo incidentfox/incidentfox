@@ -26,8 +26,8 @@ aws ecr get-login-password --region $AWS_REGION --profile $AWS_PROFILE | \
 
 # Build Docker image (for AMD64 platform)
 echo "🔨 Building Docker image for linux/amd64..."
-cd "$(dirname "$0")/../.."  # Go to mono-repo root
-docker build --platform linux/amd64 -f config_service/Dockerfile -t $ECR_REPOSITORY:latest .
+cd "$(dirname "$0")/.."  # Go to config_service root
+docker build --platform linux/amd64 -t $ECR_REPOSITORY:latest .
 
 # Tag image
 echo "🏷️  Tagging image..."

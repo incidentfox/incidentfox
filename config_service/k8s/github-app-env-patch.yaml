@@ -1,0 +1,41 @@
+# Patch to add GitHub App environment variables to config-service deployment
+# Apply with: kubectl patch deployment incidentfox-config-service -n incidentfox --patch-file github-app-env-patch.yaml
+spec:
+  template:
+    spec:
+      containers:
+      - name: config-service
+        env:
+        # Existing env vars will be preserved, these are additions
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-config-service
+              key: GITHUB_APP_ID
+        - name: GITHUB_APP_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-config-service
+              key: GITHUB_APP_CLIENT_ID
+        - name: GITHUB_APP_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-config-service
+              key: GITHUB_APP_CLIENT_SECRET
+        - name: GITHUB_APP_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-config-service
+              key: GITHUB_APP_PRIVATE_KEY
+        - name: GITHUB_APP_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-config-service
+              key: GITHUB_APP_WEBHOOK_SECRET
+        - name: GITHUB_APP_NAME
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-config-service
+              key: GITHUB_APP_NAME
+        - name: GITHUB_SETUP_REDIRECT_URL
+          value: "https://ui.incidentfox.ai/integrations/github/setup"

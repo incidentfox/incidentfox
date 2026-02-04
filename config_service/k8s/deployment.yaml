@@ -110,7 +110,7 @@ spec:
         - name: GITHUB_APP_NAME
           value: "incidentfox"
         - name: GITHUB_SETUP_REDIRECT_URL
-          value: "https://app.incidentfox.ai/integrations/github/setup"
+          value: "https://ui.incidentfox.ai/integrations/github/setup"
         resources:
           requests:
             cpu: 50m

@@ -36,7 +36,7 @@ def _get_github_app_config() -> dict:
         # Where to redirect after setup
         "setup_redirect_url": os.getenv(
             "GITHUB_SETUP_REDIRECT_URL",
-            "https://app.incidentfox.ai/integrations/github/setup",
+            "https://ui.incidentfox.ai/integrations/github/setup",
         ),
     }
 
