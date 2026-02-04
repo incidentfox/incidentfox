@@ -4128,6 +4128,23 @@ def action_button_click(body, ack, say):
     say(f"<@{body['user']['id']}> clicked the button")
 
 
+@app.action("github_app_install_button")
+def handle_github_app_install_button(ack, body):
+    """
+    Handle GitHub App install button click.
+
+    The button has a URL that opens in a new tab, so we just need to ack.
+    The user will complete the GitHub App installation flow externally,
+    then return to the Slack modal to enter their org name.
+    """
+    ack()
+    logger.info(
+        "GitHub App install button clicked",
+        user_id=body.get("user", {}).get("id"),
+        team_id=body.get("team", {}).get("id"),
+    )
+
+
 # =============================================================================
 # Onboarding: API Key Setup Modal
 # =============================================================================
@@ -4303,6 +4320,11 @@ def handle_open_setup_wizard(ack, body, client):
         trial_info = config_client.get_trial_status(team_id)
         configured = config_client.get_configured_integrations(team_id)
 
+        # Add GitHub status from GitHubInstallation table
+        github_installation = config_client.get_linked_github_installation(team_id)
+        if github_installation:
+            configured["github"] = {"enabled": True, "_github_linked": True}
+
         onboarding = get_onboarding_modules()
         modal = onboarding.build_integrations_page(
             team_id=team_id,
@@ -4397,6 +4419,15 @@ def handle_configure_integration(ack, body, client):
         configured = config_client.get_configured_integrations(team_id)
         existing_config = configured.get(integration_id, {})
 
+        # Special handling for GitHub: check if already linked via GitHub App
+        if integration_id == "github":
+            github_installation = config_client.get_linked_github_installation(team_id)
+            if github_installation:
+                # Pre-fill the github_org field with the linked org
+                existing_config["github_org"] = github_installation.get("account_login", "")
+                existing_config["_github_linked"] = True
+                existing_config["_github_installation"] = github_installation
+
         # Build and update the modal (replace, not push) to avoid stale modal stack
         # Uses local INTEGRATIONS definition from onboarding.py
         onboarding = get_onboarding_modules()
@@ -4438,6 +4469,11 @@ def handle_filter_category(ack, body, client):
         config_client = get_config_client()
         configured = config_client.get_configured_integrations(team_id)
         trial_info = config_client.get_trial_status(team_id)
+
+        # Add GitHub status from GitHubInstallation table
+        github_installation = config_client.get_linked_github_installation(team_id)
+        if github_installation:
+            configured["github"] = {"enabled": True, "_github_linked": True}
 
         # Rebuild the integrations page with new category filter
         onboarding = get_onboarding_modules()
@@ -4753,22 +4789,118 @@ def handle_integration_config_submission(ack, body, client, view):
     if team_id and integration_id and config:
         try:
             config_client = get_config_client()
-            config_client.save_integration_config(
-                slack_team_id=team_id,
-                integration_id=integration_id,
-                config=config,
-            )
+
+            # Special handling for GitHub App integration
+            if integration_id == "github" and "github_org" in config:
+                github_org = config.get("github_org", "").strip()
+                if not github_org:
+                    error_modal = {
+                        "type": "modal",
+                        "title": {"type": "plain_text", "text": "Missing Info"},
+                        "close": {"type": "plain_text", "text": "Fix"},
+                        "blocks": [
+                            {
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": ":warning: *Please enter your GitHub organization/username*\n\n"
+                                    "This should be the org or user you installed the IncidentFox GitHub App on.",
+                                },
+                            },
+                        ],
+                    }
+                    ack(response_action="push", view=error_modal)
+                    return
+
+                # Link the GitHub installation
+                result = config_client.link_github_installation(
+                    slack_team_id=team_id,
+                    github_org=github_org,
+                )
+                logger.info(
+                    f"Linked GitHub org '{github_org}' for team {team_id}: {result.get('message')}"
+                )
+
+                # Also save context_prompt if provided (standard integration config)
+                if config.get("context_prompt") or config.get("enabled") is not None:
+                    integration_config = {}
+                    if "context_prompt" in config:
+                        integration_config["context_prompt"] = config["context_prompt"]
+                    if "enabled" in config:
+                        integration_config["enabled"] = config["enabled"]
+                    if integration_config:
+                        config_client.save_integration_config(
+                            slack_team_id=team_id,
+                            integration_id=integration_id,
+                            config=integration_config,
+                        )
+            else:
+                # Standard integration config save
+                config_client.save_integration_config(
+                    slack_team_id=team_id,
+                    integration_id=integration_id,
+                    config=config,
+                )
             logger.info(f"Saved {integration_id} config for team {team_id}")
 
         except Exception as e:
             logger.error(f"Error saving integration config: {e}", exc_info=True)
-            # Extract more error details for debugging
-            error_detail = str(e)
-            status_code = getattr(e, "status_code", None)
-            if status_code:
-                error_detail = f"HTTP {status_code}"
 
-            # Show error in a push modal so it's clearly visible
+            # Extract error message - ConfigServiceError includes the actual API error
+            error_message = str(e)
+            status_code = getattr(e, "status_code", None)
+
+            # For GitHub integration, show user-friendly error messages
+            if integration_id == "github":
+                if status_code == 404:
+                    error_modal = {
+                        "type": "modal",
+                        "title": {"type": "plain_text", "text": "Not Found"},
+                        "close": {"type": "plain_text", "text": "Try Again"},
+                        "blocks": [
+                            {
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": (
+                                        ":warning: *GitHub installation not found*\n\n"
+                                        "Make sure you have:\n"
+                                        "1. Clicked 'Install GitHub App' button above\n"
+                                        "2. Completed the installation on GitHub\n"
+                                        "3. Entered the exact org/username you installed on\n\n"
+                                        "_Note: It may take a few seconds for the installation to be registered._"
+                                    ),
+                                },
+                            },
+                        ],
+                    }
+                    ack(response_action="push", view=error_modal)
+                    return
+                elif status_code == 409:
+                    error_modal = {
+                        "type": "modal",
+                        "title": {"type": "plain_text", "text": "Already Connected"},
+                        "close": {"type": "plain_text", "text": "Close"},
+                        "blocks": [
+                            {
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": (
+                                        ":x: *This GitHub org is already connected*\n\n"
+                                        "This GitHub organization is already linked to another "
+                                        "IncidentFox workspace. Each GitHub org can only be connected "
+                                        "to one workspace.\n\n"
+                                        "If you believe this is an error, please contact support@incidentfox.ai"
+                                    ),
+                                },
+                            },
+                        ],
+                    }
+                    ack(response_action="push", view=error_modal)
+                    return
+
+            # Generic error for other integrations or unexpected errors
             error_modal = {
                 "type": "modal",
                 "title": {"type": "plain_text", "text": "Save Failed"},
@@ -4786,7 +4918,7 @@ def handle_integration_config_submission(ack, body, client, view):
                         "elements": [
                             {
                                 "type": "mrkdwn",
-                                "text": f"Error: {error_detail}",
+                                "text": f"Error: {error_message[:200]}",
                             }
                         ],
                     },
@@ -4811,6 +4943,11 @@ def handle_integration_config_submission(ack, body, client, view):
             config_client = get_config_client()
             trial_info = config_client.get_trial_status(team_id)
             configured = config_client.get_configured_integrations(team_id)
+
+            # Add GitHub status from GitHubInstallation table
+            github_installation = config_client.get_linked_github_installation(team_id)
+            if github_installation:
+                configured["github"] = {"enabled": True, "_github_linked": True}
 
             onboarding = get_onboarding_modules()
             integrations_view = onboarding.build_integrations_page(

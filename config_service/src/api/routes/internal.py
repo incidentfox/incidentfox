@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from src.db import repository
 from src.db.config_models import NodeConfiguration
+from src.db.config_repository import get_or_create_node_configuration
 from src.db.models import GitHubInstallation, OrgNode, SlackInstallation
 from src.db.session import get_db
 
@@ -2356,6 +2357,166 @@ def link_github_installation(
     )
 
     return _github_installation_to_response(installation)
+
+
+class GitHubInstallationLinkByAccountRequest(BaseModel):
+    """Request to link a GitHub installation by account login (org name)."""
+
+    account_login: str  # e.g., "acme-corp"
+    org_id: str
+    team_node_id: str
+
+
+class GitHubInstallationLinkByAccountResponse(BaseModel):
+    """Response for link-by-account, includes status info."""
+
+    installation: GitHubInstallationResponse
+    linked: bool
+    message: str
+
+
+@router.post(
+    "/github/installations/link-by-account",
+    response_model=GitHubInstallationLinkByAccountResponse,
+)
+def link_github_installation_by_account(
+    request: GitHubInstallationLinkByAccountRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Link a GitHub installation to an IncidentFox org/team by account login.
+
+    This endpoint is used when a user enters their GitHub org name in the Slack
+    modal to complete the GitHub App linking flow.
+
+    Flow:
+    1. User installs GitHub App on "acme-corp"
+    2. Callback stores GitHubInstallation with account_login="acme-corp", org_id=null
+    3. User enters "acme-corp" in Slack modal
+    4. This endpoint links the installation to their org
+
+    Validation:
+    - Installation must exist with matching account_login
+    - Installation must not already be linked to another org
+    """
+    logger.info(
+        "link_github_installation_by_account",
+        account_login=request.account_login,
+        org_id=request.org_id,
+        team_node_id=request.team_node_id,
+    )
+
+    # Normalize account_login (GitHub usernames/orgs are case-insensitive)
+    account_login = request.account_login.strip().lower()
+
+    if not account_login:
+        raise HTTPException(status_code=400, detail="account_login is required")
+
+    # Find installation by account_login (case-insensitive)
+    installation = (
+        session.query(GitHubInstallation)
+        .filter(GitHubInstallation.account_login.ilike(account_login))
+        .filter(GitHubInstallation.status == "active")
+        .first()
+    )
+
+    if not installation:
+        logger.warning(
+            "github_installation_not_found_by_account",
+            account_login=request.account_login,
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=f"No GitHub installation found for '{request.account_login}'. "
+            "Please make sure you have installed the IncidentFox GitHub App on this org/user.",
+        )
+
+    # Check if already linked to a different org
+    if installation.org_id and installation.org_id != request.org_id:
+        logger.warning(
+            "github_installation_already_linked",
+            account_login=request.account_login,
+            existing_org_id=installation.org_id,
+            requested_org_id=request.org_id,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=f"This GitHub installation is already linked to another workspace. "
+            "Each GitHub org can only be linked to one IncidentFox workspace.",
+        )
+
+    # Check if already linked to this org (idempotent success)
+    if installation.org_id == request.org_id:
+        logger.info(
+            "github_installation_already_linked_same_org",
+            account_login=request.account_login,
+            org_id=request.org_id,
+        )
+        return GitHubInstallationLinkByAccountResponse(
+            installation=_github_installation_to_response(installation),
+            linked=True,
+            message=f"GitHub org '{installation.account_login}' is already connected.",
+        )
+
+    # Link the installation
+    installation.org_id = request.org_id
+    installation.team_node_id = request.team_node_id
+
+    # Also sync installation_id to the team's config so SRE agent can use it
+    # The agent needs integrations.github-app.installation_id in its config
+    try:
+        node_config = get_or_create_node_configuration(
+            session,
+            org_id=request.org_id,
+            node_id=request.team_node_id,
+            node_type="team",
+        )
+
+        # Deep merge installation_id into existing config
+        current_config = node_config.config_json or {}
+        integrations = current_config.get("integrations", {})
+        github_app = integrations.get("github-app", {})
+
+        # Add installation_id (app_id and private_key should be configured at org level)
+        github_app["installation_id"] = str(installation.installation_id)
+        github_app["account_login"] = installation.account_login
+
+        integrations["github-app"] = github_app
+        current_config["integrations"] = integrations
+        node_config.config_json = current_config
+
+        logger.info(
+            "github_installation_synced_to_config",
+            org_id=request.org_id,
+            team_node_id=request.team_node_id,
+            installation_id=installation.installation_id,
+        )
+    except Exception as e:
+        # Log but don't fail the linking - config sync is best-effort
+        logger.error(
+            "github_installation_config_sync_failed",
+            org_id=request.org_id,
+            team_node_id=request.team_node_id,
+            error=str(e),
+        )
+
+    session.commit()
+
+    logger.info(
+        "github_installation_linked_by_account",
+        id=installation.id,
+        installation_id=installation.installation_id,
+        account_login=installation.account_login,
+        org_id=request.org_id,
+        team_node_id=request.team_node_id,
+    )
+
+    return GitHubInstallationLinkByAccountResponse(
+        installation=_github_installation_to_response(installation),
+        linked=True,
+        message=f"Successfully connected GitHub org '{installation.account_login}'!",
+    )
 
 
 @router.patch(

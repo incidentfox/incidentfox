@@ -107,6 +107,24 @@ async def github_callback(
     # Store or update the installation
     account = installation_data.get("account", {})
 
+    # Validate required fields from GitHub API
+    account_login = account.get("login")
+    account_type = account.get("type")
+    account_id = account.get("id")
+
+    if not account_login or not account_type or not account_id:
+        logger.error(
+            "github_callback_missing_account_data",
+            installation_id=installation_id,
+            has_login=bool(account_login),
+            has_type=bool(account_type),
+            has_id=bool(account_id),
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="GitHub API returned incomplete account data",
+        )
+
     existing = (
         session.query(GitHubInstallation)
         .filter(GitHubInstallation.installation_id == installation_id)
@@ -116,9 +134,9 @@ async def github_callback(
     if existing:
         # Update existing installation
         existing.app_id = installation_data.get("app_id")
-        existing.account_id = account.get("id")
-        existing.account_login = account.get("login", "")
-        existing.account_type = account.get("type", "User")
+        existing.account_id = account_id
+        existing.account_login = account_login
+        existing.account_type = account_type
         existing.account_avatar_url = account.get("avatar_url")
         existing.permissions = installation_data.get("permissions")
         existing.repository_selection = installation_data.get("repository_selection")
@@ -135,7 +153,7 @@ async def github_callback(
             "github_installation_updated_via_callback",
             id=existing.id,
             installation_id=installation_id,
-            account_login=account.get("login"),
+            account_login=account_login,
         )
     else:
         # Create new installation
@@ -149,9 +167,9 @@ async def github_callback(
             id=str(uuid.uuid4()),
             installation_id=installation_id,
             app_id=installation_data.get("app_id"),
-            account_id=account.get("id"),
-            account_login=account.get("login", ""),
-            account_type=account.get("type", "User"),
+            account_id=account_id,
+            account_login=account_login,
+            account_type=account_type,
             account_avatar_url=account.get("avatar_url"),
             permissions=installation_data.get("permissions"),
             repository_selection=installation_data.get("repository_selection"),
@@ -166,14 +184,14 @@ async def github_callback(
             "github_installation_created_via_callback",
             id=installation.id,
             installation_id=installation_id,
-            account_login=account.get("login"),
+            account_login=account_login,
         )
 
     # Redirect to setup page with installation_id
     setup_url = config["setup_redirect_url"]
     params = {
         "installation_id": str(installation_id),
-        "account": account.get("login", ""),
+        "account": account_login,
         "action": setup_action or "install",
     }
     redirect_url = f"{setup_url}?{urlencode(params)}"

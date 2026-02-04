@@ -616,6 +616,99 @@ class ConfigServiceClient:
                 response_text=getattr(e.response, "text", None),
             ) from e
 
+    def get_linked_github_installation(self, slack_team_id: str) -> dict | None:
+        """
+        Get the GitHub installation linked to this Slack workspace.
+
+        Args:
+            slack_team_id: Slack team ID
+
+        Returns:
+            Installation dict with account_login, installation_id, etc. or None if not linked.
+        """
+        org_id = f"slack-{slack_team_id}"
+
+        url = f"{self.base_url}/api/v1/internal/github/installations"
+
+        try:
+            response = requests.get(
+                url,
+                params={"org_id": org_id, "status": "active", "limit": 1},
+                headers=self._get_internal_headers(),
+                timeout=10,
+            )
+            response.raise_for_status()
+            installations = response.json()
+            if installations:
+                return installations[0]
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.warning(
+                f"Failed to get linked GitHub installation for {slack_team_id}: {e}"
+            )
+            return None
+
+    def link_github_installation(
+        self, slack_team_id: str, github_org: str
+    ) -> dict:
+        """
+        Link a GitHub installation to this Slack workspace.
+
+        Args:
+            slack_team_id: Slack team ID
+            github_org: GitHub org or username (account_login from GitHub App installation)
+
+        Returns:
+            dict with installation details and status message
+
+        Raises:
+            ConfigServiceError: If linking fails (not found, already linked, etc.)
+        """
+        org_id = f"slack-{slack_team_id}"
+        team_node_id = "default"
+
+        url = f"{self.base_url}/api/v1/internal/github/installations/link-by-account"
+
+        try:
+            response = requests.post(
+                url,
+                json={
+                    "account_login": github_org,
+                    "org_id": org_id,
+                    "team_node_id": team_node_id,
+                },
+                headers=self._get_internal_headers(),
+                timeout=30,
+            )
+            response.raise_for_status()
+            result = response.json()
+            logger.info(
+                f"Linked GitHub installation '{github_org}' to workspace {slack_team_id}"
+            )
+            return result
+        except requests.exceptions.RequestException as e:
+            status_code = getattr(e.response, "status_code", None)
+            response_text = getattr(e.response, "text", None)
+
+            # Try to extract error detail from response
+            error_detail = None
+            if response_text:
+                try:
+                    error_json = e.response.json()
+                    error_detail = error_json.get("detail")
+                except Exception:
+                    pass
+
+            logger.error(
+                f"Failed to link GitHub installation '{github_org}' for {slack_team_id}: "
+                f"status={status_code}, error={error_detail or response_text}"
+            )
+            raise ConfigServiceError(
+                error_detail or f"Failed to link GitHub: {e}",
+                status_code=status_code,
+                response_text=response_text,
+            ) from e
+
 
 # Global client instance
 _client: Optional[ConfigServiceClient] = None
