@@ -1452,3 +1452,80 @@ class SlackInstallation(Base):
             unique=True,
         ),
     )
+
+
+class GitHubInstallation(Base):
+    """
+    GitHub App installation storage.
+
+    Stores installation data for GitHub Apps installed by users/orgs.
+    Used for the SaaS model where customers install our GitHub App
+    and we can then access their repositories.
+
+    The installation_id uniquely identifies a GitHub App installation.
+    Each installation can be linked to an IncidentFox org/team for routing.
+    """
+
+    __tablename__ = "github_installations"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+
+    # GitHub App identifiers
+    installation_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, unique=True, index=True
+    )
+    app_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # GitHub account that installed the app
+    account_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    account_login: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    account_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # "Organization" or "User"
+    account_avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # IncidentFox org/team linkage (set during setup flow)
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    team_node_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+
+    # Permissions and repository access
+    permissions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    repository_selection: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True
+    )  # "all" or "selected"
+    # List of repo full names (e.g., ["org/repo1", "org/repo2"])
+    repositories: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+
+    # Webhook secret for this installation (encrypted)
+    webhook_secret: Mapped[Optional[str]] = mapped_column(EncryptedText, nullable=True)
+
+    # Installation status
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="active"
+    )  # active, suspended, deleted
+    suspended_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    suspended_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    # Timestamps
+    installed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    # Store full installation payload for future-proofing
+    raw_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    __table_args__ = (
+        Index("ix_github_installations_org_team", "org_id", "team_node_id"),
+    )

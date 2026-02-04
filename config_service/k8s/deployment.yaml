@@ -81,6 +81,36 @@ spec:
         # Logging
         - name: LOG_LEVEL
           value: "INFO"
+        # GitHub App configuration
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: github-app-id
+        - name: GITHUB_APP_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: github-app-client-id
+        - name: GITHUB_APP_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: github-app-client-secret
+        - name: GITHUB_APP_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: github-app-private-key
+        - name: GITHUB_APP_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: config-service-secrets
+              key: github-app-webhook-secret
+        - name: GITHUB_APP_NAME
+          value: "incidentfox"
+        - name: GITHUB_SETUP_REDIRECT_URL
+          value: "https://app.incidentfox.ai/integrations/github/setup"
         resources:
           requests:
             cpu: 50m
