@@ -1,9 +1,17 @@
-"""Kubernetes tools for pod inspection and debugging."""
+"""Kubernetes tools for pod inspection and debugging.
 
+Supports two modes:
+1. Direct mode: Agent runs with kubeconfig access to K8s cluster
+2. Gateway mode (SaaS): Commands route through K8s Gateway to customer-deployed agents
+"""
+
+import asyncio
 import json
 import time
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from agents import function_tool
 from kubernetes import client
@@ -11,6 +19,7 @@ from kubernetes import config as k8s_config
 from kubernetes.client.rest import ApiException
 
 from ..core.config import get_config
+from ..core.execution_context import get_execution_context
 from ..core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -116,12 +125,135 @@ def _get_k8s_client():
     return client.CoreV1Api(), client.AppsV1Api()
 
 
+# =============================================================================
+# Gateway Mode Support (SaaS)
+# =============================================================================
+
+
+@dataclass
+class K8sExecutionMode:
+    """Represents how K8s commands should be executed."""
+
+    mode: str  # "direct" or "gateway"
+    cluster_id: Optional[str] = None  # Required for gateway mode
+    team_node_id: Optional[str] = None  # Required for gateway mode
+
+
+def _get_k8s_execution_mode(cluster_id: Optional[str] = None) -> K8sExecutionMode:
+    """
+    Determine the K8s execution mode based on execution context.
+
+    Priority:
+    1. If cluster_id is provided and execution context has kubernetes integration
+       with gateway_mode=true, use gateway mode
+    2. Otherwise, use direct mode (existing behavior)
+
+    Args:
+        cluster_id: Optional cluster ID for gateway mode
+
+    Returns:
+        K8sExecutionMode indicating how to execute commands
+    """
+    # Check execution context for SaaS mode
+    context = get_execution_context()
+    if context:
+        k8s_config = context.get_integration_config("kubernetes")
+        if k8s_config:
+            # Check if gateway mode is enabled
+            if k8s_config.get("gateway_mode"):
+                # Use cluster_id from param or config
+                effective_cluster_id = cluster_id or k8s_config.get("cluster_id")
+                if effective_cluster_id:
+                    return K8sExecutionMode(
+                        mode="gateway",
+                        cluster_id=effective_cluster_id,
+                        team_node_id=context.team_node_id,
+                    )
+
+    # Default to direct mode
+    return K8sExecutionMode(mode="direct")
+
+
+async def _execute_via_gateway(
+    cluster_id: str,
+    team_node_id: str,
+    command: str,
+    params: dict,
+) -> dict:
+    """
+    Execute a K8s command via the gateway.
+
+    Args:
+        cluster_id: Target cluster ID
+        team_node_id: Team node ID for authorization
+        command: Command name (e.g., "list_pods")
+        params: Command parameters
+
+    Returns:
+        Command result dict
+
+    Raises:
+        Exception: If gateway call fails
+    """
+    from .k8s_gateway_client import K8sGatewayError, get_gateway_client
+
+    try:
+        client = get_gateway_client(team_node_id)
+        return await client.execute(
+            cluster_id=cluster_id,
+            command=command,
+            params=params,
+        )
+    except K8sGatewayError as e:
+        logger.error(
+            "k8s_gateway_error",
+            cluster_id=cluster_id,
+            command=command,
+            error=str(e),
+        )
+        raise
+
+
+def _run_gateway_command(
+    cluster_id: str,
+    team_node_id: str,
+    command: str,
+    params: dict,
+) -> dict:
+    """
+    Run a gateway command synchronously (for use in sync tools).
+
+    Creates an event loop if needed.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        # If there's a running loop, we need to use run_coroutine_threadsafe
+        import concurrent.futures
+
+        future = asyncio.run_coroutine_threadsafe(
+            _execute_via_gateway(cluster_id, team_node_id, command, params),
+            loop,
+        )
+        return future.result(timeout=60)
+    except RuntimeError:
+        # No running loop, create one
+        return asyncio.run(
+            _execute_via_gateway(cluster_id, team_node_id, command, params)
+        )
+
+
+# =============================================================================
+# Tool Functions
+# =============================================================================
+
+
 @function_tool(strict_mode=False)
 def get_pod_logs(
     pod_name: str,
     namespace: str = "default",
     container: str | None = None,
     tail_lines: int = 100,
+    cluster_id: str | None = None,
 ) -> str:
     """
     Get logs from a Kubernetes pod.
@@ -131,6 +263,7 @@ def get_pod_logs(
         namespace: Kubernetes namespace
         container: Specific container name (optional)
         tail_lines: Number of log lines to retrieve
+        cluster_id: Target cluster ID (for SaaS mode with multiple clusters)
 
     Returns:
         Pod logs as JSON string
@@ -142,8 +275,37 @@ def get_pod_logs(
             tool="get_pod_logs",
             pod_name=pod_name,
             namespace=namespace,
+            cluster_id=cluster_id,
         )
 
+        # Check execution mode
+        exec_mode = _get_k8s_execution_mode(cluster_id)
+
+        if exec_mode.mode == "gateway":
+            # Route through K8s Gateway (SaaS mode)
+            result = _run_gateway_command(
+                cluster_id=exec_mode.cluster_id,
+                team_node_id=exec_mode.team_node_id,
+                command="get_pod_logs",
+                params={
+                    "pod_name": pod_name,
+                    "namespace": namespace,
+                    "container": container,
+                    "tail_lines": tail_lines,
+                },
+            )
+            elapsed = time.time() - start_time
+            logger.info(
+                "k8s_tool_complete",
+                tool="get_pod_logs",
+                pod_name=pod_name,
+                namespace=namespace,
+                elapsed_ms=int(elapsed * 1000),
+                mode="gateway",
+            )
+            return json.dumps(result)
+
+        # Direct mode (existing behavior)
         core_v1, _ = _get_k8s_client()
         logs = core_v1.read_namespaced_pod_log(
             name=pod_name,
@@ -161,6 +323,7 @@ def get_pod_logs(
             namespace=namespace,
             elapsed_ms=int(elapsed * 1000),
             log_length=len(logs) if logs else 0,
+            mode="direct",
         )
         return json.dumps({"pod": pod_name, "namespace": namespace, "logs": logs})
 
@@ -195,13 +358,18 @@ def get_pod_logs(
 
 
 @function_tool(strict_mode=False)
-def describe_pod(pod_name: str, namespace: str = "default") -> str:
+def describe_pod(
+    pod_name: str,
+    namespace: str = "default",
+    cluster_id: str | None = None,
+) -> str:
     """
     Get detailed information about a pod.
 
     Args:
         pod_name: Name of the pod
         namespace: Kubernetes namespace
+        cluster_id: Target cluster ID (for SaaS mode with multiple clusters)
 
     Returns:
         Pod details as JSON string
@@ -213,7 +381,29 @@ def describe_pod(pod_name: str, namespace: str = "default") -> str:
             tool="describe_pod",
             pod_name=pod_name,
             namespace=namespace,
+            cluster_id=cluster_id,
         )
+
+        # Check execution mode
+        exec_mode = _get_k8s_execution_mode(cluster_id)
+
+        if exec_mode.mode == "gateway":
+            result = _run_gateway_command(
+                cluster_id=exec_mode.cluster_id,
+                team_node_id=exec_mode.team_node_id,
+                command="describe_pod",
+                params={"pod_name": pod_name, "namespace": namespace},
+            )
+            elapsed = time.time() - start_time
+            logger.info(
+                "k8s_tool_complete",
+                tool="describe_pod",
+                pod_name=pod_name,
+                namespace=namespace,
+                elapsed_ms=int(elapsed * 1000),
+                mode="gateway",
+            )
+            return json.dumps(result)
 
         core_v1, _ = _get_k8s_client()
         pod = core_v1.read_namespaced_pod(
@@ -312,6 +502,7 @@ def describe_pod(pod_name: str, namespace: str = "default") -> str:
 def list_pods(
     namespace: str = "default",
     label_selector: str | None = None,
+    cluster_id: str | None = None,
 ) -> str:
     """
     List pods in a namespace.
@@ -319,6 +510,7 @@ def list_pods(
     Args:
         namespace: Kubernetes namespace
         label_selector: Label selector (e.g., "app=myapp")
+        cluster_id: Target cluster ID (for SaaS mode with multiple clusters)
 
     Returns:
         List of pod summaries as JSON string
@@ -330,7 +522,28 @@ def list_pods(
             tool="list_pods",
             namespace=namespace,
             label_selector=label_selector,
+            cluster_id=cluster_id,
         )
+
+        # Check execution mode
+        exec_mode = _get_k8s_execution_mode(cluster_id)
+
+        if exec_mode.mode == "gateway":
+            result = _run_gateway_command(
+                cluster_id=exec_mode.cluster_id,
+                team_node_id=exec_mode.team_node_id,
+                command="list_pods",
+                params={"namespace": namespace, "label_selector": label_selector},
+            )
+            elapsed = time.time() - start_time
+            logger.info(
+                "k8s_tool_complete",
+                tool="list_pods",
+                namespace=namespace,
+                elapsed_ms=int(elapsed * 1000),
+                mode="gateway",
+            )
+            return json.dumps(result)
 
         core_v1, _ = _get_k8s_client()
         pods = core_v1.list_namespaced_pod(
@@ -394,16 +607,38 @@ def list_pods(
 
 
 @function_tool(strict_mode=False)
-def list_namespaces() -> str:
+def list_namespaces(cluster_id: str | None = None) -> str:
     """
     List all namespaces in the Kubernetes cluster.
+
+    Args:
+        cluster_id: Target cluster ID (for SaaS mode with multiple clusters)
 
     Returns:
         List of namespace summaries as JSON string
     """
     try:
         start_time = time.time()
-        logger.info("k8s_tool_start", tool="list_namespaces")
+        logger.info("k8s_tool_start", tool="list_namespaces", cluster_id=cluster_id)
+
+        # Check execution mode
+        exec_mode = _get_k8s_execution_mode(cluster_id)
+
+        if exec_mode.mode == "gateway":
+            result = _run_gateway_command(
+                cluster_id=exec_mode.cluster_id,
+                team_node_id=exec_mode.team_node_id,
+                command="list_namespaces",
+                params={},
+            )
+            elapsed = time.time() - start_time
+            logger.info(
+                "k8s_tool_complete",
+                tool="list_namespaces",
+                elapsed_ms=int(elapsed * 1000),
+                mode="gateway",
+            )
+            return json.dumps(result)
 
         core_v1, _ = _get_k8s_client()
         namespaces = core_v1.list_namespace(_request_timeout=K8S_API_TIMEOUT)
@@ -457,13 +692,18 @@ def list_namespaces() -> str:
 
 
 @function_tool(strict_mode=False)
-def get_pod_events(pod_name: str, namespace: str = "default") -> str:
+def get_pod_events(
+    pod_name: str,
+    namespace: str = "default",
+    cluster_id: str | None = None,
+) -> str:
     """
     Get events related to a pod.
 
     Args:
         pod_name: Name of the pod
         namespace: Kubernetes namespace
+        cluster_id: Target cluster ID (for SaaS mode with multiple clusters)
 
     Returns:
         List of events as JSON string
@@ -475,7 +715,29 @@ def get_pod_events(pod_name: str, namespace: str = "default") -> str:
             tool="get_pod_events",
             pod_name=pod_name,
             namespace=namespace,
+            cluster_id=cluster_id,
         )
+
+        # Check execution mode
+        exec_mode = _get_k8s_execution_mode(cluster_id)
+
+        if exec_mode.mode == "gateway":
+            result = _run_gateway_command(
+                cluster_id=exec_mode.cluster_id,
+                team_node_id=exec_mode.team_node_id,
+                command="get_pod_events",
+                params={"pod_name": pod_name, "namespace": namespace},
+            )
+            elapsed = time.time() - start_time
+            logger.info(
+                "k8s_tool_complete",
+                tool="get_pod_events",
+                pod_name=pod_name,
+                namespace=namespace,
+                elapsed_ms=int(elapsed * 1000),
+                mode="gateway",
+            )
+            return json.dumps(result)
 
         core_v1, _ = _get_k8s_client()
         events = core_v1.list_namespaced_event(
@@ -543,13 +805,18 @@ def get_pod_events(pod_name: str, namespace: str = "default") -> str:
 
 
 @function_tool(strict_mode=False)
-def describe_deployment(deployment_name: str, namespace: str = "default") -> str:
+def describe_deployment(
+    deployment_name: str,
+    namespace: str = "default",
+    cluster_id: str | None = None,
+) -> str:
     """
     Get detailed information about a deployment.
 
     Args:
         deployment_name: Name of the deployment
         namespace: Kubernetes namespace
+        cluster_id: Target cluster ID (for SaaS mode with multiple clusters)
 
     Returns:
         Deployment details as JSON string
@@ -561,7 +828,29 @@ def describe_deployment(deployment_name: str, namespace: str = "default") -> str
             tool="describe_deployment",
             deployment_name=deployment_name,
             namespace=namespace,
+            cluster_id=cluster_id,
         )
+
+        # Check execution mode
+        exec_mode = _get_k8s_execution_mode(cluster_id)
+
+        if exec_mode.mode == "gateway":
+            result = _run_gateway_command(
+                cluster_id=exec_mode.cluster_id,
+                team_node_id=exec_mode.team_node_id,
+                command="describe_deployment",
+                params={"deployment_name": deployment_name, "namespace": namespace},
+            )
+            elapsed = time.time() - start_time
+            logger.info(
+                "k8s_tool_complete",
+                tool="describe_deployment",
+                deployment_name=deployment_name,
+                namespace=namespace,
+                elapsed_ms=int(elapsed * 1000),
+                mode="gateway",
+            )
+            return json.dumps(result)
 
         _, apps_v1 = _get_k8s_client()
         deployment = apps_v1.read_namespaced_deployment(

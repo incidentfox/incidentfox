@@ -1,0 +1,124 @@
+# IncidentFox K8s Agent Configuration
+# ====================================
+
+# Required: API key from IncidentFox dashboard
+# Get this from: Settings > Integrations > Kubernetes > Add Cluster
+apiKey: ""
+
+# Required: Name to identify this cluster in IncidentFox
+clusterName: ""
+
+# IncidentFox K8s Gateway URL (SaaS endpoint)
+gatewayUrl: "https://orchestrator.incidentfox.ai/gateway"
+
+# Image configuration
+image:
+  repository: incidentfox/k8s-agent
+  tag: ""  # Defaults to appVersion
+  pullPolicy: IfNotPresent
+
+# Image pull secrets (if using private registry)
+imagePullSecrets: []
+
+# Override the name
+nameOverride: ""
+fullnameOverride: ""
+
+# Service account configuration
+serviceAccount:
+  # Create a service account
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # Name of the service account (generated if not set)
+  name: ""
+
+# RBAC configuration
+rbac:
+  # Create ClusterRole and ClusterRoleBinding
+  create: true
+  # Permissions granted to the agent
+  # Default: read-only access to common resources
+  rules:
+    - apiGroups: [""]
+      resources: ["pods", "pods/log", "events", "namespaces", "nodes", "services", "configmaps"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["apps"]
+      resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["batch"]
+      resources: ["jobs", "cronjobs"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["networking.k8s.io"]
+      resources: ["ingresses", "networkpolicies"]
+      verbs: ["get", "list", "watch"]
+
+# Pod configuration
+replicaCount: 1
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod labels
+podLabels: {}
+
+# Security context for the pod
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Security context for the container
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Liveness and readiness probes
+# The agent is a long-running connection, so we use exec probes
+livenessProbe:
+  exec:
+    command:
+      - cat
+      - /tmp/healthy
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+readinessProbe:
+  exec:
+    command:
+      - cat
+      - /tmp/healthy
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Additional environment variables
+extraEnv: []
+# - name: LOG_LEVEL
+#   value: "debug"
+
+# Additional volume mounts
+extraVolumeMounts: []
+
+# Additional volumes
+extraVolumes: []

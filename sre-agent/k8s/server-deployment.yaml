@@ -54,6 +54,9 @@ spec:
             secretKeyRef:
               name: incidentfox-secrets
               key: laminar-api-key
+        # K8s Gateway URL for SaaS mode (internal cluster address)
+        - name: K8S_GATEWAY_URL
+          value: "http://k8s-gateway-svc.incidentfox-prod.svc.cluster.local:8085"
         # Note: Customer API keys (Anthropic, Coralogix, etc.) are NOT needed here.
         # Sandboxes get credentials from credential-resolver at runtime via envoy sidecar.
         resources:

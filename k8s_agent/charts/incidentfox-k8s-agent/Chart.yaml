@@ -1,0 +1,17 @@
+apiVersion: v2
+name: incidentfox-k8s-agent
+description: IncidentFox K8s Agent - Connects your Kubernetes cluster to IncidentFox SaaS
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - incidentfox
+  - kubernetes
+  - monitoring
+  - incident-management
+home: https://incidentfox.ai
+sources:
+  - https://github.com/incidentfox/k8s-agent
+maintainers:
+  - name: IncidentFox Team
+    email: support@incidentfox.ai

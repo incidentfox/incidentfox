@@ -1,0 +1,34 @@
+[project]
+name = "incidentfox-k8s-agent"
+version = "0.1.0"
+description = "IncidentFox K8s Agent - Connects customer clusters to IncidentFox SaaS"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.26.0",
+    "httpx-sse>=0.4.0",
+    "kubernetes>=29.0.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "structlog>=24.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+incidentfox-k8s-agent = "k8s_agent.main:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/k8s_agent"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

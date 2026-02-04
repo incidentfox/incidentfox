@@ -1,0 +1,35 @@
+# Ingress for K8s Gateway
+# Routes orchestrator.incidentfox.ai/gateway/* to k8s-gateway service
+#
+# Apply with: kubectl apply -f k8s/ingress.yaml
+#
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: incidentfox-k8s-gateway
+  namespace: incidentfox-prod
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:103002841599:certificate/f88d2258-6588-432b-9179-6373f732dab7
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    # Group with orchestrator ingress to share the same ALB
+    alb.ingress.kubernetes.io/group.name: orchestrator-group
+    alb.ingress.kubernetes.io/group.order: "100"
+spec:
+  ingressClassName: alb
+  rules:
+    - host: orchestrator.incidentfox.ai
+      http:
+        paths:
+          # Gateway agent connection endpoint
+          - path: /gateway
+            pathType: Prefix
+            backend:
+              service:
+                name: k8s-gateway-svc
+                port:
+                  number: 8085

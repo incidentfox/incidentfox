@@ -138,6 +138,16 @@ spec:
       {{- end }}
       http:
         paths:
+          {{- if .Values.services.k8sGateway.enabled }}
+          # K8s Gateway - for customer agents to connect via SSE
+          - path: /gateway
+            pathType: Prefix
+            backend:
+              service:
+                name: incidentfox-k8s-gateway
+                port:
+                  number: {{ .Values.services.k8sGateway.servicePort }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:

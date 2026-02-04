@@ -1,0 +1,92 @@
+{{- /*
+K8s Gateway Service.
+
+Accepts outbound SSE connections from customer K8s agents deployed in their clusters.
+Routes K8s commands from the AI agent to the appropriate connected cluster agent.
+
+For SaaS deployments only - enable via services.k8sGateway.enabled=true
+*/ -}}
+
+{{- if .Values.services.k8sGateway.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: incidentfox-k8s-gateway
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: incidentfox-k8s-gateway
+    component: k8s-gateway
+spec:
+  replicas: {{ .Values.services.k8sGateway.replicas }}
+  selector:
+    matchLabels:
+      app: incidentfox-k8s-gateway
+  template:
+    metadata:
+      labels:
+        app: incidentfox-k8s-gateway
+        component: k8s-gateway
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 8 }}
+      {{- end }}
+      containers:
+        - name: k8s-gateway
+          image: {{ required "services.k8sGateway.image is required" .Values.services.k8sGateway.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.services.k8sGateway.servicePort }}
+              protocol: TCP
+          resources:
+{{ toYaml .Values.services.k8sGateway.resources | indent 12 }}
+          env:
+            - name: PORT
+              value: {{ .Values.services.k8sGateway.servicePort | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.services.k8sGateway.logLevel | quote }}
+            - name: HEARTBEAT_INTERVAL_SECONDS
+              value: {{ .Values.services.k8sGateway.heartbeatIntervalSeconds | quote }}
+            - name: COMMAND_TIMEOUT_SECONDS
+              value: {{ .Values.services.k8sGateway.commandTimeoutSeconds | quote }}
+            # Config service URL for token validation
+            - name: CONFIG_SERVICE_URL
+              value: {{ printf "http://incidentfox-config-service.%s.svc.cluster.local:%d" .Values.namespace (int .Values.services.configService.servicePort) | quote }}
+          {{- if .Values.services.k8sGateway.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.services.k8sGateway.livenessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.services.k8sGateway.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.services.k8sGateway.livenessProbe.periodSeconds }}
+            timeoutSeconds: 3
+            failureThreshold: 3
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ .Values.services.k8sGateway.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.services.k8sGateway.readinessProbe.periodSeconds }}
+            timeoutSeconds: 3
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: incidentfox-k8s-gateway
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: incidentfox-k8s-gateway
+    component: k8s-gateway
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.services.k8sGateway.servicePort }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: incidentfox-k8s-gateway
+{{- end }}

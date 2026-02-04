@@ -507,4 +507,41 @@ services:
       maxReplicas: 4
       targetCPUUtilizationPercentage: 70
 
+  # K8s Gateway - Accepts connections from customer K8s agents (SaaS mode)
+  # Enables customers to connect their private K8s clusters without firewall changes.
+  # Agents connect outbound via SSE; gateway routes commands from AI agent.
+  k8sGateway:
+    enabled: false  # Enable for SaaS deployments
+    image: "incidentfox/k8s-gateway:v1.0.0"
+    replicas: 2
+    servicePort: 8085
+    logLevel: "INFO"
+    # Heartbeat interval for agent connections (seconds)
+    heartbeatIntervalSeconds: 30
+    # Timeout for command execution (seconds)
+    commandTimeoutSeconds: 30
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    livenessProbe:
+      enabled: true
+      path: /health
+      initialDelaySeconds: 10
+      periodSeconds: 30
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    pdb:
+      enabled: true
+      minAvailable: 1
+    hpa:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+
 

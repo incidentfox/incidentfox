@@ -16,6 +16,7 @@ on:
           - agent
           - ai-pipeline
           - config-service
+          - k8s-gateway
           - knowledge-base
           - orchestrator
           - ultimate-rag
@@ -41,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [agent, ai-pipeline, config-service, knowledge-base, orchestrator, ultimate-rag, web-ui]
+        service: [agent, ai-pipeline, config-service, k8s-gateway, knowledge-base, orchestrator, ultimate-rag, web-ui]
         include:
           - service: agent
             context: ./agent
@@ -55,6 +56,10 @@ jobs:
             context: ./config_service
             dockerfile: ./config_service/Dockerfile
             image: incidentfox-config-service
+          - service: k8s-gateway
+            context: ./k8s_gateway
+            dockerfile: ./k8s_gateway/Dockerfile
+            image: incidentfox-k8s-gateway
           - service: knowledge-base
             context: ./knowledge_base
             dockerfile: ./knowledge_base/Dockerfile
@@ -234,6 +239,7 @@ jobs:
             restart_deployment "incidentfox-orchestrator"
             restart_deployment "incidentfox-agent"
             restart_deployment "incidentfox-web-ui"
+            restart_deployment "incidentfox-k8s-gateway"
             restart_deployment "incidentfox-knowledge-base"
             restart_deployment "incidentfox-ultimate-rag"
             restart_deployment "incidentfox-ai-pipeline"
@@ -243,6 +249,7 @@ jobs:
               agent) restart_deployment "incidentfox-agent" ;;
               ai-pipeline) restart_deployment "incidentfox-ai-pipeline" ;;
               config-service) restart_deployment "incidentfox-config-service" ;;
+              k8s-gateway) restart_deployment "incidentfox-k8s-gateway" ;;
               knowledge-base) restart_deployment "incidentfox-knowledge-base" ;;
               orchestrator) restart_deployment "incidentfox-orchestrator" ;;
               ultimate-rag) restart_deployment "incidentfox-ultimate-rag" ;;
@@ -258,6 +265,11 @@ jobs:
           kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=5m
           kubectl rollout status deployment/incidentfox-agent -n ${{ env.HELM_NAMESPACE }} --timeout=5m
           kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+
+          # K8s Gateway (optional - only if enabled)
+          if kubectl get deployment/incidentfox-k8s-gateway -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
+            kubectl rollout status deployment/incidentfox-k8s-gateway -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+          fi
 
       - name: Wait for RAG services (slow startup)
         run: |

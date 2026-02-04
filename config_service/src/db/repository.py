@@ -14,6 +14,8 @@ from src.db.models import (
     AgentRun,
     ConversationMapping,
     ImpersonationJTI,
+    K8sCluster,
+    K8sClusterStatus,
     OrgAdminToken,
     OrgNode,
     PendingConfigChange,
@@ -2099,3 +2101,285 @@ def delete_conversation_mapping(
         session.flush()
         return True
     return False
+
+
+# =============================================================================
+# K8s Cluster Management (SaaS Model)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class K8sClusterInfo:
+    """Information returned after creating a K8s cluster registration."""
+
+    cluster_id: str
+    cluster_name: str
+    token: str  # Only returned once at creation time
+
+
+def issue_k8s_agent_token(
+    session: Session,
+    *,
+    org_id: str,
+    team_node_id: str,
+    cluster_name: str,
+    display_name: Optional[str] = None,
+    issued_by: Optional[str] = None,
+    pepper: str,
+) -> K8sClusterInfo:
+    """
+    Issue a K8s agent token and create cluster record.
+
+    This creates both:
+    1. A TeamToken with K8S_AGENT_CONNECT permission
+    2. A K8sCluster record linking to that token
+
+    Returns K8sClusterInfo with the token (shown once to user).
+    """
+    # Generate cluster ID
+    cluster_id = f"k8s-{uuid4().hex[:12]}"
+
+    # Issue a team token with K8s agent permissions
+    token = issue_team_token(
+        session,
+        org_id=org_id,
+        team_node_id=team_node_id,
+        issued_by=issued_by,
+        pepper=pepper,
+        permissions=TokenPermission.DEFAULT_K8S_AGENT,
+        label=f"K8s Agent: {cluster_name}",
+    )
+
+    # Extract token_id from the issued token (format: token_id.secret)
+    token_id = token.split(".", 1)[0]
+
+    # Create the cluster record
+    cluster = K8sCluster(
+        id=cluster_id,
+        org_id=org_id,
+        team_node_id=team_node_id,
+        cluster_name=cluster_name,
+        display_name=display_name,
+        token_id=token_id,
+        status=K8sClusterStatus.disconnected,
+    )
+    session.add(cluster)
+    session.flush()
+
+    # Audit log
+    record_token_audit(
+        session,
+        org_id=org_id,
+        team_node_id=team_node_id,
+        token_id=token_id,
+        event_type="k8s_cluster_registered",
+        actor=issued_by,
+        details={
+            "cluster_id": cluster_id,
+            "cluster_name": cluster_name,
+        },
+    )
+
+    return K8sClusterInfo(
+        cluster_id=cluster_id,
+        cluster_name=cluster_name,
+        token=token,
+    )
+
+
+def list_k8s_clusters(
+    session: Session,
+    *,
+    org_id: str,
+    team_node_id: str,
+    include_revoked: bool = False,
+) -> List[K8sCluster]:
+    """
+    List all K8s clusters for a team.
+
+    By default excludes clusters whose tokens have been revoked.
+    """
+    stmt = select(K8sCluster).where(
+        K8sCluster.org_id == org_id,
+        K8sCluster.team_node_id == team_node_id,
+    )
+
+    if not include_revoked:
+        # Join with TeamToken to exclude revoked
+        stmt = stmt.join(
+            TeamToken,
+            K8sCluster.token_id == TeamToken.token_id,
+        ).where(TeamToken.revoked_at.is_(None))
+
+    stmt = stmt.order_by(K8sCluster.created_at.desc())
+
+    return list(session.execute(stmt).scalars().all())
+
+
+def get_k8s_cluster(
+    session: Session,
+    *,
+    cluster_id: str,
+) -> Optional[K8sCluster]:
+    """Get a K8s cluster by ID."""
+    return session.execute(
+        select(K8sCluster).where(K8sCluster.id == cluster_id)
+    ).scalar_one_or_none()
+
+
+def get_k8s_cluster_by_token(
+    session: Session,
+    *,
+    token_id: str,
+) -> Optional[K8sCluster]:
+    """Get a K8s cluster by its token ID (used by gateway for auth)."""
+    return session.execute(
+        select(K8sCluster).where(K8sCluster.token_id == token_id)
+    ).scalar_one_or_none()
+
+
+def update_k8s_cluster_status(
+    session: Session,
+    *,
+    cluster_id: str,
+    status: K8sClusterStatus,
+    agent_version: Optional[str] = None,
+    agent_pod_name: Optional[str] = None,
+    kubernetes_version: Optional[str] = None,
+    node_count: Optional[int] = None,
+    namespace_count: Optional[int] = None,
+    cluster_info: Optional[Dict[str, Any]] = None,
+    last_error: Optional[str] = None,
+) -> Optional[K8sCluster]:
+    """
+    Update K8s cluster connection status and metadata.
+
+    Called by the gateway when:
+    - Agent connects (status=connected, populate metadata)
+    - Agent heartbeats (update last_heartbeat_at)
+    - Agent disconnects (status=disconnected)
+    - Agent errors (status=error, set last_error)
+    """
+    cluster = get_k8s_cluster(session, cluster_id=cluster_id)
+    if cluster is None:
+        return None
+
+    cluster.status = status
+    cluster.last_heartbeat_at = datetime.utcnow()
+
+    if agent_version is not None:
+        cluster.agent_version = agent_version
+    if agent_pod_name is not None:
+        cluster.agent_pod_name = agent_pod_name
+    if kubernetes_version is not None:
+        cluster.kubernetes_version = kubernetes_version
+    if node_count is not None:
+        cluster.node_count = node_count
+    if namespace_count is not None:
+        cluster.namespace_count = namespace_count
+    if cluster_info is not None:
+        cluster.cluster_info = cluster_info
+    if last_error is not None:
+        cluster.last_error = last_error
+    elif status == K8sClusterStatus.connected:
+        # Clear error on successful connection
+        cluster.last_error = None
+
+    session.flush()
+    return cluster
+
+
+def update_k8s_cluster_heartbeat(
+    session: Session,
+    *,
+    cluster_id: str,
+) -> Optional[K8sCluster]:
+    """Update the heartbeat timestamp for a cluster (lightweight operation)."""
+    cluster = get_k8s_cluster(session, cluster_id=cluster_id)
+    if cluster is None:
+        return None
+
+    cluster.last_heartbeat_at = datetime.utcnow()
+    session.flush()
+    return cluster
+
+
+def revoke_k8s_cluster(
+    session: Session,
+    *,
+    cluster_id: str,
+    revoked_by: Optional[str] = None,
+) -> bool:
+    """
+    Revoke a K8s cluster's access by revoking its token.
+
+    This will cause the agent to be disconnected on next heartbeat/request.
+    Returns True if revoked, False if cluster not found.
+    """
+    cluster = get_k8s_cluster(session, cluster_id=cluster_id)
+    if cluster is None:
+        return False
+
+    # Revoke the associated token
+    revoke_team_token(session, token_id=cluster.token_id, revoked_by=revoked_by)
+
+    # Update cluster status
+    cluster.status = K8sClusterStatus.disconnected
+    cluster.last_error = "Cluster access revoked"
+    session.flush()
+
+    # Audit log
+    record_token_audit(
+        session,
+        org_id=cluster.org_id,
+        team_node_id=cluster.team_node_id,
+        token_id=cluster.token_id,
+        event_type="k8s_cluster_revoked",
+        actor=revoked_by,
+        details={
+            "cluster_id": cluster_id,
+            "cluster_name": cluster.cluster_name,
+        },
+    )
+
+    return True
+
+
+def get_stale_k8s_clusters(
+    session: Session,
+    *,
+    stale_seconds: int = 120,
+) -> List[K8sCluster]:
+    """
+    Get clusters that haven't sent a heartbeat in stale_seconds.
+
+    Used by gateway to detect disconnected agents.
+    """
+    cutoff = datetime.utcnow() - timedelta(seconds=stale_seconds)
+
+    stmt = select(K8sCluster).where(
+        K8sCluster.status == K8sClusterStatus.connected,
+        K8sCluster.last_heartbeat_at < cutoff,
+    )
+
+    return list(session.execute(stmt).scalars().all())
+
+
+def mark_stale_clusters_disconnected(
+    session: Session,
+    *,
+    stale_seconds: int = 120,
+) -> int:
+    """
+    Mark clusters that haven't sent a heartbeat as disconnected.
+
+    Returns the number of clusters marked as disconnected.
+    """
+    stale_clusters = get_stale_k8s_clusters(session, stale_seconds=stale_seconds)
+
+    for cluster in stale_clusters:
+        cluster.status = K8sClusterStatus.disconnected
+        cluster.last_error = f"No heartbeat for {stale_seconds}s"
+
+    session.flush()
+    return len(stale_clusters)

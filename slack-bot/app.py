@@ -4392,21 +4392,35 @@ def handle_configure_integration(ack, body, client):
         pass
 
     try:
-        # Get existing config if any (from config-service)
-        config_client = get_config_client()
-        configured = config_client.get_configured_integrations(team_id)
-        existing_config = configured.get(integration_id, {})
-
-        # Build and update the modal (replace, not push) to avoid stale modal stack
-        # Uses local INTEGRATIONS definition from onboarding.py
         onboarding = get_onboarding_modules()
-        modal = onboarding.build_integration_config_modal(
-            team_id=team_id,
-            integration_id=integration_id,
-            existing_config=existing_config,
-            category_filter=category_filter,
-            entry_point="integrations",
-        )
+        config_client = get_config_client()
+
+        # Check for custom flow integrations (e.g., kubernetes_saas)
+        integration_def = onboarding.get_integration_by_id(integration_id)
+        custom_flow = integration_def.get("custom_flow") if integration_def else None
+
+        if custom_flow == "k8s_saas":
+            # K8s SaaS has a custom flow - show clusters management modal
+            clusters = config_client.list_k8s_clusters(team_id)
+            modal = onboarding.build_k8s_saas_clusters_modal(
+                team_id=team_id,
+                clusters=clusters,
+                category_filter=category_filter,
+                entry_point="integrations",
+            )
+        else:
+            # Standard field-based config modal
+            configured = config_client.get_configured_integrations(team_id)
+            existing_config = configured.get(integration_id, {})
+
+            modal = onboarding.build_integration_config_modal(
+                team_id=team_id,
+                integration_id=integration_id,
+                existing_config=existing_config,
+                category_filter=category_filter,
+                entry_point="integrations",
+            )
+
         # Use views_update to replace current modal instead of views_push
         # This prevents stale modal accumulation
         view_id = body.get("view", {}).get("id")
@@ -4470,6 +4484,208 @@ def handle_integrations_page_done(ack, body, client, view):
     team_id = private_metadata.get("team_id")
 
     logger.info(f"Closed integrations page for team {team_id}")
+
+
+# =============================================================================
+# KUBERNETES SAAS HANDLERS
+# =============================================================================
+
+
+@app.action("k8s_saas_add_cluster")
+def handle_k8s_saas_add_cluster(ack, body, client):
+    """Handle Add Cluster button click on K8s SaaS clusters modal."""
+    ack()
+
+    team_id = body.get("team", {}).get("id")
+    if not team_id:
+        logger.error("No team_id for k8s_saas_add_cluster action")
+        return
+
+    # Extract metadata from parent view
+    category_filter = "all"
+    entry_point = "integrations"
+    try:
+        parent_metadata = body.get("view", {}).get("private_metadata", "{}")
+        parent_data = json.loads(parent_metadata)
+        category_filter = parent_data.get("category_filter", "all")
+        entry_point = parent_data.get("entry_point", "integrations")
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    try:
+        onboarding = get_onboarding_modules()
+        modal = onboarding.build_k8s_saas_add_cluster_modal(
+            team_id=team_id,
+            category_filter=category_filter,
+            entry_point=entry_point,
+        )
+
+        # Push as new modal on stack
+        client.views_push(trigger_id=body["trigger_id"], view=modal)
+        logger.info(f"Pushed add cluster modal for team {team_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to open add cluster modal: {e}", exc_info=True)
+
+
+@app.view("k8s_saas_add_cluster_submission")
+def handle_k8s_saas_add_cluster_submission(ack, body, client, view):
+    """Handle form submission for adding a new K8s cluster."""
+    private_metadata = json.loads(view.get("private_metadata", "{}"))
+    team_id = private_metadata.get("team_id")
+    category_filter = private_metadata.get("category_filter", "all")
+    entry_point = private_metadata.get("entry_point", "integrations")
+
+    # Extract form values
+    values = view.get("state", {}).get("values", {})
+    cluster_name = (
+        values.get("cluster_name", {}).get("cluster_name_input", {}).get("value", "")
+    )
+    display_name = (
+        values.get("display_name", {}).get("display_name_input", {}).get("value")
+    )
+
+    # Validate cluster name
+    cluster_name = cluster_name.strip().lower()
+    if not cluster_name:
+        ack(
+            response_action="errors",
+            errors={"cluster_name": "Cluster name is required"},
+        )
+        return
+
+    # Validate cluster name format (lowercase alphanumeric and hyphens)
+    import re
+
+    if not re.match(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", cluster_name):
+        ack(
+            response_action="errors",
+            errors={
+                "cluster_name": "Use lowercase letters, numbers, and hyphens. Must start and end with alphanumeric."
+            },
+        )
+        return
+
+    ack()
+
+    try:
+        config_client = get_config_client()
+
+        # Create the cluster
+        result = config_client.create_k8s_cluster(
+            slack_team_id=team_id,
+            cluster_name=cluster_name,
+            display_name=display_name,
+        )
+
+        # Show the cluster created modal with Helm command
+        onboarding = get_onboarding_modules()
+        modal = onboarding.build_k8s_saas_cluster_created_modal(
+            team_id=team_id,
+            cluster_name=result.get("cluster_name"),
+            display_name=result.get("display_name"),
+            token=result.get("token"),
+            helm_command=result.get("helm_install_command"),
+            category_filter=category_filter,
+            entry_point=entry_point,
+        )
+
+        # Update the modal to show the Helm command
+        client.views_update(
+            view_id=body.get("view", {}).get("id"),
+            view=modal,
+        )
+        logger.info(f"Created K8s cluster {cluster_name} for team {team_id}")
+
+    except Exception as e:
+        error_msg = str(e)
+        if "already exists" in error_msg.lower():
+            # Show error in modal
+            logger.warning(f"Cluster name conflict for team {team_id}: {cluster_name}")
+        else:
+            logger.error(f"Failed to create K8s cluster: {e}", exc_info=True)
+
+
+@app.action("k8s_saas_remove_cluster")
+def handle_k8s_saas_remove_cluster(ack, body, client):
+    """Handle Remove Cluster button click."""
+    ack()
+
+    team_id = body.get("team", {}).get("id")
+    if not team_id:
+        logger.error("No team_id for k8s_saas_remove_cluster action")
+        return
+
+    action = body.get("actions", [{}])[0]
+    cluster_id = action.get("value")
+
+    if not cluster_id:
+        logger.error("No cluster_id in k8s_saas_remove_cluster action")
+        return
+
+    # Extract metadata from parent view
+    category_filter = "all"
+    entry_point = "integrations"
+    try:
+        parent_metadata = body.get("view", {}).get("private_metadata", "{}")
+        parent_data = json.loads(parent_metadata)
+        category_filter = parent_data.get("category_filter", "all")
+        entry_point = parent_data.get("entry_point", "integrations")
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    try:
+        config_client = get_config_client()
+
+        # Delete the cluster
+        config_client.delete_k8s_cluster(
+            slack_team_id=team_id,
+            cluster_id=cluster_id,
+        )
+
+        # Refresh the clusters list
+        clusters = config_client.list_k8s_clusters(team_id)
+
+        onboarding = get_onboarding_modules()
+        modal = onboarding.build_k8s_saas_clusters_modal(
+            team_id=team_id,
+            clusters=clusters,
+            category_filter=category_filter,
+            entry_point=entry_point,
+        )
+
+        # Update the modal
+        client.views_update(
+            view_id=body.get("view", {}).get("id"),
+            view=modal,
+        )
+        logger.info(f"Removed K8s cluster {cluster_id} for team {team_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to remove K8s cluster: {e}", exc_info=True)
+
+
+@app.view("k8s_saas_clusters_modal")
+def handle_k8s_saas_clusters_modal_close(ack, body, client, view):
+    """Handle Back/Close on K8s SaaS clusters modal - return to integrations page."""
+    ack()
+
+    private_metadata = json.loads(view.get("private_metadata", "{}"))
+    team_id = private_metadata.get("team_id")
+    category_filter = private_metadata.get("category_filter", "all")
+
+    logger.info(f"Closed K8s SaaS clusters modal for team {team_id}")
+
+
+@app.view("k8s_saas_cluster_created_modal")
+def handle_k8s_saas_cluster_created_close(ack, body, client, view):
+    """Handle Done on cluster created modal."""
+    ack()
+
+    private_metadata = json.loads(view.get("private_metadata", "{}"))
+    team_id = private_metadata.get("team_id")
+
+    logger.info(f"Closed K8s cluster created modal for team {team_id}")
 
 
 @app.action("open_advanced_settings")

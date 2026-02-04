@@ -137,6 +137,11 @@ class Config(BaseSettings):
         default=None, description="Config service URL"
     )
 
+    # K8s Gateway settings (for SaaS mode)
+    k8s_gateway_url: str | None = Field(
+        default=None, description="K8s Gateway service URL for SaaS mode"
+    )
+
     # Team-level config from config service (populated after init)
     # Use Any since TeamLevelConfig is dynamically imported to avoid circular imports
     team_config: Any = Field(default=None, exclude=True)

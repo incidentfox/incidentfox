@@ -72,4 +72,18 @@ spec:
       app: incidentfox-web-ui
 {{- end }}
 
+{{- if and .Values.services.k8sGateway.enabled .Values.services.k8sGateway.pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: incidentfox-k8s-gateway
+  namespace: {{ .Values.namespace }}
+spec:
+  minAvailable: {{ .Values.services.k8sGateway.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app: incidentfox-k8s-gateway
+{{- end }}
+
 

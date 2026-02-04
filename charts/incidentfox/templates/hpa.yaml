@@ -117,4 +117,27 @@ spec:
           averageUtilization: {{ .Values.services.webUi.hpa.targetCPUUtilizationPercentage }}
 {{- end }}
 
+{{- if and .Values.services.k8sGateway.enabled .Values.services.k8sGateway.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: incidentfox-k8s-gateway
+  namespace: {{ .Values.namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: incidentfox-k8s-gateway
+  minReplicas: {{ .Values.services.k8sGateway.hpa.minReplicas }}
+  maxReplicas: {{ .Values.services.k8sGateway.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.services.k8sGateway.hpa.targetCPUUtilizationPercentage }}
+{{- end }}
+
 

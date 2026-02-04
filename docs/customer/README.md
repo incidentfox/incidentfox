@@ -26,6 +26,11 @@
    - Documentation
    - Support resources
 
+4. **[Kubernetes Integration](./kubernetes-integration.md)** - Connect your K8s clusters (SaaS)
+   - Agent deployment via Helm
+   - RBAC configuration
+   - Multiple cluster support
+
 ---
 
 ## 📚 Quick Links
@@ -84,6 +89,7 @@ docs/customer/
 ├── terraform-guide.md                # PATH 1: Terraform
 ├── console-guide.md                  # PATH 3: AWS Console
 ├── installation-guide.md             # Main installation steps
+├── kubernetes-integration.md         # Connect K8s clusters (SaaS)
 ├── api-reference.md                  # API endpoints & examples
 └── onboarding.md                     # Package contents
 ```

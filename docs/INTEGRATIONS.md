@@ -6,12 +6,51 @@ Complete setup guides for all IncidentFox integrations. Connect your observabili
 
 ## Table of Contents
 
+- [Kubernetes (SaaS)](#kubernetes-saas)
 - [Slack Bot](#slack-bot-primary-interface)
 - [GitHub Bot](#github-bot)
 - [PagerDuty](#pagerduty-auto-investigation)
 - [A2A Protocol](#a2a-protocol-agent-to-agent)
 - [REST API](#rest-api)
 - [Environment Variables](#environment-variables)
+
+---
+
+## Kubernetes (SaaS)
+
+Connect your on-premise or private Kubernetes clusters to IncidentFox SaaS. Uses an outbound agent pattern - no firewall changes required.
+
+### Usage
+
+Once connected, query your clusters directly:
+
+```
+@incidentfox show me failing pods in prod-cluster
+@incidentfox get logs from pod api-server-xxx
+@incidentfox describe deployment nginx in staging
+```
+
+### Quick Setup
+
+1. **Generate API key** in dashboard: Settings → Integrations → Kubernetes → Add Cluster
+2. **Deploy agent** via Helm:
+   ```bash
+   helm repo add incidentfox https://charts.incidentfox.ai
+   helm install incidentfox-agent incidentfox/incidentfox-k8s-agent \
+     --namespace incidentfox --create-namespace \
+     --set apiKey=ixfx_k8s_YOUR_KEY \
+     --set clusterName=prod-us-east-1
+   ```
+3. **Verify** connection in dashboard (Status: Connected)
+
+### Features
+
+- Multiple clusters per team
+- Customizable RBAC via Helm values
+- Read-only access by default
+- Automatic reconnection with backoff
+
+**Full documentation:** [customer/kubernetes-integration.md](./customer/kubernetes-integration.md)
 
 ---
 

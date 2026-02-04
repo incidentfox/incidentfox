@@ -616,6 +616,173 @@ class ConfigServiceClient:
                 response_text=getattr(e.response, "text", None),
             ) from e
 
+    # =========================================================================
+    # K8s Cluster Management (SaaS Mode)
+    # =========================================================================
+
+    def create_k8s_cluster(
+        self,
+        slack_team_id: str,
+        cluster_name: str,
+        display_name: str = None,
+    ) -> Dict[str, Any]:
+        """
+        Register a new K8s cluster and generate an API key for the agent.
+
+        Args:
+            slack_team_id: Slack team ID
+            cluster_name: Unique name for the cluster (e.g., 'prod-us-east-1')
+            display_name: Human-friendly display name
+
+        Returns:
+            Dict with cluster_id, cluster_name, token, and helm_install_command.
+            IMPORTANT: The token is only returned once.
+
+        Raises:
+            ConfigServiceError: If the request fails or cluster name already exists.
+        """
+        org_id = f"slack-{slack_team_id}"
+        team_node_id = "default"
+
+        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{team_node_id}/k8s-clusters"
+
+        payload = {
+            "cluster_name": cluster_name,
+        }
+        if display_name:
+            payload["display_name"] = display_name
+
+        try:
+            response = requests.post(
+                url, json=payload, headers=self._headers(), timeout=30
+            )
+
+            if response.status_code == 409:
+                raise ConfigServiceError(
+                    f"Cluster with name '{cluster_name}' already exists",
+                    status_code=409,
+                    response_text=response.text,
+                )
+
+            response.raise_for_status()
+            result = response.json()
+            logger.info(
+                f"Created K8s cluster {cluster_name} for workspace {slack_team_id}"
+            )
+            return result
+
+        except requests.exceptions.RequestException as e:
+            if isinstance(e, ConfigServiceError):
+                raise
+            logger.error(
+                f"Failed to create K8s cluster for {slack_team_id}: "
+                f"status={getattr(e.response, 'status_code', 'N/A')}, "
+                f"error={e}"
+            )
+            raise ConfigServiceError(
+                f"Failed to create K8s cluster: {e}",
+                status_code=getattr(e.response, "status_code", None),
+                response_text=getattr(e.response, "text", None),
+            ) from e
+
+    def list_k8s_clusters(
+        self,
+        slack_team_id: str,
+        include_revoked: bool = False,
+    ) -> list:
+        """
+        List all K8s clusters for a workspace.
+
+        Args:
+            slack_team_id: Slack team ID
+            include_revoked: Whether to include revoked clusters
+
+        Returns:
+            List of cluster summary dicts with cluster_id, cluster_name,
+            display_name, status, last_heartbeat_at, etc.
+
+        Raises:
+            ConfigServiceError: If the request fails.
+        """
+        org_id = f"slack-{slack_team_id}"
+        team_node_id = "default"
+
+        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{team_node_id}/k8s-clusters"
+        params = {}
+        if include_revoked:
+            params["include_revoked"] = "true"
+
+        try:
+            response = requests.get(
+                url, params=params, headers=self._headers(), timeout=10
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.RequestException as e:
+            logger.error(
+                f"Failed to list K8s clusters for {slack_team_id}: "
+                f"status={getattr(e.response, 'status_code', 'N/A')}, "
+                f"error={e}"
+            )
+            raise ConfigServiceError(
+                f"Failed to list K8s clusters: {e}",
+                status_code=getattr(e.response, "status_code", None),
+                response_text=getattr(e.response, "text", None),
+            ) from e
+
+    def delete_k8s_cluster(
+        self,
+        slack_team_id: str,
+        cluster_id: str,
+    ) -> None:
+        """
+        Revoke a K8s cluster's access.
+
+        This disconnects the agent and revokes its API token.
+        The cluster record is kept for audit purposes.
+
+        Args:
+            slack_team_id: Slack team ID
+            cluster_id: ID of the cluster to revoke
+
+        Raises:
+            ConfigServiceError: If the request fails or cluster not found.
+        """
+        org_id = f"slack-{slack_team_id}"
+        team_node_id = "default"
+
+        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{team_node_id}/k8s-clusters/{cluster_id}"
+
+        try:
+            response = requests.delete(url, headers=self._headers(), timeout=10)
+
+            if response.status_code == 404:
+                raise ConfigServiceError(
+                    f"Cluster not found: {cluster_id}",
+                    status_code=404,
+                    response_text=response.text,
+                )
+
+            response.raise_for_status()
+            logger.info(
+                f"Deleted K8s cluster {cluster_id} for workspace {slack_team_id}"
+            )
+
+        except requests.exceptions.RequestException as e:
+            if isinstance(e, ConfigServiceError):
+                raise
+            logger.error(
+                f"Failed to delete K8s cluster {cluster_id} for {slack_team_id}: "
+                f"status={getattr(e.response, 'status_code', 'N/A')}, "
+                f"error={e}"
+            )
+            raise ConfigServiceError(
+                f"Failed to delete K8s cluster: {e}",
+                status_code=getattr(e.response, "status_code", None),
+                response_text=getattr(e.response, "text", None),
+            ) from e
+
 
 # Global client instance
 _client: Optional[ConfigServiceClient] = None

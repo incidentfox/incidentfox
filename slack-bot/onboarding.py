@@ -409,12 +409,12 @@ INTEGRATIONS: List[Dict[str, Any]] = [
     },
     {
         "id": "kubernetes",
-        "name": "Kubernetes",
+        "name": "Kubernetes (Direct)",
         "category": "infra",
         "status": "active",
         "icon": ":kubernetes:",
         "icon_fallback": ":wheel_of_dharma:",
-        "description": "Query pods, deployments, and cluster state.",
+        "description": "Direct API access - requires exposing your K8s API.",
         "setup_instructions": (
             "*Setup Instructions:*\n"
             "1. Get your Kubernetes API server URL (e.g., from `kubectl cluster-info`)\n"
@@ -452,6 +452,25 @@ INTEGRATIONS: List[Dict[str, Any]] = [
                 "hint": "Default namespace for queries (optional)",
             },
         ],
+    },
+    {
+        "id": "kubernetes_saas",
+        "name": "Kubernetes (Agent)",
+        "category": "infra",
+        "status": "active",
+        "icon": ":kubernetes:",
+        "icon_fallback": ":wheel_of_dharma:",
+        "description": "Deploy a lightweight agent in your cluster - no firewall changes needed.",
+        "featured": True,
+        "custom_flow": "k8s_saas",  # Special handling - not standard field-based config
+        "setup_instructions": (
+            "*How it works:*\n"
+            "1. Register your cluster to get an API key\n"
+            "2. Deploy our agent using Helm\n"
+            "3. Agent connects outbound to IncidentFox - no inbound firewall rules needed!\n\n"
+            "The agent runs in your cluster and proxies K8s API calls securely."
+        ),
+        "docs_url": "https://docs.incidentfox.ai/integrations/kubernetes-agent",
     },
     {
         "id": "github",
@@ -2468,5 +2487,374 @@ def build_integration_config_modal(
         "title": {"type": "plain_text", "text": integration_name[:24]},  # Max 24 chars
         "submit": {"type": "plain_text", "text": "Save"},
         "close": {"type": "plain_text", "text": "Back"},
+        "blocks": blocks,
+    }
+
+
+# =============================================================================
+# KUBERNETES SAAS MODAL BUILDERS
+# =============================================================================
+
+
+def build_k8s_saas_clusters_modal(
+    team_id: str,
+    clusters: List[Dict[str, Any]],
+    category_filter: str = "all",
+    entry_point: str = "integrations",
+) -> Dict[str, Any]:
+    """
+    Build the K8s SaaS clusters management modal.
+
+    Shows list of connected clusters with status and allows adding/removing.
+
+    Args:
+        team_id: Slack team ID
+        clusters: List of cluster summary dicts from config_client
+        category_filter: Category filter to preserve on back navigation
+        entry_point: Entry point to preserve on back navigation
+
+    Returns:
+        Slack modal view object
+    """
+    blocks = []
+
+    # Header
+    logo_url = get_integration_logo_url("kubernetes_saas")
+    header_block = {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": (
+                "*Kubernetes (Agent Mode)*\n"
+                "Connect your K8s clusters by deploying our lightweight agent. "
+                "No inbound firewall rules needed - the agent connects outbound to IncidentFox."
+            ),
+        },
+    }
+    if logo_url:
+        header_block["accessory"] = {
+            "type": "image",
+            "image_url": logo_url,
+            "alt_text": "Kubernetes",
+        }
+    blocks.append(header_block)
+    blocks.append({"type": "divider"})
+
+    # Add cluster button
+    blocks.append(
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": ":heavy_plus_sign: Add Cluster"},
+                    "style": "primary",
+                    "action_id": "k8s_saas_add_cluster",
+                }
+            ],
+        }
+    )
+
+    blocks.append({"type": "divider"})
+
+    # Clusters list
+    if not clusters:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        "_No clusters connected yet._\n\n"
+                        "Click *Add Cluster* to register your first Kubernetes cluster."
+                    ),
+                },
+            }
+        )
+    else:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "*Connected Clusters*"},
+            }
+        )
+
+        for cluster in clusters:
+            cluster_id = cluster.get("cluster_id", "")
+            cluster_name = cluster.get("cluster_name", "Unknown")
+            display_name = cluster.get("display_name") or cluster_name
+            status = cluster.get("status", "disconnected")
+            k8s_version = cluster.get("kubernetes_version", "")
+            node_count = cluster.get("node_count")
+            last_heartbeat = cluster.get("last_heartbeat_at", "")
+
+            # Status indicator
+            status_emoji = {
+                "connected": ":large_green_circle:",
+                "disconnected": ":red_circle:",
+                "error": ":warning:",
+            }.get(status, ":white_circle:")
+
+            # Build info text
+            info_parts = []
+            if k8s_version:
+                info_parts.append(f"K8s {k8s_version}")
+            if node_count:
+                info_parts.append(f"{node_count} nodes")
+            info_text = " • ".join(info_parts) if info_parts else ""
+
+            cluster_text = f"{status_emoji} *{display_name}*"
+            if cluster_name != display_name:
+                cluster_text += f" (`{cluster_name}`)"
+            if info_text:
+                cluster_text += f"\n{info_text}"
+            if status == "disconnected" and not last_heartbeat:
+                cluster_text += "\n_Agent not yet connected - deploy using Helm command_"
+
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": cluster_text},
+                    "accessory": {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": ":wastebasket: Remove"},
+                        "style": "danger",
+                        "action_id": "k8s_saas_remove_cluster",
+                        "value": cluster_id,
+                        "confirm": {
+                            "title": {"type": "plain_text", "text": "Remove Cluster?"},
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": (
+                                    f"This will disconnect *{display_name}* and revoke its API key.\n\n"
+                                    "The agent in your cluster will stop working. "
+                                    "You can always add the cluster again later."
+                                ),
+                            },
+                            "confirm": {"type": "plain_text", "text": "Remove"},
+                            "deny": {"type": "plain_text", "text": "Cancel"},
+                        },
+                    },
+                }
+            )
+
+    # How it works section
+    blocks.append({"type": "divider"})
+    blocks.append(
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": (
+                        ":book: <https://docs.incidentfox.ai/integrations/kubernetes-agent|"
+                        "View documentation> • The agent connects outbound via HTTPS - "
+                        "no inbound firewall rules needed."
+                    ),
+                }
+            ],
+        }
+    )
+
+    private_metadata = json.dumps(
+        {
+            "team_id": team_id,
+            "category_filter": category_filter,
+            "entry_point": entry_point,
+        }
+    )
+
+    return {
+        "type": "modal",
+        "callback_id": "k8s_saas_clusters_modal",
+        "private_metadata": private_metadata,
+        "title": {"type": "plain_text", "text": "K8s Clusters"},
+        "close": {"type": "plain_text", "text": "Back"},
+        "blocks": blocks,
+    }
+
+
+def build_k8s_saas_add_cluster_modal(
+    team_id: str,
+    category_filter: str = "all",
+    entry_point: str = "integrations",
+) -> Dict[str, Any]:
+    """
+    Build modal for adding a new K8s cluster.
+
+    Args:
+        team_id: Slack team ID
+        category_filter: Category filter to preserve
+        entry_point: Entry point to preserve
+
+    Returns:
+        Slack modal view object
+    """
+    blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*Register a New Cluster*\n\n"
+                    "Give your cluster a name to identify it in IncidentFox. "
+                    "You'll get a Helm command to deploy the agent."
+                ),
+            },
+        },
+        {"type": "divider"},
+        {
+            "type": "input",
+            "block_id": "cluster_name",
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "cluster_name_input",
+                "placeholder": {
+                    "type": "plain_text",
+                    "text": "e.g., prod-us-east-1, staging, dev-cluster",
+                },
+                "max_length": 63,  # K8s naming convention
+            },
+            "label": {"type": "plain_text", "text": "Cluster Name"},
+            "hint": {
+                "type": "plain_text",
+                "text": "Use lowercase letters, numbers, and hyphens. Must be unique.",
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "display_name",
+            "optional": True,
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "display_name_input",
+                "placeholder": {
+                    "type": "plain_text",
+                    "text": "e.g., Production US East, Staging Environment",
+                },
+                "max_length": 256,
+            },
+            "label": {"type": "plain_text", "text": "Display Name (Optional)"},
+            "hint": {
+                "type": "plain_text",
+                "text": "A human-friendly name shown in the UI.",
+            },
+        },
+    ]
+
+    private_metadata = json.dumps(
+        {
+            "team_id": team_id,
+            "category_filter": category_filter,
+            "entry_point": entry_point,
+        }
+    )
+
+    return {
+        "type": "modal",
+        "callback_id": "k8s_saas_add_cluster_submission",
+        "private_metadata": private_metadata,
+        "title": {"type": "plain_text", "text": "Add Cluster"},
+        "submit": {"type": "plain_text", "text": "Create"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": blocks,
+    }
+
+
+def build_k8s_saas_cluster_created_modal(
+    team_id: str,
+    cluster_name: str,
+    display_name: Optional[str],
+    token: str,
+    helm_command: str,
+    category_filter: str = "all",
+    entry_point: str = "integrations",
+) -> Dict[str, Any]:
+    """
+    Build modal showing the Helm install command after creating a cluster.
+
+    Args:
+        team_id: Slack team ID
+        cluster_name: Cluster name
+        display_name: Display name (optional)
+        token: API token (shown only once)
+        helm_command: Full Helm install command
+        category_filter: Category filter to preserve
+        entry_point: Entry point to preserve
+
+    Returns:
+        Slack modal view object
+    """
+    name_display = display_name or cluster_name
+
+    blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f":white_check_mark: *Cluster '{name_display}' Created!*",
+            },
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*Deploy the Agent*\n\n"
+                    "Run this command in your terminal to deploy the IncidentFox agent to your cluster:"
+                ),
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"```{helm_command}```",
+            },
+        },
+        {"type": "divider"},
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": (
+                        ":warning: *Save this command now!* The API key is only shown once.\n"
+                        ":lock: The agent connects outbound via HTTPS - no firewall changes needed."
+                    ),
+                }
+            ],
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*What happens next?*\n"
+                    "1. Run the Helm command above\n"
+                    "2. The agent will connect to IncidentFox within ~30 seconds\n"
+                    "3. You'll see the cluster status change to :large_green_circle: Connected"
+                ),
+            },
+        },
+    ]
+
+    private_metadata = json.dumps(
+        {
+            "team_id": team_id,
+            "cluster_name": cluster_name,
+            "category_filter": category_filter,
+            "entry_point": entry_point,
+        }
+    )
+
+    return {
+        "type": "modal",
+        "callback_id": "k8s_saas_cluster_created_modal",
+        "private_metadata": private_metadata,
+        "title": {"type": "plain_text", "text": "Deploy Agent"},
+        "close": {"type": "plain_text", "text": "Done"},
         "blocks": blocks,
     }

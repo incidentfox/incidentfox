@@ -196,3 +196,10 @@ services:
 
   dependencyService:
     enabled: false  # Disabled due to architecture mismatch
+
+  # K8s Gateway - Accepts connections from customer K8s agents (SaaS mode)
+  k8sGateway:
+    enabled: true
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:latest"
+    replicas: 2
+    logLevel: "INFO"

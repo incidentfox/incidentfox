@@ -37,8 +37,12 @@ class TokenPermission:
     AUDIT_READ = "audit:read"
     AUDIT_EXPORT = "audit:export"
 
+    # K8s agent permissions (SaaS model)
+    K8S_AGENT_CONNECT = "k8s_agent:connect"
+
     # Default permissions for new tokens
     DEFAULT_TEAM = [CONFIG_READ, CONFIG_WRITE, AGENT_INVOKE]
+    DEFAULT_K8S_AGENT = [K8S_AGENT_CONNECT]
     ALL = [
         CONFIG_READ,
         CONFIG_WRITE,
@@ -47,6 +51,7 @@ class TokenPermission:
         AGENT_INVOKE,
         AUDIT_READ,
         AUDIT_EXPORT,
+        K8S_AGENT_CONNECT,
     ]
 
 
@@ -1451,4 +1456,93 @@ class SlackInstallation(Base):
             "user_id",
             unique=True,
         ),
+    )
+
+
+# =============================================================================
+# K8s Cluster Registry (SaaS Model)
+# =============================================================================
+
+
+class K8sClusterStatus(str, enum.Enum):
+    """Connection status for K8s clusters."""
+
+    disconnected = "disconnected"
+    connected = "connected"
+    error = "error"
+
+
+class K8sCluster(Base):
+    """
+    Track connected K8s clusters for SaaS model.
+
+    Customers deploy an agent in their cluster that connects outbound to
+    the IncidentFox gateway. This table tracks registered clusters and
+    their connection status.
+
+    Lifecycle:
+    1. Customer creates cluster via API → generates agent token
+    2. Customer deploys agent with token → agent connects to gateway
+    3. Gateway updates status to 'connected' and populates cluster info
+    4. Agent heartbeats keep connection alive
+    5. Customer can revoke cluster → token revoked, agent disconnects
+    """
+
+    __tablename__ = "k8s_clusters"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    org_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    team_node_id: Mapped[str] = mapped_column(String(128), nullable=False)
+
+    # Cluster identity
+    cluster_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    display_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+
+    # Token that this cluster uses (links to TeamToken.token_id for revocation)
+    token_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+
+    # Connection status
+    status: Mapped[K8sClusterStatus] = mapped_column(
+        Enum(K8sClusterStatus, name="k8s_cluster_status"),
+        nullable=False,
+        default=K8sClusterStatus.disconnected,
+    )
+    last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Agent info (populated when agent connects)
+    agent_version: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    agent_pod_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+
+    # Cluster info (populated when agent connects)
+    kubernetes_version: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    node_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    namespace_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cluster_info: Mapped[Optional[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )  # Additional cluster metadata
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "team_node_id"],
+            ["org_nodes.org_id", "org_nodes.node_id"],
+            name="fk_k8s_clusters_team_node",
+            ondelete="CASCADE",
+        ),
+        Index("ix_k8s_clusters_org_team", "org_id", "team_node_id"),
+        Index("ix_k8s_clusters_token_id", "token_id"),
+        Index("ix_k8s_clusters_status", "status"),
     )
