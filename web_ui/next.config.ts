@@ -15,6 +15,10 @@ const nextConfig: NextConfig = {
       { source: "/api/config/identity", destination: `${base}/api/config/identity` },
       // Proxy all /api/v1/* endpoints to config service
       { source: "/api/v1/:path*", destination: `${base}/api/v1/:path*` },
+      // Proxy GitHub App OAuth callback to config service
+      // GitHub redirects here after app installation
+      { source: "/github/callback", destination: `${base}/github/callback` },
+      { source: "/github/installations/:path*", destination: `${base}/github/installations/:path*` },
     ];
   },
 };
