@@ -117,6 +117,9 @@ echo "4️⃣  Deploying config-service..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 kubectl apply -f "$SCRIPT_DIR/deployment.yaml"
 
+# Force a rollout to pick up the new image (since we use :latest tag)
+kubectl rollout restart deployment/config-service -n $NAMESPACE
+
 # Step 5: Wait for rollout
 echo ""
 echo "5️⃣  Waiting for rollout..."
