@@ -19,9 +19,7 @@ logger = logging.getLogger(__name__)
 AWS_REGION = os.getenv("AWS_REGION", "us-west-2")
 
 # AWS Secrets Manager secret name for shared Anthropic API key
-SHARED_ANTHROPIC_SECRET = os.getenv(
-    "SHARED_ANTHROPIC_SECRET", "incidentfox/prod/anthropic"
-)
+SHARED_ANTHROPIC_SECRET = os.getenv("SHARED_ANTHROPIC_SECRET", "incidentfox/prod/anthropic")
 
 # Cache for shared key (avoid hitting Secrets Manager on every request)
 _shared_key_cache: dict[str, tuple[str, datetime]] = {}
@@ -118,11 +116,7 @@ class ConfigServiceClient:
         try:
             # Call Config Service to get team's effective config
             # Config service expects org_id in "slack-{team_id}" format
-            org_id = (
-                f"slack-{tenant_id}"
-                if not tenant_id.startswith("slack-")
-                else tenant_id
-            )
+            org_id = f"slack-{tenant_id}" if not tenant_id.startswith("slack-") else tenant_id
             # Use "default" as node_id - the config is stored at org level
             response = await self._client.get(
                 f"{self.base_url}/api/v1/config/me",
@@ -144,9 +138,7 @@ class ConfigServiceClient:
 
             # Handle Anthropic free trial logic
             if integration_id == "anthropic":
-                return self._resolve_anthropic_credentials(
-                    integration_config, tenant_id
-                )
+                return self._resolve_anthropic_credentials(integration_config, tenant_id)
 
             if not integration_config:
                 logger.warning(
@@ -159,16 +151,11 @@ class ConfigServiceClient:
             return self._extract_credentials(integration_config)
 
         except httpx.HTTPStatusError as e:
-            logger.error(
-                f"Config Service HTTP error: {e.response.status_code} - "
-                f"{e.response.text}"
-            )
+            logger.error(f"Config Service HTTP error: {e.response.status_code} - {e.response.text}")
             # For Anthropic, fall back to shared key when tenant doesn't exist
             # This enables development/testing without full tenant setup
             if integration_id == "anthropic":
-                logger.info(
-                    f"Tenant {tenant_id} not found, falling back to shared Anthropic key"
-                )
+                logger.info(f"Tenant {tenant_id} not found, falling back to shared Anthropic key")
                 shared_key = get_shared_anthropic_key()
                 if shared_key:
                     return {
@@ -180,9 +167,7 @@ class ConfigServiceClient:
             logger.error(f"Config Service error: {e}")
             return None
 
-    def _resolve_anthropic_credentials(
-        self, config: dict, tenant_id: str
-    ) -> dict | None:
+    def _resolve_anthropic_credentials(self, config: dict, tenant_id: str) -> dict | None:
         """Resolve Anthropic credentials with subscription + trial support.
 
         New access control logic (subscription-first):
@@ -214,9 +199,7 @@ class ConfigServiceClient:
         has_valid_trial = False
         if is_trial and trial_expires_at:
             try:
-                expires_at = datetime.fromisoformat(
-                    trial_expires_at.replace("Z", "+00:00")
-                )
+                expires_at = datetime.fromisoformat(trial_expires_at.replace("Z", "+00:00"))
                 now = datetime.utcnow()
                 if hasattr(expires_at, "tzinfo") and expires_at.tzinfo:
                     now = now.replace(tzinfo=expires_at.tzinfo)
@@ -247,9 +230,7 @@ class ConfigServiceClient:
         # Otherwise, use our shared key with attribution for cost tracking
         shared_key = get_shared_anthropic_key()
         if not shared_key:
-            logger.error(
-                f"Shared Anthropic key not configured but needed for tenant={tenant_id}"
-            )
+            logger.error(f"Shared Anthropic key not configured but needed for tenant={tenant_id}")
             return None
 
         logger.info(
