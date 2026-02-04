@@ -648,9 +648,7 @@ class ConfigServiceClient:
             )
             return None
 
-    def link_github_installation(
-        self, slack_team_id: str, github_org: str
-    ) -> dict:
+    def link_github_installation(self, slack_team_id: str, github_org: str) -> dict:
         """
         Link a GitHub installation to this Slack workspace.
 

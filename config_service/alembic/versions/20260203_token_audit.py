@@ -40,13 +40,11 @@ def upgrade():
     )
 
     # Migrate data from created_at to event_at
-    op.execute(
-        """
+    op.execute("""
         UPDATE token_audit
         SET event_at = created_at
         WHERE created_at IS NOT NULL
-    """
-    )
+    """)
 
     # Drop old columns
     op.drop_column("token_audit", "endpoint")

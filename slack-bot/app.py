@@ -4424,7 +4424,9 @@ def handle_configure_integration(ack, body, client):
             github_installation = config_client.get_linked_github_installation(team_id)
             if github_installation:
                 # Pre-fill the github_org field with the linked org
-                existing_config["github_org"] = github_installation.get("account_login", "")
+                existing_config["github_org"] = github_installation.get(
+                    "account_login", ""
+                )
                 existing_config["_github_linked"] = True
                 existing_config["_github_installation"] = github_installation
 

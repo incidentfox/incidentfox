@@ -369,7 +369,9 @@ async def _fetch_installation_repositories(
             repos_data = repos_response.json()
             repositories = repos_data.get("repositories", [])
 
-            return [repo.get("full_name") for repo in repositories if repo.get("full_name")]
+            return [
+                repo.get("full_name") for repo in repositories if repo.get("full_name")
+            ]
 
     except httpx.HTTPError as e:
         logger.error(

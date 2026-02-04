@@ -624,7 +624,9 @@ async def _process_github_app_lifecycle_webhook(
                         "account_type": account.get("type", "User"),
                         "account_avatar_url": account.get("avatar_url"),
                         "permissions": installation.get("permissions"),
-                        "repository_selection": installation.get("repository_selection"),
+                        "repository_selection": installation.get(
+                            "repository_selection"
+                        ),
                         "status": "active",
                         "raw_data": payload,
                     }

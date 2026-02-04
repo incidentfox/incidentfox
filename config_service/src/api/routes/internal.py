@@ -2224,7 +2224,9 @@ def get_github_installation(
     return _github_installation_to_response(installation)
 
 
-@router.get("/github/installations/find", response_model=Optional[GitHubInstallationResponse])
+@router.get(
+    "/github/installations/find", response_model=Optional[GitHubInstallationResponse]
+)
 def find_github_installation(
     installation_id: Optional[int] = None,
     account_login: Optional[str] = None,
@@ -2442,7 +2444,7 @@ def link_github_installation_by_account(
         )
         raise HTTPException(
             status_code=409,
-            detail=f"This GitHub installation is already linked to another workspace. "
+            detail="This GitHub installation is already linked to another workspace. "
             "Each GitHub org can only be linked to one IncidentFox workspace.",
         )
 

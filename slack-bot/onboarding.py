@@ -2253,7 +2253,10 @@ def build_integration_config_modal(
                     {
                         "type": "context",
                         "elements": [
-                            {"type": "mrkdwn", "text": ":file_folder: Access to *all repositories*"}
+                            {
+                                "type": "mrkdwn",
+                                "text": ":file_folder: Access to *all repositories*",
+                            }
                         ],
                     }
                 )
@@ -2265,7 +2268,10 @@ def build_integration_config_modal(
                     {
                         "type": "context",
                         "elements": [
-                            {"type": "mrkdwn", "text": f":file_folder: Repositories: {repo_list}"}
+                            {
+                                "type": "mrkdwn",
+                                "text": f":file_folder: Repositories: {repo_list}",
+                            }
                         ],
                     }
                 )
@@ -2286,7 +2292,9 @@ def build_integration_config_modal(
             )
 
         # Always show install button (for new installs or reconnecting)
-        button_text = "Install on Another Org" if is_github_linked else "Install GitHub App"
+        button_text = (
+            "Install on Another Org" if is_github_linked else "Install GitHub App"
+        )
         button_style = None if is_github_linked else "primary"
 
         button_block = {

@@ -74,7 +74,10 @@ def upgrade():
         ),
         # Permissions and repository access
         sa.Column(
-            "permissions", JSONB, nullable=True, comment="GitHub App permissions granted"
+            "permissions",
+            JSONB,
+            nullable=True,
+            comment="GitHub App permissions granted",
         ),
         sa.Column(
             "repository_selection",

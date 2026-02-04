@@ -38,16 +38,42 @@ def upgrade():
 
     # Add new columns
     op.add_column("templates", sa.Column("slug", sa.String(100), nullable=True))
-    op.add_column("templates", sa.Column("detailed_description", sa.Text, nullable=True))
+    op.add_column(
+        "templates", sa.Column("detailed_description", sa.Text, nullable=True)
+    )
     op.add_column("templates", sa.Column("icon_url", sa.String(500), nullable=True))
-    op.add_column("templates", sa.Column("example_scenarios", JSONB, server_default="[]", nullable=False))
-    op.add_column("templates", sa.Column("demo_video_url", sa.String(500), nullable=True))
-    op.add_column("templates", sa.Column("is_system_template", sa.Boolean, server_default="true", nullable=False))
-    op.add_column("templates", sa.Column("version", sa.String(20), server_default="1.0.0", nullable=False))
-    op.add_column("templates", sa.Column("required_mcps", JSONB, server_default="[]", nullable=False))
-    op.add_column("templates", sa.Column("required_tools", JSONB, server_default="[]", nullable=False))
-    op.add_column("templates", sa.Column("minimum_agent_version", sa.String(20), nullable=True))
-    op.add_column("templates", sa.Column("usage_count", sa.Integer, server_default="0", nullable=False))
+    op.add_column(
+        "templates",
+        sa.Column("example_scenarios", JSONB, server_default="[]", nullable=False),
+    )
+    op.add_column(
+        "templates", sa.Column("demo_video_url", sa.String(500), nullable=True)
+    )
+    op.add_column(
+        "templates",
+        sa.Column(
+            "is_system_template", sa.Boolean, server_default="true", nullable=False
+        ),
+    )
+    op.add_column(
+        "templates",
+        sa.Column("version", sa.String(20), server_default="1.0.0", nullable=False),
+    )
+    op.add_column(
+        "templates",
+        sa.Column("required_mcps", JSONB, server_default="[]", nullable=False),
+    )
+    op.add_column(
+        "templates",
+        sa.Column("required_tools", JSONB, server_default="[]", nullable=False),
+    )
+    op.add_column(
+        "templates", sa.Column("minimum_agent_version", sa.String(20), nullable=True)
+    )
+    op.add_column(
+        "templates",
+        sa.Column("usage_count", sa.Integer, server_default="0", nullable=False),
+    )
     op.add_column("templates", sa.Column("avg_rating", sa.Integer, nullable=True))
 
     # Make org_id nullable (model allows it)
@@ -70,7 +96,9 @@ def upgrade():
     # ix_templates_category already exists but on wrong column, recreate
     op.drop_index("ix_templates_category", "templates")
     op.create_index("ix_templates_category", "templates", ["use_case_category"])
-    op.create_index("ix_templates_published", "templates", ["is_published", "is_system_template"])
+    op.create_index(
+        "ix_templates_published", "templates", ["is_published", "is_system_template"]
+    )
     op.create_index("ix_templates_org", "templates", ["org_id"])
 
     # ========================================
@@ -78,8 +106,16 @@ def upgrade():
     # ========================================
 
     # Drop foreign key constraints first
-    op.drop_constraint("template_applications_template_id_fkey", "template_applications", type_="foreignkey")
-    op.drop_constraint("template_applications_org_id_team_node_id_fkey", "template_applications", type_="foreignkey")
+    op.drop_constraint(
+        "template_applications_template_id_fkey",
+        "template_applications",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
+        "template_applications_org_id_team_node_id_fkey",
+        "template_applications",
+        type_="foreignkey",
+    )
 
     # Rename primary key column
     op.alter_column("template_applications", "application_id", new_column_name="id")
@@ -90,26 +126,53 @@ def upgrade():
     op.drop_column("template_applications", "notes")
 
     # Add new columns
-    op.add_column("template_applications", sa.Column("template_version", sa.String(20), server_default="1.0.0", nullable=False))
-    op.add_column("template_applications", sa.Column("has_customizations", sa.Boolean, server_default="false", nullable=False))
-    op.add_column("template_applications", sa.Column("customization_summary", JSONB, nullable=True))
-    op.add_column("template_applications", sa.Column("is_active", sa.Boolean, server_default="true", nullable=False))
-    op.add_column("template_applications", sa.Column("deactivated_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "template_applications",
+        sa.Column(
+            "template_version", sa.String(20), server_default="1.0.0", nullable=False
+        ),
+    )
+    op.add_column(
+        "template_applications",
+        sa.Column(
+            "has_customizations", sa.Boolean, server_default="false", nullable=False
+        ),
+    )
+    op.add_column(
+        "template_applications",
+        sa.Column("customization_summary", JSONB, nullable=True),
+    )
+    op.add_column(
+        "template_applications",
+        sa.Column("is_active", sa.Boolean, server_default="true", nullable=False),
+    )
+    op.add_column(
+        "template_applications",
+        sa.Column("deactivated_at", sa.DateTime(timezone=True), nullable=True),
+    )
 
     # Recreate foreign key to templates (now referencing 'id' instead of 'template_id')
     op.create_foreign_key(
         "fk_template_applications_template",
-        "template_applications", "templates",
-        ["template_id"], ["id"],
-        ondelete="CASCADE"
+        "template_applications",
+        "templates",
+        ["template_id"],
+        ["id"],
+        ondelete="CASCADE",
     )
 
     # Update indexes
     op.drop_index("ix_template_applications_org_team", "template_applications")
     op.drop_index("ix_template_applications_template_id", "template_applications")
-    op.create_index("ix_template_applications_template", "template_applications", ["template_id"])
-    op.create_index("ix_template_applications_team", "template_applications", ["team_node_id"])
-    op.create_index("ix_template_applications_active", "template_applications", ["is_active"])
+    op.create_index(
+        "ix_template_applications_template", "template_applications", ["template_id"]
+    )
+    op.create_index(
+        "ix_template_applications_team", "template_applications", ["team_node_id"]
+    )
+    op.create_index(
+        "ix_template_applications_active", "template_applications", ["is_active"]
+    )
 
     # ========================================
     # 3. Recreate template_analytics table
@@ -129,16 +192,25 @@ def upgrade():
         sa.Column("user_rating", sa.Integer, nullable=True),
         sa.Column("user_feedback", sa.Text, nullable=True),
         sa.Column("feedback_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
         sa.ForeignKeyConstraint(
-            ["template_id"], ["templates.id"],
+            ["template_id"],
+            ["templates.id"],
             name="fk_template_analytics_template",
-            ondelete="CASCADE"
+            ondelete="CASCADE",
         ),
     )
-    op.create_index("ix_template_analytics_template", "template_analytics", ["template_id"])
-    op.create_index("ix_template_analytics_team", "template_analytics", ["team_node_id"])
+    op.create_index(
+        "ix_template_analytics_template", "template_analytics", ["template_id"]
+    )
+    op.create_index(
+        "ix_template_analytics_team", "template_analytics", ["team_node_id"]
+    )
 
 
 def downgrade():
