@@ -57,6 +57,13 @@ class ConfigServiceClient:
             "Content-Type": "application/json",
         }
 
+    def _get_internal_headers(self) -> Dict[str, str]:
+        """Get headers for internal service-to-service requests."""
+        return {
+            "X-Internal-Service": "slack-bot",
+            "Content-Type": "application/json",
+        }
+
     def provision_workspace(
         self,
         slack_team_id: str,
