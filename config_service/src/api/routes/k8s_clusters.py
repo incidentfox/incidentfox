@@ -18,7 +18,12 @@ from ...db.repository import (
     update_k8s_cluster_status,
 )
 from ...db.session import get_db
-from ..auth import AdminPrincipal, TeamPrincipal, authenticate_admin_request, require_team_auth
+from ..auth import (
+    AdminPrincipal,
+    TeamPrincipal,
+    authenticate_admin_request,
+    require_team_auth,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -36,6 +41,7 @@ def check_org_access(principal: AdminPrincipal, org_id: str) -> None:
             status_code=403,
             detail=f"Access denied: you can only access org '{principal.org_id}'",
         )
+
 
 router = APIRouter(prefix="/api/v1/team/k8s-clusters", tags=["k8s-clusters"])
 
@@ -220,8 +226,12 @@ async def list_clusters(
             cluster_id=c.id,
             cluster_name=c.cluster_name,
             display_name=c.display_name,
-            status=c.status.value if isinstance(c.status, K8sClusterStatus) else c.status,
-            last_heartbeat_at=c.last_heartbeat_at.isoformat() if c.last_heartbeat_at else None,
+            status=(
+                c.status.value if isinstance(c.status, K8sClusterStatus) else c.status
+            ),
+            last_heartbeat_at=(
+                c.last_heartbeat_at.isoformat() if c.last_heartbeat_at else None
+            ),
             kubernetes_version=c.kubernetes_version,
             node_count=c.node_count,
             agent_version=c.agent_version,
@@ -253,8 +263,14 @@ async def get_cluster_detail(
         cluster_id=cluster.id,
         cluster_name=cluster.cluster_name,
         display_name=cluster.display_name,
-        status=cluster.status.value if isinstance(cluster.status, K8sClusterStatus) else cluster.status,
-        last_heartbeat_at=cluster.last_heartbeat_at.isoformat() if cluster.last_heartbeat_at else None,
+        status=(
+            cluster.status.value
+            if isinstance(cluster.status, K8sClusterStatus)
+            else cluster.status
+        ),
+        last_heartbeat_at=(
+            cluster.last_heartbeat_at.isoformat() if cluster.last_heartbeat_at else None
+        ),
         kubernetes_version=cluster.kubernetes_version,
         node_count=cluster.node_count,
         namespace_count=cluster.namespace_count,
@@ -391,7 +407,11 @@ async def get_cluster_by_token_internal(
         "cluster_name": cluster.cluster_name,
         "org_id": cluster.org_id,
         "team_node_id": cluster.team_node_id,
-        "status": cluster.status.value if isinstance(cluster.status, K8sClusterStatus) else cluster.status,
+        "status": (
+            cluster.status.value
+            if isinstance(cluster.status, K8sClusterStatus)
+            else cluster.status
+        ),
     }
 
 
@@ -507,8 +527,12 @@ async def admin_list_k8s_clusters(
             cluster_id=c.id,
             cluster_name=c.cluster_name,
             display_name=c.display_name,
-            status=c.status.value if isinstance(c.status, K8sClusterStatus) else c.status,
-            last_heartbeat_at=c.last_heartbeat_at.isoformat() if c.last_heartbeat_at else None,
+            status=(
+                c.status.value if isinstance(c.status, K8sClusterStatus) else c.status
+            ),
+            last_heartbeat_at=(
+                c.last_heartbeat_at.isoformat() if c.last_heartbeat_at else None
+            ),
             kubernetes_version=c.kubernetes_version,
             node_count=c.node_count,
             agent_version=c.agent_version,

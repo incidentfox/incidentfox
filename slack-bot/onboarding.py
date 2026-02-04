@@ -2707,7 +2707,10 @@ def build_k8s_saas_clusters_modal(
             "elements": [
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": ":heavy_plus_sign: Add Cluster"},
+                    "text": {
+                        "type": "plain_text",
+                        "text": ":heavy_plus_sign: Add Cluster",
+                    },
                     "style": "primary",
                     "action_id": "k8s_saas_add_cluster",
                 }
@@ -2769,7 +2772,9 @@ def build_k8s_saas_clusters_modal(
             if info_text:
                 cluster_text += f"\n{info_text}"
             if status == "disconnected" and not last_heartbeat:
-                cluster_text += "\n_Agent not yet connected - deploy using Helm command_"
+                cluster_text += (
+                    "\n_Agent not yet connected - deploy using Helm command_"
+                )
 
             blocks.append(
                 {

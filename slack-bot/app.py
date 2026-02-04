@@ -4437,7 +4437,9 @@ def handle_configure_integration(ack, body, client):
 
             # Special handling for GitHub: check if already linked via GitHub App
             if integration_id == "github":
-                github_installation = config_client.get_linked_github_installation(team_id)
+                github_installation = config_client.get_linked_github_installation(
+                    team_id
+                )
                 if github_installation:
                     # Pre-fill the github_org field with the linked org
                     existing_config["github_org"] = github_installation.get(

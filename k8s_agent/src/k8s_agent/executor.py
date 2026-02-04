@@ -79,7 +79,11 @@ class K8sExecutor:
                         "ready": self._get_pod_ready_status(pod),
                         "restarts": self._get_pod_restart_count(pod),
                         "node": pod.spec.node_name,
-                        "created_at": pod.metadata.creation_timestamp.isoformat() if pod.metadata.creation_timestamp else None,
+                        "created_at": (
+                            pod.metadata.creation_timestamp.isoformat()
+                            if pod.metadata.creation_timestamp
+                            else None
+                        ),
                     }
                     for pod in pods.items
                 ],
@@ -138,7 +142,11 @@ class K8sExecutor:
                 "node": pod.spec.node_name,
                 "ip": pod.status.pod_ip,
                 "host_ip": pod.status.host_ip,
-                "created_at": pod.metadata.creation_timestamp.isoformat() if pod.metadata.creation_timestamp else None,
+                "created_at": (
+                    pod.metadata.creation_timestamp.isoformat()
+                    if pod.metadata.creation_timestamp
+                    else None
+                ),
                 "labels": pod.metadata.labels or {},
                 "annotations": pod.metadata.annotations or {},
                 "containers": [
@@ -187,8 +195,16 @@ class K8sExecutor:
                         "reason": event.reason,
                         "message": event.message,
                         "count": event.count,
-                        "first_timestamp": event.first_timestamp.isoformat() if event.first_timestamp else None,
-                        "last_timestamp": event.last_timestamp.isoformat() if event.last_timestamp else None,
+                        "first_timestamp": (
+                            event.first_timestamp.isoformat()
+                            if event.first_timestamp
+                            else None
+                        ),
+                        "last_timestamp": (
+                            event.last_timestamp.isoformat()
+                            if event.last_timestamp
+                            else None
+                        ),
                     }
                     for event in sorted(
                         events.items,
@@ -223,10 +239,16 @@ class K8sExecutor:
                     "available": deployment.status.available_replicas or 0,
                     "updated": deployment.status.updated_replicas or 0,
                 },
-                "strategy": deployment.spec.strategy.type if deployment.spec.strategy else None,
+                "strategy": (
+                    deployment.spec.strategy.type if deployment.spec.strategy else None
+                ),
                 "labels": deployment.metadata.labels or {},
                 "selector": deployment.spec.selector.match_labels or {},
-                "created_at": deployment.metadata.creation_timestamp.isoformat() if deployment.metadata.creation_timestamp else None,
+                "created_at": (
+                    deployment.metadata.creation_timestamp.isoformat()
+                    if deployment.metadata.creation_timestamp
+                    else None
+                ),
                 "conditions": [
                     {
                         "type": cond.type,
@@ -238,7 +260,11 @@ class K8sExecutor:
                 ],
             }
         except ApiException as e:
-            logger.error("describe_deployment_failed", deployment_name=deployment_name, error=str(e))
+            logger.error(
+                "describe_deployment_failed",
+                deployment_name=deployment_name,
+                error=str(e),
+            )
             raise Exception(f"Failed to describe deployment: {e.reason}")
 
     def _cmd_list_namespaces(self) -> Dict[str, Any]:
@@ -254,7 +280,11 @@ class K8sExecutor:
                     {
                         "name": ns.metadata.name,
                         "status": ns.status.phase,
-                        "created_at": ns.metadata.creation_timestamp.isoformat() if ns.metadata.creation_timestamp else None,
+                        "created_at": (
+                            ns.metadata.creation_timestamp.isoformat()
+                            if ns.metadata.creation_timestamp
+                            else None
+                        ),
                     }
                     for ns in namespaces.items
                 ],
@@ -275,7 +305,9 @@ class K8sExecutor:
             namespace_count = len(namespaces.items)
 
             # Get version info
-            version_info = client.VersionApi().get_code(_request_timeout=K8S_API_TIMEOUT)
+            version_info = client.VersionApi().get_code(
+                _request_timeout=K8S_API_TIMEOUT
+            )
 
             return {
                 "kubernetes_version": version_info.git_version,

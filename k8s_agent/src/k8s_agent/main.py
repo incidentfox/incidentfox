@@ -33,11 +33,17 @@ async def main():
 
     # Validate required settings
     if not settings.api_key:
-        logger.error("missing_api_key", message="INCIDENTFOX_API_KEY environment variable is required")
+        logger.error(
+            "missing_api_key",
+            message="INCIDENTFOX_API_KEY environment variable is required",
+        )
         sys.exit(1)
 
     if not settings.cluster_name:
-        logger.error("missing_cluster_name", message="INCIDENTFOX_CLUSTER_NAME environment variable is required")
+        logger.error(
+            "missing_cluster_name",
+            message="INCIDENTFOX_CLUSTER_NAME environment variable is required",
+        )
         sys.exit(1)
 
     logger.info(

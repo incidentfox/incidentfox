@@ -13,7 +13,12 @@ from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge, Histogram, generate_latest
 from sse_starlette.sse import EventSourceResponse
 
-from .auth import AuthError, ClusterIdentity, validate_internal_service, validate_k8s_agent_token
+from .auth import (
+    AuthError,
+    ClusterIdentity,
+    validate_internal_service,
+    validate_k8s_agent_token,
+)
 from .config import get_settings
 from .connection_manager import connection_manager
 from .models import (
@@ -187,10 +192,12 @@ async def agent_connect(
             # Send connected event
             yield {
                 "event": "connected",
-                "data": json.dumps({
-                    "cluster_id": identity.cluster_id,
-                    "message": "Connected to K8s Gateway",
-                }),
+                "data": json.dumps(
+                    {
+                        "cluster_id": identity.cluster_id,
+                        "message": "Connected to K8s Gateway",
+                    }
+                ),
             }
 
             while True:
@@ -205,12 +212,14 @@ async def agent_connect(
                     yield {
                         "event": "command",
                         "id": cmd.request_id,
-                        "data": json.dumps({
-                            "request_id": cmd.request_id,
-                            "command": cmd.command,
-                            "params": cmd.params,
-                            "timeout": cmd.timeout,
-                        }),
+                        "data": json.dumps(
+                            {
+                                "request_id": cmd.request_id,
+                                "command": cmd.command,
+                                "params": cmd.params,
+                                "timeout": cmd.timeout,
+                            }
+                        ),
                     }
 
                 except asyncio.TimeoutError:
@@ -218,15 +227,19 @@ async def agent_connect(
                     connection_manager.update_heartbeat(identity.cluster_id)
                     yield {
                         "event": "heartbeat",
-                        "data": json.dumps({
-                            "timestamp": datetime.utcnow().isoformat(),
-                        }),
+                        "data": json.dumps(
+                            {
+                                "timestamp": datetime.utcnow().isoformat(),
+                            }
+                        ),
                     }
 
         except asyncio.CancelledError:
             logger.info("agent_connection_cancelled", cluster_id=identity.cluster_id)
         except Exception as e:
-            logger.error("agent_connection_error", cluster_id=identity.cluster_id, error=str(e))
+            logger.error(
+                "agent_connection_error", cluster_id=identity.cluster_id, error=str(e)
+            )
         finally:
             # Clean up on disconnect
             await connection_manager.unregister(identity.cluster_id)
@@ -267,7 +280,9 @@ async def agent_response(
     handled = connection_manager.handle_response(identity.cluster_id, body)
 
     if not handled:
-        raise HTTPException(status_code=404, detail="Request not found or already completed")
+        raise HTTPException(
+            status_code=404, detail="Request not found or already completed"
+        )
 
     return {"ok": True}
 
