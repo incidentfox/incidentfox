@@ -145,7 +145,9 @@ async def lifespan(app: FastAPI):
         logger.info("Config Service client initialized")
     else:
         ENV_CREDENTIALS = load_env_credentials()
-        configured = [k for k, v in ENV_CREDENTIALS.items() if has_valid_credentials(k, v)]
+        configured = [
+            k for k, v in ENV_CREDENTIALS.items() if has_valid_credentials(k, v)
+        ]
         logger.info(f"Environment credentials loaded for: {configured}")
 
         # Debug: show masked credentials to verify they're loaded
@@ -153,14 +155,22 @@ async def lifespan(app: FastAPI):
             if has_valid_credentials(integration, creds):
                 # Show which credential type is configured
                 if creds.get("api_key"):
-                    logger.info(f"  {integration}: api_key={mask_secret(creds.get('api_key'))}")
+                    logger.info(
+                        f"  {integration}: api_key={mask_secret(creds.get('api_key'))}"
+                    )
                 elif creds.get("token"):
-                    logger.info(f"  {integration}: token={mask_secret(creds.get('token'))}")
+                    logger.info(
+                        f"  {integration}: token={mask_secret(creds.get('token'))}"
+                    )
                 elif creds.get("user"):
-                    logger.info(f"  {integration}: user={creds.get('user')}, password=***")
+                    logger.info(
+                        f"  {integration}: user={creds.get('user')}, password=***"
+                    )
                 # Special case: Datadog needs both keys
                 if integration == "datadog" and creds.get("app_key"):
-                    logger.info(f"  {integration}: app_key={mask_secret(creds.get('app_key'))}")
+                    logger.info(
+                        f"  {integration}: app_key={mask_secret(creds.get('app_key'))}"
+                    )
 
     yield
 
@@ -189,8 +199,12 @@ async def health():
     return {"status": "healthy", "source": CREDENTIAL_SOURCE, "jwt_mode": JWT_MODE}
 
 
-@app.api_route("/check", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+@app.api_route(
+    "/check", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+)
+@app.api_route(
+    "/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+)
 async def ext_authz_check(request: Request, path: str = ""):
     """Handle ext_authz check from Envoy.
 
@@ -236,7 +250,9 @@ async def ext_authz_check(request: Request, path: str = ""):
     # 4. Build auth headers and return them as HTTP response headers
     # Envoy's ext_authz will forward these based on allowed_upstream_headers config
     headers_to_add = build_auth_headers(integration_id, creds)
-    logger.info(f"Injecting headers for {integration_id}: {list(headers_to_add.keys())}")
+    logger.info(
+        f"Injecting headers for {integration_id}: {list(headers_to_add.keys())}"
+    )
 
     return Response(status_code=200, headers=headers_to_add)
 
@@ -274,7 +290,9 @@ async def extract_tenant_context(request: Request) -> tuple[str, str, str]:
     return tenant_id, team_id, "unknown"
 
 
-async def get_credentials(tenant_id: str, team_id: str, integration_id: str) -> dict | None:
+async def get_credentials(
+    tenant_id: str, team_id: str, integration_id: str
+) -> dict | None:
     """Get credentials from configured source."""
     if CREDENTIAL_SOURCE == "environment":
         # Local/self-hosted: load from env vars
@@ -289,7 +307,9 @@ async def get_credentials(tenant_id: str, team_id: str, integration_id: str) -> 
         logger.error("Config Service client not initialized")
         return None
 
-    creds = await config_client.get_integration_config(tenant_id, team_id, integration_id)
+    creds = await config_client.get_integration_config(
+        tenant_id, team_id, integration_id
+    )
     if creds:
         credential_cache[cache_key] = creds
 
