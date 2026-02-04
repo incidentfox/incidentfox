@@ -346,6 +346,14 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "icon": ":prometheus:",
         "icon_fallback": ":fire:",
         "description": "Query metrics and alerts from Prometheus.",
+        "video": {
+            "title": "How to Connect Prometheus to IncidentFox",
+            "title_url": "https://vimeo.com/1161637712?share=copy&fl=sv&fe=ci",
+            "video_url": "https://player.vimeo.com/video/1161637712?autoplay=1",
+            "thumbnail_url": "https://vumbnail.com/1161637712.jpg",
+            "alt_text": "Prometheus setup tutorial",
+            "description": "Step-by-step guide to connecting your Prometheus server",
+        },
         "setup_instructions": (
             "*Setup Instructions:*\n"
             "1. Get your Prometheus server URL\n"
@@ -480,40 +488,25 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "icon": ":github:",
         "icon_fallback": ":octocat:",
         "description": "Search code, PRs, commits, and deployments.",
+        "auth_type": "github_app",  # Uses GitHub App OAuth flow
+        "github_app_url": "https://github.com/apps/incidentfox/installations/new",
         "setup_instructions": (
             "*Setup Instructions:*\n"
-            "1. Go to GitHub *Settings* > *Developer settings* > *Personal access tokens* > *Tokens (classic)*\n"
-            "2. Click *Generate new token (classic)*\n"
-            "3. Select scopes: `repo` (for private repos) or `public_repo` (for public only)\n"
-            "4. Generate and copy the token\n"
-            "5. For GitHub Enterprise, also provide your enterprise URL"
+            "1. Click the button below to install the IncidentFox GitHub App\n"
+            "2. Select your GitHub organization or personal account\n"
+            "3. Choose which repositories to grant access to\n"
+            "4. After installation, return here and enter your GitHub org/username below"
         ),
-        "docs_url": "https://docs.github.com/en/rest",
+        "docs_url": "https://docs.github.com/en/apps",
         "context_prompt_placeholder": "e.g., 'Main repos: org/api, org/frontend. Production branch is main. Deployments are tracked via GitHub Actions.'",
         "fields": [
             {
-                "id": "api_key",
-                "name": "Personal Access Token",
-                "type": "secret",
+                "id": "github_org",
+                "name": "GitHub Organization/Username",
+                "type": "string",
                 "required": True,
-                "placeholder": "ghp_xxxxxxxxxxxx",
-                "hint": "GitHub personal access token with repo access",
-            },
-            {
-                "id": "domain",
-                "name": "GitHub Enterprise URL",
-                "type": "string",
-                "required": False,
-                "placeholder": "https://github.yourcompany.com/api/v3",
-                "hint": "Only for GitHub Enterprise (leave blank for github.com)",
-            },
-            {
-                "id": "default_org",
-                "name": "Default Organization",
-                "type": "string",
-                "required": False,
-                "placeholder": "your-org",
-                "hint": "Default organization for queries (optional)",
+                "placeholder": "acme-corp",
+                "hint": "The GitHub org or username you installed the app on",
             },
         ],
     },
@@ -1265,6 +1258,60 @@ def extract_datadog_site(input_str: str) -> tuple[bool, str, str]:
         "",
         f"Invalid Datadog site: {hostname}. Expected one of: {', '.join(valid_sites)}",
     )
+
+
+def extract_confluence_url(input_str: str) -> tuple[bool, str, str]:
+    """
+    Extract Confluence base URL from any Confluence page URL.
+
+    Users may paste URLs like:
+    - https://myteam.atlassian.net/wiki/home
+    - https://myteam.atlassian.net/wiki/spaces/ENG/pages/123456
+    - https://myteam.atlassian.net
+
+    We extract just the base URL: https://myteam.atlassian.net
+
+    Args:
+        input_str: URL string (any Confluence page URL)
+
+    Returns:
+        (is_valid, base_url, error_message)
+    """
+    import re
+    from urllib.parse import urlparse
+
+    if not input_str:
+        return False, "", "Confluence URL is required"
+
+    input_str = input_str.strip()
+
+    # If it doesn't start with http, add https://
+    if not input_str.startswith(("http://", "https://")):
+        input_str = f"https://{input_str}"
+
+    try:
+        parsed = urlparse(input_str)
+        hostname = parsed.hostname or parsed.netloc.split(":")[0]
+
+        if not hostname:
+            return False, "", "Could not parse Confluence URL"
+
+        # Validate it's an Atlassian domain
+        if not hostname.endswith(".atlassian.net"):
+            return (
+                False,
+                "",
+                f"Invalid Confluence URL: {hostname}. Expected an atlassian.net domain (e.g., myteam.atlassian.net)",
+            )
+
+        # Build base URL (just scheme + host, no path)
+        scheme = parsed.scheme or "https"
+        base_url = f"{scheme}://{hostname}"
+
+        return True, base_url, ""
+
+    except Exception:
+        return False, "", "Invalid URL format"
 
 
 def extract_generic_url(
@@ -2249,6 +2296,119 @@ def build_integration_config_modal(
                 }
             )
 
+        blocks.append({"type": "divider"})
+
+    # Add GitHub App install button for GitHub App auth type
+    auth_type = schema.get("auth_type")
+    github_app_url = schema.get("github_app_url")
+    if auth_type == "github_app" and github_app_url:
+        # Check if already linked
+        is_github_linked = existing_config.get("_github_linked", False)
+        github_installation = existing_config.get("_github_installation", {})
+
+        if is_github_linked:
+            # Show connected status
+            linked_org = github_installation.get("account_login", "")
+            linked_type = github_installation.get("account_type", "Organization")
+            avatar_url = github_installation.get("account_avatar_url")
+
+            status_text = f":white_check_mark: *Connected to GitHub {linked_type.lower()}:* `{linked_org}`"
+
+            status_block = {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": status_text},
+            }
+            if avatar_url:
+                status_block["accessory"] = {
+                    "type": "image",
+                    "image_url": avatar_url,
+                    "alt_text": linked_org,
+                }
+            blocks.append(status_block)
+
+            # Show repos if available
+            repos = github_installation.get("repositories")
+            repo_selection = github_installation.get("repository_selection")
+            if repo_selection == "all":
+                blocks.append(
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": ":file_folder: Access to *all repositories*",
+                            }
+                        ],
+                    }
+                )
+            elif repos:
+                repo_list = ", ".join(repos[:5])
+                if len(repos) > 5:
+                    repo_list += f" (+{len(repos) - 5} more)"
+                blocks.append(
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": f":file_folder: Repositories: {repo_list}",
+                            }
+                        ],
+                    }
+                )
+
+            blocks.append({"type": "divider"})
+
+            # Show button to reconnect/change
+            blocks.append(
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": ":arrows_counterclockwise: To connect a different org, install the app on that org first:",
+                        }
+                    ],
+                }
+            )
+
+        # Always show install button (for new installs or reconnecting)
+        button_text = (
+            "Install on Another Org" if is_github_linked else "Install GitHub App"
+        )
+        button_style = None if is_github_linked else "primary"
+
+        button_block = {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": button_text,
+                        "emoji": True,
+                    },
+                    "url": github_app_url,
+                    "action_id": "github_app_install_button",
+                }
+            ],
+        }
+        if button_style:
+            button_block["elements"][0]["style"] = button_style
+        blocks.append(button_block)
+
+        if not is_github_linked:
+            blocks.append(
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": ":point_up: Click to open GitHub in a new tab. After installing, return here to complete setup.",
+                        }
+                    ],
+                }
+            )
         blocks.append({"type": "divider"})
 
     # Track field names for submission handler

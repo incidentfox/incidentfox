@@ -92,11 +92,15 @@ def main():
         else:
             content = html_to_text(html_content)
 
-        # Get Confluence client for URL construction
-        from confluence_client import get_confluence_client
+        # Construct page URL from environment or page data
+        import os
 
-        confluence = get_confluence_client()
-        page_url = f"{confluence.url}/wiki{page.get('_links', {}).get('webui', '')}"
+        base_url = os.getenv("CONFLUENCE_BASE_URL") or os.getenv("CONFLUENCE_URL", "")
+        base_url = base_url.rstrip("/")
+        if base_url.endswith("/wiki"):
+            base_url = base_url[:-5]
+        webui = page.get("_links", {}).get("webui", "")
+        page_url = f"{base_url}/wiki{webui}" if base_url and webui else ""
 
         # Output
         if args.json:

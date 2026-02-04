@@ -73,6 +73,25 @@ else
   fi
 fi
 
+# Get GitHub App secrets
+GITHUB_SECRET=$(aws secretsmanager get-secret-value --secret-id "incidentfox/prod/github-app" --region $REGION --query 'SecretString' --output text 2>/dev/null || echo "{}")
+if [ "$GITHUB_SECRET" == "{}" ]; then
+  echo "   ⚠️  GitHub App secrets not found in Secrets Manager"
+  echo "   To add GitHub App integration, create secret: incidentfox/prod/github-app"
+  GITHUB_APP_ID=""
+  GITHUB_APP_CLIENT_ID=""
+  GITHUB_APP_CLIENT_SECRET=""
+  GITHUB_APP_PRIVATE_KEY=""
+  GITHUB_APP_WEBHOOK_SECRET=""
+else
+  GITHUB_APP_ID=$(echo $GITHUB_SECRET | jq -r '.app_id')
+  GITHUB_APP_CLIENT_ID=$(echo $GITHUB_SECRET | jq -r '.client_id')
+  GITHUB_APP_CLIENT_SECRET=$(echo $GITHUB_SECRET | jq -r '.client_secret')
+  GITHUB_APP_PRIVATE_KEY=$(echo $GITHUB_SECRET | jq -r '.private_key')
+  GITHUB_APP_WEBHOOK_SECRET=$(echo $GITHUB_SECRET | jq -r '.webhook_secret')
+  echo "   ✅ GitHub App secrets retrieved"
+fi
+
 kubectl create secret generic config-service-secrets \
   --namespace=$NAMESPACE \
   --from-literal=db-host="$DB_HOST" \
@@ -82,6 +101,11 @@ kubectl create secret generic config-service-secrets \
   --from-literal=token-pepper="$TOKEN_PEPPER" \
   --from-literal=admin-token="$ADMIN_TOKEN" \
   --from-literal=encryption-key="$ENCRYPTION_KEY" \
+  --from-literal=github-app-id="$GITHUB_APP_ID" \
+  --from-literal=github-app-client-id="$GITHUB_APP_CLIENT_ID" \
+  --from-literal=github-app-client-secret="$GITHUB_APP_CLIENT_SECRET" \
+  --from-literal=github-app-private-key="$GITHUB_APP_PRIVATE_KEY" \
+  --from-literal=github-app-webhook-secret="$GITHUB_APP_WEBHOOK_SECRET" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo "   ✅ Secrets created"
@@ -92,6 +116,9 @@ echo ""
 echo "4️⃣  Deploying config-service..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 kubectl apply -f "$SCRIPT_DIR/deployment.yaml"
+
+# Force a rollout to pick up the new image (since we use :latest tag)
+kubectl rollout restart deployment/config-service -n $NAMESPACE
 
 # Step 5: Wait for rollout
 echo ""

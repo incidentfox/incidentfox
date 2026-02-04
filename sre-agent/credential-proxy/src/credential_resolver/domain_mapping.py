@@ -16,6 +16,8 @@ DOMAIN_TO_INTEGRATION: dict[str, str] = {
     "api.ap1.coralogix.com": "coralogix",
     "api.ap2.coralogix.com": "coralogix",
     "api.ap3.coralogix.com": "coralogix",
+    # Confluence (Atlassian Cloud)
+    "atlassian.net": "confluence",
 }
 
 # Path prefixes for proxy mode (when host is envoy:8001, localhost:8001, etc.)

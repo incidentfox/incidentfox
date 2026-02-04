@@ -111,9 +111,15 @@ def get_grafana_headers() -> dict[str, str]:
         headers["Authorization"] = f"Basic {encoded}"
         return headers
 
-    # Priority 3: Proxy mode - add tenant context
-    headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
-    headers["X-Team-Id"] = config.get("team_id") or "local"
+    # Priority 3: Proxy mode - add JWT for authentication with credential-resolver
+    # The JWT contains tenant/team context and is validated by credential-resolver
+    sandbox_jwt = os.getenv("SANDBOX_JWT")
+    if sandbox_jwt:
+        headers["X-Sandbox-JWT"] = sandbox_jwt
+    else:
+        # Fallback to tenant headers (for local dev without JWT)
+        headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
+        headers["X-Team-Id"] = config.get("team_id") or "local"
 
     return headers
 

@@ -6,6 +6,7 @@ from src.api.routes.audit import router as audit_router
 from src.api.routes.auth_me import router as auth_router
 from src.api.routes.config_v2 import router as config_v2_router
 from src.api.routes.dependencies import router as dependencies_router
+from src.api.routes.github import router as github_router
 from src.api.routes.health import router as health_router
 from src.api.routes.integration_schemas import router as integration_schemas_router
 from src.api.routes.internal import router as internal_router
@@ -50,6 +51,7 @@ def create_app() -> FastAPI:
     app.include_router(k8s_clusters_router)
     app.include_router(k8s_internal_router)
     app.include_router(k8s_admin_router)
+    app.include_router(github_router)
 
     @app.middleware("http")
     async def add_request_id(request: Request, call_next):

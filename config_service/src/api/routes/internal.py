@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from src.db import repository
 from src.db.config_models import NodeConfiguration
-from src.db.models import OrgNode, SlackInstallation
+from src.db.config_repository import get_or_create_node_configuration
+from src.db.models import GitHubInstallation, OrgNode, SlackInstallation
 from src.db.session import get_db
 
 logger = structlog.get_logger()
@@ -2047,3 +2048,554 @@ def delete_slack_installation(
         raise HTTPException(status_code=404, detail="Installation not found")
 
     return {"deleted": True, "count": deleted_count}
+
+
+# ==================== GitHub Installation Storage ====================
+
+
+class GitHubInstallationRequest(BaseModel):
+    """Request to save a GitHub App installation."""
+
+    installation_id: int
+    app_id: int
+    account_id: int
+    account_login: str
+    account_type: str  # "Organization" or "User"
+    account_avatar_url: Optional[str] = None
+    org_id: Optional[str] = None
+    team_node_id: Optional[str] = None
+    permissions: Optional[Dict[str, Any]] = None
+    repository_selection: Optional[str] = None  # "all" or "selected"
+    repositories: Optional[List[str]] = None
+    webhook_secret: Optional[str] = None
+    status: str = "active"
+    raw_data: Optional[Dict[str, Any]] = None
+
+
+class GitHubInstallationResponse(BaseModel):
+    """Response with GitHub installation data."""
+
+    id: str
+    installation_id: int
+    app_id: int
+    account_id: int
+    account_login: str
+    account_type: str
+    account_avatar_url: Optional[str] = None
+    org_id: Optional[str] = None
+    team_node_id: Optional[str] = None
+    permissions: Optional[Dict[str, Any]] = None
+    repository_selection: Optional[str] = None
+    repositories: Optional[List[str]] = None
+    status: str
+    installed_at: datetime
+    updated_at: datetime
+
+
+class GitHubInstallationLinkRequest(BaseModel):
+    """Request to link a GitHub installation to an IncidentFox org/team."""
+
+    org_id: str
+    team_node_id: str
+
+
+def _github_installation_to_response(
+    installation: GitHubInstallation,
+) -> GitHubInstallationResponse:
+    """Convert a GitHubInstallation model to response."""
+    return GitHubInstallationResponse(
+        id=installation.id,
+        installation_id=installation.installation_id,
+        app_id=installation.app_id,
+        account_id=installation.account_id,
+        account_login=installation.account_login,
+        account_type=installation.account_type,
+        account_avatar_url=installation.account_avatar_url,
+        org_id=installation.org_id,
+        team_node_id=installation.team_node_id,
+        permissions=installation.permissions,
+        repository_selection=installation.repository_selection,
+        repositories=installation.repositories,
+        status=installation.status,
+        installed_at=installation.installed_at,
+        updated_at=installation.updated_at,
+    )
+
+
+@router.post("/github/installations", response_model=GitHubInstallationResponse)
+def save_github_installation(
+    request: GitHubInstallationRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Save a GitHub App installation.
+
+    This is an upsert operation - if an installation with the same
+    installation_id exists, it will be updated.
+    """
+    logger.info(
+        "save_github_installation",
+        installation_id=request.installation_id,
+        account_login=request.account_login,
+        account_type=request.account_type,
+    )
+
+    # Look for existing installation
+    existing = (
+        session.query(GitHubInstallation)
+        .filter(GitHubInstallation.installation_id == request.installation_id)
+        .first()
+    )
+
+    if existing:
+        # Update existing installation
+        existing.app_id = request.app_id
+        existing.account_id = request.account_id
+        existing.account_login = request.account_login
+        existing.account_type = request.account_type
+        existing.account_avatar_url = request.account_avatar_url
+        existing.permissions = request.permissions
+        existing.repository_selection = request.repository_selection
+        existing.repositories = request.repositories
+        existing.status = request.status
+        existing.raw_data = request.raw_data
+        # Only update org/team if provided (don't overwrite existing linkage)
+        if request.org_id is not None:
+            existing.org_id = request.org_id
+        if request.team_node_id is not None:
+            existing.team_node_id = request.team_node_id
+        if request.webhook_secret is not None:
+            existing.webhook_secret = request.webhook_secret
+        session.commit()
+
+        logger.info("github_installation_updated", id=existing.id)
+        return _github_installation_to_response(existing)
+
+    # Create new installation
+    installation = GitHubInstallation(
+        id=str(uuid_lib.uuid4()),
+        installation_id=request.installation_id,
+        app_id=request.app_id,
+        account_id=request.account_id,
+        account_login=request.account_login,
+        account_type=request.account_type,
+        account_avatar_url=request.account_avatar_url,
+        org_id=request.org_id,
+        team_node_id=request.team_node_id,
+        permissions=request.permissions,
+        repository_selection=request.repository_selection,
+        repositories=request.repositories,
+        webhook_secret=request.webhook_secret,
+        status=request.status,
+        raw_data=request.raw_data,
+    )
+
+    session.add(installation)
+    session.commit()
+
+    logger.info("github_installation_created", id=installation.id)
+    return _github_installation_to_response(installation)
+
+
+@router.get(
+    "/github/installations/{installation_id}",
+    response_model=Optional[GitHubInstallationResponse],
+)
+def get_github_installation(
+    installation_id: int,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Get a GitHub installation by installation_id.
+
+    Returns None (null) if not found.
+    """
+    installation = (
+        session.query(GitHubInstallation)
+        .filter(GitHubInstallation.installation_id == installation_id)
+        .first()
+    )
+
+    if not installation:
+        return None
+
+    return _github_installation_to_response(installation)
+
+
+@router.get(
+    "/github/installations/find", response_model=Optional[GitHubInstallationResponse]
+)
+def find_github_installation(
+    installation_id: Optional[int] = None,
+    account_login: Optional[str] = None,
+    repo: Optional[str] = None,
+    org_id: Optional[str] = None,
+    team_node_id: Optional[str] = None,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Find a GitHub installation by various criteria.
+
+    Search priority:
+    1. installation_id (exact match)
+    2. repo (searches in repositories array)
+    3. account_login (exact match)
+    4. org_id + team_node_id (IncidentFox linkage)
+
+    Returns None (null) if not found.
+    """
+    query = session.query(GitHubInstallation).filter(
+        GitHubInstallation.status == "active"
+    )
+
+    if installation_id is not None:
+        query = query.filter(GitHubInstallation.installation_id == installation_id)
+    elif repo:
+        # Search for repo in repositories array or by account_login prefix
+        # For "all" selection, match by account_login
+        repo_parts = repo.split("/")
+        if len(repo_parts) >= 2:
+            account = repo_parts[0]
+            # Check both: exact repo in list OR all repos for this account
+            from sqlalchemy import or_
+
+            query = query.filter(
+                or_(
+                    GitHubInstallation.repositories.contains([repo]),
+                    GitHubInstallation.account_login == account,
+                )
+            )
+        else:
+            query = query.filter(GitHubInstallation.repositories.contains([repo]))
+    elif account_login:
+        query = query.filter(GitHubInstallation.account_login == account_login)
+    elif org_id and team_node_id:
+        query = query.filter(
+            GitHubInstallation.org_id == org_id,
+            GitHubInstallation.team_node_id == team_node_id,
+        )
+    else:
+        return None  # No search criteria provided
+
+    installation = query.first()
+
+    if not installation:
+        return None
+
+    return _github_installation_to_response(installation)
+
+
+@router.get("/github/installations", response_model=List[GitHubInstallationResponse])
+def list_github_installations(
+    org_id: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 100,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    List GitHub installations.
+
+    Optionally filter by org_id and/or status.
+    """
+    query = session.query(GitHubInstallation)
+
+    if org_id:
+        query = query.filter(GitHubInstallation.org_id == org_id)
+    if status:
+        query = query.filter(GitHubInstallation.status == status)
+
+    query = query.order_by(GitHubInstallation.installed_at.desc()).limit(limit)
+
+    installations = query.all()
+
+    return [_github_installation_to_response(inst) for inst in installations]
+
+
+@router.patch(
+    "/github/installations/{installation_id}/link",
+    response_model=GitHubInstallationResponse,
+)
+def link_github_installation(
+    installation_id: int,
+    request: GitHubInstallationLinkRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Link a GitHub installation to an IncidentFox org/team.
+
+    Called during the setup flow after a user installs the GitHub App.
+    """
+    logger.info(
+        "link_github_installation",
+        installation_id=installation_id,
+        org_id=request.org_id,
+        team_node_id=request.team_node_id,
+    )
+
+    installation = (
+        session.query(GitHubInstallation)
+        .filter(GitHubInstallation.installation_id == installation_id)
+        .first()
+    )
+
+    if not installation:
+        raise HTTPException(status_code=404, detail="Installation not found")
+
+    installation.org_id = request.org_id
+    installation.team_node_id = request.team_node_id
+    session.commit()
+
+    logger.info(
+        "github_installation_linked",
+        id=installation.id,
+        installation_id=installation_id,
+        org_id=request.org_id,
+        team_node_id=request.team_node_id,
+    )
+
+    return _github_installation_to_response(installation)
+
+
+class GitHubInstallationLinkByAccountRequest(BaseModel):
+    """Request to link a GitHub installation by account login (org name)."""
+
+    account_login: str  # e.g., "acme-corp"
+    org_id: str
+    team_node_id: str
+
+
+class GitHubInstallationLinkByAccountResponse(BaseModel):
+    """Response for link-by-account, includes status info."""
+
+    installation: GitHubInstallationResponse
+    linked: bool
+    message: str
+
+
+@router.post(
+    "/github/installations/link-by-account",
+    response_model=GitHubInstallationLinkByAccountResponse,
+)
+def link_github_installation_by_account(
+    request: GitHubInstallationLinkByAccountRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Link a GitHub installation to an IncidentFox org/team by account login.
+
+    This endpoint is used when a user enters their GitHub org name in the Slack
+    modal to complete the GitHub App linking flow.
+
+    Flow:
+    1. User installs GitHub App on "acme-corp"
+    2. Callback stores GitHubInstallation with account_login="acme-corp", org_id=null
+    3. User enters "acme-corp" in Slack modal
+    4. This endpoint links the installation to their org
+
+    Validation:
+    - Installation must exist with matching account_login
+    - Installation must not already be linked to another org
+    """
+    logger.info(
+        "link_github_installation_by_account",
+        account_login=request.account_login,
+        org_id=request.org_id,
+        team_node_id=request.team_node_id,
+    )
+
+    # Normalize account_login (GitHub usernames/orgs are case-insensitive)
+    account_login = request.account_login.strip().lower()
+
+    if not account_login:
+        raise HTTPException(status_code=400, detail="account_login is required")
+
+    # Find installation by account_login (case-insensitive)
+    installation = (
+        session.query(GitHubInstallation)
+        .filter(GitHubInstallation.account_login.ilike(account_login))
+        .filter(GitHubInstallation.status == "active")
+        .first()
+    )
+
+    if not installation:
+        logger.warning(
+            "github_installation_not_found_by_account",
+            account_login=request.account_login,
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=f"No GitHub installation found for '{request.account_login}'. "
+            "Please make sure you have installed the IncidentFox GitHub App on this org/user.",
+        )
+
+    # Check if already linked to a different org
+    if installation.org_id and installation.org_id != request.org_id:
+        logger.warning(
+            "github_installation_already_linked",
+            account_login=request.account_login,
+            existing_org_id=installation.org_id,
+            requested_org_id=request.org_id,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail="This GitHub installation is already linked to another workspace. "
+            "Each GitHub org can only be linked to one IncidentFox workspace.",
+        )
+
+    # Check if already linked to this org (idempotent success)
+    if installation.org_id == request.org_id:
+        logger.info(
+            "github_installation_already_linked_same_org",
+            account_login=request.account_login,
+            org_id=request.org_id,
+        )
+        return GitHubInstallationLinkByAccountResponse(
+            installation=_github_installation_to_response(installation),
+            linked=True,
+            message=f"GitHub org '{installation.account_login}' is already connected.",
+        )
+
+    # Link the installation
+    installation.org_id = request.org_id
+    installation.team_node_id = request.team_node_id
+
+    # Also sync installation_id to the team's config so SRE agent can use it
+    # The agent needs integrations.github-app.installation_id in its config
+    try:
+        node_config = get_or_create_node_configuration(
+            session,
+            org_id=request.org_id,
+            node_id=request.team_node_id,
+            node_type="team",
+        )
+
+        # Deep merge installation_id into existing config
+        current_config = node_config.config_json or {}
+        integrations = current_config.get("integrations", {})
+        github_app = integrations.get("github-app", {})
+
+        # Add installation_id (app_id and private_key should be configured at org level)
+        github_app["installation_id"] = str(installation.installation_id)
+        github_app["account_login"] = installation.account_login
+
+        integrations["github-app"] = github_app
+        current_config["integrations"] = integrations
+        node_config.config_json = current_config
+
+        logger.info(
+            "github_installation_synced_to_config",
+            org_id=request.org_id,
+            team_node_id=request.team_node_id,
+            installation_id=installation.installation_id,
+        )
+    except Exception as e:
+        # Log but don't fail the linking - config sync is best-effort
+        logger.error(
+            "github_installation_config_sync_failed",
+            org_id=request.org_id,
+            team_node_id=request.team_node_id,
+            error=str(e),
+        )
+
+    session.commit()
+
+    logger.info(
+        "github_installation_linked_by_account",
+        id=installation.id,
+        installation_id=installation.installation_id,
+        account_login=installation.account_login,
+        org_id=request.org_id,
+        team_node_id=request.team_node_id,
+    )
+
+    return GitHubInstallationLinkByAccountResponse(
+        installation=_github_installation_to_response(installation),
+        linked=True,
+        message=f"Successfully connected GitHub org '{installation.account_login}'!",
+    )
+
+
+@router.patch(
+    "/github/installations/{installation_id}/status",
+    response_model=GitHubInstallationResponse,
+)
+def update_github_installation_status(
+    installation_id: int,
+    status: str,
+    suspended_by: Optional[str] = None,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Update a GitHub installation's status.
+
+    Called when receiving lifecycle webhooks from GitHub (suspended, unsuspended, deleted).
+    """
+    logger.info(
+        "update_github_installation_status",
+        installation_id=installation_id,
+        status=status,
+    )
+
+    installation = (
+        session.query(GitHubInstallation)
+        .filter(GitHubInstallation.installation_id == installation_id)
+        .first()
+    )
+
+    if not installation:
+        raise HTTPException(status_code=404, detail="Installation not found")
+
+    installation.status = status
+    if status == "suspended":
+        installation.suspended_at = datetime.utcnow()
+        installation.suspended_by = suspended_by
+    elif status == "active":
+        installation.suspended_at = None
+        installation.suspended_by = None
+
+    session.commit()
+
+    logger.info(
+        "github_installation_status_updated",
+        id=installation.id,
+        installation_id=installation_id,
+        status=status,
+    )
+
+    return _github_installation_to_response(installation)
+
+
+@router.delete("/github/installations/{installation_id}")
+def delete_github_installation(
+    installation_id: int,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Delete a GitHub installation.
+
+    Called when the app is uninstalled from GitHub.
+    """
+    logger.info(
+        "delete_github_installation",
+        installation_id=installation_id,
+    )
+
+    deleted_count = (
+        session.query(GitHubInstallation)
+        .filter(GitHubInstallation.installation_id == installation_id)
+        .delete()
+    )
+    session.commit()
+
+    if deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Installation not found")
+
+    return {"deleted": True, "installation_id": installation_id}

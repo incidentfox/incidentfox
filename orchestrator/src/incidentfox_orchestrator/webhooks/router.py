@@ -242,6 +242,18 @@ async def github_webhook(
         delivery_id=x_github_delivery,
     )
 
+    # Handle GitHub App lifecycle events (installation, installation_repositories)
+    # These don't require repo-based routing - they're about the app installation itself
+    if x_github_event in ("installation", "installation_repositories"):
+        background.add_task(
+            _process_github_app_lifecycle_webhook,
+            request=request,
+            event_type=x_github_event,
+            delivery_id=x_github_delivery,
+            payload=payload,
+        )
+        return JSONResponse(content={"ok": True})
+
     # Extract repository for routing
     repo = payload.get("repository", {})
     repo_full_name = repo.get("full_name", "")  # e.g., "org/repo"
@@ -547,6 +559,222 @@ async def _process_github_webhook(
             error=str(e),
         )
         # Note: Agent service handles run failure recording if the run was started
+
+
+async def _process_github_app_lifecycle_webhook(
+    request: Request,
+    event_type: str,
+    delivery_id: str,
+    payload: dict,
+) -> None:
+    """
+    Process GitHub App lifecycle webhooks (installation, installation_repositories).
+
+    These events are sent when:
+    - installation/created: App installed on an org/user
+    - installation/deleted: App uninstalled
+    - installation/suspend: App suspended
+    - installation/unsuspend: App unsuspended
+    - installation_repositories/added: Repos added to installation
+    - installation_repositories/removed: Repos removed from installation
+
+    We forward these to the config service to store/update the installation.
+    """
+    import httpx
+
+    correlation_id = delivery_id or __import__("uuid").uuid4().hex
+    action = payload.get("action", "")
+    installation = payload.get("installation", {})
+    installation_id = installation.get("id")
+
+    _log(
+        "github_app_lifecycle_webhook",
+        correlation_id=correlation_id,
+        event_type=event_type,
+        action=action,
+        installation_id=installation_id,
+    )
+
+    if not installation_id:
+        _log(
+            "github_app_lifecycle_no_installation_id",
+            correlation_id=correlation_id,
+        )
+        return
+
+    # Get config service URL from app state
+    from incidentfox_orchestrator.clients import ConfigServiceClient
+
+    cfg: ConfigServiceClient = request.app.state.config_service
+    config_service_url = cfg.base_url
+
+    internal_service_header = {"X-Internal-Service": "orchestrator"}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            if event_type == "installation":
+                if action == "created":
+                    # New installation - store it
+                    account = installation.get("account", {})
+                    install_data = {
+                        "installation_id": installation_id,
+                        "app_id": installation.get("app_id"),
+                        "account_id": account.get("id"),
+                        "account_login": account.get("login", ""),
+                        "account_type": account.get("type", "User"),
+                        "account_avatar_url": account.get("avatar_url"),
+                        "permissions": installation.get("permissions"),
+                        "repository_selection": installation.get(
+                            "repository_selection"
+                        ),
+                        "status": "active",
+                        "raw_data": payload,
+                    }
+
+                    # If repository_selection is "selected", extract repos
+                    if payload.get("repositories"):
+                        install_data["repositories"] = [
+                            r.get("full_name")
+                            for r in payload.get("repositories", [])
+                            if r.get("full_name")
+                        ]
+
+                    response = await client.post(
+                        f"{config_service_url}/api/v1/internal/github/installations",
+                        json=install_data,
+                        headers=internal_service_header,
+                    )
+                    response.raise_for_status()
+
+                    _log(
+                        "github_installation_created",
+                        correlation_id=correlation_id,
+                        installation_id=installation_id,
+                        account_login=account.get("login"),
+                    )
+
+                elif action == "deleted":
+                    # Installation deleted - remove it
+                    response = await client.delete(
+                        f"{config_service_url}/api/v1/internal/github/installations/{installation_id}",
+                        headers=internal_service_header,
+                    )
+                    # 404 is okay - installation might not exist
+                    if response.status_code not in (200, 404):
+                        response.raise_for_status()
+
+                    _log(
+                        "github_installation_deleted",
+                        correlation_id=correlation_id,
+                        installation_id=installation_id,
+                    )
+
+                elif action in ("suspend", "suspended"):
+                    # Installation suspended
+                    sender = payload.get("sender", {})
+                    response = await client.patch(
+                        f"{config_service_url}/api/v1/internal/github/installations/{installation_id}/status",
+                        params={
+                            "status": "suspended",
+                            "suspended_by": sender.get("login"),
+                        },
+                        headers=internal_service_header,
+                    )
+                    if response.status_code != 404:
+                        response.raise_for_status()
+
+                    _log(
+                        "github_installation_suspended",
+                        correlation_id=correlation_id,
+                        installation_id=installation_id,
+                    )
+
+                elif action in ("unsuspend", "unsuspended"):
+                    # Installation unsuspended
+                    response = await client.patch(
+                        f"{config_service_url}/api/v1/internal/github/installations/{installation_id}/status",
+                        params={"status": "active"},
+                        headers=internal_service_header,
+                    )
+                    if response.status_code != 404:
+                        response.raise_for_status()
+
+                    _log(
+                        "github_installation_unsuspended",
+                        correlation_id=correlation_id,
+                        installation_id=installation_id,
+                    )
+
+            elif event_type == "installation_repositories":
+                # Repositories added or removed from installation
+                # Update the installation's repository list
+                repos_added = payload.get("repositories_added", [])
+                repos_removed = payload.get("repositories_removed", [])
+
+                _log(
+                    "github_installation_repos_changed",
+                    correlation_id=correlation_id,
+                    installation_id=installation_id,
+                    added_count=len(repos_added),
+                    removed_count=len(repos_removed),
+                )
+
+                # Get current installation
+                response = await client.get(
+                    f"{config_service_url}/api/v1/internal/github/installations/{installation_id}",
+                    headers=internal_service_header,
+                )
+
+                if response.status_code == 200:
+                    current = response.json()
+                    current_repos = set(current.get("repositories") or [])
+
+                    # Add new repos
+                    for repo in repos_added:
+                        if repo.get("full_name"):
+                            current_repos.add(repo["full_name"])
+
+                    # Remove repos
+                    for repo in repos_removed:
+                        if repo.get("full_name"):
+                            current_repos.discard(repo["full_name"])
+
+                    # Update installation
+                    update_data = {
+                        "installation_id": installation_id,
+                        "app_id": current.get("app_id"),
+                        "account_id": current.get("account_id"),
+                        "account_login": current.get("account_login"),
+                        "account_type": current.get("account_type"),
+                        "repositories": list(current_repos),
+                        "repository_selection": installation.get(
+                            "repository_selection", current.get("repository_selection")
+                        ),
+                    }
+
+                    response = await client.post(
+                        f"{config_service_url}/api/v1/internal/github/installations",
+                        json=update_data,
+                        headers=internal_service_header,
+                    )
+                    response.raise_for_status()
+
+    except httpx.HTTPError as e:
+        _log(
+            "github_app_lifecycle_webhook_failed",
+            correlation_id=correlation_id,
+            event_type=event_type,
+            action=action,
+            error=str(e),
+        )
+    except Exception as e:
+        _log(
+            "github_app_lifecycle_webhook_error",
+            correlation_id=correlation_id,
+            event_type=event_type,
+            action=action,
+            error=str(e),
+        )
 
 
 def _build_github_message(event_type: str, payload: dict) -> str:

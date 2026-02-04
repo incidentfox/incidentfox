@@ -56,6 +56,11 @@ def load_env_credentials() -> dict[str, dict]:
             "domain": os.getenv("CORALOGIX_DOMAIN"),
             "region": os.getenv("CORALOGIX_REGION"),
         },
+        "confluence": {
+            "url": os.getenv("CONFLUENCE_URL"),
+            "email": os.getenv("CONFLUENCE_EMAIL"),
+            "api_token": os.getenv("CONFLUENCE_API_TOKEN"),
+        },
     }
 
 
@@ -82,13 +87,28 @@ async def lifespan(app: FastAPI):
         logger.info("Config Service client initialized")
     else:
         ENV_CREDENTIALS = load_env_credentials()
-        configured = [k for k, v in ENV_CREDENTIALS.items() if v.get("api_key")]
+        # Check different primary keys based on integration type
+        configured = []
+        for k, v in ENV_CREDENTIALS.items():
+            if k == "confluence":
+                if v.get("url") and v.get("api_token"):
+                    configured.append(k)
+            elif v.get("api_key"):
+                configured.append(k)
         logger.info(f"Environment credentials loaded for: {configured}")
 
         # Debug: show masked credentials to verify they're loaded
         for integration, creds in ENV_CREDENTIALS.items():
-            api_key = creds.get("api_key")
-            logger.info(f"  {integration}: api_key={mask_secret(api_key)}")
+            if integration == "confluence":
+                url = creds.get("url")
+                api_token = creds.get("api_token")
+                logger.info(
+                    f"  {integration}: url={url or '(not set)'}, "
+                    f"api_token={mask_secret(api_token)}"
+                )
+            else:
+                api_key = creds.get("api_key")
+                logger.info(f"  {integration}: api_key={mask_secret(api_key)}")
 
     yield
 
@@ -115,6 +135,624 @@ class ExtAuthzResponse(BaseModel):
 async def health():
     """Health check endpoint."""
     return {"status": "healthy", "source": CREDENTIAL_SOURCE, "jwt_mode": JWT_MODE}
+
+
+@app.get("/api/integrations")
+async def list_integrations(request: Request):
+    """List available integrations for this tenant/team.
+
+    Returns non-sensitive metadata about which integrations are configured.
+    This can be used in system prompts to inform the agent what's available.
+
+    Security: Tenant/team context is extracted from the validated JWT.
+    """
+    logger.info("Integration list request")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    logger.info(
+        f"Integration list: tenant={tenant_id}, team={team_id}, sandbox={sandbox_name}"
+    )
+
+    # Check which integrations are configured
+    # All active integrations from onboarding.py (excludes anthropic - that's the LLM provider)
+    ACTIVE_INTEGRATIONS = [
+        "coralogix",
+        "incident_io",
+        "confluence",
+        "grafana",
+        "elasticsearch",
+        "datadog",
+        "prometheus",
+        "jaeger",
+        "kubernetes",
+        "github",
+    ]
+
+    available = []
+    for integration_id in ACTIVE_INTEGRATIONS:
+        creds = await get_credentials(tenant_id, team_id, integration_id)
+        if is_integration_configured(integration_id, creds):
+            # Return non-sensitive metadata only
+            metadata = get_integration_metadata(integration_id, creds)
+            available.append({"id": integration_id, **metadata})
+
+    return {"integrations": available}
+
+
+def is_integration_configured(integration_id: str, creds: dict | None) -> bool:
+    """Check if an integration has valid credentials configured.
+
+    Each integration has different required fields based on its authentication method.
+    See slack-bot/onboarding.py for field definitions.
+    """
+    if not creds:
+        return False
+
+    # Integrations that require domain + api_key
+    if integration_id in ["confluence", "grafana", "kubernetes"]:
+        return bool(creds.get("domain") and creds.get("api_key"))
+
+    # Datadog requires api_key + app_key + site (domain)
+    if integration_id == "datadog":
+        return bool(creds.get("api_key") and creds.get("app_key") and creds.get("site"))
+
+    # Elasticsearch: domain required, credentials optional (some clusters are open)
+    if integration_id == "elasticsearch":
+        return bool(creds.get("domain"))
+
+    # Prometheus/Jaeger: only domain required (auth optional)
+    if integration_id in ["prometheus", "jaeger"]:
+        return bool(creds.get("domain"))
+
+    # GitHub: api_key required (domain optional for GHE)
+    if integration_id == "github":
+        return bool(creds.get("api_key"))
+
+    # Default: api_key required (coralogix, incident_io, etc.)
+    return bool(creds.get("api_key"))
+
+
+def get_integration_metadata(integration_id: str, creds: dict) -> dict:
+    """Get non-sensitive metadata about an integration.
+
+    SECURITY: Never return secrets (api_key, api_token, password, etc).
+    Only return configuration metadata that helps the agent use the integration.
+    """
+    if integration_id == "confluence":
+        # Return domain URL so agent knows which Confluence instance
+        return {"url": creds.get("domain")}
+
+    elif integration_id == "coralogix":
+        # Return domain/region for API endpoint construction
+        return {
+            "domain": creds.get("domain"),
+            "region": creds.get("region"),
+        }
+
+    elif integration_id == "datadog":
+        # Return site for API endpoint construction
+        return {"site": creds.get("site")}
+
+    elif integration_id == "grafana":
+        # Return URL so agent knows which Grafana instance
+        return {"url": creds.get("domain")}
+
+    elif integration_id == "elasticsearch":
+        # Return URL and optional default index pattern
+        metadata = {"url": creds.get("domain")}
+        if creds.get("index_pattern"):
+            metadata["index_pattern"] = creds.get("index_pattern")
+        return metadata
+
+    elif integration_id == "prometheus":
+        # Return URL
+        return {"url": creds.get("domain")}
+
+    elif integration_id == "jaeger":
+        # Return URL
+        return {"url": creds.get("domain")}
+
+    elif integration_id == "kubernetes":
+        # Return URL and optional default namespace
+        metadata = {"url": creds.get("domain")}
+        if creds.get("namespace"):
+            metadata["namespace"] = creds.get("namespace")
+        return metadata
+
+    elif integration_id == "github":
+        # Return enterprise URL if configured (None means github.com)
+        metadata = {}
+        if creds.get("domain"):
+            metadata["url"] = creds.get("domain")
+        if creds.get("default_org"):
+            metadata["default_org"] = creds.get("default_org")
+        return metadata
+
+    # Default: just indicate it's configured (incident_io, etc.)
+    return {}
+
+
+# IMPORTANT: Route ordering matters in FastAPI/Starlette!
+# More specific routes MUST be declared BEFORE catch-all routes.
+# /confluence/{path:path} must come before /{path:path}
+
+
+async def generic_proxy(
+    integration_id: str,
+    path: str,
+    request: Request,
+    require_api_key: bool = True,
+    ssl_verify: bool = True,
+) -> Response:
+    """Generic reverse proxy for integrations with customer-specific URLs.
+
+    Since customer URLs are specific (e.g., grafana.company.com), we can't use
+    Envoy's static routing. This proxy:
+    1. Validates JWT and extracts tenant context
+    2. Looks up the customer's URL and credentials
+    3. Forwards the request with auth headers
+    4. Returns the response
+
+    Security: Credentials never leave this service.
+
+    Args:
+        integration_id: Integration name (e.g., "grafana", "elasticsearch")
+        path: Request path to forward
+        request: Original FastAPI request
+        require_api_key: Whether to require api_key (False for optional auth)
+        ssl_verify: Whether to verify SSL certificates
+    """
+    import re
+
+    import httpx
+
+    logger.info(f"{integration_id.title()} proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    logger.info(
+        f"{integration_id.title()} proxy: tenant={tenant_id}, team={team_id}, sandbox={sandbox_name}"
+    )
+
+    # Get credentials
+    creds = await get_credentials(tenant_id, team_id, integration_id)
+    if not creds or not creds.get("domain"):
+        logger.error(f"{integration_id.title()} not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"{integration_id.title()} integration not configured",
+        )
+
+    if require_api_key and not creds.get("api_key"):
+        logger.error(f"{integration_id.title()} api_key missing for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"{integration_id.title()} credentials incomplete",
+        )
+
+    # Build target URL from 'domain' field
+    # Domain may include paths, extract just scheme + host
+    domain = creds.get("domain", "")
+    match = re.match(r"(https?://[^/]+)", domain)
+    if match:
+        base_url = match.group(1)
+    else:
+        # Add https if missing
+        if not domain.startswith(("http://", "https://")):
+            domain = f"https://{domain}"
+        base_url = domain.rstrip("/")
+
+    target_url = f"{base_url}/{path}"
+    logger.info(f"{integration_id.title()} proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers(integration_id, creds)
+
+    # Forward the request
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    # Get query params
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0, verify=ssl_verify) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"{integration_id.title()} request timeout: {target_url}")
+        raise HTTPException(
+            status_code=504, detail=f"{integration_id.title()} request timed out"
+        )
+    except httpx.RequestError as e:
+        logger.error(f"{integration_id.title()} request error: {e}")
+        raise HTTPException(
+            status_code=502, detail=f"{integration_id.title()} request failed: {e}"
+        )
+
+
+@app.api_route(
+    "/confluence/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def confluence_proxy(path: str, request: Request):
+    """Reverse proxy for Confluence API requests.
+
+    Since Confluence URLs are customer-specific (e.g., mycompany.atlassian.net),
+    we can't use Envoy's static routing. Instead, this endpoint acts as a reverse
+    proxy that:
+    1. Validates JWT and extracts tenant context
+    2. Looks up the customer's Confluence URL and credentials
+    3. Forwards the request with Basic auth to their Confluence instance
+    4. Returns the response
+
+    Security: Credentials never leave this service.
+
+    Example:
+        Sandbox calls: http://credential-resolver:8002/confluence/wiki/rest/api/content
+        This proxies to: https://customer.atlassian.net/wiki/rest/api/content
+    """
+    import re
+
+    import httpx
+
+    logger.info(f"Confluence proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    logger.info(
+        f"Confluence proxy: tenant={tenant_id}, team={team_id}, sandbox={sandbox_name}"
+    )
+
+    # Get Confluence credentials
+    # Config Service stores: domain (URL), email, api_key
+    creds = await get_credentials(tenant_id, team_id, "confluence")
+    if not creds or not creds.get("domain") or not creds.get("api_key"):
+        logger.error(f"Confluence not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Confluence integration not configured",
+        )
+
+    # Build target URL from 'domain' field
+    # Domain may include paths like /wiki/home, extract just scheme + host
+    domain = creds.get("domain", "")
+    match = re.match(r"(https?://[^/]+)", domain)
+    if match:
+        confluence_url = match.group(1)
+    else:
+        confluence_url = domain.rstrip("/")
+
+    target_url = f"{confluence_url}/{path}"
+    logger.info(f"Confluence proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("confluence", creds)
+
+    # Forward the request
+    # Copy relevant headers from original request
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    # Get query params
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Get request body if present
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            # Return the response with same status and content
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"Confluence request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="Confluence request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"Confluence request error: {e}")
+        raise HTTPException(status_code=502, detail=f"Confluence request failed: {e}")
+
+
+# Additional integration proxies for customer-specific URLs
+# These use the generic_proxy helper
+
+
+@app.api_route(
+    "/grafana/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def grafana_proxy(path: str, request: Request):
+    """Reverse proxy for Grafana API requests."""
+    return await generic_proxy("grafana", path, request)
+
+
+@app.api_route(
+    "/elasticsearch/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def elasticsearch_proxy(path: str, request: Request):
+    """Reverse proxy for Elasticsearch API requests."""
+    # Elasticsearch may have open clusters, so api_key not always required
+    # Also disable SSL verify for self-signed certs (common in enterprise)
+    return await generic_proxy(
+        "elasticsearch", path, request, require_api_key=False, ssl_verify=False
+    )
+
+
+@app.api_route(
+    "/prometheus/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def prometheus_proxy(path: str, request: Request):
+    """Reverse proxy for Prometheus API requests."""
+    # Prometheus auth is optional (many internal deployments are open)
+    return await generic_proxy("prometheus", path, request, require_api_key=False)
+
+
+@app.api_route(
+    "/jaeger/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def jaeger_proxy(path: str, request: Request):
+    """Reverse proxy for Jaeger API requests.
+
+    Jaeger is often deployed with a /jaeger base path (common in OpenTelemetry demos
+    and Kubernetes deployments). If the domain doesn't already include /jaeger or
+    similar path, we prepend /jaeger to API requests.
+
+    Examples:
+        - Domain: http://jaeger.example.com -> forwards to http://jaeger.example.com/jaeger/api/...
+        - Domain: http://jaeger.example.com/jaeger -> forwards to http://jaeger.example.com/jaeger/api/...
+    """
+    import re
+
+    import httpx
+
+    logger.info(f"Jaeger proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get Jaeger credentials
+    creds = await get_credentials(tenant_id, team_id, "jaeger")
+    if not creds or not creds.get("domain"):
+        logger.error(f"Jaeger not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Jaeger integration not configured",
+        )
+
+    # Build target URL from 'domain' field
+    domain = creds.get("domain", "")
+    match = re.match(r"(https?://[^/]+)(.*)", domain)
+    if match:
+        base_url = match.group(1)
+        existing_path = match.group(2).strip("/")
+    else:
+        if not domain.startswith(("http://", "https://")):
+            domain = f"http://{domain}"
+        base_url = domain.rstrip("/")
+        existing_path = ""
+
+    # Check if the domain already includes a base path like /jaeger
+    # If not, prepend /jaeger (common for OpenTelemetry demo deployments)
+    if existing_path:
+        # Domain already has a path (e.g., http://example.com/jaeger)
+        target_url = f"{base_url}/{existing_path}/{path}"
+    elif path.startswith("api/"):
+        # No existing path and requesting API - prepend /jaeger
+        # This handles the common case where Jaeger UI is at /jaeger/ui/
+        # and API is at /jaeger/api/
+        target_url = f"{base_url}/jaeger/{path}"
+    else:
+        # Other paths, forward as-is
+        target_url = f"{base_url}/{path}"
+
+    logger.info(f"Jaeger proxy: forwarding to {target_url}")
+
+    # Build auth headers (Jaeger typically doesn't need auth)
+    auth_headers = build_auth_headers("jaeger", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"Jaeger request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="Jaeger request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"Jaeger request error: {e}")
+        raise HTTPException(status_code=502, detail=f"Jaeger request failed: {e}")
+
+
+@app.api_route(
+    "/github/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def github_proxy(path: str, request: Request):
+    """Reverse proxy for GitHub API requests (for GitHub Enterprise).
+
+    Note: For github.com, clients can use the fixed URL directly.
+    This proxy is for GitHub Enterprise with customer-specific URLs.
+    """
+    return await generic_proxy("github", path, request)
+
+
+@app.api_route(
+    "/datadog/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def datadog_proxy(path: str, request: Request):
+    """Reverse proxy for Datadog API requests.
+
+    Datadog has site-specific URLs (us1.datadoghq.com, eu1.datadoghq.com, etc.)
+    stored in the 'site' field. We use 'domain' generically here.
+    """
+    import httpx
+
+    logger.info(f"Datadog proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get Datadog credentials (uses 'site' not 'domain')
+    # Datadog requires api_key, app_key, and site for most API calls
+    creds = await get_credentials(tenant_id, team_id, "datadog")
+    if not creds or not creds.get("site") or not creds.get("api_key"):
+        logger.error(f"Datadog not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Datadog integration not configured",
+        )
+
+    if not creds.get("app_key"):
+        logger.error(
+            f"Datadog app_key missing for tenant={tenant_id}. "
+            "Most Datadog API endpoints require both api_key and app_key."
+        )
+        raise HTTPException(
+            status_code=404,
+            detail="Datadog integration incomplete: app_key required",
+        )
+
+    # Build Datadog API URL from site
+    site = creds.get("site", "datadoghq.com")
+    target_url = f"https://api.{site}/{path}"
+    logger.info(f"Datadog proxy: forwarding to {target_url}")
+
+    # Debug: Log credential presence (not values) for troubleshooting
+    api_key = creds.get("api_key", "")
+    app_key = creds.get("app_key", "")
+    logger.info(
+        f"Datadog credentials: api_key={len(api_key)}chars, app_key={len(app_key)}chars, "
+        f"api_key_prefix={api_key[:4] if len(api_key) >= 4 else 'N/A'}..., "
+        f"app_key_prefix={app_key[:4] if len(app_key) >= 4 else 'N/A'}..."
+    )
+
+    # Build auth headers
+    auth_headers = build_auth_headers("datadog", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            # Log non-2xx responses for debugging
+            if response.status_code >= 400:
+                logger.warning(
+                    f"Datadog API returned {response.status_code} for {target_url}: "
+                    f"{response.text[:500] if response.text else 'no body'}"
+                )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"Datadog request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="Datadog request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"Datadog request error: {e}")
+        raise HTTPException(status_code=502, detail=f"Datadog request failed: {e}")
 
 
 @app.api_route(
@@ -154,9 +792,11 @@ async def ext_authz_check(request: Request, path: str = ""):
         f"sandbox={sandbox_name}, integration={integration_id}, host={target_host}"
     )
 
-    # 3. Get credentials
+    # 3. Get credentials and validate based on integration type
     creds = await get_credentials(tenant_id, team_id, integration_id)
-    if not creds or not creds.get("api_key"):
+
+    # Check if credentials are configured (uses shared logic)
+    if not is_integration_configured(integration_id, creds):
         logger.error(
             f"No credentials found for {integration_id} "
             f"(tenant={tenant_id}, team={team_id})"
@@ -240,10 +880,14 @@ def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
 
     For customers using our shared Anthropic key, adds attribution metadata for cost tracking.
     This applies to ALL customers using our key (trial users AND paid users who don't BYOK).
+
+    Note: Some integrations (like Confluence) use direct credential fetch instead of
+    proxy injection because their client libraries manage auth internally.
     """
-    api_key = creds.get("api_key", "")
+    import base64
 
     if integration_id == "anthropic":
+        api_key = creds.get("api_key", "")
         headers = {"x-api-key": api_key}
 
         # Add attribution for ALL customers using our shared key (for cost tracking/billing)
@@ -260,9 +904,68 @@ def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
 
     elif integration_id == "coralogix":
         # Coralogix uses Bearer token
+        api_key = creds.get("api_key", "")
         return {"Authorization": f"Bearer {api_key}"}
 
+    elif integration_id == "confluence":
+        # Confluence uses Basic auth (email:api_key base64 encoded)
+        email = creds.get("email", "")
+        api_key = creds.get("api_key", "")
+        if email and api_key:
+            auth_string = f"{email}:{api_key}"
+            encoded = base64.b64encode(auth_string.encode()).decode()
+            return {"Authorization": f"Basic {encoded}"}
+        logger.warning("Confluence credentials incomplete for Basic auth")
+        return {}
+
+    elif integration_id == "datadog":
+        # Datadog uses two API keys in headers
+        return {
+            "DD-API-KEY": creds.get("api_key", ""),
+            "DD-APPLICATION-KEY": creds.get("app_key", ""),
+        }
+
+    elif integration_id == "elasticsearch":
+        # Elasticsearch uses Basic auth (username:password) or API key
+        username = creds.get("username", "")
+        api_key = creds.get("api_key", "")
+        if username and api_key:
+            # Basic auth mode
+            auth_string = f"{username}:{api_key}"
+            encoded = base64.b64encode(auth_string.encode()).decode()
+            return {"Authorization": f"Basic {encoded}"}
+        elif api_key:
+            # API key mode (already base64 encoded id:key format)
+            return {"Authorization": f"ApiKey {api_key}"}
+        # No auth (open cluster)
+        return {}
+
+    elif integration_id == "github":
+        # GitHub uses Bearer token
+        api_key = creds.get("api_key", "")
+        return {"Authorization": f"Bearer {api_key}"}
+
+    elif integration_id == "incident_io":
+        # incident.io uses Bearer token
+        api_key = creds.get("api_key", "")
+        return {"Authorization": f"Bearer {api_key}"}
+
+    elif integration_id in ["grafana", "prometheus", "kubernetes"]:
+        # These use Bearer token
+        api_key = creds.get("api_key", "")
+        if api_key:
+            return {"Authorization": f"Bearer {api_key}"}
+        return {}
+
+    elif integration_id == "jaeger":
+        # Jaeger typically doesn't need auth, but support Bearer if provided
+        api_key = creds.get("api_key", "")
+        if api_key:
+            return {"Authorization": f"Bearer {api_key}"}
+        return {}
+
     # Default: Bearer token
+    api_key = creds.get("api_key", "")
     return {"Authorization": f"Bearer {api_key}"}
 
 

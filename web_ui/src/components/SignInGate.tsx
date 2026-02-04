@@ -1,10 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useIdentity } from '@/lib/useIdentity';
 import { applyTheme, getTheme, setTheme, type ThemeMode } from '@/lib/theme';
 import { X, KeyRound, Shield, Chrome, Building2, Loader2, Lock, Mail, Users, Clock } from 'lucide-react';
 import { OnboardingWrapper } from './onboarding/OnboardingWrapper';
+
+// Paths that bypass authentication (public pages)
+const PUBLIC_PATHS = [
+  '/integrations/github/setup',
+];
 
 interface OrgSSOConfig {
   enabled: boolean;
@@ -27,12 +33,19 @@ interface VisitorSession {
 }
 
 export function SignInGate({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { identity, loading, error, refresh } = useIdentity();
   const [token, setToken] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [ssoConfig, setSsoConfig] = useState<OrgSSOConfig | null>(null);
   const [loadingSSO, setLoadingSSO] = useState(true);
+
+  // Bypass auth for public paths
+  const isPublicPath = PUBLIC_PATHS.some(p => pathname?.startsWith(p));
+  if (isPublicPath) {
+    return <>{children}</>;
+  }
 
   // Visitor login state
   const [loginMode, setLoginMode] = useState<LoginMode>('team');

@@ -9,6 +9,7 @@ The credential-resolver validates this JWT to ensure only legitimate
 sandboxes can request credentials for their designated tenant/team.
 """
 
+import json
 import os
 import time
 from dataclasses import dataclass
@@ -20,6 +21,49 @@ from auth import generate_sandbox_jwt
 from kubernetes import client
 from kubernetes import config as k8s_config
 from kubernetes.client.rest import ApiException
+
+
+def fetch_configured_integrations(jwt_token: str, tenant_id: str, team_id: str) -> str:
+    """Fetch configured integrations from credential-resolver.
+
+    This is called when creating a sandbox to inject integration metadata
+    into the sandbox environment. The agent can then know what integrations
+    are available without making runtime API calls.
+
+    Args:
+        jwt_token: JWT for authentication
+        tenant_id: Tenant ID
+        team_id: Team ID
+
+    Returns:
+        JSON string of integration metadata (non-sensitive)
+    """
+    cred_resolver_ns = os.getenv("CREDENTIAL_RESOLVER_NAMESPACE", "incidentfox-prod")
+
+    # In local dev, use port-forwarded URL
+    local_port = os.getenv("CREDENTIAL_RESOLVER_LOCAL_PORT")
+    if local_port:
+        url = f"http://localhost:{local_port}/api/integrations"
+    else:
+        url = f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/api/integrations"
+
+    headers = {
+        "Accept": "application/json",
+        "X-Sandbox-JWT": jwt_token,
+        "X-Tenant-Id": tenant_id,
+        "X-Team-Id": team_id,
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        # Return as compact JSON string for env var
+        return json.dumps(data.get("integrations", []))
+    except Exception as e:
+        print(f"⚠️ Failed to fetch integrations: {e}")
+        # Return empty list on failure - skills will handle gracefully
+        return "[]"
 
 
 class SandboxExecutionError(Exception):
@@ -377,6 +421,17 @@ static_resources:
                 ttl_hours=ttl_hours + 1,  # JWT valid slightly longer than sandbox TTL
             )
 
+        # Get credential-resolver namespace (used for both configmap and env vars)
+        cred_resolver_ns = os.getenv(
+            "CREDENTIAL_RESOLVER_NAMESPACE", "incidentfox-prod"
+        )
+
+        # Fetch configured integrations (non-sensitive metadata for system prompt)
+        configured_integrations = fetch_configured_integrations(
+            jwt_token, tenant_id, team_id
+        )
+        print(f"📦 Configured integrations for sandbox: {configured_integrations}")
+
         # Create per-sandbox ConfigMap with JWT embedded in Envoy config
         envoy_configmap_name = self._create_envoy_configmap(sandbox_name, jwt_token)
 
@@ -440,6 +495,46 @@ static_resources:
                                         "name": "CORALOGIX_BASE_URL",
                                         "value": "http://localhost:8001",
                                     },
+                                    # Confluence SDK: route through credential-resolver's reverse proxy
+                                    # (credential-resolver looks up URL + injects Basic auth)
+                                    # Note: Confluence uses per-customer URLs (e.g., customer.atlassian.net)
+                                    # so we can't use Envoy's static routing like Anthropic/Coralogix
+                                    {
+                                        "name": "CONFLUENCE_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/confluence",
+                                    },
+                                    # Additional integrations with customer-specific URLs
+                                    # These all route through credential-resolver's reverse proxy
+                                    {
+                                        "name": "GRAFANA_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/grafana",
+                                    },
+                                    {
+                                        "name": "ELASTICSEARCH_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/elasticsearch",
+                                    },
+                                    {
+                                        "name": "PROMETHEUS_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/prometheus",
+                                    },
+                                    {
+                                        "name": "JAEGER_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/jaeger",
+                                    },
+                                    {
+                                        "name": "GITHUB_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/github",
+                                    },
+                                    {
+                                        "name": "DATADOG_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/datadog",
+                                    },
+                                    # Configured integrations (non-sensitive metadata)
+                                    # JSON list of {id, url?, domain?, region?} for each integration
+                                    {
+                                        "name": "CONFIGURED_INTEGRATIONS",
+                                        "value": configured_integrations,
+                                    },
                                     # Laminar tracing: platform observability (shared across all customers)
                                     # Used for debugging agent behavior - not customer data
                                     # NOTE: Temporarily disabled to debug proxy conflict issue
@@ -469,6 +564,9 @@ static_resources:
                                     {"name": "THREAD_ID", "value": thread_id},
                                     {"name": "SANDBOX_NAME", "value": sandbox_name},
                                     {"name": "NAMESPACE", "value": self.namespace},
+                                    # JWT for authenticating with credential-resolver
+                                    # (used by scripts that call credential-resolver directly)
+                                    {"name": "SANDBOX_JWT", "value": jwt_token},
                                 ],
                                 "resources": {
                                     "requests": {
