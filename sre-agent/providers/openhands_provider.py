@@ -28,8 +28,6 @@ from typing import Any, AsyncIterator, Callable, Optional
 
 import httpx
 import yaml
-from lmnr import observe
-
 from events import (
     StreamEvent,
     error_event,
@@ -38,6 +36,7 @@ from events import (
     tool_end_event,
     tool_start_event,
 )
+from lmnr import observe
 
 from providers.base import LLMProvider, ProviderConfig, SubagentConfig
 
@@ -854,51 +853,55 @@ class OpenHandsProvider(LLMProvider):
 
         # WebSearch tool
         if "WebSearch" in self.config.allowed_tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "web_search",
-                    "description": "Search the web for information. Returns search results with titles, URLs, and snippets.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "Search query",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "web_search",
+                        "description": "Search the web for information. Returns search results with titles, URLs, and snippets.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "Search query",
+                                },
+                                "num_results": {
+                                    "type": "integer",
+                                    "description": "Number of results to return (default: 5, max: 10)",
+                                },
                             },
-                            "num_results": {
-                                "type": "integer",
-                                "description": "Number of results to return (default: 5, max: 10)",
-                            },
+                            "required": ["query"],
                         },
-                        "required": ["query"],
                     },
-                },
-            })
+                }
+            )
 
         # WebFetch tool
         if "WebFetch" in self.config.allowed_tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "web_fetch",
-                    "description": "Fetch content from a URL and convert HTML to readable text. Use for reading documentation, articles, or web pages.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "url": {
-                                "type": "string",
-                                "description": "URL to fetch",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "web_fetch",
+                        "description": "Fetch content from a URL and convert HTML to readable text. Use for reading documentation, articles, or web pages.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "url": {
+                                    "type": "string",
+                                    "description": "URL to fetch",
+                                },
+                                "prompt": {
+                                    "type": "string",
+                                    "description": "Optional: What information to extract from the page",
+                                },
                             },
-                            "prompt": {
-                                "type": "string",
-                                "description": "Optional: What information to extract from the page",
-                            },
+                            "required": ["url"],
                         },
-                        "required": ["url"],
                     },
-                },
-            })
+                }
+            )
 
         return tools
 
@@ -1102,12 +1105,16 @@ class OpenHandsProvider(LLMProvider):
                         response = await client.get(
                             "https://html.duckduckgo.com/html/",
                             params={"q": query},
-                            headers={"User-Agent": "Mozilla/5.0 (compatible; SREAgent/1.0)"},
+                            headers={
+                                "User-Agent": "Mozilla/5.0 (compatible; SREAgent/1.0)"
+                            },
                         )
                         response.raise_for_status()
 
                         # Parse results from HTML
-                        results = self._parse_duckduckgo_results(response.text, num_results)
+                        results = self._parse_duckduckgo_results(
+                            response.text, num_results
+                        )
 
                         if not results:
                             yield (f"No results found for: {query}", True, None)
@@ -1130,11 +1137,15 @@ class OpenHandsProvider(LLMProvider):
                     yield ("URL is required", False, "MissingURL")
                     return
 
-                async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                async with httpx.AsyncClient(
+                    timeout=30.0, follow_redirects=True
+                ) as client:
                     try:
                         response = await client.get(
                             url,
-                            headers={"User-Agent": "Mozilla/5.0 (compatible; SREAgent/1.0)"},
+                            headers={
+                                "User-Agent": "Mozilla/5.0 (compatible; SREAgent/1.0)"
+                            },
                         )
                         response.raise_for_status()
 
@@ -1205,7 +1216,9 @@ class OpenHandsProvider(LLMProvider):
 
         return content
 
-    def _parse_duckduckgo_results(self, html_content: str, max_results: int) -> list[dict]:
+    def _parse_duckduckgo_results(
+        self, html_content: str, max_results: int
+    ) -> list[dict]:
         """
         Parse search results from DuckDuckGo HTML.
 
@@ -1223,7 +1236,7 @@ class OpenHandsProvider(LLMProvider):
         result_pattern = re.compile(
             r'<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([^<]*)</a>.*?'
             r'<a[^>]+class="result__snippet"[^>]*>([^<]*)</a>',
-            re.DOTALL | re.IGNORECASE
+            re.DOTALL | re.IGNORECASE,
         )
 
         for match in result_pattern.finditer(html_content):
@@ -1237,15 +1250,18 @@ class OpenHandsProvider(LLMProvider):
             # DuckDuckGo uses redirect URLs, extract actual URL
             if "uddg=" in url:
                 import urllib.parse
+
                 parsed = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
                 url = parsed.get("uddg", [url])[0]
 
             if title and url:
-                results.append({
-                    "title": title,
-                    "url": url,
-                    "snippet": snippet or "(no snippet)",
-                })
+                results.append(
+                    {
+                        "title": title,
+                        "url": url,
+                        "snippet": snippet or "(no snippet)",
+                    }
+                )
 
         return results
 
@@ -1260,31 +1276,43 @@ class OpenHandsProvider(LLMProvider):
             Plain text with basic formatting preserved
         """
         # Remove script and style elements
-        text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
-        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(
+            r"<script[^>]*>.*?</script>",
+            "",
+            html_content,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        text = re.sub(
+            r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE
+        )
 
         # Convert common elements to text equivalents
-        text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
-        text = re.sub(r'</p>', '\n\n', text, flags=re.IGNORECASE)
-        text = re.sub(r'</div>', '\n', text, flags=re.IGNORECASE)
-        text = re.sub(r'</li>', '\n', text, flags=re.IGNORECASE)
-        text = re.sub(r'<li[^>]*>', '• ', text, flags=re.IGNORECASE)
-        text = re.sub(r'<h[1-6][^>]*>', '\n## ', text, flags=re.IGNORECASE)
-        text = re.sub(r'</h[1-6]>', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"</p>", "\n\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"</div>", "\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"</li>", "\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"<li[^>]*>", "• ", text, flags=re.IGNORECASE)
+        text = re.sub(r"<h[1-6][^>]*>", "\n## ", text, flags=re.IGNORECASE)
+        text = re.sub(r"</h[1-6]>", "\n", text, flags=re.IGNORECASE)
 
         # Extract links
-        text = re.sub(r'<a[^>]+href="([^"]*)"[^>]*>([^<]*)</a>', r'\2 (\1)', text, flags=re.IGNORECASE)
+        text = re.sub(
+            r'<a[^>]+href="([^"]*)"[^>]*>([^<]*)</a>',
+            r"\2 (\1)",
+            text,
+            flags=re.IGNORECASE,
+        )
 
         # Remove remaining tags
-        text = re.sub(r'<[^>]+>', '', text)
+        text = re.sub(r"<[^>]+>", "", text)
 
         # Decode HTML entities
         text = html.unescape(text)
 
         # Clean up whitespace
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        text = re.sub(r'[ \t]+', ' ', text)
-        text = '\n'.join(line.strip() for line in text.splitlines())
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"[ \t]+", " ", text)
+        text = "\n".join(line.strip() for line in text.splitlines())
 
         return text.strip()
 
@@ -1325,7 +1353,9 @@ class OpenHandsProvider(LLMProvider):
             # Add user message (with images if provided)
             if images:
                 user_content = self._build_multimodal_content(prompt, images)
-                self._conversation_history.append({"role": "user", "content": user_content})
+                self._conversation_history.append(
+                    {"role": "user", "content": user_content}
+                )
             else:
                 self._conversation_history.append({"role": "user", "content": prompt})
 
