@@ -76,9 +76,7 @@ async def proxy_request(request: Request, full_path: str):
     # Read request body once (can only be read once from the stream)
     request_body = await request.body()
     headers = {
-        key: value
-        for (key, value) in request.headers.items()
-        if key.lower() != "host"
+        key: value for (key, value) in request.headers.items() if key.lower() != "host"
     }
 
     # Retry loop with exponential backoff for DNS propagation and pod startup
@@ -102,7 +100,9 @@ async def proxy_request(request: Request, full_path: str):
         except httpx.ConnectError as e:
             last_error = e
             if attempt < RETRY_COUNT - 1:
-                delay = RETRY_BASE_DELAY * (2**attempt)  # Exponential backoff: 0.5, 1.0, 2.0
+                delay = RETRY_BASE_DELAY * (
+                    2**attempt
+                )  # Exponential backoff: 0.5, 1.0, 2.0
                 print(
                     f"Connection to sandbox '{sandbox_id}' failed (attempt {attempt + 1}/{RETRY_COUNT}), "
                     f"retrying in {delay}s... Error: {e}"
