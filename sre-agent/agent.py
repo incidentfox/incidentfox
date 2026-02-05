@@ -957,30 +957,94 @@ class OpenHandsAgentSession:
         """Initialize the OpenHands session."""
         from providers import ProviderConfig, SubagentConfig, create_provider
 
-        # Build subagent configs
+        # Build subagent configs (matching Claude SDK subagent definitions)
         subagents = {
             "log-analyst": SubagentConfig(
                 name="log-analyst",
-                description="Log analysis specialist for Coralogix, Datadog, or CloudWatch.",
-                prompt="""You are a log analysis expert. Analyze logs efficiently.
-                Use aggregations first. Report findings concisely.""",
-                tools=["Bash", "Read", "Glob", "Grep"],
+                description="Log analysis specialist for Coralogix, Datadog, or CloudWatch. "
+                "Use for analyzing logs, finding error patterns, or correlating log events. "
+                "Keeps all intermediate log output in isolated context.",
+                prompt="""You are a log analysis expert specializing in observability platforms.
+
+## Your Methodology
+1. Identify which backend is configured (check env vars: CORALOGIX_API_KEY, DATADOG_API_KEY, AWS_REGION)
+2. Use available observability Skills to query logs and metrics
+
+## Core Principles
+- **Efficiency First**: If statistics reveal a dominant error pattern (>80%), skip detailed extraction.
+- **Be Concise**: Do not narrate every step. Only report significant findings.
+- **Aggregations First**: ALWAYS get statistics before raw logs.
+
+## Output Format
+Return ONLY a structured summary:
+- Error patterns found (with counts and percentages)
+- Temporal correlation (when did it start, peak, trend)
+- Root cause hypothesis based on log evidence
+- Confidence level (high/medium/low with explanation)
+- Key evidence (2-3 specific log entries that support your hypothesis)
+
+Do NOT dump raw logs. Synthesize and summarize findings.""",
+                tools=["Skill", "Bash", "Read", "Glob", "Grep"],
                 model="sonnet",
             ),
             "k8s-debugger": SubagentConfig(
                 name="k8s-debugger",
-                description="Kubernetes debugging specialist.",
+                description="Kubernetes debugging specialist. Use for pod crashes, CrashLoopBackOff, "
+                "OOMKilled, deployment issues, resource problems, or container failures. "
+                "Keeps all kubectl output in isolated context.",
                 prompt="""You are a Kubernetes debugging expert.
-                Check events before logs. Synthesize findings.""",
-                tools=["Bash", "Read", "Glob", "Grep"],
+
+## Your Methodology
+1. ALWAYS check events BEFORE logs (events explain 80% of issues faster)
+2. Use available Kubernetes Skills for debugging
+
+## Core Principles
+- Events before logs
+- Use Skills for structured debugging workflows
+
+## Common Issue Patterns
+- OOMKilled → Memory limit exceeded (check resources)
+- ImagePullBackOff → Image not found or auth issue
+- CrashLoopBackOff → Container keeps crashing (check logs after events)
+- FailedScheduling → No nodes with capacity
+
+## Output Format
+Return a structured summary:
+- Pod/deployment status and recent restarts
+- Key events (with timestamps)
+- Resource analysis (if relevant)
+- Root cause hypothesis
+- Recommended action
+
+Do NOT dump full kubectl output. Synthesize findings.""",
+                tools=["Skill", "Bash", "Read", "Glob", "Grep"],
                 model="sonnet",
             ),
             "remediator": SubagentConfig(
                 name="remediator",
-                description="Safe remediation specialist. Always dry-run first.",
+                description="Safe remediation specialist. Use when proposing or executing pod restarts, "
+                "deployment scaling, or rollbacks. ALWAYS does dry-run first.",
                 prompt="""You are a safe remediation specialist.
-                Always dry-run before executing. Document actions.""",
-                tools=["Bash", "Read", "Glob", "Grep"],
+
+## Safety Principles
+1. ALWAYS dry-run first (all scripts support --dry-run)
+2. Show what will happen before executing
+3. Document the action and reason
+
+## Workflow
+1. Propose the action with reasoning
+2. Run with --dry-run and show output
+3. Ask for confirmation before executing
+4. Execute only after confirmation
+5. Verify the result
+
+## Output Format
+- Action: [what you propose]
+- Reason: [why this will help]
+- Risk: [potential side effects]
+- Dry-run output: [show what would happen]
+- Status: [waiting for confirmation / executed / verified]""",
+                tools=["Skill", "Bash", "Read", "Glob", "Grep"],
                 model="sonnet",
             ),
         }
@@ -997,6 +1061,7 @@ class OpenHandsAgentSession:
             cwd=cwd,
             thread_id=self.thread_id,
             allowed_tools=[
+                "Skill",  # Domain-specific knowledge/methodologies
                 "Bash",
                 "Read",
                 "Write",
@@ -1005,7 +1070,7 @@ class OpenHandsAgentSession:
                 "Grep",
                 "WebSearch",
                 "WebFetch",
-                "Task",
+                "Task",  # Subagent spawning
             ],
             subagents=subagents,
         )

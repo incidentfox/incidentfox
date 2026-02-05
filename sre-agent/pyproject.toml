@@ -35,9 +35,9 @@ dependencies = [
     "numpy>=1.24.0",  # For anomaly detection
     "scipy>=1.11.0",  # For statistical analysis
 
-    # Multi-LLM support via OpenHands SDK (Claude, Gemini, OpenAI)
+    # Multi-LLM support via LiteLLM (Claude, Gemini, OpenAI)
     # Set LLM_PROVIDER=openhands and LLM_MODEL=gemini/gemini-2.0-flash to use
-    "openhands-sdk>=1.7.0",
+    "litellm>=1.55.0",
 ]
 
 [build-system]
