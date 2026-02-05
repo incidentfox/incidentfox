@@ -1,0 +1,113 @@
+[project]
+name = "incidentfox-agent"
+version = "0.1.0"
+description = "Unified AI agent for incident investigation with multi-model support and sandbox isolation"
+requires-python = ">=3.11"
+dependencies = [
+    # Core LLM (OpenHands-style via LiteLLM for multi-model support)
+    "litellm>=1.55.0",  # Claude, Gemini, OpenAI support
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "python-dotenv>=1.0.1",
+
+    # API Server
+    "fastapi>=0.128.0",
+    "uvicorn>=0.40.0",
+    "httpx>=0.28.0",
+    "aiohttp>=3.13.0",
+
+    # Observability & Tracing
+    "lmnr>=0.7.32",  # Laminar tracing
+    "structlog>=24.4.0",
+    "prometheus-client>=0.21.0",
+    "opentelemetry-api>=1.28.0",
+    "opentelemetry-sdk>=1.28.0",
+
+    # Infrastructure
+    "kubernetes>=34.1.0",
+    "boto3>=1.34.0",
+
+    # Monitoring & Observability Backends
+    "datadog-api-client>=2.20.0",
+    "elasticsearch>=8.0.0",
+
+    # VCS & Collaboration
+    "PyGithub>=2.1.0",
+    "slack-sdk>=3.27.0",
+    "atlassian-python-api>=3.41.0",
+
+    # Utilities
+    "pyyaml>=6.0",
+    "tenacity>=9.1.2",
+    "numpy>=1.24.0",
+    "scipy>=1.11.0",
+    "requests>=2.32.0",
+
+    # JWT for sandbox authentication
+    "PyJWT>=2.8.0",
+]
+
+[project.optional-dependencies]
+# Azure integrations
+azure = [
+    "azure-identity>=1.19.0",
+    "azure-mgmt-compute>=33.0.0",
+    "azure-mgmt-containerservice>=33.0.0",
+    "azure-mgmt-web>=7.3.0",
+    "azure-mgmt-monitor>=7.0.0",
+]
+
+# Advanced analytics
+analytics = [
+    "prophet>=1.1.5",
+    "pandas>=2.2.0",
+]
+
+# Data warehouses
+warehouses = [
+    "snowflake-connector-python>=3.12.0",
+    "psycopg2-binary>=2.9.0",
+    "google-cloud-bigquery>=3.25.0",
+]
+
+# Issue tracking
+tracking = [
+    "jira>=3.8.0",
+    "python-gitlab>=4.4.0",
+    "notion-client>=2.2.0",
+]
+
+# Log platforms
+logs = [
+    "splunk-sdk>=2.0.0",
+]
+
+# All optional dependencies
+all = [
+    "incidentfox-agent[azure,analytics,warehouses,tracking,logs]",
+]
+
+[project.scripts]
+incidentfox-agent = "unified_agent.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/unified_agent"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
