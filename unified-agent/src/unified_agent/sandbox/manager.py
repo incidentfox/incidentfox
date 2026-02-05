@@ -390,29 +390,29 @@ static_resources:
         - Multi-LLM support (LLM_MODEL, API keys from secrets)
         - Envoy proxy routing (ANTHROPIC_BASE_URL)
         """
-        cred_resolver_ns = os.getenv("CREDENTIAL_RESOLVER_NAMESPACE", "incidentfox-prod")
+        cred_resolver_ns = os.getenv(
+            "CREDENTIAL_RESOLVER_NAMESPACE", "incidentfox-prod"
+        )
 
         env = [
             # Tenant context
             {"name": "INCIDENTFOX_TENANT_ID", "value": tenant_id},
             {"name": "INCIDENTFOX_TEAM_ID", "value": team_id},
-
             # Session identifiers
             {"name": "THREAD_ID", "value": thread_id},
             {"name": "SANDBOX_NAME", "value": sandbox_name},
             {"name": "NAMESPACE", "value": self.namespace},
-
             # Sandbox JWT for credential-resolver auth
             {"name": "SANDBOX_JWT", "value": jwt_token},
-
             # Envoy proxy: route Anthropic API through sidecar
             {"name": "ANTHROPIC_BASE_URL", "value": "http://localhost:8001"},
             # Placeholder key - proxy injects real key
-            {"name": "ANTHROPIC_API_KEY", "value": "sk-ant-placeholder-proxy-will-inject"},
-
+            {
+                "name": "ANTHROPIC_API_KEY",
+                "value": "sk-ant-placeholder-proxy-will-inject",
+            },
             # Configured integrations metadata (non-sensitive)
             {"name": "CONFIGURED_INTEGRATIONS", "value": configured_integrations},
-
             # Integration proxy URLs (credential-resolver handles auth)
             {"name": "CORALOGIX_BASE_URL", "value": "http://localhost:8001"},
             {
@@ -431,7 +431,6 @@ static_resources:
                 "name": "DATADOG_BASE_URL",
                 "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/datadog",
             },
-
             # Kubeconfig for K8s tools
             {"name": "KUBECONFIG", "value": "/home/agent/.kube/config"},
         ]
@@ -445,51 +444,55 @@ static_resources:
             env.append({"name": "LLM_MODEL", "value": llm_model})
         else:
             # Try to get from environment or K8s secret
-            env.append({
-                "name": "LLM_MODEL",
-                "valueFrom": {
-                    "secretKeyRef": {
-                        "name": "incidentfox-secrets",
-                        "key": "llm-model",
-                        "optional": True,
-                    }
-                },
-            })
+            env.append(
+                {
+                    "name": "LLM_MODEL",
+                    "valueFrom": {
+                        "secretKeyRef": {
+                            "name": "incidentfox-secrets",
+                            "key": "llm-model",
+                            "optional": True,
+                        }
+                    },
+                }
+            )
 
         # Multi-LLM API keys (from K8s secrets)
-        env.extend([
-            {
-                "name": "GEMINI_API_KEY",
-                "valueFrom": {
-                    "secretKeyRef": {
-                        "name": "incidentfox-secrets",
-                        "key": "gemini-api-key",
-                        "optional": True,
-                    }
+        env.extend(
+            [
+                {
+                    "name": "GEMINI_API_KEY",
+                    "valueFrom": {
+                        "secretKeyRef": {
+                            "name": "incidentfox-secrets",
+                            "key": "gemini-api-key",
+                            "optional": True,
+                        }
+                    },
                 },
-            },
-            {
-                "name": "OPENAI_API_KEY",
-                "valueFrom": {
-                    "secretKeyRef": {
-                        "name": "incidentfox-secrets",
-                        "key": "openai-api-key",
-                        "optional": True,
-                    }
+                {
+                    "name": "OPENAI_API_KEY",
+                    "valueFrom": {
+                        "secretKeyRef": {
+                            "name": "incidentfox-secrets",
+                            "key": "openai-api-key",
+                            "optional": True,
+                        }
+                    },
                 },
-            },
-            # Laminar observability (optional)
-            {
-                "name": "LMNR_PROJECT_API_KEY",
-                "valueFrom": {
-                    "secretKeyRef": {
-                        "name": "incidentfox-secrets",
-                        "key": "laminar-api-key",
-                        "optional": True,
-                    }
+                # Laminar observability (optional)
+                {
+                    "name": "LMNR_PROJECT_API_KEY",
+                    "valueFrom": {
+                        "secretKeyRef": {
+                            "name": "incidentfox-secrets",
+                            "key": "laminar-api-key",
+                            "optional": True,
+                        }
+                    },
                 },
-            },
-        ])
+            ]
+        )
 
         return env
 

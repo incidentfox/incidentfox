@@ -10,8 +10,9 @@ These tests verify:
 
 import json
 import os
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestConfigLoading:
@@ -31,11 +32,14 @@ class TestConfigLoading:
         """Test config loading from environment variables."""
         from unified_agent.core.config import load_config
 
-        with patch.dict(os.environ, {
-            "LLM_MODEL": "gemini/gemini-2.0-flash",
-            "INCIDENTFOX_TENANT_ID": "test-tenant",
-            "INCIDENTFOX_TEAM_ID": "test-team",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "LLM_MODEL": "gemini/gemini-2.0-flash",
+                "INCIDENTFOX_TENANT_ID": "test-tenant",
+                "INCIDENTFOX_TEAM_ID": "test-team",
+            },
+        ):
             config = load_config()
             assert config.llm_model == "gemini/gemini-2.0-flash"
             assert config.tenant_id == "test-tenant"
@@ -43,7 +47,7 @@ class TestConfigLoading:
 
     def test_team_config_model(self):
         """Test TeamConfig pydantic model."""
-        from unified_agent.core.config import TeamConfig, AgentConfig, ModelConfig
+        from unified_agent.core.config import AgentConfig, ModelConfig, TeamConfig
 
         team_config = TeamConfig(
             agents_config={
@@ -177,8 +181,13 @@ class TestModelNormalization:
         from unified_agent.core.agent_builder import normalize_model_name
 
         # Already prefixed should pass through
-        assert normalize_model_name("anthropic/claude-sonnet-4-20250514") == "anthropic/claude-sonnet-4-20250514"
-        assert normalize_model_name("gemini/gemini-2.0-flash") == "gemini/gemini-2.0-flash"
+        assert (
+            normalize_model_name("anthropic/claude-sonnet-4-20250514")
+            == "anthropic/claude-sonnet-4-20250514"
+        )
+        assert (
+            normalize_model_name("gemini/gemini-2.0-flash") == "gemini/gemini-2.0-flash"
+        )
         assert normalize_model_name("openai/gpt-4o") == "openai/gpt-4o"
 
     def test_unprefixed_model_normalization(self):
@@ -186,7 +195,10 @@ class TestModelNormalization:
         from unified_agent.core.agent_builder import normalize_model_name
 
         # Claude models
-        assert normalize_model_name("claude-sonnet-4-20250514") == "anthropic/claude-sonnet-4-20250514"
+        assert (
+            normalize_model_name("claude-sonnet-4-20250514")
+            == "anthropic/claude-sonnet-4-20250514"
+        )
 
         # OpenAI models
         assert normalize_model_name("gpt-4o") == "openai/gpt-4o"
@@ -224,7 +236,10 @@ class TestToolResolution:
 
     def test_resolve_specific_tools(self):
         """Test resolving specific tools by name."""
-        from unified_agent.core.agent_builder import resolve_tools, get_all_available_tools
+        from unified_agent.core.agent_builder import (
+            get_all_available_tools,
+            resolve_tools,
+        )
 
         available = get_all_available_tools()
         if available:
@@ -239,7 +254,10 @@ class TestToolResolution:
 
     def test_resolve_with_disabled(self):
         """Test that disabled tools are excluded."""
-        from unified_agent.core.agent_builder import resolve_tools, get_all_available_tools
+        from unified_agent.core.agent_builder import (
+            get_all_available_tools,
+            resolve_tools,
+        )
 
         available = get_all_available_tools()
         if len(available) >= 2:
@@ -254,7 +272,12 @@ class TestSandboxServerConfig:
 
     def test_effective_config_conversion(self):
         """Test converting TeamConfig to effective config dict."""
-        from unified_agent.core.config import TeamConfig, AgentConfig, ModelConfig, ToolsConfig
+        from unified_agent.core.config import (
+            AgentConfig,
+            ModelConfig,
+            TeamConfig,
+            ToolsConfig,
+        )
 
         team_config = TeamConfig(
             agents_config={
@@ -269,20 +292,27 @@ class TestSandboxServerConfig:
         )
 
         # Simulate server's _get_effective_config
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
 
         mock_config = MagicMock()
         mock_config.team_config = team_config
         mock_config.llm_model = "anthropic/claude-sonnet-4-20250514"
 
-        with patch('unified_agent.sandbox.server.get_config', return_value=mock_config):
+        with patch("unified_agent.sandbox.server.get_config", return_value=mock_config):
             from unified_agent.sandbox.server import _get_effective_config
+
             effective = _get_effective_config()
 
             assert "agents" in effective
             assert "investigator" in effective["agents"]
-            assert effective["agents"]["investigator"]["model"]["name"] == "gemini/gemini-2.0-flash"
-            assert "remediation" in effective["agents"]["investigator"]["tools"]["disabled"]
+            assert (
+                effective["agents"]["investigator"]["model"]["name"]
+                == "gemini/gemini-2.0-flash"
+            )
+            assert (
+                "remediation"
+                in effective["agents"]["investigator"]["tools"]["disabled"]
+            )
 
 
 class TestSandboxManager:
@@ -356,7 +386,7 @@ class TestSandboxManager:
             sandbox_name="s1",
             jwt_token="jwt",
             team_token=None,  # No team token
-            llm_model=None,   # No model override
+            llm_model=None,  # No model override
             configured_integrations="[]",
         )
 

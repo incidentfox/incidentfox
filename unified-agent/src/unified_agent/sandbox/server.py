@@ -32,14 +32,14 @@ from pydantic import BaseModel
 
 from ..core.agent import Agent
 from ..core.agent_builder import build_agent_hierarchy, normalize_model_name
-from ..core.config import get_config, reload_config, Config
+from ..core.config import Config, get_config, reload_config
 from ..core.events import (
     StreamEvent,
     error_event,
-    thought_event,
-    tool_start_event,
-    tool_end_event,
     result_event,
+    thought_event,
+    tool_end_event,
+    tool_start_event,
 )
 from ..core.runner import Runner, RunResult
 
@@ -67,6 +67,7 @@ class AgentSession:
     - Conversation history for context
     - Interrupt flag for cancellation
     """
+
     thread_id: str
     agents: Dict[str, Agent] = field(default_factory=dict)
     root_agent: Optional[Agent] = None
@@ -180,7 +181,9 @@ def _build_agents_from_config() -> Dict[str, Agent]:
 
     effective_config = _get_effective_config()
 
-    logger.info(f"Building agents from config: {list(effective_config.get('agents', {}).keys())}")
+    logger.info(
+        f"Building agents from config: {list(effective_config.get('agents', {}).keys())}"
+    )
 
     try:
         agents = build_agent_hierarchy(effective_config, team_config=config.team_config)
@@ -189,13 +192,16 @@ def _build_agents_from_config() -> Dict[str, Agent]:
 
         logger.info(f"Built {len(agents)} agents: {list(agents.keys())}")
         for name, agent in agents.items():
-            logger.info(f"  - {name}: model={agent.model}, tools={len(agent.tools or [])}")
+            logger.info(
+                f"  - {name}: model={agent.model}, tools={len(agent.tools or [])}"
+            )
 
         return agents
     except Exception as e:
         logger.error(f"Failed to build agents from config: {e}")
         # Return minimal default agent on error
         from ..core.agent import Agent
+
         default_agent = Agent(
             name="Investigator",
             instructions="You are an expert SRE investigator. Help debug production issues.",
@@ -217,9 +223,9 @@ async def get_or_create_session(thread_id: str) -> AgentSession:
 
             # Get root agent (prefer 'investigator' or 'planner', fallback to first)
             root_agent = (
-                agents.get("investigator") or
-                agents.get("planner") or
-                next(iter(agents.values()), None)
+                agents.get("investigator")
+                or agents.get("planner")
+                or next(iter(agents.values()), None)
             )
 
             if root_agent is None:
@@ -235,7 +241,9 @@ async def get_or_create_session(thread_id: str) -> AgentSession:
             )
 
             _sessions[thread_id] = session
-            logger.info(f"Created session {thread_id} with root agent: {root_agent.name}")
+            logger.info(
+                f"Created session {thread_id} with root agent: {root_agent.name}"
+            )
 
         return _sessions[thread_id]
 
@@ -386,7 +394,9 @@ async def execute(request: ExecuteRequest):
         logger.error(f"Failed to create session: {e}")
 
         async def error_stream():
-            yield error_event(thread_id, f"Failed to initialize: {e}", recoverable=False).to_sse()
+            yield error_event(
+                thread_id, f"Failed to initialize: {e}", recoverable=False
+            ).to_sse()
 
         return StreamingResponse(
             error_stream(),
@@ -405,7 +415,9 @@ async def execute(request: ExecuteRequest):
 
     async def stream():
         try:
-            logger.info(f"Starting execution for thread {thread_id} with agent {agent.name}")
+            logger.info(
+                f"Starting execution for thread {thread_id} with agent {agent.name}"
+            )
             event_count = 0
 
             # Stream events from Runner
@@ -443,7 +455,9 @@ async def execute(request: ExecuteRequest):
 
         except Exception as e:
             logger.error(f"Execution error for {thread_id}: {e}", exc_info=True)
-            yield error_event(thread_id, f"Execution failed: {e}", recoverable=False).to_sse()
+            yield error_event(
+                thread_id, f"Execution failed: {e}", recoverable=False
+            ).to_sse()
 
         finally:
             session.is_running = False
@@ -477,7 +491,9 @@ def _convert_runner_event(thread_id: str, event: dict) -> StreamEvent:
     elif event_type == "result":
         return result_event(thread_id, data.get("text", ""), success=True)
     elif event_type == "error":
-        return error_event(thread_id, data.get("message", "Unknown error"), recoverable=False)
+        return error_event(
+            thread_id, data.get("message", "Unknown error"), recoverable=False
+        )
     else:
         return thought_event(thread_id, str(data))
 
@@ -495,7 +511,9 @@ async def interrupt(request: InterruptRequest):
         try:
             async with _session_lock:
                 if thread_id not in _sessions:
-                    yield error_event(thread_id, "No active session found", recoverable=False).to_sse()
+                    yield error_event(
+                        thread_id, "No active session found", recoverable=False
+                    ).to_sse()
                     return
                 session = _sessions[thread_id]
 
@@ -511,7 +529,9 @@ async def interrupt(request: InterruptRequest):
             ).to_sse()
 
         except Exception as e:
-            yield error_event(thread_id, f"Interrupt failed: {e}", recoverable=False).to_sse()
+            yield error_event(
+                thread_id, f"Interrupt failed: {e}", recoverable=False
+            ).to_sse()
 
     return StreamingResponse(
         stream(),
@@ -552,7 +572,7 @@ async def cleanup_session(thread_id: str):
 async def startup_event():
     """Initialize on startup."""
     config = get_config()
-    logger.info(f"Sandbox server starting...")
+    logger.info("Sandbox server starting...")
     logger.info(f"  Tenant: {config.tenant_id}")
     logger.info(f"  Team: {config.team_id}")
     logger.info(f"  Model: {config.llm_model}")
