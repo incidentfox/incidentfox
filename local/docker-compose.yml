@@ -90,8 +90,12 @@ services:
     env_file:
       - .env
     environment:
-      # Required: OpenAI
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # LLM Provider Configuration
+      LLM_PROVIDER: ${LLM_PROVIDER:-claude}
+      LLM_MODEL: ${LLM_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
       # Only set OPENAI_BASE_URL if you're using a custom endpoint (LiteLLM, Azure, etc.)
       # Config service integration

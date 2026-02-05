@@ -18,7 +18,7 @@ load_dotenv()
 
 async def main():
     # Import after dotenv loads
-    from agent import InteractiveAgentSession
+    from agent import create_agent_session
 
     # Get prompt from args or interactive
     if len(sys.argv) > 1:
@@ -29,7 +29,7 @@ async def main():
     print(f"\n🔍 Running: {prompt}\n")
     print("=" * 60)
 
-    session = InteractiveAgentSession(thread_id="local-test")
+    session = create_agent_session(thread_id="local-test")
     await session.start()
 
     try:
