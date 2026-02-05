@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Optional
 
 import yaml
-
 from events import (
     StreamEvent,
     error_event,
@@ -95,7 +94,9 @@ class SkillLoader:
         content = skill_file.read_text()
 
         # Parse YAML frontmatter (between --- markers)
-        frontmatter_match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
+        frontmatter_match = re.match(
+            r"^---\s*\n(.*?)\n---\s*\n(.*)$", content, re.DOTALL
+        )
 
         if not frontmatter_match:
             # No frontmatter, use directory name as skill name
@@ -256,6 +257,7 @@ class SubagentExecutor:
 
                             # Parse arguments
                             import json
+
                             try:
                                 args = json.loads(tool_args) if tool_args else {}
                             except json.JSONDecodeError:
@@ -278,11 +280,13 @@ class SubagentExecutor:
                             )
 
                             # Add tool result to messages
-                            messages.append({
-                                "role": "tool",
-                                "tool_call_id": tool_call.id,
-                                "content": tool_result.get("output", ""),
-                            })
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "content": tool_result.get("output", ""),
+                                }
+                            )
                     else:
                         # No tool calls - we have a final response
                         final_response = assistant_message.content or ""
@@ -325,84 +329,92 @@ class SubagentExecutor:
         tools = []
 
         if "Bash" in self.config.tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "bash",
-                    "description": "Execute a bash command",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "command": {
-                                "type": "string",
-                                "description": "The bash command to execute",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "bash",
+                        "description": "Execute a bash command",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "string",
+                                    "description": "The bash command to execute",
+                                },
                             },
+                            "required": ["command"],
                         },
-                        "required": ["command"],
                     },
-                },
-            })
+                }
+            )
 
         if "Read" in self.config.tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "read_file",
-                    "description": "Read contents of a file",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": {
-                                "type": "string",
-                                "description": "Path to the file to read",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "description": "Read contents of a file",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "Path to the file to read",
+                                },
                             },
+                            "required": ["path"],
                         },
-                        "required": ["path"],
                     },
-                },
-            })
+                }
+            )
 
         if "Glob" in self.config.tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "glob",
-                    "description": "Find files matching a pattern",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "pattern": {
-                                "type": "string",
-                                "description": "Glob pattern (e.g., '**/*.py')",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "glob",
+                        "description": "Find files matching a pattern",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "pattern": {
+                                    "type": "string",
+                                    "description": "Glob pattern (e.g., '**/*.py')",
+                                },
                             },
+                            "required": ["pattern"],
                         },
-                        "required": ["pattern"],
                     },
-                },
-            })
+                }
+            )
 
         if "Grep" in self.config.tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "grep",
-                    "description": "Search for text in files",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "pattern": {
-                                "type": "string",
-                                "description": "Search pattern (regex)",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "grep",
+                        "description": "Search for text in files",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "pattern": {
+                                    "type": "string",
+                                    "description": "Search pattern (regex)",
+                                },
+                                "path": {
+                                    "type": "string",
+                                    "description": "Path to search in",
+                                },
                             },
-                            "path": {
-                                "type": "string",
-                                "description": "Path to search in",
-                            },
+                            "required": ["pattern"],
                         },
-                        "required": ["pattern"],
                     },
-                },
-            })
+                }
+            )
 
         return tools
 
@@ -446,14 +458,14 @@ class SubagentExecutor:
             elif tool_name == "glob":
                 pattern = args.get("pattern", "*")
                 import glob as glob_module
+
                 matches = glob_module.glob(
                     str(Path(self.workspace_dir) / pattern),
                     recursive=True,
                 )
                 # Make paths relative
                 rel_matches = [
-                    str(Path(m).relative_to(self.workspace_dir))
-                    for m in matches
+                    str(Path(m).relative_to(self.workspace_dir)) for m in matches
                 ]
                 return {"output": "\n".join(rel_matches[:100])}
 
@@ -555,15 +567,25 @@ class OpenHandsProvider(LLMProvider):
             )
 
         logger.info(f"[OpenHands] Provider initialized with model: {self._model}")
-        logger.info(f"[OpenHands] Skills loaded: {self._skills_loader.list_skills() if self._skills_loader else []}")
+        logger.info(
+            f"[OpenHands] Skills loaded: {self._skills_loader.list_skills() if self._skills_loader else []}"
+        )
         logger.info(f"[OpenHands] Subagents: {list(self._subagent_executors.keys())}")
 
     def _map_subagent_model(self, model_name: str) -> str:
         """Map Claude SDK model names to LiteLLM format."""
         model_mapping = {
             "sonnet": self._model,  # Use same model as parent
-            "opus": self._model.replace("sonnet", "opus") if "sonnet" in self._model else self._model,
-            "haiku": self._model.replace("sonnet", "haiku") if "sonnet" in self._model else self._model,
+            "opus": (
+                self._model.replace("sonnet", "opus")
+                if "sonnet" in self._model
+                else self._model
+            ),
+            "haiku": (
+                self._model.replace("sonnet", "haiku")
+                if "sonnet" in self._model
+                else self._model
+            ),
         }
         return model_mapping.get(model_name, self._model)
 
@@ -605,207 +627,223 @@ class OpenHandsProvider(LLMProvider):
 
         # Bash tool
         if "Bash" in self.config.allowed_tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "bash",
-                    "description": "Execute a bash command. Use for running scripts, kubectl, aws cli, etc.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "command": {
-                                "type": "string",
-                                "description": "The bash command to execute",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "bash",
+                        "description": "Execute a bash command. Use for running scripts, kubectl, aws cli, etc.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "string",
+                                    "description": "The bash command to execute",
+                                },
+                                "timeout": {
+                                    "type": "integer",
+                                    "description": "Timeout in seconds (default: 120)",
+                                },
                             },
-                            "timeout": {
-                                "type": "integer",
-                                "description": "Timeout in seconds (default: 120)",
-                            },
+                            "required": ["command"],
                         },
-                        "required": ["command"],
                     },
-                },
-            })
+                }
+            )
 
         # Read tool
         if "Read" in self.config.allowed_tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "read_file",
-                    "description": "Read the contents of a file",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": {
-                                "type": "string",
-                                "description": "Path to the file",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "description": "Read the contents of a file",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "Path to the file",
+                                },
+                                "offset": {
+                                    "type": "integer",
+                                    "description": "Line number to start from (1-indexed)",
+                                },
+                                "limit": {
+                                    "type": "integer",
+                                    "description": "Number of lines to read",
+                                },
                             },
-                            "offset": {
-                                "type": "integer",
-                                "description": "Line number to start from (1-indexed)",
-                            },
-                            "limit": {
-                                "type": "integer",
-                                "description": "Number of lines to read",
-                            },
+                            "required": ["path"],
                         },
-                        "required": ["path"],
                     },
-                },
-            })
+                }
+            )
 
         # Write tool
         if "Write" in self.config.allowed_tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "write_file",
-                    "description": "Write content to a file (overwrites existing)",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": {
-                                "type": "string",
-                                "description": "Path to the file",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "write_file",
+                        "description": "Write content to a file (overwrites existing)",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "Path to the file",
+                                },
+                                "content": {
+                                    "type": "string",
+                                    "description": "Content to write",
+                                },
                             },
-                            "content": {
-                                "type": "string",
-                                "description": "Content to write",
-                            },
+                            "required": ["path", "content"],
                         },
-                        "required": ["path", "content"],
                     },
-                },
-            })
+                }
+            )
 
         # Edit tool
         if "Edit" in self.config.allowed_tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "edit_file",
-                    "description": "Edit a file by replacing text",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": {
-                                "type": "string",
-                                "description": "Path to the file",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "edit_file",
+                        "description": "Edit a file by replacing text",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "Path to the file",
+                                },
+                                "old_string": {
+                                    "type": "string",
+                                    "description": "Text to find and replace",
+                                },
+                                "new_string": {
+                                    "type": "string",
+                                    "description": "Replacement text",
+                                },
                             },
-                            "old_string": {
-                                "type": "string",
-                                "description": "Text to find and replace",
-                            },
-                            "new_string": {
-                                "type": "string",
-                                "description": "Replacement text",
-                            },
+                            "required": ["path", "old_string", "new_string"],
                         },
-                        "required": ["path", "old_string", "new_string"],
                     },
-                },
-            })
+                }
+            )
 
         # Glob tool
         if "Glob" in self.config.allowed_tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "glob",
-                    "description": "Find files matching a glob pattern",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "pattern": {
-                                "type": "string",
-                                "description": "Glob pattern (e.g., '**/*.py', 'logs/*.log')",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "glob",
+                        "description": "Find files matching a glob pattern",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "pattern": {
+                                    "type": "string",
+                                    "description": "Glob pattern (e.g., '**/*.py', 'logs/*.log')",
+                                },
+                                "path": {
+                                    "type": "string",
+                                    "description": "Base path to search from",
+                                },
                             },
-                            "path": {
-                                "type": "string",
-                                "description": "Base path to search from",
-                            },
+                            "required": ["pattern"],
                         },
-                        "required": ["pattern"],
                     },
-                },
-            })
+                }
+            )
 
         # Grep tool
         if "Grep" in self.config.allowed_tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "grep",
-                    "description": "Search for text patterns in files",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "pattern": {
-                                "type": "string",
-                                "description": "Search pattern (regex supported)",
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "grep",
+                        "description": "Search for text patterns in files",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "pattern": {
+                                    "type": "string",
+                                    "description": "Search pattern (regex supported)",
+                                },
+                                "path": {
+                                    "type": "string",
+                                    "description": "File or directory to search",
+                                },
+                                "context": {
+                                    "type": "integer",
+                                    "description": "Lines of context around matches",
+                                },
                             },
-                            "path": {
-                                "type": "string",
-                                "description": "File or directory to search",
-                            },
-                            "context": {
-                                "type": "integer",
-                                "description": "Lines of context around matches",
-                            },
+                            "required": ["pattern"],
                         },
-                        "required": ["pattern"],
                     },
-                },
-            })
+                }
+            )
 
         # Task tool (subagent spawning)
         if "Task" in self.config.allowed_tools and self._subagent_executors:
             subagent_names = list(self._subagent_executors.keys())
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "task",
-                    "description": f"Spawn a subagent for isolated work. Available: {', '.join(subagent_names)}",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "subagent": {
-                                "type": "string",
-                                "description": f"Subagent to use: {', '.join(subagent_names)}",
-                                "enum": subagent_names,
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "task",
+                        "description": f"Spawn a subagent for isolated work. Available: {', '.join(subagent_names)}",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "subagent": {
+                                    "type": "string",
+                                    "description": f"Subagent to use: {', '.join(subagent_names)}",
+                                    "enum": subagent_names,
+                                },
+                                "prompt": {
+                                    "type": "string",
+                                    "description": "Task description for the subagent",
+                                },
                             },
-                            "prompt": {
-                                "type": "string",
-                                "description": "Task description for the subagent",
-                            },
+                            "required": ["subagent", "prompt"],
                         },
-                        "required": ["subagent", "prompt"],
                     },
-                },
-            })
+                }
+            )
 
         # Skill tool
         if "Skill" in self.config.allowed_tools and self._skills_loader:
             skill_names = self._skills_loader.list_skills()
             if skill_names:
-                tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": "skill",
-                        "description": f"Load a skill for domain-specific guidance. Available: {', '.join(skill_names)}",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "name": {
-                                    "type": "string",
-                                    "description": f"Skill to load: {', '.join(skill_names)}",
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "skill",
+                            "description": f"Load a skill for domain-specific guidance. Available: {', '.join(skill_names)}",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "description": f"Skill to load: {', '.join(skill_names)}",
+                                    },
                                 },
+                                "required": ["name"],
                             },
-                            "required": ["name"],
                         },
-                    },
-                })
+                    }
+                )
 
         return tools
 
@@ -864,14 +902,13 @@ class OpenHandsProvider(LLMProvider):
                 # Apply offset and limit
                 start = max(0, offset - 1)
                 if limit:
-                    lines = lines[start:start + limit]
+                    lines = lines[start : start + limit]
                 else:
                     lines = lines[start:]
 
                 # Add line numbers
                 numbered_lines = [
-                    f"{i + offset:6d}\t{line}"
-                    for i, line in enumerate(lines)
+                    f"{i + offset:6d}\t{line}" for i, line in enumerate(lines)
                 ]
 
                 yield ("\n".join(numbered_lines), True, None)
@@ -959,7 +996,11 @@ class OpenHandsProvider(LLMProvider):
                 prompt = args.get("prompt", "")
 
                 if subagent_name not in self._subagent_executors:
-                    yield (f"Unknown subagent: {subagent_name}", False, "UnknownSubagent")
+                    yield (
+                        f"Unknown subagent: {subagent_name}",
+                        False,
+                        "UnknownSubagent",
+                    )
                     return
 
                 executor = self._subagent_executors[subagent_name]
@@ -987,7 +1028,11 @@ class OpenHandsProvider(LLMProvider):
                 skill = self._skills_loader.get_skill(skill_name)
                 if not skill:
                     available = self._skills_loader.list_skills()
-                    yield (f"Skill '{skill_name}' not found. Available: {', '.join(available)}", False, "SkillNotFound")
+                    yield (
+                        f"Skill '{skill_name}' not found. Available: {', '.join(available)}",
+                        False,
+                        "SkillNotFound",
+                    )
                     return
 
                 yield (skill["content"], True, None)
@@ -1024,12 +1069,14 @@ class OpenHandsProvider(LLMProvider):
                 data = img.get("data", "")
 
                 # Format for LiteLLM (OpenAI-compatible)
-                content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{media_type};base64,{data}",
-                    },
-                })
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{media_type};base64,{data}",
+                        },
+                    }
+                )
 
             logger.info(f"[OpenHands] Added {len(images)} image(s) to request")
 
@@ -1050,8 +1097,9 @@ class OpenHandsProvider(LLMProvider):
         Yields:
             StreamEvent objects
         """
-        import litellm
         import json
+
+        import litellm
 
         self.is_running = True
         self._was_interrupted = False
@@ -1077,7 +1125,9 @@ class OpenHandsProvider(LLMProvider):
             tools = self._get_tools_schema()
 
             logger.info(f"[OpenHands] Starting execution with model: {self._model}")
-            logger.info(f"[OpenHands] Tools available: {[t['function']['name'] for t in tools]}")
+            logger.info(
+                f"[OpenHands] Tools available: {[t['function']['name'] for t in tools]}"
+            )
 
             # Agent loop
             max_iterations = 50
@@ -1109,7 +1159,9 @@ class OpenHandsProvider(LLMProvider):
 
                             # Parse arguments
                             try:
-                                tool_args = json.loads(tool_args_str) if tool_args_str else {}
+                                tool_args = (
+                                    json.loads(tool_args_str) if tool_args_str else {}
+                                )
                             except json.JSONDecodeError:
                                 tool_args = {"raw": tool_args_str}
 
@@ -1124,7 +1176,9 @@ class OpenHandsProvider(LLMProvider):
                             tool_output = ""
                             tool_success = True
 
-                            async for result in self._execute_tool(tool_name, tool_args, self.thread_id):
+                            async for result in self._execute_tool(
+                                tool_name, tool_args, self.thread_id
+                            ):
                                 if result[0] == "__STREAM_EVENT__":
                                     # This is a streamed event from a subagent
                                     yield result[1]
@@ -1142,11 +1196,15 @@ class OpenHandsProvider(LLMProvider):
                             )
 
                             # Add tool result to messages
-                            messages.append({
-                                "role": "tool",
-                                "tool_call_id": tool_call.id,
-                                "content": tool_output[:50000],  # Truncate for context
-                            })
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "content": tool_output[
+                                        :50000
+                                    ],  # Truncate for context
+                                }
+                            )
 
                     else:
                         # No tool calls - we have a response
@@ -1163,6 +1221,7 @@ class OpenHandsProvider(LLMProvider):
                 except Exception as e:
                     logger.error(f"[OpenHands] LLM error: {e}")
                     import traceback
+
                     traceback.print_exc()
 
                     yield error_event(
@@ -1186,6 +1245,7 @@ class OpenHandsProvider(LLMProvider):
         except Exception as e:
             logger.error(f"[OpenHands] Execution error: {e}")
             import traceback
+
             traceback.print_exc()
 
             yield error_event(
