@@ -21,6 +21,7 @@ description: Log, metric, and trace analysis methodology. Use when analyzing log
 Available backends (invoke with `/skill-name`):
 - **Coralogix** (DataPrime) - `/observability-coralogix`
 - **Datadog** - `/observability-datadog`
+- **Honeycomb** - `/observability-honeycomb`
 - **Splunk** (SPL) - `/observability-splunk`
 - **Elasticsearch/OpenSearch** - `/observability-elasticsearch`
 - **Jaeger** (Tracing) - `/observability-jaeger`
@@ -30,6 +31,7 @@ To check if a backend is working, try a simple query rather than checking env va
 ### Backend-Specific Skills
 - **Coralogix**: `/observability-coralogix` - DataPrime syntax, log/trace analysis
 - **Datadog**: `/observability-datadog` - DQL syntax, metrics and APM
+- **Honeycomb**: `/observability-honeycomb` - High-cardinality analysis, distributed tracing
 - **Splunk**: `/observability-splunk` - SPL syntax, saved searches
 - **Elasticsearch**: `/observability-elasticsearch` - Lucene/Query DSL
 - **Jaeger**: `/observability-jaeger` - Distributed tracing, latency analysis

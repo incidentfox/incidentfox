@@ -18,6 +18,7 @@ Required environment variables per skill:
     Coralogix:     CORALOGIX_DOMAIN, CORALOGIX_API_KEY
     Datadog:       DATADOG_SITE, DATADOG_API_KEY, DATADOG_APP_KEY
     Elasticsearch: ELASTICSEARCH_URL (optional: ES_USER, ES_PASSWORD)
+    Honeycomb:     HONEYCOMB_API_KEY
     Jaeger:        JAEGER_URL
     Prometheus:    PROMETHEUS_URL
     Grafana:       GRAFANA_URL, GRAFANA_API_KEY
@@ -307,6 +308,56 @@ def test_grafana() -> list[TestResult]:
     return results
 
 
+def test_honeycomb() -> list[TestResult]:
+    """Test Honeycomb skill."""
+    results = []
+
+    ok, missing = check_env_vars(["HONEYCOMB_API_KEY"])
+    if not ok:
+        return [
+            TestResult(
+                skill="observability-honeycomb",
+                script="(env check)",
+                passed=False,
+                output="",
+                error=f"Missing env vars: {', '.join(missing)}",
+            )
+        ]
+
+    # Test list_datasets.py
+    result = run_script("observability-honeycomb", "list_datasets.py", ["--json"])
+    result = validate_json_output(result)
+    results.append(result)
+
+    # If we have datasets, test get_statistics on the first one
+    if result.passed and result.output:
+        try:
+            data = json.loads(result.output)
+            if data and len(data) > 0:
+                dataset_slug = data[0].get("slug")
+                if dataset_slug:
+                    result2 = run_script(
+                        "observability-honeycomb",
+                        "get_statistics.py",
+                        [dataset_slug, "--time-range", "3600", "--json"],
+                    )
+                    result2 = validate_json_output(result2)
+                    results.append(result2)
+
+                    # Test run_query.py
+                    result3 = run_script(
+                        "observability-honeycomb",
+                        "run_query.py",
+                        [dataset_slug, "--calc", "COUNT", "--json"],
+                    )
+                    result3 = validate_json_output(result3)
+                    results.append(result3)
+        except json.JSONDecodeError:
+            pass
+
+    return results
+
+
 # =============================================================================
 # Main Test Runner
 # =============================================================================
@@ -315,6 +366,7 @@ SKILL_TESTS = {
     "coralogix": test_coralogix,
     "datadog": test_datadog,
     "elasticsearch": test_elasticsearch,
+    "honeycomb": test_honeycomb,
     "jaeger": test_jaeger,
     "prometheus": test_prometheus,
     "grafana": test_grafana,

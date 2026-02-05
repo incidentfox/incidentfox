@@ -555,6 +555,38 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
         except Exception as e:
             logger.warning("grafana_tools_load_failed", error=str(e))
 
+    # Honeycomb tools (if httpx available - already a dependency)
+    if is_integration_available("httpx"):
+        try:
+            from .honeycomb_tools import (
+                honeycomb_create_marker,
+                honeycomb_get_columns,
+                honeycomb_get_slo,
+                honeycomb_get_trigger,
+                honeycomb_list_datasets,
+                honeycomb_list_markers,
+                honeycomb_list_slos,
+                honeycomb_list_triggers,
+                honeycomb_run_query,
+            )
+
+            tools.extend(
+                [
+                    honeycomb_list_datasets,
+                    honeycomb_get_columns,
+                    honeycomb_run_query,
+                    honeycomb_list_slos,
+                    honeycomb_get_slo,
+                    honeycomb_list_triggers,
+                    honeycomb_get_trigger,
+                    honeycomb_list_markers,
+                    honeycomb_create_marker,
+                ]
+            )
+            logger.debug("honeycomb_tools_loaded", count=9)
+        except Exception as e:
+            logger.warning("honeycomb_tools_load_failed", error=str(e))
+
     # Knowledge Base tools (RAPTOR) - only if RAPTOR_ENABLED=true
     raptor_enabled = os.getenv("RAPTOR_ENABLED", "false").lower() in (
         "true",
