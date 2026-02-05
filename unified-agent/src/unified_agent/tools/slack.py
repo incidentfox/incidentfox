@@ -52,19 +52,23 @@ def slack_search_messages(query: str, count: int = 20) -> str:
 
         messages = []
         for match in response["messages"]["matches"]:
-            messages.append({
-                "text": match["text"],
-                "user": match.get("username"),
-                "channel": match["channel"]["name"],
-                "timestamp": match["ts"],
-                "permalink": match.get("permalink"),
-            })
+            messages.append(
+                {
+                    "text": match["text"],
+                    "user": match.get("username"),
+                    "channel": match["channel"]["name"],
+                    "timestamp": match["ts"],
+                    "permalink": match.get("permalink"),
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "messages": messages,
-            "count": len(messages),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "messages": messages,
+                "count": len(messages),
+            }
+        )
 
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e), "hint": "Set SLACK_BOT_TOKEN"})
@@ -106,19 +110,23 @@ def slack_get_channel_history(
 
         messages = []
         for msg in response["messages"]:
-            messages.append({
-                "text": msg.get("text", ""),
-                "user": msg.get("user"),
-                "timestamp": msg["ts"],
-                "thread_ts": msg.get("thread_ts"),
-                "reactions": msg.get("reactions", []),
-            })
+            messages.append(
+                {
+                    "text": msg.get("text", ""),
+                    "user": msg.get("user"),
+                    "timestamp": msg["ts"],
+                    "thread_ts": msg.get("thread_ts"),
+                    "reactions": msg.get("reactions", []),
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "messages": messages,
-            "count": len(messages),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "messages": messages,
+                "count": len(messages),
+            }
+        )
 
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e), "hint": "Set SLACK_BOT_TOKEN"})
@@ -140,7 +148,9 @@ def slack_get_thread_replies(channel_id: str, thread_ts: str) -> str:
         JSON with thread messages
     """
     if not channel_id or not thread_ts:
-        return json.dumps({"ok": False, "error": "channel_id and thread_ts are required"})
+        return json.dumps(
+            {"ok": False, "error": "channel_id and thread_ts are required"}
+        )
 
     logger.info(f"slack_get_thread_replies: channel={channel_id}, thread={thread_ts}")
 
@@ -150,17 +160,21 @@ def slack_get_thread_replies(channel_id: str, thread_ts: str) -> str:
 
         messages = []
         for msg in response["messages"]:
-            messages.append({
-                "text": msg.get("text", ""),
-                "user": msg.get("user"),
-                "timestamp": msg["ts"],
-            })
+            messages.append(
+                {
+                    "text": msg.get("text", ""),
+                    "user": msg.get("user"),
+                    "timestamp": msg["ts"],
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "messages": messages,
-            "count": len(messages),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "messages": messages,
+                "count": len(messages),
+            }
+        )
 
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e), "hint": "Set SLACK_BOT_TOKEN"})
@@ -200,11 +214,13 @@ def slack_post_message(
 
         response = client.chat_postMessage(**kwargs)
 
-        return json.dumps({
-            "ok": True,
-            "ts": response["ts"],
-            "channel": response["channel"],
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "ts": response["ts"],
+                "channel": response["channel"],
+            }
+        )
 
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e), "hint": "Set SLACK_BOT_TOKEN"})

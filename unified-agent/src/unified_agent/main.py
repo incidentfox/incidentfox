@@ -9,8 +9,7 @@ import logging
 import sys
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -18,14 +17,16 @@ logger = logging.getLogger(__name__)
 def run_sandbox_server():
     """Run the sandbox server (FastAPI on port 8888)."""
     from .sandbox.server import run_server
+
     run_server()
 
 
 def run_cli():
     """Run in CLI mode for direct interaction."""
     import asyncio
-    from .core.runner import Runner
+
     from .core.agent import Agent
+    from .core.runner import Runner
 
     async def main():
         agent = Agent(
@@ -65,21 +66,18 @@ def main():
 Examples:
   incidentfox-agent --mode server   # Run sandbox server (default)
   incidentfox-agent --mode cli      # Run interactive CLI
-        """
+        """,
     )
 
     parser.add_argument(
         "--mode",
         choices=["server", "cli"],
         default="server",
-        help="Run mode: server (FastAPI sandbox) or cli (interactive)"
+        help="Run mode: server (FastAPI sandbox) or cli (interactive)",
     )
 
     parser.add_argument(
-        "--port",
-        type=int,
-        default=8888,
-        help="Port for server mode (default: 8888)"
+        "--port", type=int, default=8888, help="Port for server mode (default: 8888)"
     )
 
     args = parser.parse_args()

@@ -46,7 +46,8 @@ def _get_k8s_client():
         return _k8s_core_v1, _k8s_apps_v1
 
     try:
-        from kubernetes import client, config as k8s_config
+        from kubernetes import client
+        from kubernetes import config as k8s_config
 
         try:
             k8s_config.load_kube_config()
@@ -72,11 +73,13 @@ def _get_k8s_client():
 
 def _make_error_response(tool_name: str, error: str, **kwargs) -> str:
     """Create a standard error response."""
-    return json.dumps({
-        "error": error,
-        "tool": tool_name,
-        **kwargs,
-    })
+    return json.dumps(
+        {
+            "error": error,
+            "tool": tool_name,
+            **kwargs,
+        }
+    )
 
 
 # =============================================================================
@@ -101,7 +104,9 @@ def list_pods(
     """
     try:
         start_time = time.time()
-        logger.info(f"list_pods: namespace={namespace}, label_selector={label_selector}")
+        logger.info(
+            f"list_pods: namespace={namespace}, label_selector={label_selector}"
+        )
 
         core_v1, _ = _get_k8s_client()
         pods = core_v1.list_namespaced_pod(
@@ -128,7 +133,9 @@ def list_pods(
         }
 
         elapsed = time.time() - start_time
-        logger.info(f"list_pods completed: {len(pods.items)} pods in {elapsed*1000:.0f}ms")
+        logger.info(
+            f"list_pods completed: {len(pods.items)} pods in {elapsed*1000:.0f}ms"
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
@@ -206,14 +213,20 @@ def describe_pod(
         }
 
         elapsed = time.time() - start_time
-        logger.info(f"describe_pod completed: status={pod.status.phase} in {elapsed*1000:.0f}ms")
+        logger.info(
+            f"describe_pod completed: status={pod.status.phase} in {elapsed*1000:.0f}ms"
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
-        return _make_error_response("describe_pod", str(e), pod=pod_name, namespace=namespace)
+        return _make_error_response(
+            "describe_pod", str(e), pod=pod_name, namespace=namespace
+        )
     except Exception as e:
         logger.error(f"describe_pod error: {e}")
-        return _make_error_response("describe_pod", str(e), pod=pod_name, namespace=namespace)
+        return _make_error_response(
+            "describe_pod", str(e), pod=pod_name, namespace=namespace
+        )
 
 
 @function_tool
@@ -249,14 +262,20 @@ def get_pod_logs(
         )
 
         elapsed = time.time() - start_time
-        logger.info(f"get_pod_logs completed: {len(logs) if logs else 0} bytes in {elapsed*1000:.0f}ms")
+        logger.info(
+            f"get_pod_logs completed: {len(logs) if logs else 0} bytes in {elapsed*1000:.0f}ms"
+        )
         return json.dumps({"pod": pod_name, "namespace": namespace, "logs": logs})
 
     except K8sConfigError as e:
-        return _make_error_response("get_pod_logs", str(e), pod=pod_name, namespace=namespace)
+        return _make_error_response(
+            "get_pod_logs", str(e), pod=pod_name, namespace=namespace
+        )
     except Exception as e:
         logger.error(f"get_pod_logs error: {e}")
-        return _make_error_response("get_pod_logs", str(e), pod=pod_name, namespace=namespace)
+        return _make_error_response(
+            "get_pod_logs", str(e), pod=pod_name, namespace=namespace
+        )
 
 
 @function_tool
@@ -303,14 +322,20 @@ def get_pod_events(
         }
 
         elapsed = time.time() - start_time
-        logger.info(f"get_pod_events completed: {len(events.items)} events in {elapsed*1000:.0f}ms")
+        logger.info(
+            f"get_pod_events completed: {len(events.items)} events in {elapsed*1000:.0f}ms"
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
-        return _make_error_response("get_pod_events", str(e), pod=pod_name, namespace=namespace)
+        return _make_error_response(
+            "get_pod_events", str(e), pod=pod_name, namespace=namespace
+        )
     except Exception as e:
         logger.error(f"get_pod_events error: {e}")
-        return _make_error_response("get_pod_events", str(e), pod=pod_name, namespace=namespace)
+        return _make_error_response(
+            "get_pod_events", str(e), pod=pod_name, namespace=namespace
+        )
 
 
 @function_tool
@@ -362,14 +387,26 @@ def describe_deployment(
         }
 
         elapsed = time.time() - start_time
-        logger.info(f"describe_deployment completed: ready={deployment.status.ready_replicas or 0}/{deployment.spec.replicas} in {elapsed*1000:.0f}ms")
+        logger.info(
+            f"describe_deployment completed: ready={deployment.status.ready_replicas or 0}/{deployment.spec.replicas} in {elapsed*1000:.0f}ms"
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
-        return _make_error_response("describe_deployment", str(e), deployment=deployment_name, namespace=namespace)
+        return _make_error_response(
+            "describe_deployment",
+            str(e),
+            deployment=deployment_name,
+            namespace=namespace,
+        )
     except Exception as e:
         logger.error(f"describe_deployment error: {e}")
-        return _make_error_response("describe_deployment", str(e), deployment=deployment_name, namespace=namespace)
+        return _make_error_response(
+            "describe_deployment",
+            str(e),
+            deployment=deployment_name,
+            namespace=namespace,
+        )
 
 
 @function_tool
@@ -414,30 +451,46 @@ def get_deployment_history(
             revision = rs.metadata.annotations.get(
                 "deployment.kubernetes.io/revision", "unknown"
             )
-            history.append({
-                "revision": revision,
-                "name": rs.metadata.name,
-                "replicas": rs.spec.replicas,
-                "ready": rs.status.ready_replicas or 0,
-                "created": str(rs.metadata.creation_timestamp),
-            })
+            history.append(
+                {
+                    "revision": revision,
+                    "name": rs.metadata.name,
+                    "replicas": rs.spec.replicas,
+                    "ready": rs.status.ready_replicas or 0,
+                    "created": str(rs.metadata.creation_timestamp),
+                }
+            )
 
         # Sort by revision
         history.sort(key=lambda x: x["revision"], reverse=True)
 
         elapsed = time.time() - start_time
-        logger.info(f"get_deployment_history completed: {len(history)} revisions in {elapsed*1000:.0f}ms")
-        return json.dumps({
-            "deployment": deployment_name,
-            "namespace": namespace,
-            "history": history,
-        })
+        logger.info(
+            f"get_deployment_history completed: {len(history)} revisions in {elapsed*1000:.0f}ms"
+        )
+        return json.dumps(
+            {
+                "deployment": deployment_name,
+                "namespace": namespace,
+                "history": history,
+            }
+        )
 
     except K8sConfigError as e:
-        return _make_error_response("get_deployment_history", str(e), deployment=deployment_name, namespace=namespace)
+        return _make_error_response(
+            "get_deployment_history",
+            str(e),
+            deployment=deployment_name,
+            namespace=namespace,
+        )
     except Exception as e:
         logger.error(f"get_deployment_history error: {e}")
-        return _make_error_response("get_deployment_history", str(e), deployment=deployment_name, namespace=namespace)
+        return _make_error_response(
+            "get_deployment_history",
+            str(e),
+            deployment=deployment_name,
+            namespace=namespace,
+        )
 
 
 @function_tool
@@ -476,11 +529,15 @@ def describe_service(
             )
             for subset in endpoints.subsets or []:
                 for address in subset.addresses or []:
-                    endpoint_list.append({
-                        "ip": address.ip,
-                        "ready": True,
-                        "target": address.target_ref.name if address.target_ref else None,
-                    })
+                    endpoint_list.append(
+                        {
+                            "ip": address.ip,
+                            "ready": True,
+                            "target": (
+                                address.target_ref.name if address.target_ref else None
+                            ),
+                        }
+                    )
         except Exception:
             pass
 
@@ -503,14 +560,20 @@ def describe_service(
         }
 
         elapsed = time.time() - start_time
-        logger.info(f"describe_service completed: {len(endpoint_list)} endpoints in {elapsed*1000:.0f}ms")
+        logger.info(
+            f"describe_service completed: {len(endpoint_list)} endpoints in {elapsed*1000:.0f}ms"
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:
-        return _make_error_response("describe_service", str(e), service=service_name, namespace=namespace)
+        return _make_error_response(
+            "describe_service", str(e), service=service_name, namespace=namespace
+        )
     except Exception as e:
         logger.error(f"describe_service error: {e}")
-        return _make_error_response("describe_service", str(e), service=service_name, namespace=namespace)
+        return _make_error_response(
+            "describe_service", str(e), service=service_name, namespace=namespace
+        )
 
 
 @function_tool
@@ -542,7 +605,9 @@ def list_namespaces() -> str:
         }
 
         elapsed = time.time() - start_time
-        logger.info(f"list_namespaces completed: {len(namespaces.items)} namespaces in {elapsed*1000:.0f}ms")
+        logger.info(
+            f"list_namespaces completed: {len(namespaces.items)} namespaces in {elapsed*1000:.0f}ms"
+        )
         return json.dumps(result)
 
     except K8sConfigError as e:

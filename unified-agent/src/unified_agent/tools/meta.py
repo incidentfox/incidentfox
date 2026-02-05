@@ -34,10 +34,12 @@ def think(thought: str) -> str:
     # This tool is essentially a no-op that allows the model to
     # "think out loud" in a structured way that gets recorded
     logger.debug(f"Agent thought: {thought[:200]}...")
-    return json.dumps({
-        "status": "thought_recorded",
-        "message": "Continue with your investigation based on this reasoning.",
-    })
+    return json.dumps(
+        {
+            "status": "thought_recorded",
+            "message": "Continue with your investigation based on this reasoning.",
+        }
+    )
 
 
 @function_tool
@@ -71,32 +73,40 @@ def web_search(
 
             with DDGS() as ddgs:
                 for r in ddgs.text(query, max_results=num_results):
-                    results.append({
-                        "title": r.get("title", ""),
-                        "url": r.get("href", ""),
-                        "snippet": r.get("body", ""),
-                    })
+                    results.append(
+                        {
+                            "title": r.get("title", ""),
+                            "url": r.get("href", ""),
+                            "snippet": r.get("body", ""),
+                        }
+                    )
 
-            return json.dumps({
-                "query": query,
-                "result_count": len(results),
-                "results": results,
-            })
+            return json.dumps(
+                {
+                    "query": query,
+                    "result_count": len(results),
+                    "results": results,
+                }
+            )
 
         except ImportError:
             # Fall back to a simple response
-            return json.dumps({
-                "error": "Web search not available",
-                "message": "Install duckduckgo-search package: pip install duckduckgo-search",
-                "query": query,
-            })
+            return json.dumps(
+                {
+                    "error": "Web search not available",
+                    "message": "Install duckduckgo-search package: pip install duckduckgo-search",
+                    "query": query,
+                }
+            )
 
     except Exception as e:
         logger.error(f"web_search error: {e}")
-        return json.dumps({
-            "error": str(e),
-            "query": query,
-        })
+        return json.dumps(
+            {
+                "error": str(e),
+                "query": query,
+            }
+        )
 
 
 @function_tool
@@ -131,6 +141,7 @@ def web_fetch(
             # Try to extract text from HTML
             try:
                 from bs4 import BeautifulSoup
+
                 soup = BeautifulSoup(content, "html.parser")
 
                 # Remove script and style elements
@@ -144,25 +155,31 @@ def web_fetch(
             except ImportError:
                 pass  # Use raw HTML if beautifulsoup not available
 
-        return json.dumps({
-            "url": url,
-            "status_code": response.status_code,
-            "content_type": response.headers.get("content-type"),
-            "content": content[:100000],  # Limit size
-        })
+        return json.dumps(
+            {
+                "url": url,
+                "status_code": response.status_code,
+                "content_type": response.headers.get("content-type"),
+                "content": content[:100000],  # Limit size
+            }
+        )
 
     except ImportError:
-        return json.dumps({
-            "error": "httpx not installed",
-            "message": "Install httpx: pip install httpx",
-            "url": url,
-        })
+        return json.dumps(
+            {
+                "error": "httpx not installed",
+                "message": "Install httpx: pip install httpx",
+                "url": url,
+            }
+        )
     except Exception as e:
         logger.error(f"web_fetch error: {e}")
-        return json.dumps({
-            "error": str(e),
-            "url": url,
-        })
+        return json.dumps(
+            {
+                "error": str(e),
+                "url": url,
+            }
+        )
 
 
 @function_tool
@@ -188,8 +205,9 @@ def llm_call(
     # This tool allows nested LLM calls for complex reasoning
     # In practice, it would use the configured LLM provider
     try:
-        import litellm
         import os
+
+        import litellm
 
         full_prompt = prompt
         if context:
@@ -202,21 +220,25 @@ def llm_call(
             max_tokens=4000,
         )
 
-        return json.dumps({
-            "response": response.choices[0].message.content,
-            "model": response.model,
-            "usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-            },
-        })
+        return json.dumps(
+            {
+                "response": response.choices[0].message.content,
+                "model": response.model,
+                "usage": {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                },
+            }
+        )
 
     except Exception as e:
         logger.error(f"llm_call error: {e}")
-        return json.dumps({
-            "error": str(e),
-            "prompt": prompt[:500],
-        })
+        return json.dumps(
+            {
+                "error": str(e),
+                "prompt": prompt[:500],
+            }
+        )
 
 
 # =============================================================================

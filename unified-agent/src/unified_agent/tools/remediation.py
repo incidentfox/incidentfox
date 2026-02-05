@@ -67,14 +67,16 @@ def get_current_replicas(deployment: str, namespace: str = "default") -> str:
         apps_v1 = client.AppsV1Api()
         deploy = apps_v1.read_namespaced_deployment(deployment, namespace)
 
-        return json.dumps({
-            "ok": True,
-            "deployment": deployment,
-            "namespace": namespace,
-            "desired_replicas": deploy.spec.replicas,
-            "ready_replicas": deploy.status.ready_replicas or 0,
-            "available_replicas": deploy.status.available_replicas or 0,
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "deployment": deployment,
+                "namespace": namespace,
+                "desired_replicas": deploy.spec.replicas,
+                "ready_replicas": deploy.status.ready_replicas or 0,
+                "available_replicas": deploy.status.available_replicas or 0,
+            }
+        )
 
     except Exception as e:
         logger.error(f"get_current_replicas error: {e}")
@@ -117,7 +119,9 @@ def propose_remediation(
         JSON with proposal status
     """
     if not action_type or not target or not reason:
-        return json.dumps({"ok": False, "error": "action_type, target, and reason are required"})
+        return json.dumps(
+            {"ok": False, "error": "action_type, target, and reason are required"}
+        )
 
     logger.info(f"propose_remediation: action={action_type}, target={target}")
 
@@ -148,25 +152,29 @@ def propose_remediation(
             if response.status_code in (200, 201):
                 data = response.json()
                 logger.info(f"remediation_proposed: id={data.get('id')}")
-                return json.dumps({
-                    "ok": True,
-                    "status": "pending_approval",
-                    "proposal_id": data.get("id"),
-                    "message": f"Remediation proposed: {action_type} on {target}. Awaiting approval.",
-                    "urgency": urgency,
-                })
+                return json.dumps(
+                    {
+                        "ok": True,
+                        "status": "pending_approval",
+                        "proposal_id": data.get("id"),
+                        "message": f"Remediation proposed: {action_type} on {target}. Awaiting approval.",
+                        "urgency": urgency,
+                    }
+                )
     except Exception as e:
         logger.warning(f"remediation_api_error: {e}")
 
     # Fallback: Log the proposal
     logger.info(f"remediation_proposed_local: {proposal}")
-    return json.dumps({
-        "ok": True,
-        "status": "logged_for_review",
-        "proposal": proposal,
-        "message": f"Remediation logged: {action_type} on {target}. Please review manually.",
-        "note": "Remediation API unavailable - proposal logged but not queued.",
-    })
+    return json.dumps(
+        {
+            "ok": True,
+            "status": "logged_for_review",
+            "proposal": proposal,
+            "message": f"Remediation logged: {action_type} on {target}. Please review manually.",
+            "note": "Remediation API unavailable - proposal logged but not queued.",
+        }
+    )
 
 
 @function_tool
@@ -275,11 +283,13 @@ def propose_scale_deployment(
         action_type="scale_deployment",
         target=f"deployment/{deployment}",
         reason=reason or f"Scale to {replicas} replicas",
-        parameters=json.dumps({
-            "namespace": namespace,
-            "deployment": deployment,
-            "replicas": replicas,
-        }),
+        parameters=json.dumps(
+            {
+                "namespace": namespace,
+                "deployment": deployment,
+                "replicas": replicas,
+            }
+        ),
         urgency="medium" if replicas > 0 else "high",
         rollback_action=f"Scale back to {current_replicas} replicas",
     )
@@ -299,18 +309,22 @@ def list_pending_remediations() -> str:
         with _get_client() as client:
             response = client.get("/api/v1/remediations?status=pending")
             if response.status_code == 200:
-                return json.dumps({
-                    "ok": True,
-                    "remediations": response.json(),
-                })
+                return json.dumps(
+                    {
+                        "ok": True,
+                        "remediations": response.json(),
+                    }
+                )
     except Exception as e:
         logger.warning(f"list_remediations_failed: {e}")
 
-    return json.dumps({
-        "ok": False,
-        "error": "Could not fetch pending remediations",
-        "remediations": [],
-    })
+    return json.dumps(
+        {
+            "ok": False,
+            "error": "Could not fetch pending remediations",
+            "remediations": [],
+        }
+    )
 
 
 @function_tool
@@ -333,17 +347,21 @@ def get_remediation_status(proposal_id: str) -> str:
         with _get_client() as client:
             response = client.get(f"/api/v1/remediations/{proposal_id}")
             if response.status_code == 200:
-                return json.dumps({
-                    "ok": True,
-                    **response.json(),
-                })
+                return json.dumps(
+                    {
+                        "ok": True,
+                        **response.json(),
+                    }
+                )
     except Exception as e:
         logger.warning(f"get_remediation_failed: {e}")
 
-    return json.dumps({
-        "ok": False,
-        "error": f"Could not fetch remediation {proposal_id}",
-    })
+    return json.dumps(
+        {
+            "ok": False,
+            "error": f"Could not fetch remediation {proposal_id}",
+        }
+    )
 
 
 # Register tools

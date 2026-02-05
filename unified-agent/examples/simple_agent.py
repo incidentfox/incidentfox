@@ -17,10 +17,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from unified_agent import (
     Agent,
-    Runner,
     ModelSettings,
-    function_tool,
+    Runner,
     create_generic_agent_from_config,
+    function_tool,
 )
 
 
@@ -29,6 +29,7 @@ from unified_agent import (
 def get_current_time() -> str:
     """Get the current UTC time."""
     from datetime import datetime
+
     return datetime.utcnow().isoformat()
 
 
@@ -44,6 +45,7 @@ def calculate(expression: str) -> str:
         Result of the calculation
     """
     import json
+
     # Only allow safe mathematical operations
     allowed = set("0123456789+-*/.() ")
     if not all(c in allowed for c in expression):

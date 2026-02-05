@@ -48,7 +48,9 @@ def describe_ec2_instance(instance_id: str, region: str = "us-east-1") -> str:
         response = ec2.describe_instances(InstanceIds=[instance_id])
 
         if not response["Reservations"]:
-            return json.dumps({"error": "Instance not found", "instance_id": instance_id})
+            return json.dumps(
+                {"error": "Instance not found", "instance_id": instance_id}
+            )
 
         instance = response["Reservations"][0]["Instances"][0]
 
@@ -108,11 +110,13 @@ def get_cloudwatch_logs(
             )
 
             if not streams["logStreams"]:
-                return json.dumps({
-                    "log_group": log_group,
-                    "messages": [],
-                    "error": "No log streams found",
-                })
+                return json.dumps(
+                    {
+                        "log_group": log_group,
+                        "messages": [],
+                        "error": "No log streams found",
+                    }
+                )
 
             stream_name = streams["logStreams"][0]["logStreamName"]
             response = logs.get_log_events(
@@ -122,11 +126,13 @@ def get_cloudwatch_logs(
             )
             messages = [event["message"] for event in response["events"]]
 
-        return json.dumps({
-            "log_group": log_group,
-            "message_count": len(messages),
-            "messages": messages,
-        })
+        return json.dumps(
+            {
+                "log_group": log_group,
+                "message_count": len(messages),
+                "messages": messages,
+            }
+        )
 
     except Exception as e:
         logger.error(f"get_cloudwatch_logs error: {e}")
@@ -179,18 +185,20 @@ def get_cloudwatch_metrics(
             key=lambda x: x["Timestamp"],
         )
 
-        return json.dumps({
-            "namespace": namespace,
-            "metric_name": metric_name,
-            "datapoints": [
-                {
-                    "timestamp": str(dp["Timestamp"]),
-                    "value": dp.get(stat),
-                    "unit": dp.get("Unit"),
-                }
-                for dp in datapoints
-            ],
-        })
+        return json.dumps(
+            {
+                "namespace": namespace,
+                "metric_name": metric_name,
+                "datapoints": [
+                    {
+                        "timestamp": str(dp["Timestamp"]),
+                        "value": dp.get(stat),
+                        "unit": dp.get("Unit"),
+                    }
+                    for dp in datapoints
+                ],
+            }
+        )
 
     except Exception as e:
         logger.error(f"get_cloudwatch_metrics error: {e}")

@@ -25,7 +25,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from .agent import Agent, ModelSettings, function_tool
-from .runner import Runner, MaxTurnsExceeded, MODEL_ALIASES
+from .runner import MODEL_ALIASES, MaxTurnsExceeded, Runner
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +153,7 @@ def get_all_available_tools() -> dict[str, Callable]:
     # This will be populated as we port tools from agent/
     try:
         from ..tools import get_tool_registry
+
         tools.update(get_tool_registry())
     except ImportError:
         logger.debug("unified_agent.tools not available yet")
@@ -161,21 +162,24 @@ def get_all_available_tools() -> dict[str, Callable]:
     # This enables gradual migration
     try:
         from ai_agent.tools.kubernetes import (
-            list_pods,
-            describe_pod,
-            get_pod_logs,
-            get_pod_events,
             describe_deployment,
+            describe_pod,
             get_deployment_history,
+            get_pod_events,
+            get_pod_logs,
+            list_pods,
         )
-        tools.update({
-            "list_pods": list_pods,
-            "describe_pod": describe_pod,
-            "get_pod_logs": get_pod_logs,
-            "get_pod_events": get_pod_events,
-            "describe_deployment": describe_deployment,
-            "get_deployment_history": get_deployment_history,
-        })
+
+        tools.update(
+            {
+                "list_pods": list_pods,
+                "describe_pod": describe_pod,
+                "get_pod_logs": get_pod_logs,
+                "get_pod_events": get_pod_events,
+                "describe_deployment": describe_deployment,
+                "get_deployment_history": get_deployment_history,
+            }
+        )
     except ImportError:
         pass
 
@@ -186,42 +190,51 @@ def get_all_available_tools() -> dict[str, Callable]:
             get_cloudwatch_metrics,
             list_ecs_tasks,
         )
-        tools.update({
-            "describe_ec2_instance": describe_ec2_instance,
-            "get_cloudwatch_logs": get_cloudwatch_logs,
-            "get_cloudwatch_metrics": get_cloudwatch_metrics,
-            "list_ecs_tasks": list_ecs_tasks,
-        })
+
+        tools.update(
+            {
+                "describe_ec2_instance": describe_ec2_instance,
+                "get_cloudwatch_logs": get_cloudwatch_logs,
+                "get_cloudwatch_metrics": get_cloudwatch_metrics,
+                "list_ecs_tasks": list_ecs_tasks,
+            }
+        )
     except ImportError:
         pass
 
     try:
         from ai_agent.tools.grafana_tools import (
-            grafana_list_dashboards,
             grafana_get_dashboard,
+            grafana_list_dashboards,
             grafana_query_prometheus,
         )
-        tools.update({
-            "grafana_list_dashboards": grafana_list_dashboards,
-            "grafana_get_dashboard": grafana_get_dashboard,
-            "grafana_query_prometheus": grafana_query_prometheus,
-        })
+
+        tools.update(
+            {
+                "grafana_list_dashboards": grafana_list_dashboards,
+                "grafana_get_dashboard": grafana_get_dashboard,
+                "grafana_query_prometheus": grafana_query_prometheus,
+            }
+        )
     except ImportError:
         pass
 
     try:
         from ai_agent.tools.github_tools import (
-            search_github_code,
-            read_github_file,
-            list_pull_requests,
             list_issues,
+            list_pull_requests,
+            read_github_file,
+            search_github_code,
         )
-        tools.update({
-            "search_github_code": search_github_code,
-            "read_github_file": read_github_file,
-            "list_pull_requests": list_pull_requests,
-            "list_issues": list_issues,
-        })
+
+        tools.update(
+            {
+                "search_github_code": search_github_code,
+                "read_github_file": read_github_file,
+                "list_pull_requests": list_pull_requests,
+                "list_issues": list_issues,
+            }
+        )
     except ImportError:
         pass
 
@@ -263,7 +276,9 @@ def resolve_tools(
     # Get actual tool functions
     result_tools = [all_tools[name] for name in result_names if name in all_tools]
 
-    logger.debug(f"Resolved {len(result_tools)} tools (enabled={len(enabled)}, disabled={len(disabled)})")
+    logger.debug(
+        f"Resolved {len(result_tools)} tools (enabled={len(enabled)}, disabled={len(disabled)})"
+    )
     return result_tools
 
 
@@ -285,7 +300,6 @@ Your role is to:
 5. Track progress and ensure thorough investigation
 
 Be systematic and thorough. Start with understanding the scope of the issue before diving into details.""",
-
         "investigation": """You are an expert SRE with deep expertise in incident investigation.
 
 Your role is to:
@@ -296,7 +310,6 @@ Your role is to:
 5. Identify the root cause or escalate if unclear
 
 Focus on the "why" not just the "what". Look for patterns and correlations.""",
-
         "k8s": """You are a Kubernetes expert specializing in troubleshooting container and cluster issues.
 
 Your expertise includes:
@@ -307,7 +320,6 @@ Your expertise includes:
 - Node conditions and scheduling issues
 
 Provide specific kubectl commands and YAML snippets when relevant.""",
-
         "aws": """You are an AWS expert specializing in cloud resource management and troubleshooting.
 
 Your expertise includes:
@@ -318,7 +330,6 @@ Your expertise includes:
 - Load balancers and networking
 
 Reference specific AWS documentation and best practices.""",
-
         "metrics": """You are a metrics analysis expert specializing in anomaly detection and performance analysis.
 
 Your expertise includes:
@@ -329,7 +340,6 @@ Your expertise includes:
 - Dashboard interpretation
 
 Explain statistical significance and confidence levels in your analysis.""",
-
         "coding": """You are an expert software engineer specializing in code analysis and debugging.
 
 Your expertise includes:
@@ -340,7 +350,6 @@ Your expertise includes:
 - Security vulnerability identification
 
 Reference specific lines and commits when discussing code changes.""",
-
         "log-analyst": """You are a log analysis specialist.
 
 Your role is to:
@@ -351,7 +360,6 @@ Your role is to:
 5. Summarize findings clearly
 
 Use regex and structured queries for precise filtering.""",
-
         "remediator": """You are a remediation specialist responsible for safe system changes.
 
 Your role is to:
@@ -363,7 +371,9 @@ Your role is to:
 
 Always use dry-run first. Prefer rollbacks over rollforwards when safe.""",
     }
-    return prompts.get(agent_id, "You are an AI assistant that helps with technical tasks.")
+    return prompts.get(
+        agent_id, "You are an AI assistant that helps with technical tasks."
+    )
 
 
 def build_agent_from_config(
@@ -449,9 +459,7 @@ def build_agent_from_config(
 
     if isinstance(sub_agents_config, dict):
         # Canonical format: Dict[str, bool]
-        sub_agent_ids = [
-            aid for aid, enabled in sub_agents_config.items() if enabled
-        ]
+        sub_agent_ids = [aid for aid, enabled in sub_agents_config.items() if enabled]
     elif isinstance(sub_agents_config, list):
         # Legacy format with disable/enable pattern
         disable_default = agent_config.get("disable_default_sub_agents", [])
@@ -461,7 +469,9 @@ def build_agent_from_config(
         sub_agent_ids.extend(enable_extra)
         # Deduplicate while preserving order
         seen = set()
-        sub_agent_ids = [sid for sid in sub_agent_ids if not (sid in seen or seen.add(sid))]
+        sub_agent_ids = [
+            sid for sid in sub_agent_ids if not (sid in seen or seen.add(sid))
+        ]
     else:
         sub_agent_ids = []
 
@@ -518,11 +528,15 @@ def _run_agent_in_thread(agent: Agent, query: str, max_turns: int = 25) -> Any:
                 )
                 result_holder["result"] = result
             except MaxTurnsExceeded as e:
-                logger.warning(f"Sub-agent {agent_name} exceeded max turns ({max_turns})")
+                logger.warning(
+                    f"Sub-agent {agent_name} exceeded max turns ({max_turns})"
+                )
                 result_holder["result"] = {
                     "status": "incomplete",
                     "message": f"Investigation exceeded {max_turns} turns",
-                    "partial_messages": e.partial_messages[-5:] if e.partial_messages else [],
+                    "partial_messages": (
+                        e.partial_messages[-5:] if e.partial_messages else []
+                    ),
                 }
                 result_holder["partial"] = True
             finally:
@@ -675,6 +689,7 @@ def build_agent_hierarchy(
     if team_config:
         try:
             from ..integrations.a2a import get_remote_agents_for_team
+
             remote_agents = get_remote_agents_for_team(team_config)
             logger.info(f"Loaded {len(remote_agents)} remote agents")
         except ImportError:

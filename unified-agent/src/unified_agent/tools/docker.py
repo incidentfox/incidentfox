@@ -65,13 +65,15 @@ def docker_ps(all_containers: bool = False) -> str:
             if line:
                 parts = line.split("|")
                 if len(parts) >= 4:
-                    containers.append({
-                        "id": parts[0],
-                        "name": parts[1],
-                        "image": parts[2],
-                        "status": parts[3],
-                        "ports": parts[4] if len(parts) > 4 else "",
-                    })
+                    containers.append(
+                        {
+                            "id": parts[0],
+                            "name": parts[1],
+                            "image": parts[2],
+                            "status": parts[3],
+                            "ports": parts[4] if len(parts) > 4 else "",
+                        }
+                    )
         result["containers"] = containers
 
     return json.dumps(result)
@@ -139,8 +141,12 @@ def docker_stats(container: Optional[str] = None) -> str:
     """
     logger.info(f"docker_stats: container={container}")
 
-    args = ["stats", "--no-stream", "--format",
-            "{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.NetIO}}|{{.BlockIO}}"]
+    args = [
+        "stats",
+        "--no-stream",
+        "--format",
+        "{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.NetIO}}|{{.BlockIO}}",
+    ]
     if container:
         args.append(container)
 
@@ -152,13 +158,15 @@ def docker_stats(container: Optional[str] = None) -> str:
             if line:
                 parts = line.split("|")
                 if len(parts) >= 5:
-                    stats.append({
-                        "name": parts[0],
-                        "cpu_percent": parts[1],
-                        "memory": parts[2],
-                        "net_io": parts[3],
-                        "block_io": parts[4],
-                    })
+                    stats.append(
+                        {
+                            "name": parts[0],
+                            "cpu_percent": parts[1],
+                            "memory": parts[2],
+                            "net_io": parts[3],
+                            "block_io": parts[4],
+                        }
+                    )
         result["stats"] = stats
 
     return json.dumps(result)
@@ -195,7 +203,11 @@ def docker_images() -> str:
     """
     logger.info("docker_images")
 
-    args = ["images", "--format", "{{.Repository}}|{{.Tag}}|{{.ID}}|{{.Size}}|{{.CreatedSince}}"]
+    args = [
+        "images",
+        "--format",
+        "{{.Repository}}|{{.Tag}}|{{.ID}}|{{.Size}}|{{.CreatedSince}}",
+    ]
     result = _run_docker(args)
 
     if result.get("ok"):
@@ -204,13 +216,15 @@ def docker_images() -> str:
             if line:
                 parts = line.split("|")
                 if len(parts) >= 5:
-                    images.append({
-                        "repository": parts[0],
-                        "tag": parts[1],
-                        "id": parts[2],
-                        "size": parts[3],
-                        "created": parts[4],
-                    })
+                    images.append(
+                        {
+                            "repository": parts[0],
+                            "tag": parts[1],
+                            "id": parts[2],
+                            "size": parts[3],
+                            "created": parts[4],
+                        }
+                    )
         result["images"] = images
 
     return json.dumps(result)

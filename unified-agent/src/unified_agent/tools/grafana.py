@@ -77,7 +77,13 @@ def grafana_list_dashboards(query: str = "") -> str:
         return json.dumps(result)
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set GRAFANA_URL and GRAFANA_API_KEY"})
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set GRAFANA_URL and GRAFANA_API_KEY",
+            }
+        )
     except Exception as e:
         logger.error(f"grafana_list_dashboards error: {e}")
         return json.dumps({"ok": False, "error": str(e)})
@@ -108,12 +114,14 @@ def grafana_get_dashboard(dashboard_uid: str) -> str:
         dashboard = data.get("dashboard", {})
         panels = []
         for panel in dashboard.get("panels", []):
-            panels.append({
-                "id": panel.get("id"),
-                "title": panel.get("title"),
-                "type": panel.get("type"),
-                "datasource": panel.get("datasource"),
-            })
+            panels.append(
+                {
+                    "id": panel.get("id"),
+                    "title": panel.get("title"),
+                    "type": panel.get("type"),
+                    "datasource": panel.get("datasource"),
+                }
+            )
 
         result = {
             "ok": True,
@@ -127,7 +135,9 @@ def grafana_get_dashboard(dashboard_uid: str) -> str:
 
     except Exception as e:
         logger.error(f"grafana_get_dashboard error: {e}")
-        return json.dumps({"ok": False, "error": str(e), "dashboard_uid": dashboard_uid})
+        return json.dumps(
+            {"ok": False, "error": str(e), "dashboard_uid": dashboard_uid}
+        )
 
 
 @function_tool
@@ -166,7 +176,9 @@ def grafana_query_prometheus(
                 "step": step,
             }
 
-            response = client.get("/api/datasources/proxy/1/api/v1/query_range", params=params)
+            response = client.get(
+                "/api/datasources/proxy/1/api/v1/query_range", params=params
+            )
             response.raise_for_status()
             data = response.json()
 
@@ -176,17 +188,21 @@ def grafana_query_prometheus(
         results = data.get("data", {}).get("result", [])
         formatted = []
         for r in results[:20]:  # Limit results
-            formatted.append({
-                "metric": r.get("metric", {}),
-                "values": r.get("values", [])[-100:],  # Last 100 datapoints
-            })
+            formatted.append(
+                {
+                    "metric": r.get("metric", {}),
+                    "values": r.get("values", [])[-100:],  # Last 100 datapoints
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "query": query,
-            "result_count": len(results),
-            "results": formatted,
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "query": query,
+                "result_count": len(results),
+                "results": formatted,
+            }
+        )
 
     except Exception as e:
         logger.error(f"grafana_query_prometheus error: {e}")

@@ -144,6 +144,7 @@ def load_config() -> Config:
             config.team_config = _load_from_config_service(team_token)
         except Exception as e:
             import logging
+
             logging.warning(f"Failed to load team config: {e}")
 
     # Fallback to local config file

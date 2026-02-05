@@ -73,9 +73,7 @@ class Agent:
     def get_tool_by_name(self, name: str) -> Optional[Callable]:
         """Get a tool by its function name."""
         for tool in self.tools:
-            tool_name = getattr(tool, "__name__", None) or getattr(
-                tool, "name", None
-            )
+            tool_name = getattr(tool, "__name__", None) or getattr(tool, "name", None)
             if tool_name == name:
                 return tool
         return None

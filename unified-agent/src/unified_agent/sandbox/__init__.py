@@ -14,7 +14,7 @@ Components:
 """
 
 from .auth import generate_sandbox_jwt, verify_sandbox_jwt
-from .manager import SandboxManager, SandboxInfo, SandboxExecutionError
+from .manager import SandboxExecutionError, SandboxInfo, SandboxManager
 
 __all__ = [
     "generate_sandbox_jwt",

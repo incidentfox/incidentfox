@@ -15,7 +15,9 @@ from . import register_tool
 logger = logging.getLogger(__name__)
 
 
-def _run_git(args: list[str], cwd: Optional[str] = None, timeout_s: float = 60.0) -> dict:
+def _run_git(
+    args: list[str], cwd: Optional[str] = None, timeout_s: float = 60.0
+) -> dict:
     """Run a git command and return structured output."""
     cmd = ["git"] + args
     try:
@@ -58,7 +60,9 @@ def git_status(cwd: str = ".") -> str:
         branch = ""
         if lines and lines[0].startswith("## "):
             branch_line = lines[0][3:]
-            branch = branch_line.split("...")[0] if "..." in branch_line else branch_line
+            branch = (
+                branch_line.split("...")[0] if "..." in branch_line else branch_line
+            )
         clean = len(lines) <= 1 or (len(lines) == 1 and lines[0].startswith("##"))
         result["branch"] = branch
         result["clean"] = clean
@@ -142,13 +146,15 @@ def git_log(
             if line and "|" in line:
                 parts = line.split("|")
                 if len(parts) >= 5:
-                    commits.append({
-                        "hash": parts[0],
-                        "author": parts[1],
-                        "email": parts[2],
-                        "subject": parts[3],
-                        "date": parts[4],
-                    })
+                    commits.append(
+                        {
+                            "hash": parts[0],
+                            "author": parts[1],
+                            "email": parts[2],
+                            "subject": parts[3],
+                            "date": parts[4],
+                        }
+                    )
         result["commits"] = commits
 
     return json.dumps(result)
@@ -220,18 +226,27 @@ def git_branch_list(cwd: str = ".") -> str:
     """
     logger.info(f"git_branch_list: cwd={cwd}")
 
-    result = _run_git(["branch", "-a", "--format=%(refname:short)|%(upstream:short)|%(committerdate:relative)"], cwd=cwd or None)
+    result = _run_git(
+        [
+            "branch",
+            "-a",
+            "--format=%(refname:short)|%(upstream:short)|%(committerdate:relative)",
+        ],
+        cwd=cwd or None,
+    )
 
     if result.get("ok"):
         branches = []
         for line in result.get("stdout", "").strip().split("\n"):
             if line:
                 parts = line.split("|")
-                branches.append({
-                    "name": parts[0],
-                    "upstream": parts[1] if len(parts) > 1 else "",
-                    "last_commit": parts[2] if len(parts) > 2 else "",
-                })
+                branches.append(
+                    {
+                        "name": parts[0],
+                        "upstream": parts[1] if len(parts) > 1 else "",
+                        "last_commit": parts[2] if len(parts) > 2 else "",
+                    }
+                )
         result["branches"] = branches
 
     return json.dumps(result)

@@ -27,6 +27,6 @@ content = loader.load_skill("investigate")
 ```
 """
 
-from .loader import SkillLoader, Skill
+from .loader import Skill, SkillLoader
 
 __all__ = ["SkillLoader", "Skill"]

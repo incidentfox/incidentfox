@@ -59,33 +59,37 @@ def pagerduty_get_incident(incident_id: str) -> str:
 
         incident = response.json()["incident"]
 
-        return json.dumps({
-            "ok": True,
-            "id": incident["id"],
-            "incident_number": incident.get("incident_number"),
-            "title": incident["title"],
-            "description": incident.get("description"),
-            "status": incident["status"],
-            "urgency": incident["urgency"],
-            "created_at": incident["created_at"],
-            "updated_at": incident.get("updated_at"),
-            "service": {
-                "id": incident["service"]["id"],
-                "name": incident["service"]["summary"],
-            },
-            "assignments": [
-                {"assignee": a["assignee"]["summary"], "at": a["at"]}
-                for a in incident.get("assignments", [])
-            ],
-            "acknowledgements": [
-                {"acknowledger": a["acknowledger"]["summary"], "at": a["at"]}
-                for a in incident.get("acknowledgements", [])
-            ],
-            "url": incident["html_url"],
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "id": incident["id"],
+                "incident_number": incident.get("incident_number"),
+                "title": incident["title"],
+                "description": incident.get("description"),
+                "status": incident["status"],
+                "urgency": incident["urgency"],
+                "created_at": incident["created_at"],
+                "updated_at": incident.get("updated_at"),
+                "service": {
+                    "id": incident["service"]["id"],
+                    "name": incident["service"]["summary"],
+                },
+                "assignments": [
+                    {"assignee": a["assignee"]["summary"], "at": a["at"]}
+                    for a in incident.get("assignments", [])
+                ],
+                "acknowledgements": [
+                    {"acknowledger": a["acknowledger"]["summary"], "at": a["at"]}
+                    for a in incident.get("acknowledgements", [])
+                ],
+                "url": incident["html_url"],
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set PAGERDUTY_API_KEY"})
+        return json.dumps(
+            {"ok": False, "error": str(e), "hint": "Set PAGERDUTY_API_KEY"}
+        )
     except Exception as e:
         logger.error(f"pagerduty_get_incident error: {e}")
         return json.dumps({"ok": False, "error": str(e), "incident_id": incident_id})
@@ -128,23 +132,29 @@ def pagerduty_get_incident_log_entries(
 
         entries = []
         for entry in log_entries:
-            entries.append({
-                "id": entry["id"],
-                "type": entry["type"],
-                "created_at": entry["created_at"],
-                "agent": entry.get("agent", {}).get("summary"),
-                "channel": entry.get("channel", {}).get("type"),
-                "summary": entry.get("summary"),
-            })
+            entries.append(
+                {
+                    "id": entry["id"],
+                    "type": entry["type"],
+                    "created_at": entry["created_at"],
+                    "agent": entry.get("agent", {}).get("summary"),
+                    "channel": entry.get("channel", {}).get("type"),
+                    "summary": entry.get("summary"),
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "entries": entries,
-            "count": len(entries),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "entries": entries,
+                "count": len(entries),
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set PAGERDUTY_API_KEY"})
+        return json.dumps(
+            {"ok": False, "error": str(e), "hint": "Set PAGERDUTY_API_KEY"}
+        )
     except Exception as e:
         logger.error(f"pagerduty_get_incident_log_entries error: {e}")
         return json.dumps({"ok": False, "error": str(e), "incident_id": incident_id})
@@ -196,25 +206,31 @@ def pagerduty_list_incidents(
 
         incident_list = []
         for incident in incidents:
-            incident_list.append({
-                "id": incident["id"],
-                "incident_number": incident.get("incident_number"),
-                "title": incident["title"],
-                "status": incident["status"],
-                "urgency": incident["urgency"],
-                "created_at": incident["created_at"],
-                "service": incident["service"]["summary"],
-                "url": incident["html_url"],
-            })
+            incident_list.append(
+                {
+                    "id": incident["id"],
+                    "incident_number": incident.get("incident_number"),
+                    "title": incident["title"],
+                    "status": incident["status"],
+                    "urgency": incident["urgency"],
+                    "created_at": incident["created_at"],
+                    "service": incident["service"]["summary"],
+                    "url": incident["html_url"],
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "incidents": incident_list,
-            "count": len(incident_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "incidents": incident_list,
+                "count": len(incident_list),
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set PAGERDUTY_API_KEY"})
+        return json.dumps(
+            {"ok": False, "error": str(e), "hint": "Set PAGERDUTY_API_KEY"}
+        )
     except Exception as e:
         logger.error(f"pagerduty_list_incidents error: {e}")
         return json.dumps({"ok": False, "error": str(e)})
@@ -250,34 +266,40 @@ def pagerduty_get_escalation_policy(policy_id: str) -> str:
 
         policy = response.json()["escalation_policy"]
 
-        return json.dumps({
-            "ok": True,
-            "id": policy["id"],
-            "name": policy["name"],
-            "description": policy.get("description"),
-            "num_loops": policy.get("num_loops"),
-            "escalation_rules": [
-                {
-                    "escalation_delay_in_minutes": rule["escalation_delay_in_minutes"],
-                    "targets": [
-                        {
-                            "type": target["type"],
-                            "id": target["id"],
-                            "summary": target["summary"],
-                        }
-                        for target in rule.get("targets", [])
-                    ],
-                }
-                for rule in policy.get("escalation_rules", [])
-            ],
-            "services": [
-                {"id": svc["id"], "summary": svc["summary"]}
-                for svc in policy.get("services", [])
-            ],
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "id": policy["id"],
+                "name": policy["name"],
+                "description": policy.get("description"),
+                "num_loops": policy.get("num_loops"),
+                "escalation_rules": [
+                    {
+                        "escalation_delay_in_minutes": rule[
+                            "escalation_delay_in_minutes"
+                        ],
+                        "targets": [
+                            {
+                                "type": target["type"],
+                                "id": target["id"],
+                                "summary": target["summary"],
+                            }
+                            for target in rule.get("targets", [])
+                        ],
+                    }
+                    for rule in policy.get("escalation_rules", [])
+                ],
+                "services": [
+                    {"id": svc["id"], "summary": svc["summary"]}
+                    for svc in policy.get("services", [])
+                ],
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set PAGERDUTY_API_KEY"})
+        return json.dumps(
+            {"ok": False, "error": str(e), "hint": "Set PAGERDUTY_API_KEY"}
+        )
     except Exception as e:
         logger.error(f"pagerduty_get_escalation_policy error: {e}")
         return json.dumps({"ok": False, "error": str(e), "policy_id": policy_id})
@@ -328,20 +350,26 @@ def pagerduty_calculate_mttr(service_id: str = "", days: int = 30) -> str:
         # Calculate resolution times
         resolution_times = []
         for incident in incidents:
-            created = datetime.fromisoformat(incident["created_at"].replace("Z", "+00:00"))
-            resolved = datetime.fromisoformat(incident["last_status_change_at"].replace("Z", "+00:00"))
+            created = datetime.fromisoformat(
+                incident["created_at"].replace("Z", "+00:00")
+            )
+            resolved = datetime.fromisoformat(
+                incident["last_status_change_at"].replace("Z", "+00:00")
+            )
             resolution_minutes = (resolved - created).total_seconds() / 60
             resolution_times.append(resolution_minutes)
 
         if not resolution_times:
-            return json.dumps({
-                "ok": True,
-                "service_id": service_id,
-                "period_days": days,
-                "incident_count": 0,
-                "mttr_minutes": 0,
-                "message": "No resolved incidents in this period",
-            })
+            return json.dumps(
+                {
+                    "ok": True,
+                    "service_id": service_id,
+                    "period_days": days,
+                    "incident_count": 0,
+                    "mttr_minutes": 0,
+                    "message": "No resolved incidents in this period",
+                }
+            )
 
         # Calculate statistics
         resolution_times.sort()
@@ -350,21 +378,25 @@ def pagerduty_calculate_mttr(service_id: str = "", days: int = 30) -> str:
         median_mttr = resolution_times[count // 2]
         p95_mttr = resolution_times[int(count * 0.95)] if count > 0 else 0
 
-        return json.dumps({
-            "ok": True,
-            "service_id": service_id,
-            "period_days": days,
-            "incident_count": count,
-            "mttr_minutes": round(avg_mttr, 2),
-            "mttr_hours": round(avg_mttr / 60, 2),
-            "median_minutes": round(median_mttr, 2),
-            "p95_minutes": round(p95_mttr, 2),
-            "fastest_resolution_minutes": round(min(resolution_times), 2),
-            "slowest_resolution_minutes": round(max(resolution_times), 2),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "service_id": service_id,
+                "period_days": days,
+                "incident_count": count,
+                "mttr_minutes": round(avg_mttr, 2),
+                "mttr_hours": round(avg_mttr / 60, 2),
+                "median_minutes": round(median_mttr, 2),
+                "p95_minutes": round(p95_mttr, 2),
+                "fastest_resolution_minutes": round(min(resolution_times), 2),
+                "slowest_resolution_minutes": round(max(resolution_times), 2),
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set PAGERDUTY_API_KEY"})
+        return json.dumps(
+            {"ok": False, "error": str(e), "hint": "Set PAGERDUTY_API_KEY"}
+        )
     except Exception as e:
         logger.error(f"pagerduty_calculate_mttr error: {e}")
         return json.dumps({"ok": False, "error": str(e)})

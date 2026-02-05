@@ -142,8 +142,16 @@ class Runner:
                     api_key=api_key,
                     tools=tools,
                     tool_choice="auto" if tools else None,
-                    temperature=agent.model_settings.temperature if agent.model_settings else 0.4,
-                    max_tokens=agent.model_settings.max_tokens if agent.model_settings else None,
+                    temperature=(
+                        agent.model_settings.temperature
+                        if agent.model_settings
+                        else 0.4
+                    ),
+                    max_tokens=(
+                        agent.model_settings.max_tokens
+                        if agent.model_settings
+                        else None
+                    ),
                 )
 
                 assistant_message = response.choices[0].message
@@ -191,18 +199,22 @@ class Runner:
                         logger.warning(f"Unknown tool requested: {tool_name}")
 
                     # Record tool call
-                    tool_calls_history.append({
-                        "name": tool_name,
-                        "args": tool_args,
-                        "output": tool_output[:10000],  # Truncate large outputs
-                    })
+                    tool_calls_history.append(
+                        {
+                            "name": tool_name,
+                            "args": tool_args,
+                            "output": tool_output[:10000],  # Truncate large outputs
+                        }
+                    )
 
                     # Add tool result to messages
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": tool_output[:50000],  # Truncate for context
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": tool_output[:50000],  # Truncate for context
+                        }
+                    )
 
             except Exception as e:
                 logger.error(f"LLM error on turn {turn}: {e}")
@@ -246,7 +258,11 @@ class Runner:
                     api_key=api_key,
                     tools=tools,
                     tool_choice="auto" if tools else None,
-                    temperature=agent.model_settings.temperature if agent.model_settings else 0.4,
+                    temperature=(
+                        agent.model_settings.temperature
+                        if agent.model_settings
+                        else 0.4
+                    ),
                 )
 
                 assistant_message = response.choices[0].message
@@ -306,11 +322,13 @@ class Runner:
                         thread_id=thread_id,
                     )
 
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": tool_output[:50000],
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": tool_output[:50000],
+                        }
+                    )
 
             except Exception as e:
                 yield StreamEvent(

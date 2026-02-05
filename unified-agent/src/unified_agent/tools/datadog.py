@@ -21,7 +21,9 @@ def _get_datadog_client():
     try:
         from datadog_api_client import ApiClient, Configuration
     except ImportError:
-        raise RuntimeError("datadog-api-client not installed: pip install datadog-api-client")
+        raise RuntimeError(
+            "datadog-api-client not installed: pip install datadog-api-client"
+        )
 
     api_key = os.getenv("DATADOG_API_KEY")
     app_key = os.getenv("DATADOG_APP_KEY")
@@ -70,22 +72,32 @@ def query_datadog_metrics(query: str, time_range_minutes: int = 60) -> str:
         series_data = []
         if hasattr(response, "series") and response.series:
             for s in response.series[:10]:  # Limit series
-                series_data.append({
-                    "metric": s.get("metric"),
-                    "scope": s.get("scope"),
-                    "pointlist": s.get("pointlist", [])[-100:],  # Last 100 points
-                })
+                series_data.append(
+                    {
+                        "metric": s.get("metric"),
+                        "scope": s.get("scope"),
+                        "pointlist": s.get("pointlist", [])[-100:],  # Last 100 points
+                    }
+                )
 
-        return json.dumps({
-            "ok": True,
-            "query": query,
-            "from_time": str(start_time),
-            "to_time": str(end_time),
-            "series": series_data,
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "query": query,
+                "from_time": str(start_time),
+                "to_time": str(end_time),
+                "series": series_data,
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set DATADOG_API_KEY and DATADOG_APP_KEY"})
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set DATADOG_API_KEY and DATADOG_APP_KEY",
+            }
+        )
     except Exception as e:
         logger.error(f"query_datadog_metrics error: {e}")
         return json.dumps({"ok": False, "error": str(e), "query": query})
@@ -136,22 +148,32 @@ def search_datadog_logs(
         logs = []
         for log in (response.data or [])[:limit]:
             attrs = log.attributes
-            logs.append({
-                "timestamp": str(attrs.timestamp) if attrs.timestamp else None,
-                "message": attrs.message,
-                "service": attrs.service,
-                "status": attrs.status,
-            })
+            logs.append(
+                {
+                    "timestamp": str(attrs.timestamp) if attrs.timestamp else None,
+                    "message": attrs.message,
+                    "service": attrs.service,
+                    "status": attrs.status,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "query": query,
-            "logs": logs,
-            "count": len(logs),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "query": query,
+                "logs": logs,
+                "count": len(logs),
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set DATADOG_API_KEY and DATADOG_APP_KEY"})
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set DATADOG_API_KEY and DATADOG_APP_KEY",
+            }
+        )
     except Exception as e:
         logger.error(f"search_datadog_logs error: {e}")
         return json.dumps({"ok": False, "error": str(e), "query": query})
@@ -189,15 +211,17 @@ def get_service_apm_metrics(service_name: str, time_range_minutes: int = 60) -> 
             time_range_minutes,
         )
 
-        return json.dumps({
-            "ok": True,
-            "service": service_name,
-            "metrics": {
-                "latency": json.loads(latency),
-                "errors": json.loads(errors),
-                "throughput": json.loads(throughput),
-            },
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "service": service_name,
+                "metrics": {
+                    "latency": json.loads(latency),
+                    "errors": json.loads(errors),
+                    "throughput": json.loads(throughput),
+                },
+            }
+        )
 
     except Exception as e:
         logger.error(f"get_service_apm_metrics error: {e}")

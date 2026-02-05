@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ..core.events import StreamEvent, error_event
-from ..providers import create_provider, ProviderConfig, SubagentConfig
+from ..providers import ProviderConfig, SubagentConfig, create_provider
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ _session_lock = asyncio.Lock()
 
 class ImageData(BaseModel):
     """Image data for multimodal input."""
+
     type: str = "base64"
     media_type: str
     data: str
@@ -48,6 +49,7 @@ class ImageData(BaseModel):
 
 class ExecuteRequest(BaseModel):
     """Request to execute an investigation."""
+
     prompt: str
     thread_id: Optional[str] = None
     images: Optional[List[ImageData]] = None
@@ -55,11 +57,13 @@ class ExecuteRequest(BaseModel):
 
 class InterruptRequest(BaseModel):
     """Request to interrupt the investigation."""
+
     thread_id: str
 
 
 class AnswerRequest(BaseModel):
     """Request to provide answer to AskUserQuestion."""
+
     thread_id: str
     answers: dict
 
@@ -119,7 +123,16 @@ async def get_or_create_session(thread_id: str):
                 cwd=cwd,
                 thread_id=thread_id,
                 model=model,
-                allowed_tools=["Bash", "Read", "Write", "Edit", "Glob", "Grep", "Task", "Skill"],
+                allowed_tools=[
+                    "Bash",
+                    "Read",
+                    "Write",
+                    "Edit",
+                    "Glob",
+                    "Grep",
+                    "Task",
+                    "Skill",
+                ],
                 subagents=subagents,
             )
 
@@ -160,7 +173,9 @@ async def execute(request: ExecuteRequest):
                 else:
                     yield f"data: {event}\n\n"
 
-            logger.info(f"Execution completed: {event_count} events for thread {thread_id}")
+            logger.info(
+                f"Execution completed: {event_count} events for thread {thread_id}"
+            )
 
         except Exception as e:
             logger.error(f"Execution error for {thread_id}: {e}")
@@ -190,7 +205,9 @@ async def interrupt(request: InterruptRequest):
         try:
             async with _session_lock:
                 if thread_id not in _sessions:
-                    err = error_event(thread_id, "No active session found", recoverable=False)
+                    err = error_event(
+                        thread_id, "No active session found", recoverable=False
+                    )
                     yield err.to_sse()
                     return
                 session = _sessions[thread_id]
@@ -256,6 +273,7 @@ async def shutdown_event():
 def run_server():
     """Run the sandbox server."""
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8888, log_level="info")
 
 

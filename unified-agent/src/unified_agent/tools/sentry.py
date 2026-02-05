@@ -79,27 +79,37 @@ def sentry_list_issues(
 
         issues = []
         for issue in response.json():
-            issues.append({
-                "id": issue["id"],
-                "title": issue["title"],
-                "short_id": issue["shortId"],
-                "status": issue["status"],
-                "level": issue["level"],
-                "count": issue["count"],
-                "user_count": issue["userCount"],
-                "first_seen": issue["firstSeen"],
-                "last_seen": issue["lastSeen"],
-                "permalink": issue["permalink"],
-            })
+            issues.append(
+                {
+                    "id": issue["id"],
+                    "title": issue["title"],
+                    "short_id": issue["shortId"],
+                    "status": issue["status"],
+                    "level": issue["level"],
+                    "count": issue["count"],
+                    "user_count": issue["userCount"],
+                    "first_seen": issue["firstSeen"],
+                    "last_seen": issue["lastSeen"],
+                    "permalink": issue["permalink"],
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "issues": issues,
-            "count": len(issues),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "issues": issues,
+                "count": len(issues),
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set SENTRY_AUTH_TOKEN and SENTRY_ORGANIZATION"})
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set SENTRY_AUTH_TOKEN and SENTRY_ORGANIZATION",
+            }
+        )
     except Exception as e:
         logger.error(f"sentry_list_issues error: {e}")
         return json.dumps({"ok": False, "error": str(e), "project": project})
@@ -132,24 +142,32 @@ def sentry_get_issue_details(issue_id: str) -> str:
 
         issue = response.json()
 
-        return json.dumps({
-            "ok": True,
-            "id": issue["id"],
-            "title": issue["title"],
-            "short_id": issue["shortId"],
-            "status": issue["status"],
-            "level": issue["level"],
-            "count": issue["count"],
-            "user_count": issue["userCount"],
-            "first_seen": issue["firstSeen"],
-            "last_seen": issue["lastSeen"],
-            "permalink": issue["permalink"],
-            "metadata": issue.get("metadata", {}),
-            "tags": issue.get("tags", []),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "id": issue["id"],
+                "title": issue["title"],
+                "short_id": issue["shortId"],
+                "status": issue["status"],
+                "level": issue["level"],
+                "count": issue["count"],
+                "user_count": issue["userCount"],
+                "first_seen": issue["firstSeen"],
+                "last_seen": issue["lastSeen"],
+                "permalink": issue["permalink"],
+                "metadata": issue.get("metadata", {}),
+                "tags": issue.get("tags", []),
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set SENTRY_AUTH_TOKEN and SENTRY_ORGANIZATION"})
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set SENTRY_AUTH_TOKEN and SENTRY_ORGANIZATION",
+            }
+        )
     except Exception as e:
         logger.error(f"sentry_get_issue_details error: {e}")
         return json.dumps({"ok": False, "error": str(e), "issue_id": issue_id})
@@ -171,29 +189,41 @@ def sentry_list_projects() -> str:
         config = _get_sentry_config()
         headers = _get_sentry_headers()
 
-        url = f"https://sentry.io/api/0/organizations/{config['organization']}/projects/"
+        url = (
+            f"https://sentry.io/api/0/organizations/{config['organization']}/projects/"
+        )
 
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
 
         projects = []
         for project in response.json():
-            projects.append({
-                "id": project["id"],
-                "slug": project["slug"],
-                "name": project["name"],
-                "platform": project.get("platform"),
-                "status": project.get("status"),
-            })
+            projects.append(
+                {
+                    "id": project["id"],
+                    "slug": project["slug"],
+                    "name": project["name"],
+                    "platform": project.get("platform"),
+                    "status": project.get("status"),
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "projects": projects,
-            "count": len(projects),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "projects": projects,
+                "count": len(projects),
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set SENTRY_AUTH_TOKEN and SENTRY_ORGANIZATION"})
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set SENTRY_AUTH_TOKEN and SENTRY_ORGANIZATION",
+            }
+        )
     except Exception as e:
         logger.error(f"sentry_list_projects error: {e}")
         return json.dumps({"ok": False, "error": str(e)})
@@ -237,16 +267,24 @@ def sentry_get_project_stats(
         response = requests.get(url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
 
-        return json.dumps({
-            "ok": True,
-            "project": project,
-            "stat": stat,
-            "resolution": resolution,
-            "data": response.json(),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "project": project,
+                "stat": stat,
+                "resolution": resolution,
+                "data": response.json(),
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set SENTRY_AUTH_TOKEN and SENTRY_ORGANIZATION"})
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set SENTRY_AUTH_TOKEN and SENTRY_ORGANIZATION",
+            }
+        )
     except Exception as e:
         logger.error(f"sentry_get_project_stats error: {e}")
         return json.dumps({"ok": False, "error": str(e), "project": project})
@@ -284,23 +322,33 @@ def sentry_list_releases(project: str, limit: int = 10) -> str:
 
         releases = []
         for release in response.json():
-            releases.append({
-                "version": release["version"],
-                "short_version": release.get("shortVersion"),
-                "date_created": release["dateCreated"],
-                "date_released": release.get("dateReleased"),
-                "new_groups": release.get("newGroups", 0),
-                "url": release.get("url"),
-            })
+            releases.append(
+                {
+                    "version": release["version"],
+                    "short_version": release.get("shortVersion"),
+                    "date_created": release["dateCreated"],
+                    "date_released": release.get("dateReleased"),
+                    "new_groups": release.get("newGroups", 0),
+                    "url": release.get("url"),
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "releases": releases,
-            "count": len(releases),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "releases": releases,
+                "count": len(releases),
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": str(e), "hint": "Set SENTRY_AUTH_TOKEN and SENTRY_ORGANIZATION"})
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set SENTRY_AUTH_TOKEN and SENTRY_ORGANIZATION",
+            }
+        )
     except Exception as e:
         logger.error(f"sentry_list_releases error: {e}")
         return json.dumps({"ok": False, "error": str(e), "project": project})

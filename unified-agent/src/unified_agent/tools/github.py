@@ -55,20 +55,22 @@ def github_get_repo_info(repo: str) -> str:
         g = _get_github_client()
         r = g.get_repo(repo)
 
-        return json.dumps({
-            "ok": True,
-            "name": r.name,
-            "full_name": r.full_name,
-            "description": r.description,
-            "private": r.private,
-            "default_branch": r.default_branch,
-            "clone_url": r.clone_url,
-            "html_url": r.html_url,
-            "language": r.language,
-            "stars": r.stargazers_count,
-            "forks": r.forks_count,
-            "open_issues": r.open_issues_count,
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "name": r.name,
+                "full_name": r.full_name,
+                "description": r.description,
+                "private": r.private,
+                "default_branch": r.default_branch,
+                "clone_url": r.clone_url,
+                "html_url": r.html_url,
+                "language": r.language,
+                "stars": r.stargazers_count,
+                "forks": r.forks_count,
+                "open_issues": r.open_issues_count,
+            }
+        )
 
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e), "hint": "Set GITHUB_TOKEN"})
@@ -110,19 +112,23 @@ def github_list_files(repo: str, path: str = "", ref: str = "") -> str:
 
         file_list = []
         for item in contents:
-            file_list.append({
-                "name": item.name,
-                "path": item.path,
-                "type": item.type,
-                "size": item.size if item.type == "file" else None,
-                "sha": item.sha,
-            })
+            file_list.append(
+                {
+                    "name": item.name,
+                    "path": item.path,
+                    "type": item.type,
+                    "size": item.size if item.type == "file" else None,
+                    "sha": item.sha,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "files": file_list,
-            "count": len(file_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "files": file_list,
+                "count": len(file_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_files error: {e}")
@@ -160,7 +166,9 @@ def github_read_file(repo: str, file_path: str, ref: str = "main") -> str:
 
     except Exception as e:
         logger.error(f"github_read_file error: {e}")
-        return json.dumps({"ok": False, "error": str(e), "repo": repo, "file": file_path})
+        return json.dumps(
+            {"ok": False, "error": str(e), "repo": repo, "file": file_path}
+        )
 
 
 @function_tool
@@ -202,18 +210,22 @@ def github_search_code(
         for i, result in enumerate(results):
             if i >= max_results:
                 break
-            matches.append({
-                "file_path": result.path,
-                "repository": result.repository.full_name,
-                "url": result.html_url,
-                "score": result.score,
-            })
+            matches.append(
+                {
+                    "file_path": result.path,
+                    "repository": result.repository.full_name,
+                    "url": result.html_url,
+                    "score": result.score,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "matches": matches,
-            "count": len(matches),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "matches": matches,
+                "count": len(matches),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_search_code error: {e}")
@@ -269,21 +281,29 @@ def github_list_commits(
         for i, commit in enumerate(commits):
             if i >= max_results:
                 break
-            commit_list.append({
-                "sha": commit.sha,
-                "short_sha": commit.sha[:7],
-                "message": commit.commit.message,
-                "author": commit.commit.author.name if commit.commit.author else None,
-                "author_login": commit.author.login if commit.author else None,
-                "date": str(commit.commit.author.date) if commit.commit.author else None,
-                "url": commit.html_url,
-            })
+            commit_list.append(
+                {
+                    "sha": commit.sha,
+                    "short_sha": commit.sha[:7],
+                    "message": commit.commit.message,
+                    "author": (
+                        commit.commit.author.name if commit.commit.author else None
+                    ),
+                    "author_login": commit.author.login if commit.author else None,
+                    "date": (
+                        str(commit.commit.author.date) if commit.commit.author else None
+                    ),
+                    "url": commit.html_url,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "commits": commit_list,
-            "count": len(commit_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "commits": commit_list,
+                "count": len(commit_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_commits error: {e}")
@@ -314,31 +334,39 @@ def github_get_commit(repo: str, sha: str) -> str:
 
         files_changed = []
         for f in commit.files:
-            files_changed.append({
-                "filename": f.filename,
-                "status": f.status,
-                "additions": f.additions,
-                "deletions": f.deletions,
-                "changes": f.changes,
-                "patch": f.patch[:2000] if f.patch else None,
-            })
+            files_changed.append(
+                {
+                    "filename": f.filename,
+                    "status": f.status,
+                    "additions": f.additions,
+                    "deletions": f.deletions,
+                    "changes": f.changes,
+                    "patch": f.patch[:2000] if f.patch else None,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "sha": commit.sha,
-            "message": commit.commit.message,
-            "author": commit.commit.author.name if commit.commit.author else None,
-            "author_email": commit.commit.author.email if commit.commit.author else None,
-            "date": str(commit.commit.author.date) if commit.commit.author else None,
-            "url": commit.html_url,
-            "stats": {
-                "additions": commit.stats.additions,
-                "deletions": commit.stats.deletions,
-                "total": commit.stats.total,
-            },
-            "files_changed": files_changed,
-            "parents": [p.sha for p in commit.parents],
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "sha": commit.sha,
+                "message": commit.commit.message,
+                "author": commit.commit.author.name if commit.commit.author else None,
+                "author_email": (
+                    commit.commit.author.email if commit.commit.author else None
+                ),
+                "date": (
+                    str(commit.commit.author.date) if commit.commit.author else None
+                ),
+                "url": commit.html_url,
+                "stats": {
+                    "additions": commit.stats.additions,
+                    "deletions": commit.stats.deletions,
+                    "total": commit.stats.total,
+                },
+                "files_changed": files_changed,
+                "parents": [p.sha for p in commit.parents],
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_get_commit error: {e}")
@@ -370,32 +398,38 @@ def github_compare_commits(repo: str, base: str, head: str) -> str:
 
         commits = []
         for c in comparison.commits[:50]:
-            commits.append({
-                "sha": c.sha,
-                "message": c.commit.message.split("\n")[0],
-                "author": c.commit.author.name if c.commit.author else None,
-                "date": str(c.commit.author.date) if c.commit.author else None,
-            })
+            commits.append(
+                {
+                    "sha": c.sha,
+                    "message": c.commit.message.split("\n")[0],
+                    "author": c.commit.author.name if c.commit.author else None,
+                    "date": str(c.commit.author.date) if c.commit.author else None,
+                }
+            )
 
         files = []
         for f in comparison.files[:100]:
-            files.append({
-                "filename": f.filename,
-                "status": f.status,
-                "additions": f.additions,
-                "deletions": f.deletions,
-            })
+            files.append(
+                {
+                    "filename": f.filename,
+                    "status": f.status,
+                    "additions": f.additions,
+                    "deletions": f.deletions,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "status": comparison.status,
-            "ahead_by": comparison.ahead_by,
-            "behind_by": comparison.behind_by,
-            "total_commits": comparison.total_commits,
-            "commits": commits,
-            "files": files,
-            "url": comparison.html_url,
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "status": comparison.status,
+                "ahead_by": comparison.ahead_by,
+                "behind_by": comparison.behind_by,
+                "total_commits": comparison.total_commits,
+                "commits": commits,
+                "files": files,
+                "url": comparison.html_url,
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_compare_commits error: {e}")
@@ -449,20 +483,24 @@ def github_search_commits_by_timerange(
         for i, commit in enumerate(commits):
             if i >= max_results:
                 break
-            commit_list.append({
-                "sha": commit.sha,
-                "message": commit.commit.message,
-                "author": commit.commit.author.name,
-                "author_email": commit.commit.author.email,
-                "date": str(commit.commit.author.date),
-                "url": commit.html_url,
-            })
+            commit_list.append(
+                {
+                    "sha": commit.sha,
+                    "message": commit.commit.message,
+                    "author": commit.commit.author.name,
+                    "author_email": commit.commit.author.email,
+                    "date": str(commit.commit.author.date),
+                    "url": commit.html_url,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "commits": commit_list,
-            "count": len(commit_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "commits": commit_list,
+                "count": len(commit_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_search_commits_by_timerange error: {e}")
@@ -500,17 +538,21 @@ def github_list_branches(repo: str, max_results: int = 30) -> str:
         for i, branch in enumerate(branches):
             if i >= max_results:
                 break
-            branch_list.append({
-                "name": branch.name,
-                "sha": branch.commit.sha,
-                "protected": branch.protected,
-            })
+            branch_list.append(
+                {
+                    "name": branch.name,
+                    "sha": branch.commit.sha,
+                    "protected": branch.protected,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "branches": branch_list,
-            "count": len(branch_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "branches": branch_list,
+                "count": len(branch_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_branches error: {e}")
@@ -543,17 +585,21 @@ def github_list_tags(repo: str, max_results: int = 30) -> str:
         for i, tag in enumerate(tags):
             if i >= max_results:
                 break
-            tag_list.append({
-                "name": tag.name,
-                "sha": tag.commit.sha,
-                "url": f"https://github.com/{repo}/releases/tag/{tag.name}",
-            })
+            tag_list.append(
+                {
+                    "name": tag.name,
+                    "sha": tag.commit.sha,
+                    "url": f"https://github.com/{repo}/releases/tag/{tag.name}",
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "tags": tag_list,
-            "count": len(tag_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "tags": tag_list,
+                "count": len(tag_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_tags error: {e}")
@@ -593,22 +639,26 @@ def github_list_releases(
                 break
             if not include_prereleases and release.prerelease:
                 continue
-            release_list.append({
-                "id": release.id,
-                "tag_name": release.tag_name,
-                "name": release.title,
-                "body": release.body[:500] if release.body else None,
-                "draft": release.draft,
-                "prerelease": release.prerelease,
-                "created_at": str(release.created_at),
-                "url": release.html_url,
-            })
+            release_list.append(
+                {
+                    "id": release.id,
+                    "tag_name": release.tag_name,
+                    "name": release.title,
+                    "body": release.body[:500] if release.body else None,
+                    "draft": release.draft,
+                    "prerelease": release.prerelease,
+                    "created_at": str(release.created_at),
+                    "url": release.html_url,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "releases": release_list,
-            "count": len(release_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "releases": release_list,
+                "count": len(release_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_releases error: {e}")
@@ -651,20 +701,24 @@ def github_list_pull_requests(
         for i, pr in enumerate(prs):
             if i >= max_results:
                 break
-            pr_list.append({
-                "number": pr.number,
-                "title": pr.title,
-                "state": pr.state,
-                "author": pr.user.login,
-                "created_at": str(pr.created_at),
-                "url": pr.html_url,
-            })
+            pr_list.append(
+                {
+                    "number": pr.number,
+                    "title": pr.title,
+                    "state": pr.state,
+                    "author": pr.user.login,
+                    "created_at": str(pr.created_at),
+                    "url": pr.html_url,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "pull_requests": pr_list,
-            "count": len(pr_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "pull_requests": pr_list,
+                "count": len(pr_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_pull_requests error: {e}")
@@ -693,27 +747,31 @@ def github_get_pr(repo: str, pr_number: int) -> str:
         repository = g.get_repo(repo)
         pr = repository.get_pull(pr_number)
 
-        return json.dumps({
-            "ok": True,
-            "number": pr.number,
-            "title": pr.title,
-            "body": pr.body,
-            "state": pr.state,
-            "author": pr.user.login,
-            "head": pr.head.ref,
-            "base": pr.base.ref,
-            "mergeable": pr.mergeable,
-            "merged": pr.merged,
-            "created_at": str(pr.created_at),
-            "updated_at": str(pr.updated_at),
-            "url": pr.html_url,
-            "labels": [l.name for l in pr.labels],
-            "assignees": [a.login for a in pr.assignees],
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "number": pr.number,
+                "title": pr.title,
+                "body": pr.body,
+                "state": pr.state,
+                "author": pr.user.login,
+                "head": pr.head.ref,
+                "base": pr.base.ref,
+                "mergeable": pr.mergeable,
+                "merged": pr.merged,
+                "created_at": str(pr.created_at),
+                "updated_at": str(pr.updated_at),
+                "url": pr.html_url,
+                "labels": [l.name for l in pr.labels],
+                "assignees": [a.login for a in pr.assignees],
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_get_pr error: {e}")
-        return json.dumps({"ok": False, "error": str(e), "repo": repo, "pr_number": pr_number})
+        return json.dumps(
+            {"ok": False, "error": str(e), "repo": repo, "pr_number": pr_number}
+        )
 
 
 @function_tool
@@ -744,20 +802,24 @@ def github_get_pr_files(repo: str, pr_number: int, max_results: int = 100) -> st
         for i, f in enumerate(files):
             if i >= max_results:
                 break
-            file_list.append({
-                "filename": f.filename,
-                "status": f.status,
-                "additions": f.additions,
-                "deletions": f.deletions,
-                "changes": f.changes,
-                "patch": f.patch[:1000] if f.patch else None,
-            })
+            file_list.append(
+                {
+                    "filename": f.filename,
+                    "status": f.status,
+                    "additions": f.additions,
+                    "deletions": f.deletions,
+                    "changes": f.changes,
+                    "patch": f.patch[:1000] if f.patch else None,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "files": file_list,
-            "count": len(file_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "files": file_list,
+                "count": len(file_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_get_pr_files error: {e}")
@@ -792,19 +854,27 @@ def github_list_pr_commits(repo: str, pr_number: int, max_results: int = 100) ->
         for i, commit in enumerate(commits):
             if i >= max_results:
                 break
-            commit_list.append({
-                "sha": commit.sha,
-                "message": commit.commit.message,
-                "author": commit.commit.author.name if commit.commit.author else None,
-                "date": str(commit.commit.author.date) if commit.commit.author else None,
-                "url": commit.html_url,
-            })
+            commit_list.append(
+                {
+                    "sha": commit.sha,
+                    "message": commit.commit.message,
+                    "author": (
+                        commit.commit.author.name if commit.commit.author else None
+                    ),
+                    "date": (
+                        str(commit.commit.author.date) if commit.commit.author else None
+                    ),
+                    "url": commit.html_url,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "commits": commit_list,
-            "count": len(commit_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "commits": commit_list,
+                "count": len(commit_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_pr_commits error: {e}")
@@ -836,20 +906,26 @@ def github_list_pr_reviews(repo: str, pr_number: int) -> str:
 
         review_list = []
         for review in reviews:
-            review_list.append({
-                "id": review.id,
-                "user": review.user.login if review.user else None,
-                "state": review.state,
-                "body": review.body,
-                "submitted_at": str(review.submitted_at) if review.submitted_at else None,
-                "url": review.html_url,
-            })
+            review_list.append(
+                {
+                    "id": review.id,
+                    "user": review.user.login if review.user else None,
+                    "state": review.state,
+                    "body": review.body,
+                    "submitted_at": (
+                        str(review.submitted_at) if review.submitted_at else None
+                    ),
+                    "url": review.html_url,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "reviews": review_list,
-            "count": len(review_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "reviews": review_list,
+                "count": len(review_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_pr_reviews error: {e}")
@@ -899,22 +975,26 @@ def github_search_prs(
         for i, pr in enumerate(results):
             if i >= max_results:
                 break
-            pr_list.append({
-                "number": pr.number,
-                "title": pr.title,
-                "state": pr.state,
-                "repository": pr.repository.full_name,
-                "author": pr.user.login if pr.user else None,
-                "labels": [l.name for l in pr.labels],
-                "created_at": str(pr.created_at),
-                "url": pr.html_url,
-            })
+            pr_list.append(
+                {
+                    "number": pr.number,
+                    "title": pr.title,
+                    "state": pr.state,
+                    "repository": pr.repository.full_name,
+                    "author": pr.user.login if pr.user else None,
+                    "labels": [l.name for l in pr.labels],
+                    "created_at": str(pr.created_at),
+                    "url": pr.html_url,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "pull_requests": pr_list,
-            "count": len(pr_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "pull_requests": pr_list,
+                "count": len(pr_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_search_prs error: {e}")
@@ -963,21 +1043,25 @@ def github_list_issues(
                 break
             if issue.pull_request:
                 continue
-            issue_list.append({
-                "number": issue.number,
-                "title": issue.title,
-                "state": issue.state,
-                "author": issue.user.login,
-                "labels": [l.name for l in issue.labels],
-                "created_at": str(issue.created_at),
-                "url": issue.html_url,
-            })
+            issue_list.append(
+                {
+                    "number": issue.number,
+                    "title": issue.title,
+                    "state": issue.state,
+                    "author": issue.user.login,
+                    "labels": [l.name for l in issue.labels],
+                    "created_at": str(issue.created_at),
+                    "url": issue.html_url,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "issues": issue_list,
-            "count": len(issue_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "issues": issue_list,
+                "count": len(issue_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_issues error: {e}")
@@ -1006,22 +1090,24 @@ def github_get_issue(repo: str, issue_number: int) -> str:
         repository = g.get_repo(repo)
         issue = repository.get_issue(issue_number)
 
-        return json.dumps({
-            "ok": True,
-            "number": issue.number,
-            "title": issue.title,
-            "body": issue.body,
-            "state": issue.state,
-            "author": issue.user.login if issue.user else None,
-            "labels": [l.name for l in issue.labels],
-            "assignees": [a.login for a in issue.assignees],
-            "milestone": issue.milestone.title if issue.milestone else None,
-            "created_at": str(issue.created_at),
-            "updated_at": str(issue.updated_at),
-            "closed_at": str(issue.closed_at) if issue.closed_at else None,
-            "comments_count": issue.comments,
-            "url": issue.html_url,
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "number": issue.number,
+                "title": issue.title,
+                "body": issue.body,
+                "state": issue.state,
+                "author": issue.user.login if issue.user else None,
+                "labels": [l.name for l in issue.labels],
+                "assignees": [a.login for a in issue.assignees],
+                "milestone": issue.milestone.title if issue.milestone else None,
+                "created_at": str(issue.created_at),
+                "updated_at": str(issue.updated_at),
+                "closed_at": str(issue.closed_at) if issue.closed_at else None,
+                "comments_count": issue.comments,
+                "url": issue.html_url,
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_get_issue error: {e}")
@@ -1060,19 +1146,23 @@ def github_list_issue_comments(
         for i, comment in enumerate(comments):
             if i >= max_results:
                 break
-            comment_list.append({
-                "id": comment.id,
-                "author": comment.user.login if comment.user else None,
-                "body": comment.body,
-                "created_at": str(comment.created_at),
-                "url": comment.html_url,
-            })
+            comment_list.append(
+                {
+                    "id": comment.id,
+                    "author": comment.user.login if comment.user else None,
+                    "body": comment.body,
+                    "created_at": str(comment.created_at),
+                    "url": comment.html_url,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "comments": comment_list,
-            "count": len(comment_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "comments": comment_list,
+                "count": len(comment_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_issue_comments error: {e}")
@@ -1119,22 +1209,26 @@ def github_search_issues(
         for i, issue in enumerate(results):
             if i >= max_results:
                 break
-            issue_list.append({
-                "number": issue.number,
-                "title": issue.title,
-                "state": issue.state,
-                "repository": issue.repository.full_name,
-                "author": issue.user.login if issue.user else None,
-                "labels": [l.name for l in issue.labels],
-                "created_at": str(issue.created_at),
-                "url": issue.html_url,
-            })
+            issue_list.append(
+                {
+                    "number": issue.number,
+                    "title": issue.title,
+                    "state": issue.state,
+                    "repository": issue.repository.full_name,
+                    "author": issue.user.login if issue.user else None,
+                    "labels": [l.name for l in issue.labels],
+                    "created_at": str(issue.created_at),
+                    "url": issue.html_url,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "issues": issue_list,
-            "count": len(issue_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "issues": issue_list,
+                "count": len(issue_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_search_issues error: {e}")
@@ -1188,21 +1282,25 @@ def github_list_workflow_runs(
         for i, run in enumerate(runs):
             if i >= max_results:
                 break
-            run_list.append({
-                "id": run.id,
-                "name": run.name,
-                "status": run.status,
-                "conclusion": run.conclusion,
-                "url": run.html_url,
-                "created_at": str(run.created_at),
-                "head_branch": run.head_branch,
-            })
+            run_list.append(
+                {
+                    "id": run.id,
+                    "name": run.name,
+                    "status": run.status,
+                    "conclusion": run.conclusion,
+                    "url": run.html_url,
+                    "created_at": str(run.created_at),
+                    "head_branch": run.head_branch,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "workflow_runs": run_list,
-            "count": len(run_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "workflow_runs": run_list,
+                "count": len(run_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_workflow_runs error: {e}")
@@ -1235,17 +1333,21 @@ def github_list_contributors(repo: str, max_results: int = 30) -> str:
         for i, c in enumerate(contributors):
             if i >= max_results:
                 break
-            contributor_list.append({
-                "login": c.login,
-                "contributions": c.contributions,
-                "url": c.html_url,
-            })
+            contributor_list.append(
+                {
+                    "login": c.login,
+                    "contributions": c.contributions,
+                    "url": c.html_url,
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "contributors": contributor_list,
-            "count": len(contributor_list),
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "contributors": contributor_list,
+                "count": len(contributor_list),
+            }
+        )
 
     except Exception as e:
         logger.error(f"github_list_contributors error: {e}")

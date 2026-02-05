@@ -97,7 +97,9 @@ class SkillLoader:
                             if skill:
                                 skills[skill.name] = skill
                         except Exception as e:
-                            logger.warning(f"Failed to parse skill at {skill_path}: {e}")
+                            logger.warning(
+                                f"Failed to parse skill at {skill_path}: {e}"
+                            )
 
         logger.debug(f"Discovered {len(skills)} skills")
         return skills
@@ -172,7 +174,9 @@ class SkillLoader:
             content = f.read()
 
         # Parse YAML frontmatter
-        frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)$", content, re.DOTALL)
+        frontmatter_match = re.match(
+            r"^---\s*\n(.*?)\n---\s*\n(.*)$", content, re.DOTALL
+        )
         if not frontmatter_match:
             logger.warning(f"No frontmatter found in {path}")
             return None

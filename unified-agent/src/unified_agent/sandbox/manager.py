@@ -40,11 +40,13 @@ logger = logging.getLogger(__name__)
 
 class SandboxExecutionError(Exception):
     """Raised when sandbox execution fails."""
+
     pass
 
 
 class SandboxInterruptError(Exception):
     """Raised when sandbox interrupt fails."""
+
     pass
 
 
@@ -140,7 +142,8 @@ class SandboxManager:
             return
 
         try:
-            from kubernetes import client, config as k8s_config
+            from kubernetes import client
+            from kubernetes import config as k8s_config
 
             try:
                 k8s_config.load_incluster_config()
@@ -178,7 +181,9 @@ class SandboxManager:
 
         self._ensure_k8s_client()
         configmap_name = f"envoy-config-{sandbox_name}"
-        cred_resolver_ns = os.getenv("CREDENTIAL_RESOLVER_NAMESPACE", "incidentfox-prod")
+        cred_resolver_ns = os.getenv(
+            "CREDENTIAL_RESOLVER_NAMESPACE", "incidentfox-prod"
+        )
 
         # Envoy configuration with JWT embedded
         envoy_config = f"""# Envoy proxy configuration for credential injection
@@ -406,7 +411,9 @@ static_resources:
                 ttl_hours=ttl_hours + 1,
             )
 
-        cred_resolver_ns = os.getenv("CREDENTIAL_RESOLVER_NAMESPACE", "incidentfox-prod")
+        cred_resolver_ns = os.getenv(
+            "CREDENTIAL_RESOLVER_NAMESPACE", "incidentfox-prod"
+        )
 
         # Fetch configured integrations
         configured_integrations = fetch_configured_integrations(
@@ -450,19 +457,39 @@ static_resources:
                                 ),
                                 "ports": [{"containerPort": 8888, "name": "sandbox"}],
                                 "env": [
-                                    {"name": "INCIDENTFOX_TENANT_ID", "value": tenant_id},
+                                    {
+                                        "name": "INCIDENTFOX_TENANT_ID",
+                                        "value": tenant_id,
+                                    },
                                     {"name": "INCIDENTFOX_TEAM_ID", "value": team_id},
-                                    {"name": "ANTHROPIC_BASE_URL", "value": "http://localhost:8001"},
-                                    {"name": "ANTHROPIC_API_KEY", "value": "sk-ant-placeholder-proxy-will-inject"},
-                                    {"name": "CONFIGURED_INTEGRATIONS", "value": configured_integrations},
+                                    {
+                                        "name": "ANTHROPIC_BASE_URL",
+                                        "value": "http://localhost:8001",
+                                    },
+                                    {
+                                        "name": "ANTHROPIC_API_KEY",
+                                        "value": "sk-ant-placeholder-proxy-will-inject",
+                                    },
+                                    {
+                                        "name": "CONFIGURED_INTEGRATIONS",
+                                        "value": configured_integrations,
+                                    },
                                     {"name": "THREAD_ID", "value": thread_id},
                                     {"name": "SANDBOX_NAME", "value": sandbox_name},
                                     {"name": "NAMESPACE", "value": self.namespace},
                                     {"name": "SANDBOX_JWT", "value": jwt_token},
                                 ],
                                 "resources": {
-                                    "requests": {"memory": "512Mi", "cpu": "100m", "ephemeral-storage": "2Gi"},
-                                    "limits": {"memory": "2Gi", "cpu": "2000m", "ephemeral-storage": "10Gi"},
+                                    "requests": {
+                                        "memory": "512Mi",
+                                        "cpu": "100m",
+                                        "ephemeral-storage": "2Gi",
+                                    },
+                                    "limits": {
+                                        "memory": "2Gi",
+                                        "cpu": "2000m",
+                                        "ephemeral-storage": "10Gi",
+                                    },
                                 },
                                 "securityContext": {
                                     "allowPrivilegeEscalation": False,
@@ -475,10 +502,19 @@ static_resources:
                             {
                                 "name": "envoy",
                                 "image": "envoyproxy/envoy:v1.28-latest",
-                                "args": ["--config-path", "/etc/envoy/envoy.yaml", "--log-level", "warn"],
+                                "args": [
+                                    "--config-path",
+                                    "/etc/envoy/envoy.yaml",
+                                    "--log-level",
+                                    "warn",
+                                ],
                                 "ports": [{"containerPort": 8001, "name": "proxy"}],
                                 "volumeMounts": [
-                                    {"name": "envoy-config", "mountPath": "/etc/envoy", "readOnly": True}
+                                    {
+                                        "name": "envoy-config",
+                                        "mountPath": "/etc/envoy",
+                                        "readOnly": True,
+                                    }
                                 ],
                                 "resources": {
                                     "requests": {"cpu": "50m", "memory": "64Mi"},
@@ -492,7 +528,10 @@ static_resources:
                             },
                         ],
                         "volumes": [
-                            {"name": "envoy-config", "configMap": {"name": envoy_configmap_name}}
+                            {
+                                "name": "envoy-config",
+                                "configMap": {"name": envoy_configmap_name},
+                            }
                         ],
                     },
                 },
@@ -503,7 +542,9 @@ static_resources:
 
         # Add gVisor runtime if enabled
         if os.getenv("USE_GVISOR", "false").lower() == "true":
-            sandbox_manifest["spec"]["podTemplate"]["spec"]["runtimeClassName"] = "gvisor"
+            sandbox_manifest["spec"]["podTemplate"]["spec"][
+                "runtimeClassName"
+            ] = "gvisor"
 
         try:
             self.custom_api.create_namespaced_custom_object(

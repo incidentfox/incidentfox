@@ -1,27 +1,29 @@
 """Tests for unified_agent.core module."""
 
 import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 
 # Test imports work
 def test_imports():
     """Verify all core imports work."""
     from unified_agent.core import (
         Agent,
+        AgentConfig,
         AgentDefinition,
+        AgentResult,
+        MaxTurnsExceeded,
         ModelSettings,
-        function_tool,
+        ProviderConfig,
         Runner,
         RunResult,
-        MaxTurnsExceeded,
-        AgentConfig,
-        ProviderConfig,
-        build_agent_hierarchy,
         build_agent_from_config,
+        build_agent_hierarchy,
         create_generic_agent_from_config,
+        function_tool,
         validate_agent_config,
-        AgentResult,
     )
 
     # Verify classes exist
@@ -221,4 +223,7 @@ def test_model_alias_resolution():
     assert normalize_model_name("gemini-2.0-flash") == "gemini/gemini-2.0-flash"
 
     # Already normalized should pass through
-    assert normalize_model_name("anthropic/claude-sonnet-4-20250514") == "anthropic/claude-sonnet-4-20250514"
+    assert (
+        normalize_model_name("anthropic/claude-sonnet-4-20250514")
+        == "anthropic/claude-sonnet-4-20250514"
+    )

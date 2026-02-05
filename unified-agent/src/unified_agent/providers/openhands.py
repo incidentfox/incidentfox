@@ -223,11 +223,13 @@ class SubagentExecutor:
                                 output=tool_result.get("output", "")[:5000],
                             )
 
-                            messages.append({
-                                "role": "tool",
-                                "tool_call_id": tool_call.id,
-                                "content": tool_result.get("output", ""),
-                            })
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "content": tool_result.get("output", ""),
+                                }
+                            )
                     else:
                         final_response = assistant_message.content or ""
                         if final_response:
@@ -236,7 +238,9 @@ class SubagentExecutor:
 
                 except Exception as e:
                     logger.error(f"[Subagent:{self.config.name}] Error: {e}")
-                    yield error_event(thread_id, f"Subagent error: {str(e)}", recoverable=True)
+                    yield error_event(
+                        thread_id, f"Subagent error: {str(e)}", recoverable=True
+                    )
                     break
 
             if iteration >= max_iterations:
@@ -264,69 +268,92 @@ class SubagentExecutor:
         tools = []
 
         if "Bash" in self.config.tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "bash",
-                    "description": "Execute a bash command",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "command": {"type": "string", "description": "The bash command to execute"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "bash",
+                        "description": "Execute a bash command",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "string",
+                                    "description": "The bash command to execute",
+                                },
+                            },
+                            "required": ["command"],
                         },
-                        "required": ["command"],
                     },
-                },
-            })
+                }
+            )
 
         if "Read" in self.config.tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "read_file",
-                    "description": "Read contents of a file",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": {"type": "string", "description": "Path to the file"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "description": "Read contents of a file",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "Path to the file",
+                                },
+                            },
+                            "required": ["path"],
                         },
-                        "required": ["path"],
                     },
-                },
-            })
+                }
+            )
 
         if "Glob" in self.config.tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "glob",
-                    "description": "Find files matching a pattern",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "pattern": {"type": "string", "description": "Glob pattern (e.g., '**/*.py')"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "glob",
+                        "description": "Find files matching a pattern",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "pattern": {
+                                    "type": "string",
+                                    "description": "Glob pattern (e.g., '**/*.py')",
+                                },
+                            },
+                            "required": ["pattern"],
                         },
-                        "required": ["pattern"],
                     },
-                },
-            })
+                }
+            )
 
         if "Grep" in self.config.tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "grep",
-                    "description": "Search for text in files",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "pattern": {"type": "string", "description": "Search pattern"},
-                            "path": {"type": "string", "description": "File or directory to search"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "grep",
+                        "description": "Search for text in files",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "pattern": {
+                                    "type": "string",
+                                    "description": "Search pattern",
+                                },
+                                "path": {
+                                    "type": "string",
+                                    "description": "File or directory to search",
+                                },
+                            },
+                            "required": ["pattern"],
                         },
-                        "required": ["pattern"],
                     },
-                },
-            })
+                }
+            )
 
         return tools
 
@@ -359,7 +386,9 @@ class SubagentExecutor:
 
             elif tool_name == "glob":
                 pattern = args.get("pattern", "")
-                matches = list(glob_module.glob(str(workspace / pattern), recursive=True))
+                matches = list(
+                    glob_module.glob(str(workspace / pattern), recursive=True)
+                )
                 return {"output": "\n".join(matches[:100])}
 
             elif tool_name == "grep":
@@ -409,7 +438,9 @@ class OpenHandsProvider(LLMProvider):
     def __init__(self, config: ProviderConfig):
         super().__init__(config)
 
-        self._model = config.model or os.getenv("LLM_MODEL", "anthropic/claude-sonnet-4-20250514")
+        self._model = config.model or os.getenv(
+            "LLM_MODEL", "anthropic/claude-sonnet-4-20250514"
+        )
         self._api_key = self._get_api_key()
 
         self._skills_loader: Optional[SkillLoader] = None
@@ -455,15 +486,25 @@ class OpenHandsProvider(LLMProvider):
 
         logger.info(f"[OpenHands] Provider initialized with model: {self._model}")
         if self._skills_loader:
-            logger.info(f"[OpenHands] Skills loaded: {self._skills_loader.list_skills()}")
+            logger.info(
+                f"[OpenHands] Skills loaded: {self._skills_loader.list_skills()}"
+            )
         logger.info(f"[OpenHands] Subagents: {list(self._subagent_executors.keys())}")
 
     def _map_subagent_model(self, model_name: str) -> str:
         """Map model aliases to LiteLLM format."""
         model_mapping = {
             "sonnet": self._model,
-            "opus": self._model.replace("sonnet", "opus") if "sonnet" in self._model else self._model,
-            "haiku": self._model.replace("sonnet", "haiku") if "sonnet" in self._model else self._model,
+            "opus": (
+                self._model.replace("sonnet", "opus")
+                if "sonnet" in self._model
+                else self._model
+            ),
+            "haiku": (
+                self._model.replace("sonnet", "haiku")
+                if "sonnet" in self._model
+                else self._model
+            ),
         }
         return model_mapping.get(model_name, self._model)
 
@@ -501,178 +542,262 @@ class OpenHandsProvider(LLMProvider):
         allowed = self.config.allowed_tools
 
         if "Bash" in allowed:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "bash",
-                    "description": "Execute a bash command. Use for running scripts, kubectl, aws cli, etc.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "command": {"type": "string", "description": "The bash command to execute"},
-                            "timeout": {"type": "integer", "description": "Timeout in seconds (default: 120)"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "bash",
+                        "description": "Execute a bash command. Use for running scripts, kubectl, aws cli, etc.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "string",
+                                    "description": "The bash command to execute",
+                                },
+                                "timeout": {
+                                    "type": "integer",
+                                    "description": "Timeout in seconds (default: 120)",
+                                },
+                            },
+                            "required": ["command"],
                         },
-                        "required": ["command"],
                     },
-                },
-            })
+                }
+            )
 
         if "Read" in allowed:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "read_file",
-                    "description": "Read the contents of a file",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": {"type": "string", "description": "Path to the file"},
-                            "offset": {"type": "integer", "description": "Line number to start from (1-indexed)"},
-                            "limit": {"type": "integer", "description": "Number of lines to read"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "description": "Read the contents of a file",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "Path to the file",
+                                },
+                                "offset": {
+                                    "type": "integer",
+                                    "description": "Line number to start from (1-indexed)",
+                                },
+                                "limit": {
+                                    "type": "integer",
+                                    "description": "Number of lines to read",
+                                },
+                            },
+                            "required": ["path"],
                         },
-                        "required": ["path"],
                     },
-                },
-            })
+                }
+            )
 
         if "Write" in allowed:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "write_file",
-                    "description": "Write content to a file (overwrites existing)",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": {"type": "string", "description": "Path to the file"},
-                            "content": {"type": "string", "description": "Content to write"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "write_file",
+                        "description": "Write content to a file (overwrites existing)",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "Path to the file",
+                                },
+                                "content": {
+                                    "type": "string",
+                                    "description": "Content to write",
+                                },
+                            },
+                            "required": ["path", "content"],
                         },
-                        "required": ["path", "content"],
                     },
-                },
-            })
+                }
+            )
 
         if "Edit" in allowed:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "edit_file",
-                    "description": "Edit a file by replacing text",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "path": {"type": "string", "description": "Path to the file"},
-                            "old_string": {"type": "string", "description": "Text to find and replace"},
-                            "new_string": {"type": "string", "description": "Replacement text"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "edit_file",
+                        "description": "Edit a file by replacing text",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "Path to the file",
+                                },
+                                "old_string": {
+                                    "type": "string",
+                                    "description": "Text to find and replace",
+                                },
+                                "new_string": {
+                                    "type": "string",
+                                    "description": "Replacement text",
+                                },
+                            },
+                            "required": ["path", "old_string", "new_string"],
                         },
-                        "required": ["path", "old_string", "new_string"],
                     },
-                },
-            })
+                }
+            )
 
         if "Glob" in allowed:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "glob",
-                    "description": "Find files matching a glob pattern",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "pattern": {"type": "string", "description": "Glob pattern (e.g., '**/*.py')"},
-                            "path": {"type": "string", "description": "Base path to search from"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "glob",
+                        "description": "Find files matching a glob pattern",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "pattern": {
+                                    "type": "string",
+                                    "description": "Glob pattern (e.g., '**/*.py')",
+                                },
+                                "path": {
+                                    "type": "string",
+                                    "description": "Base path to search from",
+                                },
+                            },
+                            "required": ["pattern"],
                         },
-                        "required": ["pattern"],
                     },
-                },
-            })
+                }
+            )
 
         if "Grep" in allowed:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "grep",
-                    "description": "Search for text patterns in files",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "pattern": {"type": "string", "description": "Search pattern (regex supported)"},
-                            "path": {"type": "string", "description": "File or directory to search"},
-                            "context": {"type": "integer", "description": "Lines of context around matches"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "grep",
+                        "description": "Search for text patterns in files",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "pattern": {
+                                    "type": "string",
+                                    "description": "Search pattern (regex supported)",
+                                },
+                                "path": {
+                                    "type": "string",
+                                    "description": "File or directory to search",
+                                },
+                                "context": {
+                                    "type": "integer",
+                                    "description": "Lines of context around matches",
+                                },
+                            },
+                            "required": ["pattern"],
                         },
-                        "required": ["pattern"],
                     },
-                },
-            })
+                }
+            )
 
         if "Task" in allowed and self._subagent_executors:
             subagent_names = list(self._subagent_executors.keys())
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "task",
-                    "description": f"Spawn a subagent for isolated work. Available: {', '.join(subagent_names)}",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "subagent": {"type": "string", "description": f"Subagent to use", "enum": subagent_names},
-                            "prompt": {"type": "string", "description": "Task description for the subagent"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "task",
+                        "description": f"Spawn a subagent for isolated work. Available: {', '.join(subagent_names)}",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "subagent": {
+                                    "type": "string",
+                                    "description": "Subagent to use",
+                                    "enum": subagent_names,
+                                },
+                                "prompt": {
+                                    "type": "string",
+                                    "description": "Task description for the subagent",
+                                },
+                            },
+                            "required": ["subagent", "prompt"],
                         },
-                        "required": ["subagent", "prompt"],
                     },
-                },
-            })
+                }
+            )
 
         if "Skill" in allowed and self._skills_loader:
             skill_names = self._skills_loader.list_skills()
             if skill_names:
-                tools.append({
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "skill",
+                            "description": f"Load a skill for domain-specific guidance. Available: {', '.join(skill_names)}",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "description": "Skill to load",
+                                    },
+                                },
+                                "required": ["name"],
+                            },
+                        },
+                    }
+                )
+
+        if "WebSearch" in allowed:
+            tools.append(
+                {
                     "type": "function",
                     "function": {
-                        "name": "skill",
-                        "description": f"Load a skill for domain-specific guidance. Available: {', '.join(skill_names)}",
+                        "name": "web_search",
+                        "description": "Search the web for information",
                         "parameters": {
                             "type": "object",
                             "properties": {
-                                "name": {"type": "string", "description": f"Skill to load"},
+                                "query": {
+                                    "type": "string",
+                                    "description": "Search query",
+                                },
+                                "num_results": {
+                                    "type": "integer",
+                                    "description": "Number of results (default: 5)",
+                                },
                             },
-                            "required": ["name"],
+                            "required": ["query"],
                         },
                     },
-                })
-
-        if "WebSearch" in allowed:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "web_search",
-                    "description": "Search the web for information",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string", "description": "Search query"},
-                            "num_results": {"type": "integer", "description": "Number of results (default: 5)"},
-                        },
-                        "required": ["query"],
-                    },
-                },
-            })
+                }
+            )
 
         if "WebFetch" in allowed:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "web_fetch",
-                    "description": "Fetch content from a URL",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "url": {"type": "string", "description": "URL to fetch"},
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "web_fetch",
+                        "description": "Fetch content from a URL",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "url": {
+                                    "type": "string",
+                                    "description": "URL to fetch",
+                                },
+                            },
+                            "required": ["url"],
                         },
-                        "required": ["url"],
                     },
-                },
-            })
+                }
+            )
 
         return tools
 
@@ -724,7 +849,9 @@ class OpenHandsProvider(LLMProvider):
                 else:
                     lines = lines[start:]
 
-                numbered_lines = [f"{i + offset:6d}\t{line}" for i, line in enumerate(lines)]
+                numbered_lines = [
+                    f"{i + offset:6d}\t{line}" for i, line in enumerate(lines)
+                ]
                 yield ("\n".join(numbered_lines), True, None)
 
             elif tool_name == "write_file":
@@ -750,7 +877,11 @@ class OpenHandsProvider(LLMProvider):
 
                 content = full_path.read_text()
                 if old_string not in content:
-                    yield (f"String not found in file: {old_string[:50]}...", False, "NotFound")
+                    yield (
+                        f"String not found in file: {old_string[:50]}...",
+                        False,
+                        "NotFound",
+                    )
                     return
 
                 new_content = content.replace(old_string, new_string, 1)
@@ -766,7 +897,11 @@ class OpenHandsProvider(LLMProvider):
                 matches = list(glob_module.glob(str(search_path), recursive=True))
                 matches = sorted(matches)[:200]
 
-                yield ("\n".join(matches) if matches else "No matches found", True, None)
+                yield (
+                    "\n".join(matches) if matches else "No matches found",
+                    True,
+                    None,
+                )
 
             elif tool_name == "grep":
                 pattern = args.get("pattern", "")
@@ -789,7 +924,11 @@ class OpenHandsProvider(LLMProvider):
                 prompt = args.get("prompt", "")
 
                 if subagent_name not in self._subagent_executors:
-                    yield (f"Unknown subagent: {subagent_name}", False, "UnknownSubagent")
+                    yield (
+                        f"Unknown subagent: {subagent_name}",
+                        False,
+                        "UnknownSubagent",
+                    )
                     return
 
                 executor = self._subagent_executors[subagent_name]
@@ -830,7 +969,9 @@ class OpenHandsProvider(LLMProvider):
                             timeout=30,
                         )
                         # Parse results (simplified)
-                        results = f"Search results for: {query}\n(Web search integration)"
+                        results = (
+                            f"Search results for: {query}\n(Web search integration)"
+                        )
                         yield (results, True, None)
                 except Exception as e:
                     yield (f"Search error: {str(e)}", False, "SearchError")
@@ -840,7 +981,9 @@ class OpenHandsProvider(LLMProvider):
 
                 try:
                     async with httpx.AsyncClient() as client:
-                        response = await client.get(url, timeout=30, follow_redirects=True)
+                        response = await client.get(
+                            url, timeout=30, follow_redirects=True
+                        )
                         content = response.text
 
                         # Convert HTML to text
@@ -859,8 +1002,15 @@ class OpenHandsProvider(LLMProvider):
 
     def _html_to_text(self, html_content: str) -> str:
         """Convert HTML to readable text."""
-        text = re.sub(r"<script[^>]*>.*?</script>", "", html_content, flags=re.DOTALL | re.IGNORECASE)
-        text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(
+            r"<script[^>]*>.*?</script>",
+            "",
+            html_content,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        text = re.sub(
+            r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE
+        )
         text = re.sub(r"<[^>]+>", " ", text)
         text = html.unescape(text)
         text = re.sub(r"\s+", " ", text)
@@ -879,11 +1029,15 @@ class OpenHandsProvider(LLMProvider):
         try:
             if not self._conversation_history:
                 system_prompt = self._build_system_prompt()
-                self._conversation_history = [{"role": "system", "content": system_prompt}]
+                self._conversation_history = [
+                    {"role": "system", "content": system_prompt}
+                ]
 
             if images:
                 user_content = self._build_multimodal_content(prompt, images)
-                self._conversation_history.append({"role": "user", "content": user_content})
+                self._conversation_history.append(
+                    {"role": "user", "content": user_content}
+                )
             else:
                 self._conversation_history.append({"role": "user", "content": prompt})
 
@@ -919,7 +1073,9 @@ class OpenHandsProvider(LLMProvider):
                             tool_args_str = tool_call.function.arguments
 
                             try:
-                                tool_args = json.loads(tool_args_str) if tool_args_str else {}
+                                tool_args = (
+                                    json.loads(tool_args_str) if tool_args_str else {}
+                                )
                             except json.JSONDecodeError:
                                 tool_args = {"raw": tool_args_str}
 
@@ -928,7 +1084,9 @@ class OpenHandsProvider(LLMProvider):
                             tool_output = ""
                             tool_success = True
 
-                            async for result in self._execute_tool(tool_name, tool_args):
+                            async for result in self._execute_tool(
+                                tool_name, tool_args
+                            ):
                                 if result[0] == "__STREAM_EVENT__":
                                     yield result[1]
                                 else:
@@ -962,13 +1120,17 @@ class OpenHandsProvider(LLMProvider):
 
                 except Exception as e:
                     logger.error(f"[OpenHands] LLM error: {e}")
-                    yield error_event(self.thread_id, f"LLM error: {str(e)}", recoverable=False)
+                    yield error_event(
+                        self.thread_id, f"LLM error: {str(e)}", recoverable=False
+                    )
                     return
 
             if iteration >= max_iterations:
                 logger.warning(f"[OpenHands] Reached max iterations ({max_iterations})")
 
-            yield result_event(self.thread_id, final_text or "Task completed.", success=True)
+            yield result_event(
+                self.thread_id, final_text or "Task completed.", success=True
+            )
 
         except Exception as e:
             logger.error(f"[OpenHands] Execution error: {e}")
@@ -985,10 +1147,12 @@ class OpenHandsProvider(LLMProvider):
             media_type = img.get("media_type", "image/png")
             data = img.get("data", "")
 
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:{media_type};base64,{data}"},
-            })
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{media_type};base64,{data}"},
+                }
+            )
 
         return content
 
