@@ -145,13 +145,21 @@ async def lifespan(app: FastAPI):
                         f"  {integration}: api_key={mask_secret(creds.get('api_key'))}, "
                         f"app_key={mask_secret(creds.get('app_key'))}, site={creds.get('site')}"
                     )
-                elif integration in ["confluence", "grafana", "elasticsearch", "prometheus", "jaeger"]:
+                elif integration in [
+                    "confluence",
+                    "grafana",
+                    "elasticsearch",
+                    "prometheus",
+                    "jaeger",
+                ]:
                     logger.info(
                         f"  {integration}: domain={creds.get('domain') or '(not set)'}, "
                         f"api_key={mask_secret(creds.get('api_key'))}"
                     )
                 else:
-                    logger.info(f"  {integration}: api_key={mask_secret(creds.get('api_key'))}")
+                    logger.info(
+                        f"  {integration}: api_key={mask_secret(creds.get('api_key'))}"
+                    )
 
     yield
 
