@@ -121,17 +121,18 @@ class SandboxManager:
     def __init__(
         self,
         namespace: str = "default",
-        image: str = "incidentfox-agent:latest",
+        image: Optional[str] = None,
     ):
         """
         Initialize sandbox manager.
 
         Args:
             namespace: Kubernetes namespace for sandboxes
-            image: Docker image to use for sandboxes
+            image: Docker image to use for sandboxes.
+                   Defaults to UNIFIED_AGENT_IMAGE env var or 'unified-agent:latest'
         """
         self.namespace = namespace
-        self.image = image
+        self.image = image or os.getenv("UNIFIED_AGENT_IMAGE", "unified-agent:latest")
         self._k8s_loaded = False
         self.custom_api = None
         self.core_api = None
@@ -369,6 +370,129 @@ static_resources:
             if e.status != 404:
                 raise
 
+    def _build_container_env(
+        self,
+        tenant_id: str,
+        team_id: str,
+        thread_id: str,
+        sandbox_name: str,
+        jwt_token: str,
+        team_token: Optional[str],
+        llm_model: Optional[str],
+        configured_integrations: str,
+    ) -> list:
+        """
+        Build environment variables for the agent container.
+
+        Supports:
+        - Multi-tenant context (tenant_id, team_id)
+        - Config-driven agents (TEAM_TOKEN)
+        - Multi-LLM support (LLM_MODEL, API keys from secrets)
+        - Envoy proxy routing (ANTHROPIC_BASE_URL)
+        """
+        cred_resolver_ns = os.getenv("CREDENTIAL_RESOLVER_NAMESPACE", "incidentfox-prod")
+
+        env = [
+            # Tenant context
+            {"name": "INCIDENTFOX_TENANT_ID", "value": tenant_id},
+            {"name": "INCIDENTFOX_TEAM_ID", "value": team_id},
+
+            # Session identifiers
+            {"name": "THREAD_ID", "value": thread_id},
+            {"name": "SANDBOX_NAME", "value": sandbox_name},
+            {"name": "NAMESPACE", "value": self.namespace},
+
+            # Sandbox JWT for credential-resolver auth
+            {"name": "SANDBOX_JWT", "value": jwt_token},
+
+            # Envoy proxy: route Anthropic API through sidecar
+            {"name": "ANTHROPIC_BASE_URL", "value": "http://localhost:8001"},
+            # Placeholder key - proxy injects real key
+            {"name": "ANTHROPIC_API_KEY", "value": "sk-ant-placeholder-proxy-will-inject"},
+
+            # Configured integrations metadata (non-sensitive)
+            {"name": "CONFIGURED_INTEGRATIONS", "value": configured_integrations},
+
+            # Integration proxy URLs (credential-resolver handles auth)
+            {"name": "CORALOGIX_BASE_URL", "value": "http://localhost:8001"},
+            {
+                "name": "CONFLUENCE_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/confluence",
+            },
+            {
+                "name": "GRAFANA_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/grafana",
+            },
+            {
+                "name": "GITHUB_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/github",
+            },
+            {
+                "name": "DATADOG_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/datadog",
+            },
+
+            # Kubeconfig for K8s tools
+            {"name": "KUBECONFIG", "value": "/home/agent/.kube/config"},
+        ]
+
+        # Config-driven agents: TEAM_TOKEN enables loading config from Config Service
+        if team_token:
+            env.append({"name": "TEAM_TOKEN", "value": team_token})
+
+        # LLM model override
+        if llm_model:
+            env.append({"name": "LLM_MODEL", "value": llm_model})
+        else:
+            # Try to get from environment or K8s secret
+            env.append({
+                "name": "LLM_MODEL",
+                "valueFrom": {
+                    "secretKeyRef": {
+                        "name": "incidentfox-secrets",
+                        "key": "llm-model",
+                        "optional": True,
+                    }
+                },
+            })
+
+        # Multi-LLM API keys (from K8s secrets)
+        env.extend([
+            {
+                "name": "GEMINI_API_KEY",
+                "valueFrom": {
+                    "secretKeyRef": {
+                        "name": "incidentfox-secrets",
+                        "key": "gemini-api-key",
+                        "optional": True,
+                    }
+                },
+            },
+            {
+                "name": "OPENAI_API_KEY",
+                "valueFrom": {
+                    "secretKeyRef": {
+                        "name": "incidentfox-secrets",
+                        "key": "openai-api-key",
+                        "optional": True,
+                    }
+                },
+            },
+            # Laminar observability (optional)
+            {
+                "name": "LMNR_PROJECT_API_KEY",
+                "valueFrom": {
+                    "secretKeyRef": {
+                        "name": "incidentfox-secrets",
+                        "key": "laminar-api-key",
+                        "optional": True,
+                    }
+                },
+            },
+        ])
+
+        return env
+
     def create_sandbox(
         self,
         thread_id: str,
@@ -376,6 +500,8 @@ static_resources:
         team_id: str = "local",
         ttl_hours: int = 2,
         jwt_token: Optional[str] = None,
+        team_token: Optional[str] = None,
+        llm_model: Optional[str] = None,
     ) -> SandboxInfo:
         """
         Create a new sandbox for an investigation.
@@ -389,6 +515,8 @@ static_resources:
             team_id: Team node ID for credential lookup
             ttl_hours: Hours until automatic cleanup (default: 2)
             jwt_token: Pre-generated JWT for session reuse
+            team_token: Team token for Config Service auth (enables config-driven agents)
+            llm_model: LLM model to use (e.g., 'anthropic/claude-sonnet-4-20250514')
 
         Returns:
             SandboxInfo with details about the created sandbox
@@ -456,29 +584,16 @@ static_resources:
                                     else "IfNotPresent"
                                 ),
                                 "ports": [{"containerPort": 8888, "name": "sandbox"}],
-                                "env": [
-                                    {
-                                        "name": "INCIDENTFOX_TENANT_ID",
-                                        "value": tenant_id,
-                                    },
-                                    {"name": "INCIDENTFOX_TEAM_ID", "value": team_id},
-                                    {
-                                        "name": "ANTHROPIC_BASE_URL",
-                                        "value": "http://localhost:8001",
-                                    },
-                                    {
-                                        "name": "ANTHROPIC_API_KEY",
-                                        "value": "sk-ant-placeholder-proxy-will-inject",
-                                    },
-                                    {
-                                        "name": "CONFIGURED_INTEGRATIONS",
-                                        "value": configured_integrations,
-                                    },
-                                    {"name": "THREAD_ID", "value": thread_id},
-                                    {"name": "SANDBOX_NAME", "value": sandbox_name},
-                                    {"name": "NAMESPACE", "value": self.namespace},
-                                    {"name": "SANDBOX_JWT", "value": jwt_token},
-                                ],
+                                "env": self._build_container_env(
+                                    tenant_id=tenant_id,
+                                    team_id=team_id,
+                                    thread_id=thread_id,
+                                    sandbox_name=sandbox_name,
+                                    jwt_token=jwt_token,
+                                    team_token=team_token,
+                                    llm_model=llm_model,
+                                    configured_integrations=configured_integrations,
+                                ),
                                 "resources": {
                                     "requests": {
                                         "memory": "512Mi",
