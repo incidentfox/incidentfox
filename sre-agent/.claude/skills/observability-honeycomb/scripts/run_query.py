@@ -23,7 +23,6 @@ from honeycomb_client import (
     run_query,
 )
 
-
 VALID_CALCULATIONS = [
     "COUNT",
     "SUM",
@@ -215,7 +214,19 @@ def main():
 
 def parse_filter(filter_expr: str) -> dict:
     """Parse a simple filter expression into Honeycomb filter format."""
-    operators = [">=", "<=", "!=", "=", ">", "<", "exists", "does-not-exist", "contains", "starts-with", "in"]
+    operators = [
+        ">=",
+        "<=",
+        "!=",
+        "=",
+        ">",
+        "<",
+        "exists",
+        "does-not-exist",
+        "contains",
+        "starts-with",
+        "in",
+    ]
 
     for op in operators:
         if f" {op} " in filter_expr or filter_expr.endswith(f" {op}"):

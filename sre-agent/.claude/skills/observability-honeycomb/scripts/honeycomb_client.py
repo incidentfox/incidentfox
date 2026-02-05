@@ -316,7 +316,9 @@ def list_triggers(dataset_slug: str) -> list[dict[str, Any]]:
         ]
 
 
-def format_results(results: list[dict[str, Any]], breakdowns: list[str] | None = None) -> str:
+def format_results(
+    results: list[dict[str, Any]], breakdowns: list[str] | None = None
+) -> str:
     """Format query results for display.
 
     Args:

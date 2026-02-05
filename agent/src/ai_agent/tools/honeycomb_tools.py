@@ -90,7 +90,9 @@ def honeycomb_list_datasets() -> list[dict[str, Any]]:
         return result
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "honeycomb_list_datasets", "honeycomb")
+        return handle_integration_not_configured(
+            e, "honeycomb_list_datasets", "honeycomb"
+        )
     except Exception as e:
         logger.error("honeycomb_list_datasets_failed", error=str(e))
         raise ToolExecutionError("honeycomb_list_datasets", str(e), e)
@@ -130,7 +132,9 @@ def honeycomb_get_columns(dataset_slug: str) -> list[dict[str, Any]]:
         return result
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "honeycomb_get_columns", "honeycomb")
+        return handle_integration_not_configured(
+            e, "honeycomb_get_columns", "honeycomb"
+        )
     except Exception as e:
         logger.error("honeycomb_get_columns_failed", error=str(e), dataset=dataset_slug)
         raise ToolExecutionError("honeycomb_get_columns", str(e), e)
@@ -209,7 +213,8 @@ def honeycomb_run_query(
 
             if not query_id:
                 raise ToolExecutionError(
-                    "honeycomb_run_query", "Failed to create query - no query ID returned"
+                    "honeycomb_run_query",
+                    "Failed to create query - no query ID returned",
                 )
 
             # Step 2: Execute query
@@ -224,7 +229,8 @@ def honeycomb_run_query(
 
             if not query_result_id:
                 raise ToolExecutionError(
-                    "honeycomb_run_query", "Failed to execute query - no result ID returned"
+                    "honeycomb_run_query",
+                    "Failed to execute query - no result ID returned",
                 )
 
             # Step 3: Poll for results
@@ -352,7 +358,12 @@ def honeycomb_get_slo(dataset_slug: str, slo_id: str) -> dict[str, Any]:
     except IntegrationNotConfiguredError as e:
         return handle_integration_not_configured(e, "honeycomb_get_slo", "honeycomb")
     except Exception as e:
-        logger.error("honeycomb_get_slo_failed", error=str(e), dataset=dataset_slug, slo_id=slo_id)
+        logger.error(
+            "honeycomb_get_slo_failed",
+            error=str(e),
+            dataset=dataset_slug,
+            slo_id=slo_id,
+        )
         raise ToolExecutionError("honeycomb_get_slo", str(e), e)
 
 
@@ -389,13 +400,19 @@ def honeycomb_list_triggers(dataset_slug: str) -> list[dict[str, Any]]:
                 }
             )
 
-        logger.info("honeycomb_triggers_listed", dataset=dataset_slug, count=len(result))
+        logger.info(
+            "honeycomb_triggers_listed", dataset=dataset_slug, count=len(result)
+        )
         return result
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "honeycomb_list_triggers", "honeycomb")
+        return handle_integration_not_configured(
+            e, "honeycomb_list_triggers", "honeycomb"
+        )
     except Exception as e:
-        logger.error("honeycomb_list_triggers_failed", error=str(e), dataset=dataset_slug)
+        logger.error(
+            "honeycomb_list_triggers_failed", error=str(e), dataset=dataset_slug
+        )
         raise ToolExecutionError("honeycomb_list_triggers", str(e), e)
 
 
@@ -433,11 +450,15 @@ def honeycomb_get_trigger(dataset_slug: str, trigger_id: str) -> dict[str, Any]:
             "updated_at": trigger.get("updated_at"),
         }
 
-        logger.info("honeycomb_trigger_fetched", dataset=dataset_slug, trigger_id=trigger_id)
+        logger.info(
+            "honeycomb_trigger_fetched", dataset=dataset_slug, trigger_id=trigger_id
+        )
         return result
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "honeycomb_get_trigger", "honeycomb")
+        return handle_integration_not_configured(
+            e, "honeycomb_get_trigger", "honeycomb"
+        )
     except Exception as e:
         logger.error(
             "honeycomb_get_trigger_failed",
@@ -448,7 +469,9 @@ def honeycomb_get_trigger(dataset_slug: str, trigger_id: str) -> dict[str, Any]:
         raise ToolExecutionError("honeycomb_get_trigger", str(e), e)
 
 
-def honeycomb_list_markers(dataset_slug: str, time_range: int = 86400) -> list[dict[str, Any]]:
+def honeycomb_list_markers(
+    dataset_slug: str, time_range: int = 86400
+) -> list[dict[str, Any]]:
     """
     List deployment markers for a dataset.
 
@@ -485,9 +508,13 @@ def honeycomb_list_markers(dataset_slug: str, time_range: int = 86400) -> list[d
         return result
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "honeycomb_list_markers", "honeycomb")
+        return handle_integration_not_configured(
+            e, "honeycomb_list_markers", "honeycomb"
+        )
     except Exception as e:
-        logger.error("honeycomb_list_markers_failed", error=str(e), dataset=dataset_slug)
+        logger.error(
+            "honeycomb_list_markers_failed", error=str(e), dataset=dataset_slug
+        )
         raise ToolExecutionError("honeycomb_list_markers", str(e), e)
 
 
@@ -558,9 +585,13 @@ def honeycomb_create_marker(
         return result
 
     except IntegrationNotConfiguredError as e:
-        return handle_integration_not_configured(e, "honeycomb_create_marker", "honeycomb")
+        return handle_integration_not_configured(
+            e, "honeycomb_create_marker", "honeycomb"
+        )
     except Exception as e:
-        logger.error("honeycomb_create_marker_failed", error=str(e), dataset=dataset_slug)
+        logger.error(
+            "honeycomb_create_marker_failed", error=str(e), dataset=dataset_slug
+        )
         raise ToolExecutionError("honeycomb_create_marker", str(e), e)
 
 

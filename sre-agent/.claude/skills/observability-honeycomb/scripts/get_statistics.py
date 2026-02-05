@@ -36,7 +36,9 @@ def main():
         default=3600,
         help="Time range in seconds (default: 3600 = 1 hour)",
     )
-    parser.add_argument("--filter", help="Filter expression (e.g., 'service.name = api')")
+    parser.add_argument(
+        "--filter", help="Filter expression (e.g., 'service.name = api')"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -168,7 +170,9 @@ def main():
                     count = row.get("COUNT", 0)
                     if msg:
                         normalized = normalize_message(msg)
-                        top_error_patterns.append({"pattern": normalized, "count": count})
+                        top_error_patterns.append(
+                            {"pattern": normalized, "count": count}
+                        )
             except Exception:
                 pass
 
@@ -178,11 +182,17 @@ def main():
         elif error_rate > 10:
             recommendation = f"HIGH error rate ({error_rate}%). Investigate top error patterns immediately."
         elif error_rate > 5:
-            recommendation = f"Elevated error rate ({error_rate}%). Review error patterns."
+            recommendation = (
+                f"Elevated error rate ({error_rate}%). Review error patterns."
+            )
         elif total_count > 100000:
-            recommendation = f"High volume ({total_count:,} events). Use targeted service filter."
+            recommendation = (
+                f"High volume ({total_count:,} events). Use targeted service filter."
+            )
         else:
-            recommendation = f"Normal volume ({total_count:,} events). Error rate: {error_rate}%"
+            recommendation = (
+                f"Normal volume ({total_count:,} events). Error rate: {error_rate}%"
+            )
 
         # Build result
         result = {
@@ -212,9 +222,9 @@ def main():
 
             if status_dist:
                 print("Status Code Distribution:")
-                for status, count in sorted(
-                    status_dist.items(), key=lambda x: -x[1]
-                )[:10]:
+                for status, count in sorted(status_dist.items(), key=lambda x: -x[1])[
+                    :10
+                ]:
                     pct = round(count / total_count * 100, 1) if total_count > 0 else 0
                     print(f"  {status}: {count:,} ({pct}%)")
                 print()
