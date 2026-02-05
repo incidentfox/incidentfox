@@ -66,18 +66,32 @@ spec:
           limits:
             cpu: "1000m"
             memory: "1Gi"
+        # Startup probe: allows up to 60s for initial startup before liveness kicks in
+        # This prevents liveness probe from killing pods during slow startups
+        startupProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 12  # 5 + (12 * 5) = 65 seconds max startup time
         readinessProbe:
           httpGet:
             path: /docs
             port: 8000
           initialDelaySeconds: 10
           periodSeconds: 5
+          timeoutSeconds: 5      # Increased from default 1s to handle load spikes
+          failureThreshold: 3
         livenessProbe:
           httpGet:
             path: /docs
             port: 8000
           initialDelaySeconds: 20
           periodSeconds: 10
+          timeoutSeconds: 5      # Increased from default 1s to handle load spikes
+          failureThreshold: 3
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

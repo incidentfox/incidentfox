@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import asyncio
+
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -23,6 +25,10 @@ app = FastAPI()
 # Configuration
 DEFAULT_SANDBOX_PORT = 8888
 DEFAULT_NAMESPACE = "default"
+
+# Retry configuration for handling DNS propagation delays and pod startup
+RETRY_COUNT = 3
+RETRY_BASE_DELAY = 0.5  # seconds, will use exponential backoff: 0.5, 1.0, 2.0
 # For streaming SSE, use separate connect/read/write/pool timeouts
 # connect: 30s to establish connection
 # read: None - no timeout between SSE events (agent may think for minutes)
@@ -67,35 +73,55 @@ async def proxy_request(request: Request, full_path: str):
 
     print(f"Proxying request for sandbox '{sandbox_id}' to URL: {target_url}")
 
-    try:
-        headers = {
-            key: value
-            for (key, value) in request.headers.items()
-            if key.lower() != "host"
-        }
+    # Read request body once (can only be read once from the stream)
+    request_body = await request.body()
+    headers = {
+        key: value
+        for (key, value) in request.headers.items()
+        if key.lower() != "host"
+    }
 
-        req = client.build_request(
-            method=request.method,
-            url=target_url,
-            headers=headers,
-            content=await request.body(),
-        )
+    # Retry loop with exponential backoff for DNS propagation and pod startup
+    last_error = None
+    for attempt in range(RETRY_COUNT):
+        try:
+            req = client.build_request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                content=request_body,
+            )
 
-        resp = await client.send(req, stream=True)
+            resp = await client.send(req, stream=True)
 
-        return StreamingResponse(
-            content=resp.aiter_bytes(),
-            status_code=resp.status_code,
-            headers=resp.headers,
-        )
-    except httpx.ConnectError as e:
-        print(f"ERROR: Connection to sandbox at {target_url} failed. Error: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail=f"Could not connect to the backend sandbox: {sandbox_id}",
-        )
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        raise HTTPException(
-            status_code=500, detail="An internal error occurred in the proxy."
-        )
+            return StreamingResponse(
+                content=resp.aiter_bytes(),
+                status_code=resp.status_code,
+                headers=resp.headers,
+            )
+        except httpx.ConnectError as e:
+            last_error = e
+            if attempt < RETRY_COUNT - 1:
+                delay = RETRY_BASE_DELAY * (2**attempt)  # Exponential backoff: 0.5, 1.0, 2.0
+                print(
+                    f"Connection to sandbox '{sandbox_id}' failed (attempt {attempt + 1}/{RETRY_COUNT}), "
+                    f"retrying in {delay}s... Error: {e}"
+                )
+                await asyncio.sleep(delay)
+            else:
+                print(
+                    f"ERROR: All {RETRY_COUNT} connection attempts to sandbox at {target_url} failed. "
+                    f"Error: {e}"
+                )
+        except Exception as e:
+            # Don't retry on non-connection errors
+            print(f"An unexpected error occurred: {e}")
+            raise HTTPException(
+                status_code=500, detail="An internal error occurred in the proxy."
+            )
+
+    # All retries exhausted
+    raise HTTPException(
+        status_code=502,
+        detail=f"Could not connect to the backend sandbox: {sandbox_id}",
+    )

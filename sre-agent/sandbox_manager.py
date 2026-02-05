@@ -630,6 +630,29 @@ static_resources:
                                     "runAsUser": 1000,
                                     "capabilities": {"drop": ["ALL"]},
                                 },
+                                # Startup probe: allows time for FastAPI server initialization
+                                # Prevents traffic routing before server is ready
+                                "startupProbe": {
+                                    "httpGet": {
+                                        "path": "/health",
+                                        "port": 8888,
+                                    },
+                                    "initialDelaySeconds": 2,
+                                    "periodSeconds": 2,
+                                    "timeoutSeconds": 3,
+                                    "failureThreshold": 15,  # 2 + (15 * 2) = 32s max startup
+                                },
+                                # Readiness probe: signals when pod can receive traffic
+                                "readinessProbe": {
+                                    "httpGet": {
+                                        "path": "/health",
+                                        "port": 8888,
+                                    },
+                                    "initialDelaySeconds": 3,
+                                    "periodSeconds": 5,
+                                    "timeoutSeconds": 3,
+                                    "failureThreshold": 2,
+                                },
                             },
                             # Envoy sidecar - handles credential injection via ext_authz
                             {
