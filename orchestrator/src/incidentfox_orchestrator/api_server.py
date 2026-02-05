@@ -2100,20 +2100,28 @@ def create_app() -> FastAPI:
             "status": {
                 "state": task.status,
                 "message": task.result_message,
-                "timestamp": task.updated_at.isoformat() if task.updated_at else _now().isoformat(),
+                "timestamp": (
+                    task.updated_at.isoformat()
+                    if task.updated_at
+                    else _now().isoformat()
+                ),
             },
             "artifacts": task.artifacts,
             "history": task.history or [],
         }
 
-    def _a2a_run_agent_task(task_id: str, user_query: str, org_id: str, team_node_id: str) -> None:
+    def _a2a_run_agent_task(
+        task_id: str, user_query: str, org_id: str, team_node_id: str
+    ) -> None:
         """Background task to run the agent and update task status."""
         agent_api: AgentApiClient = app.state.agent_api
         cfg: ConfigServiceClient = app.state.config_service
 
         try:
             # Get internal admin token for impersonation
-            internal_admin = (os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or "").strip()
+            internal_admin = (
+                os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or ""
+            ).strip()
             if not internal_admin:
                 raise ValueError("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN not configured")
 
@@ -2144,22 +2152,35 @@ def create_app() -> FastAPI:
                             "role": "agent",
                             "parts": [
                                 {
-                                    "text": out if isinstance(out, str) else __import__("json").dumps(out, indent=2)
+                                    "text": (
+                                        out
+                                        if isinstance(out, str)
+                                        else __import__("json").dumps(out, indent=2)
+                                    )
                                 }
                             ],
                         }
-                        task.artifacts = [{"name": "investigation_result", "parts": [{"data": out}]}]
+                        task.artifacts = [
+                            {"name": "investigation_result", "parts": [{"data": out}]}
+                        ]
                     else:
                         task.status = "failed"
                         task.error = result.get("error", "Agent run failed")
-                        task.result_message = {"role": "agent", "parts": [{"text": task.error}]}
+                        task.result_message = {
+                            "role": "agent",
+                            "parts": [{"text": task.error}],
+                        }
 
                     task.history = (task.history or []) + [
                         {"state": task.status, "timestamp": _now().isoformat()}
                     ]
                     task.updated_at = _now()
 
-            _log("a2a_task_completed", task_id=task_id, status=task.status if task else "unknown")
+            _log(
+                "a2a_task_completed",
+                task_id=task_id,
+                status=task.status if task else "unknown",
+            )
 
         except Exception as e:
             _log("a2a_task_failed", task_id=task_id, error=str(e))
@@ -2168,7 +2189,10 @@ def create_app() -> FastAPI:
                 if task:
                     task.status = "failed"
                     task.error = str(e)
-                    task.result_message = {"role": "agent", "parts": [{"text": f"Error: {e}"}]}
+                    task.result_message = {
+                        "role": "agent",
+                        "parts": [{"text": f"Error: {e}"}],
+                    }
                     task.history = (task.history or []) + [
                         {"state": "failed", "timestamp": _now().isoformat()}
                     ]
@@ -2212,19 +2236,30 @@ def create_app() -> FastAPI:
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id,
-                    "error": {"code": -32602, "message": "Invalid params: message.parts required"},
+                    "error": {
+                        "code": -32602,
+                        "message": "Invalid params: message.parts required",
+                    },
                 }
 
-            user_query = "\n".join(p.get("text", "") for p in message.get("parts", []) if p.get("text"))
+            user_query = "\n".join(
+                p.get("text", "") for p in message.get("parts", []) if p.get("text")
+            )
             if not user_query:
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id,
-                    "error": {"code": -32602, "message": "Invalid params: no text in message"},
+                    "error": {
+                        "code": -32602,
+                        "message": "Invalid params: no text in message",
+                    },
                 }
 
             # Create task
-            task_id = params.get("id") or f"task-{_now().timestamp()}-{__import__('uuid').uuid4().hex[:9]}"
+            task_id = (
+                params.get("id")
+                or f"task-{_now().timestamp()}-{__import__('uuid').uuid4().hex[:9]}"
+            )
             org_id = os.getenv("DEFAULT_ORG_ID", "org-default")
             team_node_id = os.getenv("DEFAULT_TEAM_NODE_ID", "team-default")
 
@@ -2246,7 +2281,9 @@ def create_app() -> FastAPI:
                 s.flush()
 
             # Spawn background task
-            background_tasks.add_task(_a2a_run_agent_task, task_id, user_query, org_id, team_node_id)
+            background_tasks.add_task(
+                _a2a_run_agent_task, task_id, user_query, org_id, team_node_id
+            )
 
             _log("a2a_task_created", task_id=task_id)
 
@@ -2255,7 +2292,11 @@ def create_app() -> FastAPI:
                 "id": request_id,
                 "result": {
                     "id": task_id,
-                    "status": {"state": "working", "message": message, "timestamp": _now().isoformat()},
+                    "status": {
+                        "state": "working",
+                        "message": message,
+                        "timestamp": _now().isoformat(),
+                    },
                     "history": [
                         {"state": "submitted", "timestamp": _now().isoformat()},
                         {"state": "working", "timestamp": _now().isoformat()},
@@ -2280,7 +2321,11 @@ def create_app() -> FastAPI:
                         "id": request_id,
                         "error": {"code": -32001, "message": "Task not found"},
                     }
-                return {"jsonrpc": "2.0", "id": request_id, "result": _a2a_task_to_response(task)}
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": _a2a_task_to_response(task),
+                }
 
         elif method == "tasks/cancel":
             task_id = params.get("id")
@@ -2307,7 +2352,11 @@ def create_app() -> FastAPI:
                     ]
                     task.updated_at = _now()
 
-                return {"jsonrpc": "2.0", "id": request_id, "result": _a2a_task_to_response(task)}
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": _a2a_task_to_response(task),
+                }
 
         else:
             return {
@@ -2323,7 +2372,12 @@ def create_app() -> FastAPI:
             **A2A_AGENT_CARD,
             "endpoints": {
                 "base": "/api/v1/a2a",
-                "methods": ["tasks/send", "tasks/get", "tasks/cancel", "agent/authenticatedExtendedCard"],
+                "methods": [
+                    "tasks/send",
+                    "tasks/get",
+                    "tasks/cancel",
+                    "agent/authenticatedExtendedCard",
+                ],
             },
         }
 

@@ -68,7 +68,9 @@ class A2ATask(Base):
     message = Column(JSON, nullable=False)  # Original request {role, parts}
     result_message = Column(JSON, nullable=True)  # Response after completion
     artifacts = Column(JSON, nullable=True)  # Investigation results
-    history = Column(JSON, nullable=False, default=list)  # State transitions [{state, timestamp}]
+    history = Column(
+        JSON, nullable=False, default=list
+    )  # State transitions [{state, timestamp}]
 
     # Context
     org_id = Column(String(128), nullable=False, index=True)
