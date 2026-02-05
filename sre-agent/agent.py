@@ -2,7 +2,7 @@
 """
 IncidentFox AI SRE Agent
 
-Provides InteractiveAgentSession for persistent Claude SDK sessions with interrupt support.
+Provides InteractiveAgentSession for persistent LLM sessions with interrupt support.
 Used by sandbox_server.py for production deployments.
 
 Architecture (Skills + Scripts + Subagents):
@@ -14,6 +14,11 @@ No MCP tools - all integrations use skills with scripts for:
 - Minimal context bloat (skill metadata ~100 tokens, loaded on-demand)
 - Progressive disclosure (syntax/methodology loaded when needed)
 - Clean main context (subagent output stays isolated)
+
+LLM Provider Support:
+- Claude SDK (default): Production-tested, full feature support
+- OpenHands SDK: Multi-LLM support (Claude, Gemini, OpenAI)
+- Set LLM_PROVIDER=openhands to use OpenHands, defaults to "claude"
 
 Laminar Tracing:
 - Sessions: Groups multi-turn conversations by thread_id
@@ -28,15 +33,6 @@ import re
 from pathlib import Path
 from typing import AsyncIterator, Optional, Union
 
-from claude_agent_sdk import (
-    AssistantMessage,
-    ClaudeAgentOptions,
-    ClaudeSDKClient,
-    HookMatcher,
-    ResultMessage,
-    TextBlock,
-)
-from claude_agent_sdk.types import StreamEvent as SDKStreamEvent
 from dotenv import load_dotenv
 from events import (
     StreamEvent,
@@ -47,6 +43,21 @@ from events import (
     tool_start_event,
 )
 from lmnr import Laminar, observe
+
+# Conditional imports based on provider
+# Claude SDK imports are only needed if using Claude provider
+_LLM_PROVIDER = os.getenv("LLM_PROVIDER", "claude").lower()
+
+if _LLM_PROVIDER == "claude":
+    from claude_agent_sdk import (
+        AssistantMessage,
+        ClaudeAgentOptions,
+        ClaudeSDKClient,
+        HookMatcher,
+        ResultMessage,
+        TextBlock,
+    )
+    from claude_agent_sdk.types import StreamEvent as SDKStreamEvent
 
 # Max image size to embed (5MB)
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
@@ -912,3 +923,144 @@ Do NOT dump full kubectl output. Synthesize findings.""",
             except Exception:
                 pass  # Ignore cleanup errors
             self.client = None
+
+    async def provide_answer(self, answers: dict) -> None:
+        """Provide answer to pending AskUserQuestion."""
+        if hasattr(self, "_pending_answer_event") and self._pending_answer_event is not None:
+            self._pending_answer = answers
+            self._pending_answer_event.set()
+
+
+class OpenHandsAgentSession:
+    """
+    Agent session using OpenHands SDK for multi-LLM support.
+
+    This class provides the same interface as InteractiveAgentSession but
+    uses OpenHands SDK internally, enabling support for multiple LLM providers:
+    - anthropic/claude-sonnet-4-20250514 (default)
+    - gemini/gemini-2.0-flash
+    - openai/gpt-4o
+
+    Set LLM_MODEL environment variable to change the model.
+    """
+
+    def __init__(self, thread_id: str):
+        self.thread_id = thread_id
+        self.is_running: bool = False
+        self._was_interrupted: bool = False
+        self._provider = None
+
+    async def start(self):
+        """Initialize the OpenHands session."""
+        from providers import ProviderConfig, SubagentConfig, create_provider
+
+        # Build subagent configs
+        subagents = {
+            "log-analyst": SubagentConfig(
+                name="log-analyst",
+                description="Log analysis specialist for Coralogix, Datadog, or CloudWatch.",
+                prompt="""You are a log analysis expert. Analyze logs efficiently.
+                Use aggregations first. Report findings concisely.""",
+                tools=["Bash", "Read", "Glob", "Grep"],
+                model="sonnet",
+            ),
+            "k8s-debugger": SubagentConfig(
+                name="k8s-debugger",
+                description="Kubernetes debugging specialist.",
+                prompt="""You are a Kubernetes debugging expert.
+                Check events before logs. Synthesize findings.""",
+                tools=["Bash", "Read", "Glob", "Grep"],
+                model="sonnet",
+            ),
+            "remediator": SubagentConfig(
+                name="remediator",
+                description="Safe remediation specialist. Always dry-run first.",
+                prompt="""You are a safe remediation specialist.
+                Always dry-run before executing. Document actions.""",
+                tools=["Bash", "Read", "Glob", "Grep"],
+                model="sonnet",
+            ),
+        }
+
+        # Determine working directory
+        if os.path.exists("/workspace"):
+            cwd = "/app"
+        else:
+            thread_workspace = f"/tmp/sessions/{self.thread_id}"
+            os.makedirs(thread_workspace, exist_ok=True)
+            cwd = thread_workspace
+
+        config = ProviderConfig(
+            cwd=cwd,
+            thread_id=self.thread_id,
+            allowed_tools=[
+                "Bash", "Read", "Write", "Edit", "Glob", "Grep",
+                "WebSearch", "WebFetch", "Task",
+            ],
+            subagents=subagents,
+        )
+
+        self._provider = create_provider("openhands", config)
+        await self._provider.start()
+
+    @observe()
+    async def execute(
+        self, prompt: str, images: list = None
+    ) -> AsyncIterator[StreamEvent]:
+        """Execute a query and stream events."""
+        if self._provider is None:
+            raise RuntimeError("Session not started. Call start() first.")
+
+        self.is_running = True
+        self._was_interrupted = False
+
+        try:
+            async for event in self._provider.execute(prompt, images):
+                yield event
+        finally:
+            self.is_running = False
+
+    async def interrupt(self) -> AsyncIterator[StreamEvent]:
+        """Interrupt current execution."""
+        if self._provider is None:
+            raise RuntimeError("Session not started. Call start() first.")
+
+        async for event in self._provider.interrupt():
+            yield event
+
+        self._was_interrupted = True
+        self.is_running = False
+
+    async def close(self):
+        """Clean up the session."""
+        if self._provider is not None:
+            await self._provider.close()
+            self._provider = None
+
+    async def provide_answer(self, answers: dict) -> None:
+        """Provide answer to pending question."""
+        if self._provider is not None:
+            await self._provider.provide_answer(answers)
+
+
+def create_agent_session(thread_id: str):
+    """
+    Factory function to create the appropriate agent session.
+
+    Returns InteractiveAgentSession (Claude SDK) by default.
+    Set LLM_PROVIDER=openhands to use OpenHands SDK for multi-LLM support.
+
+    Args:
+        thread_id: Unique identifier for the session
+
+    Returns:
+        Either InteractiveAgentSession or OpenHandsAgentSession
+    """
+    provider = os.getenv("LLM_PROVIDER", "claude").lower()
+
+    if provider == "openhands":
+        print(f"🔄 [AGENT] Using OpenHands provider (LLM_MODEL={os.getenv('LLM_MODEL', 'default')})")
+        return OpenHandsAgentSession(thread_id)
+    else:
+        print(f"🔄 [AGENT] Using Claude provider")
+        return InteractiveAgentSession(thread_id)

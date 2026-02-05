@@ -22,7 +22,7 @@ from pydantic import BaseModel
 sys.path.insert(0, "/app")
 from events import StreamEvent, error_event
 
-from agent import InteractiveAgentSession
+from agent import InteractiveAgentSession, OpenHandsAgentSession, create_agent_session
 
 app = FastAPI(
     title="IncidentFox Sandbox Runtime",
@@ -30,8 +30,8 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# Global session manager: thread_id -> InteractiveAgentSession
-_sessions: Dict[str, InteractiveAgentSession] = {}
+# Global session manager: thread_id -> Agent session (InteractiveAgentSession or OpenHandsAgentSession)
+_sessions: Dict[str, InteractiveAgentSession | OpenHandsAgentSession] = {}
 _session_lock = asyncio.Lock()
 
 
@@ -107,20 +107,24 @@ async def list_sessions():
     }
 
 
-async def get_or_create_session(thread_id: str) -> InteractiveAgentSession:
+async def get_or_create_session(thread_id: str) -> InteractiveAgentSession | OpenHandsAgentSession:
     """
     Get existing session or create new one for thread_id.
+
+    Uses create_agent_session() factory function which respects LLM_PROVIDER env var:
+    - LLM_PROVIDER=claude (default): Uses Claude Agent SDK
+    - LLM_PROVIDER=openhands: Uses OpenHands SDK for multi-LLM support
 
     Args:
         thread_id: Investigation thread ID
 
     Returns:
-        InteractiveAgentSession instance
+        Agent session instance (InteractiveAgentSession or OpenHandsAgentSession)
     """
     async with _session_lock:
         if thread_id not in _sessions:
-            # Create new session
-            session = InteractiveAgentSession(thread_id)
+            # Create new session using factory
+            session = create_agent_session(thread_id)
             await session.start()
             _sessions[thread_id] = session
         return _sessions[thread_id]
@@ -441,13 +445,12 @@ async def answer_question(request: AnswerRequest):
 
         session = _sessions[thread_id]
 
-    # Store answer and wake up waiting callback
-    if hasattr(session, "_pending_answer_event"):
-        session._pending_answer = answers
-        session._pending_answer_event.set()
+    # Use the unified provide_answer method (works for both providers)
+    try:
+        await session.provide_answer(answers)
         return {"status": "ok", "thread_id": thread_id}
-    else:
-        raise HTTPException(400, f"No pending question for {thread_id}")
+    except Exception as e:
+        raise HTTPException(400, f"Failed to provide answer: {str(e)}")
 
 
 @app.post("/cleanup")
