@@ -266,7 +266,7 @@ watch_sandbox_logs &
 LOG_WATCHER_PID=$!
 
 # Start server (in foreground so we see its output)
-.venv/bin/python server.py &
+uv run python server.py &
 SERVER_PID=$!
 
 # Wait for server to exit or for signal
