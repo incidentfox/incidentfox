@@ -61,6 +61,10 @@ def load_env_credentials() -> dict[str, dict]:
             "email": os.getenv("CONFLUENCE_EMAIL"),
             "api_token": os.getenv("CONFLUENCE_API_TOKEN"),
         },
+        "honeycomb": {
+            "api_key": os.getenv("HONEYCOMB_API_KEY"),
+            "domain": os.getenv("HONEYCOMB_DOMAIN"),  # Optional: defaults to api.honeycomb.io
+        },
     }
 
 
@@ -168,6 +172,7 @@ async def list_integrations(request: Request):
         "jaeger",
         "kubernetes",
         "github",
+        "honeycomb",
     ]
 
     available = []
@@ -208,6 +213,10 @@ def is_integration_configured(integration_id: str, creds: dict | None) -> bool:
 
     # GitHub: api_key required (domain optional for GHE)
     if integration_id == "github":
+        return bool(creds.get("api_key"))
+
+    # Honeycomb: api_key required (domain optional, defaults to api.honeycomb.io)
+    if integration_id == "honeycomb":
         return bool(creds.get("api_key"))
 
     # Default: api_key required (coralogix, incident_io, etc.)
@@ -269,6 +278,10 @@ def get_integration_metadata(integration_id: str, creds: dict) -> dict:
         if creds.get("default_org"):
             metadata["default_org"] = creds.get("default_org")
         return metadata
+
+    elif integration_id == "honeycomb":
+        # Return domain (defaults to api.honeycomb.io if not set)
+        return {"url": creds.get("domain") or "https://api.honeycomb.io"}
 
     # Default: just indicate it's configured (incident_io, etc.)
     return {}
@@ -655,6 +668,82 @@ async def github_proxy(path: str, request: Request):
 
 
 @app.api_route(
+    "/honeycomb/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def honeycomb_proxy(path: str, request: Request):
+    """Reverse proxy for Honeycomb API requests.
+
+    Honeycomb uses X-Honeycomb-Team header for authentication.
+    Domain defaults to api.honeycomb.io (US) but can be api.eu1.honeycomb.io (EU).
+    """
+    import httpx
+
+    logger.info(f"Honeycomb proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get Honeycomb credentials
+    creds = await get_credentials(tenant_id, team_id, "honeycomb")
+    if not creds or not creds.get("api_key"):
+        logger.error(f"Honeycomb not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Honeycomb integration not configured",
+        )
+
+    # Build Honeycomb API URL (default to US region)
+    domain = creds.get("domain", "https://api.honeycomb.io")
+    if not domain.startswith(("http://", "https://")):
+        domain = f"https://{domain}"
+    target_url = f"{domain.rstrip('/')}/1/{path}"
+    logger.info(f"Honeycomb proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("honeycomb", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"Honeycomb request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="Honeycomb request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"Honeycomb request error: {e}")
+        raise HTTPException(status_code=502, detail=f"Honeycomb request failed: {e}")
+
+
+@app.api_route(
     "/datadog/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
 )
@@ -963,6 +1052,11 @@ def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
         if api_key:
             return {"Authorization": f"Bearer {api_key}"}
         return {}
+
+    elif integration_id == "honeycomb":
+        # Honeycomb uses X-Honeycomb-Team header
+        api_key = creds.get("api_key", "")
+        return {"X-Honeycomb-Team": api_key}
 
     # Default: Bearer token
     api_key = creds.get("api_key", "")
