@@ -11,9 +11,13 @@ Features:
 - Subagents: Isolated context execution for log-analyst, k8s-debugger, remediator
 - Image support: Multimodal input for supported models
 - Tool output capture: Streams tool results back to caller
+- Conversation history persistence across turns
+- Observability via Laminar @observe() decorator
+- WebSearch/WebFetch tools for web access
 """
 
 import asyncio
+import html
 import logging
 import os
 import re
@@ -22,7 +26,10 @@ import tempfile
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Optional
 
+import httpx
 import yaml
+from lmnr import observe
+
 from events import (
     StreamEvent,
     error_event,
@@ -845,6 +852,54 @@ class OpenHandsProvider(LLMProvider):
                     }
                 )
 
+        # WebSearch tool
+        if "WebSearch" in self.config.allowed_tools:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "description": "Search the web for information. Returns search results with titles, URLs, and snippets.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Search query",
+                            },
+                            "num_results": {
+                                "type": "integer",
+                                "description": "Number of results to return (default: 5, max: 10)",
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+            })
+
+        # WebFetch tool
+        if "WebFetch" in self.config.allowed_tools:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "web_fetch",
+                    "description": "Fetch content from a URL and convert HTML to readable text. Use for reading documentation, articles, or web pages.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": {
+                                "type": "string",
+                                "description": "URL to fetch",
+                            },
+                            "prompt": {
+                                "type": "string",
+                                "description": "Optional: What information to extract from the page",
+                            },
+                        },
+                        "required": ["url"],
+                    },
+                },
+            })
+
         return tools
 
     async def _execute_tool(
@@ -1037,6 +1092,74 @@ class OpenHandsProvider(LLMProvider):
 
                 yield (skill["content"], True, None)
 
+            elif tool_name == "web_search":
+                query = args.get("query", "")
+                num_results = min(args.get("num_results", 5), 10)
+
+                # Use DuckDuckGo HTML search (no API key required)
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    try:
+                        response = await client.get(
+                            "https://html.duckduckgo.com/html/",
+                            params={"q": query},
+                            headers={"User-Agent": "Mozilla/5.0 (compatible; SREAgent/1.0)"},
+                        )
+                        response.raise_for_status()
+
+                        # Parse results from HTML
+                        results = self._parse_duckduckgo_results(response.text, num_results)
+
+                        if not results:
+                            yield (f"No results found for: {query}", True, None)
+                        else:
+                            output_lines = [f"Search results for: {query}\n"]
+                            for i, r in enumerate(results, 1):
+                                output_lines.append(f"{i}. {r['title']}")
+                                output_lines.append(f"   URL: {r['url']}")
+                                output_lines.append(f"   {r['snippet']}\n")
+                            yield ("\n".join(output_lines), True, None)
+
+                    except httpx.HTTPError as e:
+                        yield (f"Search failed: {str(e)}", False, "HTTPError")
+
+            elif tool_name == "web_fetch":
+                url = args.get("url", "")
+                prompt = args.get("prompt", "")
+
+                if not url:
+                    yield ("URL is required", False, "MissingURL")
+                    return
+
+                async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                    try:
+                        response = await client.get(
+                            url,
+                            headers={"User-Agent": "Mozilla/5.0 (compatible; SREAgent/1.0)"},
+                        )
+                        response.raise_for_status()
+
+                        content_type = response.headers.get("content-type", "")
+
+                        if "text/html" in content_type:
+                            # Convert HTML to readable text
+                            text = self._html_to_text(response.text)
+                        else:
+                            text = response.text
+
+                        # Truncate if too long
+                        if len(text) > 50000:
+                            text = text[:50000] + "\n\n[Content truncated...]"
+
+                        if prompt:
+                            output = f"Content from {url}:\n\n{text}\n\n---\nExtraction request: {prompt}"
+                        else:
+                            output = f"Content from {url}:\n\n{text}"
+
+                        yield (output, True, None)
+
+                    except httpx.HTTPError as e:
+                        yield (f"Fetch failed: {str(e)}", False, "HTTPError")
+
             else:
                 yield (f"Unknown tool: {tool_name}", False, "UnknownTool")
 
@@ -1082,6 +1205,90 @@ class OpenHandsProvider(LLMProvider):
 
         return content
 
+    def _parse_duckduckgo_results(self, html_content: str, max_results: int) -> list[dict]:
+        """
+        Parse search results from DuckDuckGo HTML.
+
+        Args:
+            html_content: Raw HTML from DuckDuckGo
+            max_results: Maximum number of results to return
+
+        Returns:
+            List of dicts with title, url, snippet
+        """
+        results = []
+
+        # Simple regex-based parsing for DuckDuckGo HTML results
+        # Match result links and snippets
+        result_pattern = re.compile(
+            r'<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([^<]*)</a>.*?'
+            r'<a[^>]+class="result__snippet"[^>]*>([^<]*)</a>',
+            re.DOTALL | re.IGNORECASE
+        )
+
+        for match in result_pattern.finditer(html_content):
+            if len(results) >= max_results:
+                break
+
+            url = match.group(1)
+            title = html.unescape(match.group(2).strip())
+            snippet = html.unescape(match.group(3).strip())
+
+            # DuckDuckGo uses redirect URLs, extract actual URL
+            if "uddg=" in url:
+                import urllib.parse
+                parsed = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+                url = parsed.get("uddg", [url])[0]
+
+            if title and url:
+                results.append({
+                    "title": title,
+                    "url": url,
+                    "snippet": snippet or "(no snippet)",
+                })
+
+        return results
+
+    def _html_to_text(self, html_content: str) -> str:
+        """
+        Convert HTML to readable plain text.
+
+        Args:
+            html_content: Raw HTML
+
+        Returns:
+            Plain text with basic formatting preserved
+        """
+        # Remove script and style elements
+        text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+
+        # Convert common elements to text equivalents
+        text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'</p>', '\n\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'</div>', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'</li>', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'<li[^>]*>', '• ', text, flags=re.IGNORECASE)
+        text = re.sub(r'<h[1-6][^>]*>', '\n## ', text, flags=re.IGNORECASE)
+        text = re.sub(r'</h[1-6]>', '\n', text, flags=re.IGNORECASE)
+
+        # Extract links
+        text = re.sub(r'<a[^>]+href="([^"]*)"[^>]*>([^<]*)</a>', r'\2 (\1)', text, flags=re.IGNORECASE)
+
+        # Remove remaining tags
+        text = re.sub(r'<[^>]+>', '', text)
+
+        # Decode HTML entities
+        text = html.unescape(text)
+
+        # Clean up whitespace
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = re.sub(r'[ \t]+', ' ', text)
+        text = '\n'.join(line.strip() for line in text.splitlines())
+
+        return text.strip()
+
+    @observe(name="openhands_execute")
     async def execute(
         self,
         prompt: str,
@@ -1089,6 +1296,8 @@ class OpenHandsProvider(LLMProvider):
     ) -> AsyncIterator[StreamEvent]:
         """
         Execute a query and stream events.
+
+        Maintains conversation history across calls for multi-turn support.
 
         Args:
             prompt: User prompt
@@ -1106,20 +1315,22 @@ class OpenHandsProvider(LLMProvider):
         final_text = ""
 
         try:
-            # Build system prompt
-            system_prompt = self._build_system_prompt()
-
-            # Initialize conversation
-            messages = [
-                {"role": "system", "content": system_prompt},
-            ]
+            # Initialize conversation history if empty (first turn)
+            if not self._conversation_history:
+                system_prompt = self._build_system_prompt()
+                self._conversation_history = [
+                    {"role": "system", "content": system_prompt},
+                ]
 
             # Add user message (with images if provided)
             if images:
                 user_content = self._build_multimodal_content(prompt, images)
-                messages.append({"role": "user", "content": user_content})
+                self._conversation_history.append({"role": "user", "content": user_content})
             else:
-                messages.append({"role": "user", "content": prompt})
+                self._conversation_history.append({"role": "user", "content": prompt})
+
+            # Use conversation history for this turn
+            messages = self._conversation_history.copy()
 
             # Get tools schema
             tools = self._get_tools_schema()
@@ -1147,9 +1358,11 @@ class OpenHandsProvider(LLMProvider):
                     )
 
                     assistant_message = response.choices[0].message
+                    assistant_msg_dict = assistant_message.model_dump()
 
-                    # Add to conversation history
-                    messages.append(assistant_message.model_dump())
+                    # Add to conversation history (persist across turns)
+                    self._conversation_history.append(assistant_msg_dict)
+                    messages.append(assistant_msg_dict)
 
                     # Check for tool calls
                     if assistant_message.tool_calls:
@@ -1195,16 +1408,14 @@ class OpenHandsProvider(LLMProvider):
                                 output=tool_output[:10000],  # Truncate
                             )
 
-                            # Add tool result to messages
-                            messages.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tool_call.id,
-                                    "content": tool_output[
-                                        :50000
-                                    ],  # Truncate for context
-                                }
-                            )
+                            # Add tool result to messages and history
+                            tool_result_msg = {
+                                "role": "tool",
+                                "tool_call_id": tool_call.id,
+                                "content": tool_output[:50000],  # Truncate for context
+                            }
+                            self._conversation_history.append(tool_result_msg)
+                            messages.append(tool_result_msg)
 
                     else:
                         # No tool calls - we have a response
