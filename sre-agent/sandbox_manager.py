@@ -489,6 +489,50 @@ static_resources:
                                         "name": "ANTHROPIC_API_KEY",
                                         "value": "sk-ant-placeholder-proxy-will-inject-real-key",
                                     },
+                                    # LLM Provider configuration (multi-LLM support)
+                                    # Set LLM_PROVIDER=openhands and LLM_MODEL to use Gemini/OpenAI
+                                    {
+                                        "name": "LLM_PROVIDER",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "incidentfox-secrets",
+                                                "key": "llm-provider",
+                                                "optional": True,  # Defaults to "claude" if not set
+                                            }
+                                        },
+                                    },
+                                    {
+                                        "name": "LLM_MODEL",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "incidentfox-secrets",
+                                                "key": "llm-model",
+                                                "optional": True,  # Defaults to provider default
+                                            }
+                                        },
+                                    },
+                                    # Gemini API key (only needed if using LLM_MODEL=gemini/*)
+                                    {
+                                        "name": "GEMINI_API_KEY",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "incidentfox-secrets",
+                                                "key": "gemini-api-key",
+                                                "optional": True,
+                                            }
+                                        },
+                                    },
+                                    # OpenAI API key (only needed if using LLM_MODEL=openai/*)
+                                    {
+                                        "name": "OPENAI_API_KEY",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "incidentfox-secrets",
+                                                "key": "openai-api-key",
+                                                "optional": True,
+                                            }
+                                        },
+                                    },
                                     # Coralogix SDK: route API requests through proxy
                                     # (proxy injects Authorization header for Coralogix)
                                     {
