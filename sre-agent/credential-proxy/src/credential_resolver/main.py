@@ -46,7 +46,20 @@ ENV_CREDENTIALS: dict[str, dict] = {}
 
 
 def load_env_credentials() -> dict[str, dict]:
-    """Load credentials from environment variables."""
+    """Load credentials from environment variables.
+
+    Supports all observability backends for self-hosted/local mode:
+    - Anthropic: LLM API
+    - Coralogix: Log aggregation
+    - Confluence: Documentation
+    - Datadog: Monitoring (requires both API key and App key)
+    - Elasticsearch: Search/logging
+    - Grafana: Dashboards/visualization
+    - Prometheus: Metrics
+    - Jaeger: Distributed tracing
+    - GitHub: Code repository
+    - Honeycomb: Observability
+    """
     return {
         "anthropic": {
             "api_key": os.getenv("ANTHROPIC_API_KEY"),
@@ -57,9 +70,39 @@ def load_env_credentials() -> dict[str, dict]:
             "region": os.getenv("CORALOGIX_REGION"),
         },
         "confluence": {
-            "url": os.getenv("CONFLUENCE_URL"),
+            "domain": os.getenv("CONFLUENCE_URL"),
             "email": os.getenv("CONFLUENCE_EMAIL"),
-            "api_token": os.getenv("CONFLUENCE_API_TOKEN"),
+            "api_key": os.getenv("CONFLUENCE_API_TOKEN"),
+        },
+        "datadog": {
+            "api_key": os.getenv("DD_API_KEY") or os.getenv("DATADOG_API_KEY"),
+            "app_key": os.getenv("DD_APP_KEY") or os.getenv("DATADOG_APP_KEY"),
+            "site": os.getenv("DD_SITE", "datadoghq.com"),
+        },
+        "elasticsearch": {
+            "domain": os.getenv("ELASTICSEARCH_URL"),
+            "api_key": os.getenv("ELASTICSEARCH_API_KEY"),
+            "username": os.getenv("ELASTICSEARCH_USER"),
+        },
+        "grafana": {
+            "domain": os.getenv("GRAFANA_URL"),
+            "api_key": os.getenv("GRAFANA_API_KEY") or os.getenv("GRAFANA_TOKEN"),
+        },
+        "prometheus": {
+            "domain": os.getenv("PROMETHEUS_URL"),
+            "api_key": os.getenv("PROMETHEUS_TOKEN"),
+        },
+        "jaeger": {
+            "domain": os.getenv("JAEGER_URL"),
+            "api_key": os.getenv("JAEGER_TOKEN"),
+        },
+        "github": {
+            "api_key": os.getenv("GITHUB_TOKEN"),
+            "domain": os.getenv("GITHUB_ENTERPRISE_URL"),  # Optional, for GHE
+        },
+        "honeycomb": {
+            "api_key": os.getenv("HONEYCOMB_API_KEY"),
+            "dataset": os.getenv("HONEYCOMB_DATASET"),
         },
     }
 
@@ -87,28 +130,28 @@ async def lifespan(app: FastAPI):
         logger.info("Config Service client initialized")
     else:
         ENV_CREDENTIALS = load_env_credentials()
-        # Check different primary keys based on integration type
-        configured = []
-        for k, v in ENV_CREDENTIALS.items():
-            if k == "confluence":
-                if v.get("url") and v.get("api_token"):
-                    configured.append(k)
-            elif v.get("api_key"):
-                configured.append(k)
+        # Check which integrations are configured using shared validation
+        configured = [
+            k for k, v in ENV_CREDENTIALS.items() if is_integration_configured(k, v)
+        ]
         logger.info(f"Environment credentials loaded for: {configured}")
 
         # Debug: show masked credentials to verify they're loaded
         for integration, creds in ENV_CREDENTIALS.items():
-            if integration == "confluence":
-                url = creds.get("url")
-                api_token = creds.get("api_token")
-                logger.info(
-                    f"  {integration}: url={url or '(not set)'}, "
-                    f"api_token={mask_secret(api_token)}"
-                )
-            else:
-                api_key = creds.get("api_key")
-                logger.info(f"  {integration}: api_key={mask_secret(api_key)}")
+            if is_integration_configured(integration, creds):
+                # Log the primary credential for each type
+                if integration == "datadog":
+                    logger.info(
+                        f"  {integration}: api_key={mask_secret(creds.get('api_key'))}, "
+                        f"app_key={mask_secret(creds.get('app_key'))}, site={creds.get('site')}"
+                    )
+                elif integration in ["confluence", "grafana", "elasticsearch", "prometheus", "jaeger"]:
+                    logger.info(
+                        f"  {integration}: domain={creds.get('domain') or '(not set)'}, "
+                        f"api_key={mask_secret(creds.get('api_key'))}"
+                    )
+                else:
+                    logger.info(f"  {integration}: api_key={mask_secret(creds.get('api_key'))}")
 
     yield
 
@@ -963,6 +1006,11 @@ def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
         if api_key:
             return {"Authorization": f"Bearer {api_key}"}
         return {}
+
+    elif integration_id == "honeycomb":
+        # Honeycomb uses X-Honeycomb-Team header
+        api_key = creds.get("api_key", "")
+        return {"X-Honeycomb-Team": api_key}
 
     # Default: Bearer token
     api_key = creds.get("api_key", "")
