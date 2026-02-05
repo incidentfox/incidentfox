@@ -18,6 +18,9 @@ DOMAIN_TO_INTEGRATION: dict[str, str] = {
     "api.ap3.coralogix.com": "coralogix",
     # Confluence (Atlassian Cloud)
     "atlassian.net": "confluence",
+    # Honeycomb (US and EU regions)
+    "api.honeycomb.io": "honeycomb",
+    "api.eu1.honeycomb.io": "honeycomb",
 }
 
 # Path prefixes for proxy mode (when host is envoy:8001, localhost:8001, etc.)
@@ -26,6 +29,7 @@ PATH_TO_INTEGRATION: dict[str, str] = {
     "/api/event_logging/": "anthropic",  # Anthropic telemetry
     "/api/v1/dataprime/": "coralogix",  # Coralogix DataPrime
     "/api/v1/query": "coralogix",  # Coralogix query
+    "/honeycomb/": "honeycomb",  # Honeycomb API
 }
 
 # Hosts that use path-based routing (static list)
