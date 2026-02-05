@@ -13,8 +13,8 @@ Environment variables:
 import json
 import os
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from typing import Any
 
 
@@ -185,7 +185,9 @@ def list_folders(space_id: str) -> list[dict[str, Any]]:
     return response.get("folders", [])
 
 
-def list_lists(space_id: str | None = None, folder_id: str | None = None) -> list[dict[str, Any]]:
+def list_lists(
+    space_id: str | None = None, folder_id: str | None = None
+) -> list[dict[str, Any]]:
     """List all lists in a space or folder.
 
     Args:
@@ -347,19 +349,19 @@ def search_tasks(
 
     if statuses:
         for status in statuses:
-            params[f"statuses[]"] = status
+            params["statuses[]"] = status
     if assignees:
         for assignee in assignees:
-            params[f"assignees[]"] = assignee
+            params["assignees[]"] = assignee
     if list_ids:
         for list_id in list_ids:
-            params[f"list_ids[]"] = list_id
+            params["list_ids[]"] = list_id
     if space_ids:
         for space_id in space_ids:
-            params[f"space_ids[]"] = space_id
+            params["space_ids[]"] = space_id
     if folder_ids:
         for folder_id in folder_ids:
-            params[f"folder_ids[]"] = folder_id
+            params["folder_ids[]"] = folder_id
     if date_created_gt:
         params["date_created_gt"] = str(date_created_gt)
     if date_created_lt:
@@ -380,7 +382,8 @@ def search_tasks(
     if query:
         query_lower = query.lower()
         tasks = [
-            t for t in tasks
+            t
+            for t in tasks
             if query_lower in t.get("name", "").lower()
             or query_lower in (t.get("description") or "").lower()
         ]
@@ -540,6 +543,7 @@ def format_task(task: dict[str, Any], verbose: bool = False) -> str:
         due_date = task.get("due_date")
         if due_date:
             from datetime import datetime
+
             dt = datetime.fromtimestamp(int(due_date) / 1000)
             lines.append(f"  Due: {dt.strftime('%Y-%m-%d %H:%M')}")
 
@@ -547,7 +551,9 @@ def format_task(task: dict[str, Any], verbose: bool = False) -> str:
         description = task.get("description")
         if description:
             # Truncate long descriptions
-            desc_preview = description[:200] + "..." if len(description) > 200 else description
+            desc_preview = (
+                description[:200] + "..." if len(description) > 200 else description
+            )
             lines.append(f"  Description: {desc_preview}")
 
         # Tags

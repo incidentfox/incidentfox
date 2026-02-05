@@ -85,7 +85,9 @@ def main():
             # Assignees
             assignees = task.get("assignees", [])
             if assignees:
-                names = [a.get("username", a.get("email", "Unknown")) for a in assignees]
+                names = [
+                    a.get("username", a.get("email", "Unknown")) for a in assignees
+                ]
                 print(f"Assignees: {', '.join(names)}")
 
             # Dates
@@ -137,7 +139,9 @@ def main():
                 print("-" * 40)
                 for st in subtasks:
                     st_status = st.get("status", {}).get("status", "?")
-                    print(f"  [{st_status}] {st.get('name', 'Untitled')} ({st.get('id')})")
+                    print(
+                        f"  [{st_status}] {st.get('name', 'Untitled')} ({st.get('id')})"
+                    )
 
             # Comments
             if args.include_comments:

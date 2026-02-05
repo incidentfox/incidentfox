@@ -17,7 +17,7 @@ import json
 import sys
 import time
 
-from clickup_client import search_tasks, format_task
+from clickup_client import format_task, search_tasks
 
 
 def parse_time_range(time_str: str) -> int:
@@ -46,11 +46,21 @@ def parse_time_range(time_str: str) -> int:
 
 def main():
     parser = argparse.ArgumentParser(description="Search ClickUp tasks")
-    parser.add_argument("--query", "-q", help="Search query (matches name and description)")
-    parser.add_argument("--status", "-s", action="append", help="Filter by status (can repeat)")
-    parser.add_argument("--assignee", "-a", action="append", help="Filter by assignee ID (can repeat)")
-    parser.add_argument("--list-id", action="append", help="Filter by list ID (can repeat)")
-    parser.add_argument("--space-id", action="append", help="Filter by space ID (can repeat)")
+    parser.add_argument(
+        "--query", "-q", help="Search query (matches name and description)"
+    )
+    parser.add_argument(
+        "--status", "-s", action="append", help="Filter by status (can repeat)"
+    )
+    parser.add_argument(
+        "--assignee", "-a", action="append", help="Filter by assignee ID (can repeat)"
+    )
+    parser.add_argument(
+        "--list-id", action="append", help="Filter by list ID (can repeat)"
+    )
+    parser.add_argument(
+        "--space-id", action="append", help="Filter by space ID (can repeat)"
+    )
     parser.add_argument(
         "--updated-since",
         help="Only tasks updated since (e.g., '1h', '24h', '7d')",
@@ -59,8 +69,12 @@ def main():
         "--created-since",
         help="Only tasks created since (e.g., '1h', '24h', '7d')",
     )
-    parser.add_argument("--include-closed", action="store_true", help="Include closed tasks")
-    parser.add_argument("--limit", type=int, default=50, help="Maximum results (default: 50)")
+    parser.add_argument(
+        "--include-closed", action="store_true", help="Include closed tasks"
+    )
+    parser.add_argument(
+        "--limit", type=int, default=50, help="Maximum results (default: 50)"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 

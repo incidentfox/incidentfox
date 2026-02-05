@@ -632,7 +632,7 @@ INTEGRATIONS: List[Dict[str, Any]] = [
             "6. Paste the API token below"
         ),
         "docs_url": "https://clickup.com/api",
-        "context_prompt_placeholder": "e.g., 'Our incident tasks are in the \"SRE\" space. Use the \"Incidents\" list. Severity is tracked in a custom field.'",
+        "context_prompt_placeholder": 'e.g., \'Our incident tasks are in the "SRE" space. Use the "Incidents" list. Severity is tracked in a custom field.\'',
         "fields": [
             {
                 "id": "api_key",

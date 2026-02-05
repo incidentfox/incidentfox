@@ -16,12 +16,14 @@ import argparse
 import json
 import sys
 
-from clickup_client import list_teams, list_spaces, list_folders, list_lists
+from clickup_client import list_folders, list_lists, list_spaces, list_teams
 
 
 def main():
     parser = argparse.ArgumentParser(description="List ClickUp spaces and structure")
-    parser.add_argument("--include-lists", "-l", action="store_true", help="Include lists in output")
+    parser.add_argument(
+        "--include-lists", "-l", action="store_true", help="Include lists in output"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -68,22 +70,26 @@ def main():
                         # Get lists in folder
                         folder_lists = list_lists(folder_id=folder.get("id"))
                         for lst in folder_lists:
-                            folder_data["lists"].append({
-                                "id": lst.get("id"),
-                                "name": lst.get("name"),
-                                "task_count": lst.get("task_count"),
-                            })
+                            folder_data["lists"].append(
+                                {
+                                    "id": lst.get("id"),
+                                    "name": lst.get("name"),
+                                    "task_count": lst.get("task_count"),
+                                }
+                            )
 
                         space_data["folders"].append(folder_data)
 
                     # Get folderless lists
                     folderless_lists = list_lists(space_id=space.get("id"))
                     for lst in folderless_lists:
-                        space_data["lists"].append({
-                            "id": lst.get("id"),
-                            "name": lst.get("name"),
-                            "task_count": lst.get("task_count"),
-                        })
+                        space_data["lists"].append(
+                            {
+                                "id": lst.get("id"),
+                                "name": lst.get("name"),
+                                "task_count": lst.get("task_count"),
+                            }
+                        )
 
                 team_data["spaces"].append(space_data)
 
@@ -112,7 +118,9 @@ def main():
                         if args.include_lists:
                             # Folders
                             for folder in space.get("folders", []):
-                                print(f"    Folder: {folder['name']} (ID: {folder['id']})")
+                                print(
+                                    f"    Folder: {folder['name']} (ID: {folder['id']})"
+                                )
                                 for lst in folder.get("lists", []):
                                     count = lst.get("task_count", "?")
                                     print(f"      List: {lst['name']} ({count} tasks)")
