@@ -4977,6 +4977,16 @@ def handle_integration_config_submission(ack, body, client, view):
                         validation_errors.append(error_msg)
                     else:
                         config["site"] = parsed_site
+                # Special handling for Honeycomb URL field
+                elif integration_id == "honeycomb" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "Honeycomb"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
                 else:
                     config[field_id] = val
             elif field_id in existing_config:

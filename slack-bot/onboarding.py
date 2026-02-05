@@ -578,10 +578,41 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "honeycomb",
         "name": "Honeycomb",
         "category": "observability",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":honeycomb:",
         "icon_fallback": ":honeybee:",
-        "description": "Query observability data and traces.",
+        "description": "Query high-cardinality observability data, traces, and SLOs.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your Honeycomb account\n"
+            "2. Go to *Team Settings* (gear icon) > *API Keys*\n"
+            "3. Click *Create API Key*\n"
+            "4. Name it 'IncidentFox' and select these permissions:\n"
+            "   • *Query Data* - Run queries on datasets\n"
+            "   • *Manage Queries and Columns* - View columns and query specs\n"
+            "5. Click *Create* and copy the API key\n"
+            "6. Paste the API key below"
+        ),
+        "docs_url": "https://docs.honeycomb.io/api/",
+        "context_prompt_placeholder": "e.g., 'Our main dataset is production. Key fields: service.name, duration_ms, http.status_code. SLO target is 99.9%.'",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "your-honeycomb-api-key",
+                "hint": "Honeycomb API key with Query Data permissions",
+            },
+            {
+                "id": "domain",
+                "name": "API Endpoint (Optional)",
+                "type": "string",
+                "required": False,
+                "placeholder": "https://api.honeycomb.io (default) or https://api.eu1.honeycomb.io",
+                "hint": "Leave blank for US region. Use api.eu1.honeycomb.io for EU",
+            },
+        ],
     },
     {
         "id": "dynatrace",
