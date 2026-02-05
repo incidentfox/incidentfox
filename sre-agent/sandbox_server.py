@@ -107,7 +107,9 @@ async def list_sessions():
     }
 
 
-async def get_or_create_session(thread_id: str) -> InteractiveAgentSession | OpenHandsAgentSession:
+async def get_or_create_session(
+    thread_id: str,
+) -> InteractiveAgentSession | OpenHandsAgentSession:
     """
     Get existing session or create new one for thread_id.
 

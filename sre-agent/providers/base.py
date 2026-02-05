@@ -153,12 +153,16 @@ def get_provider_class(provider_name: str) -> type[LLMProvider]:
     """
     if provider_name == "claude":
         from providers.claude_provider import ClaudeProvider
+
         return ClaudeProvider
     elif provider_name == "openhands":
         from providers.openhands_provider import OpenHandsProvider
+
         return OpenHandsProvider
     else:
-        raise ValueError(f"Unknown provider: {provider_name}. Use 'claude' or 'openhands'.")
+        raise ValueError(
+            f"Unknown provider: {provider_name}. Use 'claude' or 'openhands'."
+        )
 
 
 def create_provider(

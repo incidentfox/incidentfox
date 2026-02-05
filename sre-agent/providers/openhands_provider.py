@@ -20,6 +20,7 @@ from events import (
     tool_end_event,
     tool_start_event,
 )
+
 from providers.base import LLMProvider, ProviderConfig
 
 logger = logging.getLogger(__name__)
@@ -86,7 +87,13 @@ methodologies for specific tasks like Kubernetes debugging, log analysis, etc.
     async def start(self) -> None:
         """Initialize the OpenHands session."""
         try:
-            from openhands.sdk import Agent, LLM, LocalConversation, LocalWorkspace, Tool
+            from openhands.sdk import (
+                LLM,
+                Agent,
+                LocalConversation,
+                LocalWorkspace,
+                Tool,
+            )
 
             # Create LLM
             self._llm = LLM(model=self._model, api_key=self._api_key)
@@ -107,7 +114,7 @@ methodologies for specific tasks like Kubernetes debugging, log analysis, etc.
                 tools=tools,
                 system_prompt_kwargs={
                     "custom_instructions": self._build_system_prompt()
-                }
+                },
             )
             logger.info(f"[OpenHands] Agent created with {len(tools)} tools")
 
@@ -227,7 +234,7 @@ methodologies for specific tasks like Kubernetes debugging, log analysis, etc.
                 async for stream_event in self._convert_event(event):
                     yield stream_event
                     # Capture final text
-                    if hasattr(event, 'action') and hasattr(event.action, 'message'):
+                    if hasattr(event, "action") and hasattr(event.action, "message"):
                         if event.action.message:
                             final_text = event.action.message
 
@@ -260,16 +267,16 @@ methodologies for specific tasks like Kubernetes debugging, log analysis, etc.
     async def _convert_event(self, event) -> AsyncIterator[StreamEvent]:
         """Convert OpenHands event to StreamEvent."""
         # Check for action events
-        if hasattr(event, 'action'):
+        if hasattr(event, "action"):
             action = event.action
             action_type = type(action).__name__
 
             # Thought/thinking events
-            if hasattr(action, 'thought') and action.thought:
+            if hasattr(action, "thought") and action.thought:
                 yield thought_event(self.thread_id, action.thought)
 
             # Final message (FinishAction)
-            elif hasattr(action, 'message') and action.message:
+            elif hasattr(action, "message") and action.message:
                 # This is captured separately for final result
                 pass
 
@@ -280,9 +287,9 @@ methodologies for specific tasks like Kubernetes debugging, log analysis, etc.
                 tool_input = {}
 
                 # Try to extract command/input
-                if hasattr(action, 'command'):
+                if hasattr(action, "command"):
                     tool_input = {"command": action.command}
-                elif hasattr(action, 'path'):
+                elif hasattr(action, "path"):
                     tool_input = {"path": action.path}
 
                 yield tool_start_event(
@@ -292,22 +299,22 @@ methodologies for specific tasks like Kubernetes debugging, log analysis, etc.
                 )
 
         # Check for observation events (tool results)
-        if hasattr(event, 'observation'):
+        if hasattr(event, "observation"):
             observation = event.observation
             obs_type = type(observation).__name__
 
             # Extract output
             output = ""
-            if hasattr(observation, 'content'):
+            if hasattr(observation, "content"):
                 if isinstance(observation.content, list):
                     output = " ".join(
-                        str(c.text) if hasattr(c, 'text') else str(c)
+                        str(c.text) if hasattr(c, "text") else str(c)
                         for c in observation.content
                     )
                 else:
                     output = str(observation.content)
 
-            is_error = getattr(observation, 'is_error', False)
+            is_error = getattr(observation, "is_error", False)
             tool_name = obs_type.replace("Observation", "")
 
             yield tool_end_event(

@@ -926,7 +926,10 @@ Do NOT dump full kubectl output. Synthesize findings.""",
 
     async def provide_answer(self, answers: dict) -> None:
         """Provide answer to pending AskUserQuestion."""
-        if hasattr(self, "_pending_answer_event") and self._pending_answer_event is not None:
+        if (
+            hasattr(self, "_pending_answer_event")
+            and self._pending_answer_event is not None
+        ):
             self._pending_answer = answers
             self._pending_answer_event.set()
 
@@ -994,8 +997,15 @@ class OpenHandsAgentSession:
             cwd=cwd,
             thread_id=self.thread_id,
             allowed_tools=[
-                "Bash", "Read", "Write", "Edit", "Glob", "Grep",
-                "WebSearch", "WebFetch", "Task",
+                "Bash",
+                "Read",
+                "Write",
+                "Edit",
+                "Glob",
+                "Grep",
+                "WebSearch",
+                "WebFetch",
+                "Task",
             ],
             subagents=subagents,
         )
@@ -1059,8 +1069,10 @@ def create_agent_session(thread_id: str):
     provider = os.getenv("LLM_PROVIDER", "claude").lower()
 
     if provider == "openhands":
-        print(f"🔄 [AGENT] Using OpenHands provider (LLM_MODEL={os.getenv('LLM_MODEL', 'default')})")
+        print(
+            f"🔄 [AGENT] Using OpenHands provider (LLM_MODEL={os.getenv('LLM_MODEL', 'default')})"
+        )
         return OpenHandsAgentSession(thread_id)
     else:
-        print(f"🔄 [AGENT] Using Claude provider")
+        print("🔄 [AGENT] Using Claude provider")
         return InteractiveAgentSession(thread_id)

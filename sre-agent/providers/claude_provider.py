@@ -20,7 +20,6 @@ from claude_agent_sdk import (
     TextBlock,
 )
 from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
-
 from events import (
     StreamEvent,
     error_event,
@@ -31,8 +30,8 @@ from events import (
     tool_end_event,
     tool_start_event,
 )
-from providers.base import LLMProvider, ProviderConfig
 
+from providers.base import LLMProvider, ProviderConfig
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +104,9 @@ class ClaudeProvider(LLMProvider):
             """Handle tool permission requests, including AskUserQuestion."""
             if tool_name == "AskUserQuestion":
                 questions = input_data.get("questions", [])
-                logger.info(f"[AskUserQuestion] Agent asked {len(questions)} question(s)")
+                logger.info(
+                    f"[AskUserQuestion] Agent asked {len(questions)} question(s)"
+                )
 
                 # Store event for answer waiting
                 event = asyncio.Event()
@@ -127,12 +128,12 @@ class ClaudeProvider(LLMProvider):
                         updated_input={"questions": questions, "answers": answer}
                     )
                 except asyncio.TimeoutError:
-                    logger.warning("[AskUserQuestion] Timeout - continuing without answer")
+                    logger.warning(
+                        "[AskUserQuestion] Timeout - continuing without answer"
+                    )
 
                     # Emit timeout event
-                    self._pending_events.append(
-                        question_timeout_event(self.thread_id)
-                    )
+                    self._pending_events.append(question_timeout_event(self.thread_id))
 
                     # Cleanup
                     self._pending_answer_event = None
@@ -210,7 +211,9 @@ class ClaudeProvider(LLMProvider):
                                 },
                             }
                         )
-                    logger.info(f"[Claude] Sending multimodal message with {len(images)} image(s)")
+                    logger.info(
+                        f"[Claude] Sending multimodal message with {len(images)} image(s)"
+                    )
                     yield {
                         "type": "user",
                         "message": {"role": "user", "content": content},
@@ -230,7 +233,9 @@ class ClaudeProvider(LLMProvider):
                 async with asyncio.timeout(RESPONSE_TIMEOUT):
                     async for message in self.client.receive_response():
                         message_count += 1
-                        parent_tool_use_id = getattr(message, "parent_tool_use_id", None)
+                        parent_tool_use_id = getattr(
+                            message, "parent_tool_use_id", None
+                        )
 
                         # Emit pending tool_end events
                         while self._pending_tool_ends:
@@ -272,7 +277,9 @@ class ClaudeProvider(LLMProvider):
 
                                     # Track parent for subagent
                                     if tool_use_id and parent_tool_use_id:
-                                        self._tool_parent_map[tool_use_id] = parent_tool_use_id
+                                        self._tool_parent_map[tool_use_id] = (
+                                            parent_tool_use_id
+                                        )
 
                                     yield tool_start_event(
                                         self.thread_id,
@@ -300,9 +307,14 @@ class ClaudeProvider(LLMProvider):
                                 )
 
                             # Extract images and files from result
-                            from agent import _extract_files_from_text, _extract_images_from_text
+                            from agent import (
+                                _extract_files_from_text,
+                                _extract_images_from_text,
+                            )
 
-                            result_text, extracted_images = _extract_images_from_text(final_text)
+                            result_text, extracted_images = _extract_images_from_text(
+                                final_text
+                            )
                             _, extracted_files = _extract_files_from_text(final_text)
 
                             success = message.subtype == "success"
