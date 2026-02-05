@@ -25,7 +25,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Generator
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -109,7 +109,11 @@ class TestHealthEndpoint:
         data = response.json()
         assert "model" in data
         # Default model should be set
-        assert "anthropic" in data["model"] or "gemini" in data["model"] or "openai" in data["model"]
+        assert (
+            "anthropic" in data["model"]
+            or "gemini" in data["model"]
+            or "openai" in data["model"]
+        )
 
 
 class TestConfigEndpoint:
@@ -290,7 +294,11 @@ class TestMockIncidentInvestigation:
         # Second request to same thread
         response2 = requests.post(
             f"{AGENT_URL}/execute",
-            json={"prompt": "What did I ask before?", "thread_id": thread_id, "max_turns": 1},
+            json={
+                "prompt": "What did I ask before?",
+                "thread_id": thread_id,
+                "max_turns": 1,
+            },
             stream=True,
             timeout=60,
         )
@@ -367,7 +375,9 @@ class TestRealLLMIncidentInvestigation:
 
         # 2. Used tools to investigate (read files, etc.)
         # Note: Tool names depend on implementation
-        assert len(tool_calls) > 0 or len(thoughts) > 3, "Agent should use tools or think deeply"
+        assert (
+            len(tool_calls) > 0 or len(thoughts) > 3
+        ), "Agent should use tools or think deeply"
 
         # 3. Mentioned OOM or memory in the investigation
         all_text = " ".join(thoughts) + " " + result_text
@@ -375,7 +385,9 @@ class TestRealLLMIncidentInvestigation:
             keyword in all_text.lower()
             for keyword in ["oom", "memory", "512mi", "limit", "killed"]
         )
-        assert oom_mentioned, f"Agent should identify memory issue. Got: {all_text[:500]}"
+        assert (
+            oom_mentioned
+        ), f"Agent should identify memory issue. Got: {all_text[:500]}"
 
     def test_multi_model_gemini(self, docker_compose_up, request):
         """Test that Gemini model works (if configured)."""
@@ -438,7 +450,9 @@ class TestLocalAgentExecution:
             result = await Runner.run(agent, "Investigate the pod crash")
 
             assert result.final_output is not None
-            assert "OOM" in result.final_output or "memory" in result.final_output.lower()
+            assert (
+                "OOM" in result.final_output or "memory" in result.final_output.lower()
+            )
             assert result.status == "complete"
 
     @pytest.mark.asyncio
@@ -456,7 +470,9 @@ class TestLocalAgentExecution:
         @function_tool
         def read_log(path: str) -> str:
             """Read a log file."""
-            return "2024-01-15T10:10:00Z ERROR OOMKilled: Container exceeded memory limit"
+            return (
+                "2024-01-15T10:10:00Z ERROR OOMKilled: Container exceeded memory limit"
+            )
 
         agent = Agent(
             name="TestInvestigator",
