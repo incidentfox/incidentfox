@@ -100,8 +100,11 @@ ENV PYTHONPATH=/app/src
 # ==============================================================================
 
 # Create non-root user and workspace directory
+# Symlink bundled skills into .claude/skills so the agent's bash tool
+# can resolve relative paths (e.g. .claude/skills/alerting-context/scripts/...)
 RUN useradd -m -u 1000 agent && \
-    mkdir -p /workspace /home/agent/.kube /home/agent/.aws && \
+    mkdir -p /workspace/.claude /home/agent/.kube /home/agent/.aws && \
+    ln -s /app/src/unified_agent/skills/bundled /workspace/.claude/skills && \
     chown -R agent:agent /app /workspace /home/agent
 
 USER agent
