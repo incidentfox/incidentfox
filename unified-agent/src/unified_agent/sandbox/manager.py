@@ -571,7 +571,7 @@ static_resources:
                 "podTemplate": {
                     "metadata": {
                         "labels": {
-                            "app": "incidentfox-agent",
+                            "app": "incidentfox-sandbox",  # Different from incidentfox-agent to avoid service routing
                             "thread-id": thread_id,
                         }
                     },

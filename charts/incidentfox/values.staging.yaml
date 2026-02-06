@@ -115,6 +115,12 @@ externalSecrets:
       clientIdRemoteRefKey: incidentfox/staging/slack_client_id
       clientSecretRemoteRefKey: incidentfox/staging/slack_client_secret
       signingSecretRemoteRefKey: incidentfox/staging/slack_signing_secret
+    # Encryption key for config-service column encryption
+    encryptionKey:
+      enabled: true
+      secretName: incidentfox-encryption-key
+      secretKey: ENCRYPTION_KEY
+      remoteRefKey: incidentfox/staging/encryption_key
 
 services:
   configService:
@@ -173,7 +179,8 @@ services:
   # Unified Agent with gVisor sandbox isolation
   agent:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:sandbox-label-fix"
+    servicePort: 8000  # server.py listens on 8000
     serviceAccount:
       create: true
       name: incidentfox-agent
@@ -186,7 +193,7 @@ services:
     # Enable sandbox mode with gVisor isolation
     sandbox:
       enabled: true
-      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:staging"
+      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:sandbox-label-fix"
       namespace: ""  # Same namespace as agent
       useGvisor: true
     # Enable tracing in staging for debugging
@@ -204,7 +211,7 @@ services:
   # Credential Resolver for sandbox credential injection
   credentialResolver:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-credential-resolver:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:fec4ecc"
     replicas: 2
     credentialSource: config_service
     jwtMode: strict

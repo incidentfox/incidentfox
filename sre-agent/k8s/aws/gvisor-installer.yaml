@@ -61,18 +61,16 @@ spec:
           # Configure containerd
           echo "📝 Configuring containerd..."
           mkdir -p /host/etc/containerd
-          
-          # Remove any old/wrong gVisor runtime config
-          sed -i '/\[plugins\."io\.containerd\.grpc\.v1\.cri"\.containerd\.runtimes\.runsc\]/,+1d' /host/etc/containerd/config.toml 2>/dev/null || true
-          
-          # Add gVisor runtime config (must match EKS containerd format)
-          if ! grep -q "'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc" /host/etc/containerd/config.toml 2>/dev/null; then
+
+          # Remove any old/wrong gVisor runtime config (both old and new CRI paths)
+          sed -i '/\[plugins\..*containerd\.runtimes\.runsc\]/,+2d' /host/etc/containerd/config.toml 2>/dev/null || true
+
+          # Add gVisor runtime config (must match EKS containerd format - uses grpc.v1.cri path)
+          if ! grep -q 'containerd.runtimes.runsc' /host/etc/containerd/config.toml 2>/dev/null; then
             echo "Adding gVisor runtime configuration..."
-            cat >> /host/etc/containerd/config.toml <<EOFCONFIG
-          
-          [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc]
-          runtime_type = "io.containerd.runsc.v1"
-          EOFCONFIG
+            echo '' >> /host/etc/containerd/config.toml
+            echo '[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]' >> /host/etc/containerd/config.toml
+            echo 'runtime_type = "io.containerd.runsc.v1"' >> /host/etc/containerd/config.toml
           else
             echo "✅ containerd already configured for gVisor"
           fi

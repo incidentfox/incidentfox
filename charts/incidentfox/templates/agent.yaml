@@ -91,11 +91,11 @@ spec:
         - name: agent
           image: {{ required "services.agent.image is required" .Values.services.agent.image }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          # Run server.py (API server) not sandbox_server.py (sandbox runtime)
+          command: ["python", "/app/server.py"]
           ports:
             - containerPort: {{ .Values.services.agent.servicePort }}
               name: http
-            - containerPort: {{ .Values.services.agent.healthServer.port | default 8081 }}
-              name: health
           resources:
 {{ toYaml .Values.services.agent.resources | indent 12 }}
           env:
@@ -135,6 +135,9 @@ spec:
               value: {{ .Values.services.agent.sandbox.useGvisor | default "true" | quote }}
             # Credential resolver namespace (for Envoy ext_authz)
             - name: CREDENTIAL_RESOLVER_NAMESPACE
+              value: {{ .Values.namespace | quote }}
+            # Router namespace (for sandbox-router service)
+            - name: ROUTER_NAMESPACE
               value: {{ .Values.namespace | quote }}
             # JWT secret for signing sandbox tokens
             - name: JWT_SECRET
@@ -184,11 +187,11 @@ spec:
                   name: {{ .Values.externalSecrets.contract.agentOpenAI.secretName }}
                   key: {{ .Values.externalSecrets.contract.agentOpenAI.apiKeyKey }}
             {{- end }}
-          # Readiness probe
+          # Readiness probe (uses /health on main port since server.py doesn't have separate health server)
           readinessProbe:
             httpGet:
-              path: /readyz
-              port: {{ .Values.services.agent.healthServer.port | default 8081 }}
+              path: {{ .Values.services.agent.readinessProbe.path | default "/health" }}
+              port: {{ .Values.services.agent.servicePort }}
             initialDelaySeconds: {{ .Values.services.agent.readinessProbe.initialDelaySeconds | default 5 }}
             periodSeconds: {{ .Values.services.agent.readinessProbe.periodSeconds | default 10 }}
             timeoutSeconds: {{ .Values.services.agent.readinessProbe.timeoutSeconds | default 5 }}
@@ -197,8 +200,8 @@ spec:
           {{- if .Values.services.agent.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
-              path: /livez
-              port: {{ .Values.services.agent.healthServer.port | default 8081 }}
+              path: {{ .Values.services.agent.livenessProbe.path | default "/health" }}
+              port: {{ .Values.services.agent.servicePort }}
             initialDelaySeconds: {{ .Values.services.agent.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.services.agent.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.services.agent.livenessProbe.timeoutSeconds | default 5 }}
