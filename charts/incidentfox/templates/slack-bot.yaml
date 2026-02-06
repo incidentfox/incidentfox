@@ -122,6 +122,10 @@ metadata:
   {{- end }}
 spec:
   type: {{ .Values.services.slackBot.service.type | default "ClusterIP" }}
+  {{- if eq .Values.services.slackBot.service.type "LoadBalancer" }}
+  # loadBalancerClass is immutable - must match existing service to avoid recreation
+  loadBalancerClass: service.k8s.aws/nlb
+  {{- end }}
   ports:
     {{- if eq .Values.services.slackBot.service.type "LoadBalancer" }}
     - port: 443
