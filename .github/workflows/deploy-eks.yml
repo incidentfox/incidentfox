@@ -242,6 +242,15 @@ jobs:
           patch_resource service "sandbox-router-svc"
           patch_resource service "credential-resolver-svc"
 
+          # Delete LoadBalancer services with immutable fields (loadBalancerClass)
+          # These must be recreated by Helm with the correct spec
+          for svc in incidentfox-slack-bot; do
+            if kubectl get service "$svc" -n "$NS" &>/dev/null; then
+              echo "Deleting service/$svc (loadBalancerClass is immutable, Helm will recreate)..."
+              kubectl delete service "$svc" -n "$NS" --wait=false
+            fi
+          done
+
       - name: Deploy with Helm (no wait)
         working-directory: charts
         run: |
