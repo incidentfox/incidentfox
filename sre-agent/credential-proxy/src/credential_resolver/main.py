@@ -103,9 +103,6 @@ def load_env_credentials() -> dict[str, dict]:
         "honeycomb": {
             "api_key": os.getenv("HONEYCOMB_API_KEY"),
             "dataset": os.getenv("HONEYCOMB_DATASET"),
-        },
-        "honeycomb": {
-            "api_key": os.getenv("HONEYCOMB_API_KEY"),
             "domain": os.getenv(
                 "HONEYCOMB_DOMAIN"
             ),  # Optional: defaults to api.honeycomb.io
