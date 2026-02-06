@@ -119,6 +119,20 @@ externalSecrets:
       webhookSecretRemoteRefKey: incidentfox/prod/recall_webhook_secret
       botName: "IncidentFox Notetaker"
       botImageUrl: "https://incidentfox-assets.s3.us-west-2.amazonaws.com/bot-avatar.png"
+    # Google Chat integration
+    googleChat:
+      enabled: false
+      secretName: incidentfox-google-chat
+      projectIdKey: project_id
+      projectIdRemoteRefKey: incidentfox/prod/google_chat_project_id
+    # MS Teams integration
+    teams:
+      enabled: false
+      secretName: incidentfox-teams
+      appIdKey: app_id
+      appPasswordKey: app_password
+      appIdRemoteRefKey: incidentfox/prod/teams_app_id
+      appPasswordRemoteRefKey: incidentfox/prod/teams_app_password
 
 services:
   configService:
