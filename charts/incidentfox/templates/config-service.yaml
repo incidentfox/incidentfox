@@ -85,7 +85,7 @@ spec:
               value: {{ default "email" .Values.services.configService.oidc.emailClaim | quote }}
             - name: OIDC_SUBJECT_CLAIM
               value: {{ default "sub" .Values.services.configService.oidc.subjectClaim | quote }}
-            {{- if .Values.externalSecrets.contract.encryptionKey.enabled }}
+            {{- if and .Values.externalSecrets.contract.encryptionKey .Values.externalSecrets.contract.encryptionKey.enabled }}
             - name: ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:
