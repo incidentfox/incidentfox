@@ -286,7 +286,9 @@ class InvestigateRequest(BaseModel):
     team_id: Optional[str] = None  # Slack team_id
     team_token: Optional[str] = None  # Team token for config loading
     images: Optional[List[ImageData]] = None
-    file_attachments: Optional[List[Dict[str, Any]]] = None  # File metadata (not used yet)
+    file_attachments: Optional[List[Dict[str, Any]]] = (
+        None  # File metadata (not used yet)
+    )
 
 
 class InterruptRequest(BaseModel):
