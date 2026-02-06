@@ -483,6 +483,17 @@ static_resources:
                         }
                     },
                 },
+                # PagerDuty API key (optional - for alerting-context skill)
+                {
+                    "name": "PAGERDUTY_API_KEY",
+                    "valueFrom": {
+                        "secretKeyRef": {
+                            "name": "incidentfox-pagerduty-api",
+                            "key": "api-key",
+                            "optional": True,
+                        }
+                    },
+                },
                 # Laminar observability (optional)
                 {
                     "name": "LMNR_PROJECT_API_KEY",
