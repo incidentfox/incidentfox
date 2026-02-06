@@ -232,7 +232,7 @@ export default function AgentSettingsPage() {
             name: cfg.name || id,
             description: cfg.description || '',
             enabled: cfg.enabled !== false,
-            model: cfg.model || { name: 'gpt-4o', temperature: 0.3, max_tokens: 16000 },
+            model: cfg.model || { name: 'gpt-5.2', temperature: 0.3, max_tokens: 16000 },
             prompt: cfg.prompt || { system: '' },
             tools: cfg.tools || {},
             disable_default_tools: cfg.disable_default_tools,
@@ -546,7 +546,7 @@ export default function AgentSettingsPage() {
       name: newAgentId.trim(),
       description: '',
       enabled: true,
-      model: { name: 'gpt-4o', temperature: 0.3, max_tokens: 16000 },
+      model: { name: 'gpt-5.2', temperature: 0.3, max_tokens: 16000 },
       prompt: { system: '' },
       tools: {},
       sub_agents: {},
@@ -1094,9 +1094,8 @@ export default function AgentSettingsPage() {
                           <option value="o4-mini">o4-mini</option>
                         </optgroup>
                         <optgroup label="Standard Models">
-                          <option value="gpt-4o">gpt-4o</option>
-                          <option value="gpt-4o-2024-11-20">gpt-4o-2024-11-20</option>
-                          <option value="gpt-4o-mini">gpt-4o-mini</option>
+                          <option value="gpt-5.2">gpt-5.2</option>
+                          <option value="gpt-5.2-mini">gpt-5.2-mini</option>
                           <option value="gpt-4-turbo">gpt-4-turbo</option>
                           <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
                         </optgroup>

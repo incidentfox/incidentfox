@@ -136,7 +136,7 @@ Add these to `.env` to enable additional tools:
 ```bash
 # Required
 OPENAI_API_KEY=sk-xxx
-OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=gpt-5.2
 
 # Auto-generated (don't edit)
 TOKEN_PEPPER=xxx

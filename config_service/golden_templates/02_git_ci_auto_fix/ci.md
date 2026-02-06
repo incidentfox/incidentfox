@@ -2,7 +2,7 @@
 
 **Template:** 02_git_ci_auto_fix
 **Role:** Sub-agent
-**Model:** gpt-4o
+**Model:** gpt-5.2
 
 ---
 

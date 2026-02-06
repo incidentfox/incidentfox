@@ -163,7 +163,7 @@ def main() -> None:
                         },
                         # Basic agent config
                         "agent": {
-                            "model": "gpt-4o",
+                            "model": "gpt-5.2",
                             "max_tool_calls": 50,
                         },
                     },

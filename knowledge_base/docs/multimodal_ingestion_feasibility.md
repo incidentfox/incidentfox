@@ -153,7 +153,7 @@ class WebExtractor:
 **Options**:
 
 **A. OpenAI GPT-4 Vision** (Recommended)
-- **API**: `gpt-4-vision-preview` or `gpt-4o`
+- **API**: `gpt-4-vision-preview` or `gpt-5.2`
 - **Capability**: Describe images, extract text (OCR), summarize
 - **Cost**: ~$0.01-0.03 per image
 - **Quality**: Excellent, understands context
@@ -165,7 +165,7 @@ client = OpenAI()
 def process_image(image_path: str) -> str:
     with open(image_path, "rb") as f:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5.2",
             messages=[{
                 "role": "user",
                 "content": [

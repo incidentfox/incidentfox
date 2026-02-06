@@ -942,7 +942,7 @@ class OpenHandsAgentSession:
     uses OpenHands SDK internally, enabling support for multiple LLM providers:
     - anthropic/claude-sonnet-4-20250514 (default)
     - gemini/gemini-2.0-flash
-    - openai/gpt-4o
+    - openai/gpt-5.2
 
     Set LLM_MODEL environment variable to change the model.
     """

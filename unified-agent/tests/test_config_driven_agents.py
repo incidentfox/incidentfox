@@ -117,7 +117,7 @@ class TestAgentBuilder:
                 },
                 "openai_agent": {
                     "enabled": True,
-                    "model": {"name": "openai/gpt-4o"},
+                    "model": {"name": "openai/gpt-5.2"},
                 },
             }
         }
@@ -200,7 +200,9 @@ class TestModelNormalization:
             == "anthropic/claude-sonnet-4-20250514"
         )
 
-        # OpenAI models
+        # OpenAI models (gpt-5.2 is the current default, gpt-4o still supported for backwards compat)
+        assert normalize_model_name("gpt-5.2") == "openai/gpt-5.2"
+        assert normalize_model_name("gpt-5.2-mini") == "openai/gpt-5.2-mini"
         assert normalize_model_name("gpt-4o") == "openai/gpt-4o"
         assert normalize_model_name("gpt-4o-mini") == "openai/gpt-4o-mini"
 

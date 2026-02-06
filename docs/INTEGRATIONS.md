@@ -558,7 +558,7 @@ Complete reference of all integration-related environment variables.
 ```bash
 # Required
 OPENAI_API_KEY=sk-...              # OpenAI API key
-OPENAI_MODEL=gpt-4o                # Model to use (gpt-4o, gpt-4-turbo)
+OPENAI_MODEL=gpt-5.2                # Model to use (gpt-5.2, gpt-4-turbo)
 
 # Optional
 ANTHROPIC_API_KEY=sk-ant-...       # For Claude agents

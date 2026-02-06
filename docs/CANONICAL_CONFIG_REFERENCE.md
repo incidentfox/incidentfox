@@ -68,7 +68,7 @@ This document defines the **canonical data format** for IncidentFox configuratio
         "description": "Plans incident investigation strategy",
         "enabled": true,
         "model": {
-          "name": "gpt-4o",
+          "name": "gpt-5.2",
           "max_tokens": 4000,
           "temperature": 0.3
         },
@@ -95,7 +95,7 @@ This document defines the **canonical data format** for IncidentFox configuratio
         "description": "Investigates K8s cluster issues",
         "enabled": true,
         "model": {
-          "name": "gpt-4o",
+          "name": "gpt-5.2",
           "max_tokens": 3000,
           "temperature": 0.1
         },
@@ -119,7 +119,7 @@ This document defines the **canonical data format** for IncidentFox configuratio
         "description": "Investigates AWS infrastructure",
         "enabled": true,
         "model": {
-          "name": "gpt-4o",
+          "name": "gpt-5.2",
           "max_tokens": 3000,
           "temperature": 0.1
         },
@@ -142,7 +142,7 @@ This document defines the **canonical data format** for IncidentFox configuratio
         "description": "Analyzes metrics and trends",
         "enabled": true,
         "model": {
-          "name": "gpt-4o",
+          "name": "gpt-5.2",
           "max_tokens": 3000,
           "temperature": 0.1
         },
@@ -212,7 +212,7 @@ This document defines the **canonical data format** for IncidentFox configuratio
         "description": "Plans incident investigation strategy",
         "enabled": true,
         "model": {
-          "name": "gpt-4o",
+          "name": "gpt-5.2",
           "max_tokens": 4000,
           "temperature": 0.3
         },
@@ -239,7 +239,7 @@ This document defines the **canonical data format** for IncidentFox configuratio
         "description": "Investigates K8s cluster issues",
         "enabled": true,
         "model": {
-          "name": "gpt-4o",
+          "name": "gpt-5.2",
           "max_tokens": 3000,
           "temperature": 0.1
         },
@@ -263,7 +263,7 @@ This document defines the **canonical data format** for IncidentFox configuratio
         "description": "Investigates AWS infrastructure",
         "enabled": true,
         "model": {
-          "name": "gpt-4o",
+          "name": "gpt-5.2",
           "max_tokens": 3000,
           "temperature": 0.1
         },
@@ -286,7 +286,7 @@ This document defines the **canonical data format** for IncidentFox configuratio
         "description": "Analyzes metrics and trends",
         "enabled": true,
         "model": {
-          "name": "gpt-4o",
+          "name": "gpt-5.2",
           "max_tokens": 3000,
           "temperature": 0.1
         },
@@ -446,7 +446,7 @@ This document defines the **canonical data format** for IncidentFox configuratio
         "description": "Coordinates investigation across infra layers",
         "enabled": true,
         "model": {
-          "name": "gpt-4o",
+          "name": "gpt-5.2",
           "max_tokens": 3500,
           "temperature": 0.2
         },
@@ -486,7 +486,7 @@ This document defines the **canonical data format** for IncidentFox configuratio
         "description": "Investigates Datadog metrics and alerts",
         "enabled": true,
         "model": {
-          "name": "gpt-4o",
+          "name": "gpt-5.2",
           "max_tokens": 3000,
           "temperature": 0.1
         },
@@ -564,7 +564,7 @@ The config service deep merges team config onto org config:
       "name": "Incident Planner",
       "enabled": true,
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "max_tokens": 4000,
         "temperature": 0.3  // from org
       },
@@ -588,7 +588,7 @@ The config service deep merges team config onto org config:
       "name": "Infrastructure Investigator",
       "enabled": true,
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "max_tokens": 3500,
         "temperature": 0.2
       },
@@ -639,7 +639,7 @@ The config service deep merges team config onto org config:
       "name": "Datadog Agent",
       "enabled": true,
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "max_tokens": 3000,
         "temperature": 0.1
       },
@@ -829,7 +829,7 @@ The config service deep merges team config onto org config:
       "name": "Incident Planner",
       "enabled": true,
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "max_tokens": 4000,
         "temperature": 0.3  // from org
       },

@@ -194,7 +194,7 @@ def llm_call(prompt: str, system_prompt: str = "", purpose: str = "") -> str:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        model = os.getenv("OPENAI_MODEL", "gpt-4o")
+        model = os.getenv("OPENAI_MODEL", "gpt-5.2")
 
         # Reasoning models (o1, o3, o4, gpt-5) don't support temperature
         reasoning_prefixes = ("o1", "o3", "o4", "gpt-5")

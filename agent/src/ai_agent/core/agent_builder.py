@@ -60,7 +60,7 @@ def create_model_settings(
     For standard models: Uses temperature.
 
     Args:
-        model_name: The model name (e.g., "gpt-4o", "gpt-5", "o3-mini")
+        model_name: The model name (e.g., "gpt-5.2", "o3-mini")
         temperature: Temperature for standard models (ignored for reasoning models)
         max_tokens: Maximum tokens for response
         reasoning: Reasoning effort for reasoning models ('none', 'low', 'medium', 'high', 'xhigh')
@@ -478,7 +478,7 @@ def build_agent_from_config(
         system_prompt = system_prompt + "\n\n" + prompt_config["suffix"]
 
     # Build model settings using shared helper
-    model_name = model_config.get("name", "gpt-4o")
+    model_name = model_config.get("name", "gpt-5.2")
     model_settings = create_model_settings(
         model_name=model_name,
         temperature=model_config.get("temperature", 0.4),
@@ -866,7 +866,7 @@ def validate_agent_config(agent_config: dict[str, Any]) -> list[str]:
         # Valid model prefixes (allows for versioned models like gpt-5.1, gpt-5.2, etc.)
         valid_prefixes = (
             "gpt-5",  # GPT-5 series (reasoning models)
-            "gpt-4o",  # GPT-4o series
+            "gpt-4o",  # GPT-4o series (deprecated, use gpt-5.2)
             "gpt-4-turbo",
             "gpt-4.1",  # GPT-4.1 series
             "gpt-3.5-turbo",

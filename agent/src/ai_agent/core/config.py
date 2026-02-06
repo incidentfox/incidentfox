@@ -32,7 +32,7 @@ class OpenAIConfig(BaseSettings):
     api_key: str = Field(..., description="OpenAI API key")
     # Default to a model compatible with structured outputs / JSON schema formatting
     # used by the Agents SDK.
-    model: str = Field(default="gpt-4o", description="Default model to use")
+    model: str = Field(default="gpt-5.2", description="Default model to use")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int | None = Field(default=4000, gt=0)
     timeout: int = Field(default=60, description="Request timeout in seconds")

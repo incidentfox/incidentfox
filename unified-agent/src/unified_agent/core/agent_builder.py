@@ -57,7 +57,7 @@ def normalize_model_name(model_name: str) -> str:
     Handles:
     - Aliases (sonnet, opus, haiku, etc.)
     - Provider-prefixed names (anthropic/claude-...)
-    - Legacy names (gpt-4o -> openai/gpt-4o)
+    - Legacy names (gpt-5.2 -> openai/gpt-5.2)
     """
     # Check aliases first
     if model_name in MODEL_ALIASES:
@@ -827,7 +827,7 @@ def create_generic_agent_from_config(
             {
                 "name": "Agent Name",
                 "description": "What this agent does",
-                "model": "sonnet" | "opus" | "gpt-4o" | ...,
+                "model": "sonnet" | "opus" | "gpt-5.2" | ...,
                 "prompt": "System instructions...",
                 "tools": ["tool1", "tool2"] | {"tool1": true, "tool2": false},
                 "max_turns": 20,

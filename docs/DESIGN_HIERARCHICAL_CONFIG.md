@@ -69,7 +69,7 @@ def compute_effective_config(org_config, unit_config, team_config):
 
 | Type | Description | Example |
 |------|-------------|---------|
-| `inherited` | Uses parent value if not set | `model: "gpt-4o"` |
+| `inherited` | Uses parent value if not set | `model: "gpt-5.2"` |
 | `required` | Must be set at team level (no default) | `grafana_url: null` |
 | `locked` | Set by org, teams cannot override | `max_tokens: 100000` |
 
@@ -88,7 +88,7 @@ def compute_effective_config(org_config, unit_config, team_config):
       "description": "Orchestrates complex tasks by delegating to specialized agents",
       
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.3,
         "max_tokens": 16000
       },
@@ -127,7 +127,7 @@ def compute_effective_config(org_config, unit_config, team_config):
       "name": "Investigation Agent",
       
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.4
       },
       
@@ -174,7 +174,7 @@ def compute_effective_config(org_config, unit_config, team_config):
 {
   "agents": {
     "investigation": {
-      "model": { "name": "gpt-4o", "temperature": 0.4 },
+      "model": { "name": "gpt-5.2", "temperature": 0.4 },
       "prompt": { "system": "You are an SRE..." },
       "max_turns": 20
     }
@@ -202,7 +202,7 @@ def compute_effective_config(org_config, unit_config, team_config):
 {
   "agents": {
     "investigation": {
-      "model": { "name": "gpt-4o", "temperature": 0.4 },  // inherited
+      "model": { "name": "gpt-5.2", "temperature": 0.4 },  // inherited
       "prompt": { 
         "system": "You are an SRE specializing in payments systems...",  // overridden
         "suffix": "Always check the payments-db first."  // added

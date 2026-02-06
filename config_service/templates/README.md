@@ -265,7 +265,7 @@ Each template JSON follows this structure:
       "enabled": true,
       "name": "Display Name",
       "description": "What this agent does",
-      "model": { "name": "gpt-4o", "temperature": 0.3 },
+      "model": { "name": "gpt-5.2", "temperature": 0.3 },
       "prompt": { "system": "Agent system prompt" },
       "max_turns": 50,
       "tools": { "enabled": [...], "disabled": [] },

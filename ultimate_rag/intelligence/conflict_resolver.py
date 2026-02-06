@@ -38,7 +38,7 @@ class ConflictResolver:
     def __init__(
         self,
         openai_client: Optional[AsyncOpenAI] = None,
-        model: str = "gpt-4o-2024-08-06",
+        model: str = "gpt-5.2",
         temperature: float = 0.1,
         similarity_threshold: float = 0.75,
         max_retries: int = 3,

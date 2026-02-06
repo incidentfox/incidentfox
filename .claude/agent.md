@@ -283,7 +283,7 @@ Agents are JSON-configured - no code changes needed!
 {
   "agents": {
     "security_agent": {
-      "model": "gpt-4o",
+      "model": "gpt-5.2",
       "prompt": {
         "system": "You are a security expert...",
         "instructions": ["Check CVEs", "Review best practices"]

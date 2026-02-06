@@ -2,7 +2,7 @@
 
 **Template:** 09_incident_postmortem
 **Role:** Master (orchestrator)
-**Model:** gpt-4o
+**Model:** gpt-5.2
 
 ---
 
