@@ -72,6 +72,7 @@ class TeamConfig(BaseModel):
     agents_config: dict[str, AgentConfig] = Field(default_factory=dict)
     integrations: dict[str, dict] = Field(default_factory=dict)
     mcp_servers: dict[str, dict] = Field(default_factory=dict)
+    feature_triage: dict[str, Any] = Field(default_factory=dict)
 
     def get_agent_config(self, agent_name: str) -> AgentConfig:
         """Get config for a specific agent, with defaults."""
@@ -181,6 +182,7 @@ def _load_from_config_service(team_token: str) -> Optional[TeamConfig]:
             },
             integrations=effective_config.get("integrations", {}),
             mcp_servers=effective_config.get("mcp_servers", {}),
+            feature_triage=effective_config.get("feature_triage", {}),
         )
     except Exception:
         return None
@@ -208,6 +210,7 @@ def _load_local_config() -> TeamConfig:
                             },
                             integrations=data.get("integrations", {}),
                             mcp_servers=data.get("mcp_servers", {}),
+                            feature_triage=data.get("feature_triage", {}),
                         )
             except Exception:
                 pass

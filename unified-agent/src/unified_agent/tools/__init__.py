@@ -115,6 +115,12 @@ def _load_all_tools():
     except ImportError:
         pass
 
+    # Feature triage
+    try:
+        from . import feature_triage
+    except ImportError:
+        pass
+
 
 # Export registry functions
 __all__ = [
