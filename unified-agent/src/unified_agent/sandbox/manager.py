@@ -433,6 +433,8 @@ static_resources:
             },
             # Kubeconfig for K8s tools
             {"name": "KUBECONFIG", "value": "/home/agent/.kube/config"},
+            # LiteLLM observability callback (Langfuse)
+            {"name": "LITELLM_CALLBACKS", "value": "langfuse"},
         ]
 
         # Config-driven agents: TEAM_TOKEN enables loading config from Config Service
