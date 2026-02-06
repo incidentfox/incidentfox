@@ -100,6 +100,25 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.agentOpenAI.secretName }}
                   key: {{ .Values.externalSecrets.contract.agentOpenAI.apiKeyKey }}
+            {{- if .Values.externalSecrets.contract.googleChat.enabled }}
+            - name: GOOGLE_CHAT_SERVICE_ACCOUNT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.googleChat.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.googleChat.serviceAccountKeyKey | quote }}
+            {{- end }}
+            {{- if .Values.externalSecrets.contract.teams.enabled }}
+            - name: TEAMS_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.teams.appIdKey | quote }}
+            - name: TEAMS_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.teams.appPasswordKey | quote }}
+            {{- end }}
           # Readiness probe: Uses dedicated health server on separate thread
           # Returns 503 if heartbeat is stale (agent not making progress)
           readinessProbe:

@@ -124,7 +124,9 @@ externalSecrets:
       enabled: false
       secretName: incidentfox-google-chat
       projectIdKey: project_id
+      serviceAccountKeyKey: service_account_key
       projectIdRemoteRefKey: incidentfox/prod/google_chat_project_id
+      serviceAccountKeyRemoteRefKey: incidentfox/prod/google_chat_service_account_key
     # MS Teams integration
     teams:
       enabled: false
