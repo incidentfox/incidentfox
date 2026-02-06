@@ -6,6 +6,14 @@ name: Deploy to EKS
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
       services:
         description: 'Services to build and deploy'
         required: true
@@ -30,8 +38,6 @@ on:
 env:
   AWS_REGION: us-west-2
   ECR_REGISTRY: 103002841599.dkr.ecr.us-west-2.amazonaws.com
-  EKS_CLUSTER: incidentfox-demo
-  HELM_NAMESPACE: incidentfox
 
 jobs:
   build-and-push:
@@ -133,12 +139,17 @@ jobs:
           echo "- **Digest**: \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
 
   deploy:
-    name: Deploy to EKS
+    name: Deploy to EKS (${{ github.event.inputs.environment }})
     needs: build-and-push
     if: ${{ github.event.inputs.skip_deploy != 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      # Environment-specific configuration
+      EKS_CLUSTER: ${{ github.event.inputs.environment == 'production' && 'incidentfox-prod' || 'incidentfox-demo' }}
+      HELM_NAMESPACE: ${{ github.event.inputs.environment == 'production' && 'incidentfox-prod' || 'incidentfox' }}
+      VALUES_FILE: ${{ github.event.inputs.environment == 'production' && 'values.prod.yaml' || 'values.staging.yaml' }}
 
     steps:
       - name: Checkout code
@@ -151,8 +162,14 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Show AWS identity (for aws-auth debugging)
+      - name: Show deployment configuration
         run: |
+          echo "=== Deployment Configuration ==="
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "EKS Cluster: ${{ env.EKS_CLUSTER }}"
+          echo "Namespace: ${{ env.HELM_NAMESPACE }}"
+          echo "Values File: ${{ env.VALUES_FILE }}"
+          echo ""
           echo "=== AWS Caller Identity ==="
           aws sts get-caller-identity
           echo ""
@@ -208,9 +225,10 @@ jobs:
         run: |
           # Deploy without --wait to avoid Helm's aggressive API polling
           # We'll use kubectl rollout status instead (more efficient, better errors)
+          echo "Deploying with: incidentfox/${{ env.VALUES_FILE }}"
           helm upgrade --install incidentfox ./incidentfox \
             -n ${{ env.HELM_NAMESPACE }} \
-            -f incidentfox/values.prod.yaml \
+            -f incidentfox/${{ env.VALUES_FILE }} \
             --no-hooks \
             --force \
             --timeout 5m

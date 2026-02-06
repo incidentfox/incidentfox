@@ -173,7 +173,7 @@ services:
   # Unified Agent with gVisor sandbox isolation
   agent:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
     serviceAccount:
       create: true
       name: incidentfox-agent
@@ -186,7 +186,7 @@ services:
     # Enable sandbox mode with gVisor isolation
     sandbox:
       enabled: true
-      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:latest"
+      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
       namespace: ""  # Same namespace as agent
       useGvisor: true
     # Disable tracing in production (using OpenAI tracing UI)
@@ -200,7 +200,7 @@ services:
   # Sandbox Router for routing to sandbox pods
   sandboxRouter:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sandbox-router:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/sandbox-router:latest"
     replicas: 2
     hpa:
       enabled: true
@@ -217,7 +217,7 @@ services:
   # Credential Resolver for sandbox credential injection
   credentialResolver:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-credential-resolver:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:latest"
     replicas: 2
     credentialSource: config_service
     jwtMode: strict
