@@ -89,6 +89,8 @@ externalSecrets:
       internalTokenRemoteRefKey: incidentfox/prod/orchestrator_internal_token
     langfuse:
       enabled: false  # Using OpenAI tracing UI instead
+    googleChat:
+      enabled: true
 
 services:
   configService:
