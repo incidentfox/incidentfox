@@ -431,6 +431,26 @@ static_resources:
                 "name": "DATADOG_BASE_URL",
                 "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/datadog",
             },
+            {
+                "name": "LOKI_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/loki",
+            },
+            {
+                "name": "SPLUNK_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/splunk",
+            },
+            {
+                "name": "SENTRY_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/sentry",
+            },
+            {
+                "name": "PAGERDUTY_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/pagerduty",
+            },
+            {
+                "name": "GITLAB_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/gitlab",
+            },
             # Kubeconfig for K8s tools
             {"name": "KUBECONFIG", "value": "/home/agent/.kube/config"},
             # LiteLLM observability callback (Langfuse)
