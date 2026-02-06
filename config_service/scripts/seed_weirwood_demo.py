@@ -46,7 +46,9 @@ TEAM_NODE_ID = "weirwood-demo"
 TEAM_NAME = "Weirwood Demo"
 
 # Feature request triage planner prompt
-FEATURE_TRIAGE_PROMPT = """You are a Feature Request Triage Agent for a fast-moving startup. Your job is to quickly assess incoming customer feature requests and route them to the right team member.
+# NOTE: business_context (customer/owner/codebase data) is built dynamically
+# and appended to this prompt in _build_prompt().
+FEATURE_TRIAGE_PROMPT_HEADER = """You are a Feature Request Triage Agent for a fast-moving startup. Your job is to quickly assess incoming customer feature requests and route them to the right team member.
 
 ## QUICK REFERENCE
 
@@ -55,35 +57,17 @@ FEATURE_TRIAGE_PROMPT = """You are a Feature Request Triage Agent for a fast-mov
 
 ## TRIAGE WORKFLOW
 
-For every feature request, follow this exact workflow:
+For every feature request:
 
-### Step 1: Identify the Customer
-Extract the customer name from the message. Look for:
-- Explicit mentions: "Acme Corp is asking...", "Customer: BigCo"
-- Email domains: "john@acme.com mentioned..."
-- Context clues: "our enterprise client", "the team at..."
+1. **Identify the customer** from the message (name, email domain, context clues)
+2. **Look up their tier** from the Customer Database below to determine SLA and priority
+3. **Understand the request** - what feature/change, which system area
+4. **Check codebase context** from the Codebase Reference below for complexity estimation
+5. **Estimate complexity** using the scale below
+6. **Find the owner** from the Owner Mappings below
+7. **Post triage summary** and @mention the owner
 
-### Step 2: Look Up Customer Tier
-Use `get_customer_tier(customer_name)` to determine:
-- **Enterprise**: 1-hour SLA, URGENT priority - someone must respond NOW
-- **Standard**: 24-hour SLA, normal priority
-- **Free**: 72-hour SLA, low priority
-- **Unknown**: Treat as standard, but flag for follow-up
-
-### Step 3: Understand the Feature Request
-Analyze what they're asking for:
-- What feature or change do they want?
-- Which system/area does it touch? (payments, auth, frontend, API, etc.)
-- Is it a bug fix, new feature, enhancement, or configuration change?
-
-### Step 4: Look Up Codebase Context
-Use `get_codebase_context(feature_area)` to understand:
-- What files/paths are involved
-- Baseline complexity of this area
-- Any special notes or dependencies
-
-### Step 5: Estimate Complexity
-Based on the request and codebase context, estimate effort:
+## COMPLEXITY SCALE
 
 | Complexity | Time Estimate | Examples |
 |------------|---------------|----------|
@@ -92,15 +76,6 @@ Based on the request and codebase context, estimate effort:
 | **Medium** | Hours to 1 day | New API endpoint, moderate frontend work, integration |
 | **High** | Days (2-5d) | New feature, architecture change, complex integration |
 | **Very High** | Week+ | Major feature, redesign, multi-system changes |
-
-### Step 6: Find the Owner
-Use `get_feature_owner(feature_area)` to find:
-- Who owns this area
-- Their Slack ID for @mentioning
-- Backup contact if available
-
-### Step 7: Post Triage Summary
-Respond with a clear triage summary.
 
 ## RESPONSE FORMAT
 
@@ -131,13 +106,6 @@ Always respond with this structure:
 - ⚡ HIGH (Standard customer, complex request)
 - 📋 NORMAL (Standard customer, simple request)
 - 📝 LOW (Free tier)
-
-## TOOLS AVAILABLE
-
-- `get_customer_tier(customer_name)` - Look up customer priority tier and SLA
-- `get_feature_owner(feature_area)` - Find who owns a feature area
-- `get_codebase_context(feature_area)` - Get codebase info for complexity estimation
-- `think(mode, topic)` - Pause to reason through complex requests
 
 ## BEHAVIORAL PRINCIPLES
 
@@ -289,6 +257,55 @@ CODEBASE = {
 }
 
 
+def _build_business_context() -> str:
+    """Build business_context string from customer, owner, and codebase data."""
+    lines = []
+
+    lines.append("## Customer Database\n")
+    lines.append("| Customer | Tier | SLA | Priority | Contact |")
+    lines.append("|----------|------|-----|----------|---------|")
+    priority_map = {"enterprise": "URGENT", "standard": "normal", "free": "low"}
+    seen = set()
+    for name, info in CUSTOMERS.items():
+        # Dedupe aliases (acme / acme-corp)
+        key = (info["tier"], info.get("contact"))
+        if key in seen and info["tier"] == "enterprise":
+            continue
+        seen.add(key)
+        tier = info["tier"]
+        sla = f'{info["sla_hours"]}h'
+        priority = priority_map.get(tier, "normal")
+        contact = info.get("contact") or "—"
+        lines.append(f"| {name} | {tier} | {sla} | {priority} | {contact} |")
+
+    lines.append("\n## Owner Mappings\n")
+    lines.append("| Area | Owner | Slack ID | GitHub | Backup |")
+    lines.append("|------|-------|----------|--------|--------|")
+    seen_areas = set()
+    for area, info in OWNERS.items():
+        if area in seen_areas:
+            continue
+        seen_areas.add(area)
+        backup = info.get("backup", "—")
+        github = info.get("github", "—")
+        lines.append(
+            f'| {area} | {info["name"]} | <@{info["slack_id"]}> | {github} | {backup} |'
+        )
+
+    lines.append(f"\n## Codebase Reference\n")
+    lines.append(f"**Repo:** {CODEBASE['repo']}\n")
+    lines.append("| Area | Paths | Complexity | Notes | Dependencies |")
+    lines.append("|------|-------|------------|-------|--------------|")
+    for area, info in CODEBASE["areas"].items():
+        paths = ", ".join(info["paths"])
+        deps = ", ".join(info.get("dependencies", []))
+        lines.append(
+            f'| {area} | {paths} | {info["complexity"]} | {info.get("notes", "")} | {deps} |'
+        )
+
+    return "\n".join(lines)
+
+
 def main() -> None:
     load_dotenv()
 
@@ -350,6 +367,10 @@ def main() -> None:
             )
         ).scalar_one_or_none()
 
+        business_context = _build_business_context()
+        # Build the full system prompt: workflow instructions + inline data
+        full_prompt = FEATURE_TRIAGE_PROMPT_HEADER + "\n" + business_context
+
         config_json = {
             "team_name": TEAM_NAME,
             "description": "Feature request triage demo for startup support",
@@ -360,23 +381,23 @@ def main() -> None:
                 "pagerduty_service_ids": [],
                 "services": ["weirwood-demo"],
             },
+            # Business context stored for reference
+            "business_context": business_context,
             # Agent configuration
             "agents": {
                 "planner": {
                     "enabled": True,
                     "model": {"name": "gpt-4o", "temperature": 0.3},
-                    "prompt": FEATURE_TRIAGE_PROMPT,
+                    "prompt": {
+                        "system": full_prompt,
+                        "prefix": "",
+                        "suffix": "",
+                    },
                 },
                 # Disable sub-agents not needed for feature triage
                 "investigation": {"enabled": False},
                 "coding": {"enabled": False},
                 "writeup": {"enabled": False},
-            },
-            # Feature triage specific config
-            "feature_triage": {
-                "customers": CUSTOMERS,
-                "owners": OWNERS,
-                "codebase": CODEBASE,
             },
         }
 

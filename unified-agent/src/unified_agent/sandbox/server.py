@@ -202,7 +202,6 @@ def _get_effective_config() -> Dict[str, Any]:
         "agents": agents_dict,
         "integrations": team_config.integrations,
         "mcp_servers": team_config.mcp_servers,
-        "feature_triage": team_config.feature_triage,
     }
 
 
