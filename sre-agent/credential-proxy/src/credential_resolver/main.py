@@ -1219,9 +1219,7 @@ async def pagerduty_proxy(path: str, request: Request):
         raise HTTPException(status_code=504, detail="PagerDuty request timed out")
     except httpx.RequestError as e:
         logger.error(f"PagerDuty request error: {e}")
-        raise HTTPException(
-            status_code=502, detail=f"PagerDuty request failed: {e}"
-        )
+        raise HTTPException(status_code=502, detail=f"PagerDuty request failed: {e}")
 
 
 @app.api_route(
