@@ -272,6 +272,23 @@ class ExecuteRequest(BaseModel):
     max_turns: Optional[int] = None
 
 
+class InvestigateRequest(BaseModel):
+    """
+    Request to investigate - compatibility endpoint for slack-bot.
+
+    This model accepts the legacy /investigate request format used by slack-bot,
+    which includes team_token in the request body instead of environment.
+    """
+
+    prompt: str
+    thread_id: Optional[str] = None
+    tenant_id: Optional[str] = None  # Slack team_id for credential lookup
+    team_id: Optional[str] = None  # Slack team_id
+    team_token: Optional[str] = None  # Team token for config loading
+    images: Optional[List[ImageData]] = None
+    file_attachments: Optional[List[Dict[str, Any]]] = None  # File metadata (not used yet)
+
+
 class InterruptRequest(BaseModel):
     """Request to interrupt the investigation."""
 
@@ -470,6 +487,34 @@ async def execute(request: ExecuteRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.post("/investigate")
+async def investigate(request: InvestigateRequest):
+    """
+    Compatibility endpoint for slack-bot.
+
+    This endpoint accepts the legacy /investigate request format and forwards
+    to the /execute endpoint. It handles team_token from the request body
+    by setting it as an environment variable for config loading.
+    """
+    # Set team_token as env var if provided (for config service auth)
+    if request.team_token:
+        os.environ["TEAM_TOKEN"] = request.team_token
+        logger.info(f"Set TEAM_TOKEN from request for thread {request.thread_id}")
+
+        # Reload config to pick up new team token
+        global _cached_config, _cached_agents
+        _cached_config = None
+        _cached_agents = None
+
+    # Forward to execute with compatible fields
+    execute_request = ExecuteRequest(
+        prompt=request.prompt,
+        thread_id=request.thread_id,
+        images=request.images,
+    )
+    return await execute(execute_request)
 
 
 def _convert_runner_event(thread_id: str, event: dict) -> StreamEvent:
