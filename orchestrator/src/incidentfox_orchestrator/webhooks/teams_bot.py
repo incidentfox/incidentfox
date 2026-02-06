@@ -18,7 +18,11 @@ import uuid
 from functools import partial
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
+from botbuilder.core import (
+    BotFrameworkAdapter,
+    BotFrameworkAdapterSettings,
+    TurnContext,
+)
 from botbuilder.schema import Activity, ActivityTypes, ConversationReference
 
 if TYPE_CHECKING:
@@ -159,7 +163,9 @@ class TeamsIntegration:
         # Extract identifiers
         channel_data = activity.channel_data or {}
         channel_info = channel_data.get("channel", {})
-        channel_id = channel_info.get("id", "") if isinstance(channel_info, dict) else ""
+        channel_id = (
+            channel_info.get("id", "") if isinstance(channel_info, dict) else ""
+        )
 
         team_info = channel_data.get("team", {})
         team_id = team_info.get("id", "") if isinstance(team_info, dict) else ""
@@ -189,7 +195,9 @@ class TeamsIntegration:
         )
 
         if not text:
-            await turn_context.send_activity("Hey! What would you like me to investigate?")
+            await turn_context.send_activity(
+                "Hey! What would you like me to investigate?"
+            )
             return
 
         # Send typing indicator
@@ -318,19 +326,51 @@ class TeamsIntegration:
             # Serialize conversation reference for output handler
             conv_ref_dict = {
                 "activity_id": conversation_ref.activity_id,
-                "user": {
-                    "id": conversation_ref.user.id if conversation_ref.user else None,
-                    "name": conversation_ref.user.name if conversation_ref.user else None,
-                } if conversation_ref.user else None,
-                "bot": {
-                    "id": conversation_ref.bot.id if conversation_ref.bot else None,
-                    "name": conversation_ref.bot.name if conversation_ref.bot else None,
-                } if conversation_ref.bot else None,
-                "conversation": {
-                    "id": conversation_ref.conversation.id if conversation_ref.conversation else None,
-                    "name": conversation_ref.conversation.name if conversation_ref.conversation else None,
-                    "is_group": conversation_ref.conversation.is_group if conversation_ref.conversation else None,
-                } if conversation_ref.conversation else None,
+                "user": (
+                    {
+                        "id": (
+                            conversation_ref.user.id if conversation_ref.user else None
+                        ),
+                        "name": (
+                            conversation_ref.user.name
+                            if conversation_ref.user
+                            else None
+                        ),
+                    }
+                    if conversation_ref.user
+                    else None
+                ),
+                "bot": (
+                    {
+                        "id": conversation_ref.bot.id if conversation_ref.bot else None,
+                        "name": (
+                            conversation_ref.bot.name if conversation_ref.bot else None
+                        ),
+                    }
+                    if conversation_ref.bot
+                    else None
+                ),
+                "conversation": (
+                    {
+                        "id": (
+                            conversation_ref.conversation.id
+                            if conversation_ref.conversation
+                            else None
+                        ),
+                        "name": (
+                            conversation_ref.conversation.name
+                            if conversation_ref.conversation
+                            else None
+                        ),
+                        "is_group": (
+                            conversation_ref.conversation.is_group
+                            if conversation_ref.conversation
+                            else None
+                        ),
+                    }
+                    if conversation_ref.conversation
+                    else None
+                ),
                 "channel_id": conversation_ref.channel_id,
                 "service_url": conversation_ref.service_url,
             }
@@ -426,7 +466,9 @@ class TeamsIntegration:
             _log(
                 "teams_bot_added",
                 correlation_id=correlation_id,
-                conversation_id=activity.conversation.id if activity.conversation else None,
+                conversation_id=(
+                    activity.conversation.id if activity.conversation else None
+                ),
             )
             await turn_context.send_activity(
                 "Hi! I'm IncidentFox, your AI incident investigation assistant. "

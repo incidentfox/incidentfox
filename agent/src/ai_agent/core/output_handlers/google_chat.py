@@ -256,11 +256,7 @@ class GoogleChatOutputHandler(OutputHandler):
                     {
                         "header": "Summary",
                         "widgets": [
-                            {
-                                "textParagraph": {
-                                    "text": str(output["summary"])[:2000]
-                                }
-                            }
+                            {"textParagraph": {"text": str(output["summary"])[:2000]}}
                         ],
                     }
                 )
@@ -291,7 +287,11 @@ class GoogleChatOutputHandler(OutputHandler):
                 try:
                     json_str = json.dumps(output, indent=2, default=str)[:3000]
                     sections.append(
-                        {"widgets": [{"textParagraph": {"text": f"<pre>{json_str}</pre>"}}]}
+                        {
+                            "widgets": [
+                                {"textParagraph": {"text": f"<pre>{json_str}</pre>"}}
+                            ]
+                        }
                     )
                 except Exception:
                     sections.append(
@@ -307,9 +307,7 @@ class GoogleChatOutputHandler(OutputHandler):
         if duration_seconds:
             meta += f" | {duration_seconds:.1f}s"
 
-        sections.append(
-            {"widgets": [{"textParagraph": {"text": f"<i>{meta}</i>"}}]}
-        )
+        sections.append({"widgets": [{"textParagraph": {"text": f"<i>{meta}</i>"}}]})
 
         return {
             "cardId": "result",

@@ -58,7 +58,11 @@ class TeamsOutputHandler(OutputHandler):
 
     def _deserialize_conversation_reference(self, conv_ref: dict[str, Any]):
         """Deserialize conversation reference from dict."""
-        from botbuilder.schema import ChannelAccount, ConversationAccount, ConversationReference
+        from botbuilder.schema import (
+            ChannelAccount,
+            ConversationAccount,
+            ConversationReference,
+        )
 
         user_data = conv_ref.get("user")
         bot_data = conv_ref.get("bot")
@@ -66,19 +70,31 @@ class TeamsOutputHandler(OutputHandler):
 
         return ConversationReference(
             activity_id=conv_ref.get("activity_id"),
-            user=ChannelAccount(
-                id=user_data.get("id") if user_data else None,
-                name=user_data.get("name") if user_data else None,
-            ) if user_data else None,
-            bot=ChannelAccount(
-                id=bot_data.get("id") if bot_data else None,
-                name=bot_data.get("name") if bot_data else None,
-            ) if bot_data else None,
-            conversation=ConversationAccount(
-                id=conv_data.get("id") if conv_data else None,
-                name=conv_data.get("name") if conv_data else None,
-                is_group=conv_data.get("is_group") if conv_data else None,
-            ) if conv_data else None,
+            user=(
+                ChannelAccount(
+                    id=user_data.get("id") if user_data else None,
+                    name=user_data.get("name") if user_data else None,
+                )
+                if user_data
+                else None
+            ),
+            bot=(
+                ChannelAccount(
+                    id=bot_data.get("id") if bot_data else None,
+                    name=bot_data.get("name") if bot_data else None,
+                )
+                if bot_data
+                else None
+            ),
+            conversation=(
+                ConversationAccount(
+                    id=conv_data.get("id") if conv_data else None,
+                    name=conv_data.get("name") if conv_data else None,
+                    is_group=conv_data.get("is_group") if conv_data else None,
+                )
+                if conv_data
+                else None
+            ),
             channel_id=conv_ref.get("channel_id"),
             service_url=conv_ref.get("service_url"),
         )

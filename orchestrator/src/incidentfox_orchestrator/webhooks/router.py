@@ -2173,9 +2173,7 @@ async def teams_webhook(
     )
     if teams_integration is None:
         _log("teams_not_initialized")
-        raise HTTPException(
-            status_code=503, detail="Teams integration not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Teams integration not initialized")
 
     raw_body = await request.body()
 

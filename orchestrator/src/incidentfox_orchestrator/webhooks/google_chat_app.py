@@ -97,7 +97,11 @@ class GoogleChatIntegration:
         elif event_type == "CARD_CLICKED":
             return await self._handle_card_clicked(event_data, correlation_id)
         else:
-            _log("gchat_unknown_event", event_type=event_type, correlation_id=correlation_id)
+            _log(
+                "gchat_unknown_event",
+                event_type=event_type,
+                correlation_id=correlation_id,
+            )
             return {}
 
     async def _handle_message(

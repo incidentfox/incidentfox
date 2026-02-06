@@ -379,8 +379,8 @@ def verify_google_chat_bearer_token(
         raise SignatureVerificationError("missing_bearer_token", "google_chat")
 
     try:
-        from google.oauth2 import id_token
         from google.auth.transport import requests as google_requests
+        from google.oauth2 import id_token
 
         # Verify the token using Google's public keys
         # This validates signature, expiration, issuer, and audience
