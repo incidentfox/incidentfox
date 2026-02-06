@@ -1,12 +1,12 @@
-# IncidentFox Production - us-west-2 (incidentfox-demo cluster)
-# Co-located with otel-demo for end-to-end evaluation
+# IncidentFox Production - us-west-2 (incidentfox-prod cluster)
+# Production environment for customer-facing workloads
 
-namespace: incidentfox
+namespace: incidentfox-prod
 
 global:
   imagePullPolicy: Always
   configService:
-    url: "http://incidentfox-config-service.incidentfox.svc.cluster.local:8080"
+    url: "http://incidentfox-config-service.incidentfox-prod.svc.cluster.local:8080"
     orgId: "prod"
   database:
     databaseUrlSecretName: incidentfox-database-url
@@ -33,27 +33,25 @@ ingress:
     webAclArn: ""
 
 externalSecrets:
-  # ExternalSecrets are managed separately (already created manually)
-  enabled: false
-  installClusterSecretStore: false
+  # ExternalSecrets managed via Helm (enable when ready to migrate)
+  enabled: true
+  installClusterSecretStore: true
   awsRegion: "us-west-2"
   contract:
     databaseUrl:
       enabled: true
       secretName: incidentfox-database-url
       secretKey: DATABASE_URL
-      # Use existing RDS in us-west-2
-      remoteRefKey: incidentfox-config-service/rds
+      remoteRefKey: incidentfox/prod/database_url
     configService:
       enabled: true
       secretName: incidentfox-config-service
       adminTokenKey: ADMIN_TOKEN
       tokenPepperKey: TOKEN_PEPPER
       impersonationJwtSecretKey: IMPERSONATION_JWT_SECRET
-      adminTokenRemoteRefKey: incidentfox-config-service/admin_token
-      tokenPepperRemoteRefKey: incidentfox-config-service/token_pepper
-      # Need to create this secret
-      impersonationJwtSecretRemoteRefKey: incidentfox-config-service/impersonation_jwt_secret
+      adminTokenRemoteRefKey: incidentfox/prod/config_service_admin_token
+      tokenPepperRemoteRefKey: incidentfox/prod/config_service_token_pepper
+      impersonationJwtSecretRemoteRefKey: incidentfox/prod/config_service_impersonation_jwt_secret
     agentOpenAI:
       enabled: true
       secretName: incidentfox-openai
@@ -71,9 +69,10 @@ externalSecrets:
     github:
       enabled: true
       secretName: incidentfox-github
-      webhookSecretKey: webhook_secret  # Key name in K8s secret
+      webhookSecretKey: webhook_secret
+      remoteRefKey: incidentfox/prod/github_webhook_secret
     pagerduty:
-      enabled: false  # TODO: Add secret to AWS Secrets Manager first
+      enabled: false
       secretName: incidentfox-pagerduty
       webhookSecretKey: webhook_secret
       remoteRefKey: incidentfox/prod/pagerduty_webhook_secret
@@ -93,6 +92,28 @@ externalSecrets:
       enabled: true
     teams:
       enabled: true
+    # JWT secret for sandbox credential injection
+    jwtSecret:
+      enabled: true
+      secretName: incidentfox-jwt-secret
+      secretKey: JWT_SECRET
+      remoteRefKey: incidentfox/prod/jwt_secret
+    # Shared Anthropic key for free trials
+    sharedAnthropicKey:
+      enabled: true
+      secretName: incidentfox-shared-anthropic
+      secretKey: ANTHROPIC_API_KEY
+      remoteRefKey: incidentfox/prod/shared_anthropic_api_key
+    # Slack Bot OAuth credentials
+    slackBot:
+      enabled: true
+      secretName: incidentfox-slack-bot
+      clientIdKey: client_id
+      clientSecretKey: client_secret
+      signingSecretKey: signing_secret
+      clientIdRemoteRefKey: incidentfox/prod/slack_client_id
+      clientSecretRemoteRefKey: incidentfox/prod/slack_client_secret
+      signingSecretRemoteRefKey: incidentfox/prod/slack_signing_secret
 
 services:
   configService:
@@ -129,58 +150,98 @@ services:
     slackAgentMaxTurns: "200"
     slackAgentTimeoutSeconds: "180"
 
+  # Slack Bot - Multi-tenant Slack integration
+  slackBot:
+    enabled: true
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-slack-bot:latest"
+    replicas: 1
+    servicePort: 3000
+    freeTrial:
+      enabled: true
+      days: 7
+    service:
+      type: LoadBalancer
+      annotations:
+        service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+        service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+        # Production SSL cert for slack.incidentfox.ai
+        service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:us-west-2:103002841599:certificate/72d414bd-24e0-4e62-b579-b399a9eb2c9f"
+        service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+
+  # Unified Agent with gVisor sandbox isolation
   agent:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:latest"
     serviceAccount:
       create: true
       name: incidentfox-agent
       annotations:
-        # Need to create this IAM role in us-west-2
         eks.amazonaws.com/role-arn: "arn:aws:iam::103002841599:role/incidentfox-prod-agent"
+    # K8s tools - agent can access customer namespaces via k8s-gateway
+    kubernetes:
+      enabled: true
+      namespace: "incidentfox-prod"
+    # Enable sandbox mode with gVisor isolation
+    sandbox:
+      enabled: true
+      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:latest"
+      namespace: ""  # Same namespace as agent
+      useGvisor: true
+    # Disable tracing in production (using OpenAI tracing UI)
     tracing:
-      enabled: false  # Using OpenAI tracing UI
+      enabled: false
       langfuse:
         enabled: false
       otlp:
         enabled: false
-    # Enable K8s tools - agent can access otel-demo namespace
-    kubernetes:
+
+  # Sandbox Router for routing to sandbox pods
+  sandboxRouter:
+    enabled: true
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sandbox-router:latest"
+    replicas: 2
+    hpa:
       enabled: true
-      namespace: "otel-demo"
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+
+  # Sandbox Cleanup for expired sandbox garbage collection
+  sandboxCleanup:
+    enabled: true
+    image: "bitnami/kubectl:latest"
+    schedule: "*/15 * * * *"
+
+  # Credential Resolver for sandbox credential injection
+  credentialResolver:
+    enabled: true
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-credential-resolver:latest"
+    replicas: 2
+    credentialSource: config_service
+    jwtMode: strict
+    sharedAnthropicKey:
+      enabled: true
+      secretName: incidentfox-shared-anthropic
+      secretKey: ANTHROPIC_API_KEY
 
   aiPipelineApi:
-    # Deprecated - use knowledgeBase instead
-    enabled: false
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ai-pipeline-api:latest"
+    enabled: false  # Deprecated - use ultimateRag instead
 
-  # RAPTOR Knowledge Base for semantic search (legacy - disabled, using ultimate-rag instead)
   knowledgeBase:
-    enabled: false
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-knowledge-base:latest"
-    replicas: 1
-    # IRSA role created via Terraform - update after terraform apply
-    serviceAccountRoleArn: "arn:aws:iam::103002841599:role/incidentfox-raptor-kb-role"
-    defaultTree: "mega_ultra_v2"
-    s3:
-      enabled: true
-      bucket: "raptor-kb-trees-103002841599"
-      prefix: "trees/"
+    enabled: false  # Deprecated - use ultimateRag instead
 
-  # Ultimate RAG - Next-gen knowledge base with graph queries, teaching, analytics
+  # Ultimate RAG - Knowledge base with graph queries, teaching, analytics
   ultimateRag:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ultimate-rag:latest"
     replicas: 1
-    # Same IRSA role as knowledgeBase (same S3 bucket access)
     serviceAccountRoleArn: "arn:aws:iam::103002841599:role/incidentfox-raptor-kb-role"
     defaultTree: "mega_ultra_v2"
     s3:
       enabled: true
       bucket: "raptor-kb-trees-103002841599"
       prefix: "trees/"
-    # Extended startup probe for large tree loading (55k nodes takes ~10min)
-    # 60s initial + 60 failures * 10s = up to 10 min 60s startup time
     startupProbe:
       initialDelaySeconds: 60
       periodSeconds: 10
@@ -191,8 +252,7 @@ services:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-web-ui:latest"
     cookieSecure: true
-    # Use the alias service - auto-routes to ultimate-rag (takes precedence when both enabled)
-    raptorApiUrl: "http://incidentfox-rag.incidentfox.svc.cluster.local:8000"
+    raptorApiUrl: "http://incidentfox-rag.incidentfox-prod.svc.cluster.local:8000"
     oidc:
       enabled: false
     slack:
@@ -201,7 +261,7 @@ services:
   dependencyService:
     enabled: false  # Disabled due to architecture mismatch
 
-  # K8s Gateway - Accepts connections from customer K8s agents (SaaS mode)
+  # K8s Gateway for SaaS mode (customer K8s agents)
   k8sGateway:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:latest"

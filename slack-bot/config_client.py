@@ -42,6 +42,11 @@ FREE_TRIAL_ENABLED = os.environ.get("FREE_TRIAL_ENABLED", "true").lower() == "tr
 # The credential-resolver fetches the shared key from Secrets Manager at runtime.
 # We only store trial metadata (is_trial=True, expiration) during provisioning.
 
+# Team token cache: slack_team_id -> (token, issued_at)
+# Tokens are cached for 1 hour to avoid excessive token issuance
+_team_token_cache: Dict[str, tuple] = {}
+_TEAM_TOKEN_CACHE_TTL = timedelta(hours=1)
+
 
 class ConfigServiceClient:
     """Client for interacting with config_service."""
@@ -207,6 +212,55 @@ class ConfigServiceClient:
         response = requests.post(url, json={}, headers=self._headers(), timeout=10)
         response.raise_for_status()
         return response.json()
+
+    def get_team_token(self, slack_team_id: str) -> Optional[str]:
+        """
+        Get a team token for Config Service API access.
+
+        This token enables config-driven agents - the agent can use it to
+        load team configuration (agent definitions, tools, LLM settings, etc.)
+        from Config Service.
+
+        Tokens are cached for 1 hour to avoid excessive token issuance.
+
+        Args:
+            slack_team_id: Slack team ID
+
+        Returns:
+            Team token string, or None if workspace not provisioned.
+        """
+        global _team_token_cache
+
+        # Check cache first
+        if slack_team_id in _team_token_cache:
+            token, issued_at = _team_token_cache[slack_team_id]
+            if datetime.utcnow() - issued_at < _TEAM_TOKEN_CACHE_TTL:
+                return token
+            # Token expired, remove from cache
+            del _team_token_cache[slack_team_id]
+
+        # Issue new token
+        org_id = f"slack-{slack_team_id}"
+        team_node_id = "default"
+
+        try:
+            token_response = self._issue_team_token(org_id, team_node_id)
+            token = token_response.get("token")
+            if token:
+                _team_token_cache[slack_team_id] = (token, datetime.utcnow())
+                logger.debug(f"Issued team token for workspace {slack_team_id}")
+                return token
+            return None
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                # Workspace not provisioned
+                logger.warning(f"Workspace {slack_team_id} not provisioned")
+                return None
+            logger.error(f"Failed to issue team token for {slack_team_id}: {e}")
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to issue team token for {slack_team_id}: {e}")
+            return None
 
     def _issue_org_admin_token(
         self,

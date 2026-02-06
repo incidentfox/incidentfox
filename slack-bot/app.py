@@ -1758,6 +1758,15 @@ def handle_mention(event, say, client, context):
     )
 
     try:
+        # Get team token for config-driven agents
+        # This enables the agent to load team config (agent definitions, tools, LLM settings)
+        team_token = None
+        try:
+            config_client = get_config_client()
+            team_token = config_client.get_team_token(team_id)
+        except Exception as e:
+            logger.warning(f"Failed to get team token for {team_id}: {e}")
+
         # Build request payload with prompt and optional images
         request_payload = {
             "prompt": enriched_prompt,
@@ -1765,6 +1774,10 @@ def handle_mention(event, say, client, context):
             "tenant_id": team_id,  # Slack team_id = tenant for credential lookup
             "team_id": team_id,
         }
+
+        # Add team_token for config-driven agents (enables dynamic config loading)
+        if team_token:
+            request_payload["team_token"] = team_token
 
         # Add images if any were attached
         if images:
@@ -2159,6 +2172,14 @@ Use all available tools to gather context about this issue."""
     )
 
     try:
+        # Get team token for config-driven agents
+        team_token = None
+        try:
+            config_client = get_config_client()
+            team_token = config_client.get_team_token(team_id)
+        except Exception as e:
+            logger.warning(f"Failed to get team token for {team_id}: {e}")
+
         # Call sre-agent to investigate
         request_payload = {
             "prompt": investigation_prompt,
@@ -2166,6 +2187,10 @@ Use all available tools to gather context about this issue."""
             "tenant_id": team_id,  # Slack team_id = tenant for credential lookup
             "team_id": team_id,
         }
+
+        # Add team_token for config-driven agents
+        if team_token:
+            request_payload["team_token"] = team_token
 
         response = requests.post(
             f"{SRE_AGENT_URL}/investigate",
@@ -2480,6 +2505,14 @@ def handle_message(event, client, context):
         )
 
         try:
+            # Get team token for config-driven agents
+            team_token = None
+            try:
+                config_client = get_config_client()
+                team_token = config_client.get_team_token(team_id)
+            except Exception as e:
+                logger.warning(f"Failed to get team token for {team_id}: {e}")
+
             # Build request payload
             request_payload = {
                 "prompt": enriched_prompt,
@@ -2487,6 +2520,10 @@ def handle_message(event, client, context):
                 "tenant_id": team_id,  # Slack team_id = tenant for credential lookup
                 "team_id": team_id,
             }
+
+            # Add team_token for config-driven agents
+            if team_token:
+                request_payload["team_token"] = team_token
 
             # Add images if present
             if images:
@@ -2981,12 +3018,24 @@ def handle_nudge_invoke(ack, body, client, context, respond):
 
     # Call sre-agent with SSE streaming
     try:
+        # Get team token for config-driven agents
+        team_token = None
+        try:
+            config_client = get_config_client()
+            team_token = config_client.get_team_token(team_id)
+        except Exception as e:
+            logger.warning(f"Failed to get team token for {team_id}: {e}")
+
         request_payload = {
             "prompt": enriched_prompt,
             "thread_id": thread_id,
             "tenant_id": team_id,  # Slack team_id = tenant for credential lookup
             "team_id": team_id,
         }
+
+        # Add team_token for config-driven agents
+        if team_token:
+            request_payload["team_token"] = team_token
 
         response = requests.post(
             f"{SRE_AGENT_URL}/investigate",
@@ -3162,6 +3211,14 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
     )
 
     try:
+        # Get team token for config-driven agents
+        team_token = None
+        try:
+            config_client = get_config_client()
+            team_token = config_client.get_team_token(team_id)
+        except Exception as e:
+            logger.warning(f"Failed to get team token for {team_id}: {e}")
+
         # Call sre-agent to investigate
         request_payload = {
             "prompt": investigation_prompt,
@@ -3169,6 +3226,10 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
             "tenant_id": team_id,  # Slack team_id = tenant for credential lookup
             "team_id": team_id,
         }
+
+        # Add team_token for config-driven agents
+        if team_token:
+            request_payload["team_token"] = team_token
 
         response = requests.post(
             f"{SRE_AGENT_URL}/investigate",

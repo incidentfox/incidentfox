@@ -152,6 +152,7 @@ class InvestigateRequest(BaseModel):
     thread_id: Optional[str] = None  # For follow-ups, generate if not provided
     tenant_id: Optional[str] = None  # Organization/tenant ID for credential lookup
     team_id: Optional[str] = None  # Team node ID for credential lookup
+    team_token: Optional[str] = None  # Team token for config-driven agents
     images: Optional[List[ImageData]] = None  # Optional attached images
     file_attachments: Optional[List[FileAttachment]] = (
         None  # File attachments (downloaded via proxy)
@@ -434,6 +435,7 @@ async def investigate(request: InvestigateRequest):
     # Extract tenant context (defaults for local dev)
     tenant_id = request.tenant_id or os.getenv("DEFAULT_TENANT_ID", "local")
     team_id = request.team_id or os.getenv("DEFAULT_TEAM_ID", "local")
+    team_token = request.team_token  # For config-driven agents (may be None)
 
     # Create/reuse sandbox
     sandbox_info = sandbox_manager.get_sandbox(thread_id)
@@ -452,6 +454,7 @@ async def investigate(request: InvestigateRequest):
                 tenant_id=tenant_id,
                 team_id=team_id,
                 jwt_token=jwt_token,
+                team_token=team_token,
             )
 
             # Wait for sandbox to be ready

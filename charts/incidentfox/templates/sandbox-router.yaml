@@ -1,0 +1,115 @@
+{{- if and .Values.services.agent.enabled .Values.services.agent.sandbox.enabled .Values.services.sandboxRouter.enabled }}
+---
+# Sandbox Router - Routes requests to dynamically created sandbox pods
+# The router provides stable endpoints for sandbox access while pods come and go.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-sandbox-router
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: sandbox-router
+    app.kubernetes.io/name: sandbox-router
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.services.sandboxRouter.replicas }}
+  selector:
+    matchLabels:
+      app: sandbox-router
+  template:
+    metadata:
+      labels:
+        app: sandbox-router
+        app.kubernetes.io/name: sandbox-router
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: sandbox-router
+      containers:
+        - name: router
+          image: {{ .Values.services.sandboxRouter.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.services.sandboxRouter.servicePort }}
+              protocol: TCP
+          env:
+            - name: SANDBOX_NAMESPACE
+              value: {{ .Values.services.agent.sandbox.namespace | default .Values.namespace | quote }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.services.sandboxRouter.servicePort }}
+            initialDelaySeconds: {{ .Values.services.sandboxRouter.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.services.sandboxRouter.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.services.sandboxRouter.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.services.sandboxRouter.readinessProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.services.sandboxRouter.servicePort }}
+            initialDelaySeconds: {{ .Values.services.sandboxRouter.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.services.sandboxRouter.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.services.sandboxRouter.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.services.sandboxRouter.livenessProbe.failureThreshold }}
+          resources:
+            {{- toYaml .Values.services.sandboxRouter.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-sandbox-router
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: sandbox-router
+    app.kubernetes.io/name: sandbox-router
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  type: ClusterIP
+  selector:
+    app: sandbox-router
+  ports:
+    - name: http
+      protocol: TCP
+      port: {{ .Values.services.sandboxRouter.servicePort }}
+      targetPort: {{ .Values.services.sandboxRouter.servicePort }}
+---
+{{- if .Values.services.sandboxRouter.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-sandbox-router
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: sandbox-router
+    app.kubernetes.io/name: sandbox-router
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-sandbox-router
+  minReplicas: {{ .Values.services.sandboxRouter.hpa.minReplicas }}
+  maxReplicas: {{ .Values.services.sandboxRouter.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.services.sandboxRouter.hpa.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}
