@@ -30,9 +30,8 @@ on:
           - slack-bot
           - ultimate-rag
           - web-ui
-          # Deprecated services (kept for backwards compatibility)
           - ai-pipeline
-          - knowledge-base
+          - knowledge-base (deprecated)
       skip_deploy:
         description: 'Skip Helm deployment (build & push only)'
         required: false
@@ -52,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [agent, config-service, credential-resolver, k8s-gateway, orchestrator, sandbox-router, slack-bot, ultimate-rag, web-ui, ai-pipeline, knowledge-base]
+        service: [agent, config-service, credential-resolver, k8s-gateway, orchestrator, sandbox-router, slack-bot, ultimate-rag, web-ui, ai-pipeline, "knowledge-base (deprecated)"]
         include:
           - service: agent
             context: ./unified-agent
@@ -90,12 +89,11 @@ jobs:
             context: ./web_ui
             dockerfile: ./web_ui/Dockerfile
             image: incidentfox-web-ui
-          # Deprecated services
           - service: ai-pipeline
             context: ./ai_pipeline
             dockerfile: ./ai_pipeline/Dockerfile
             image: incidentfox-ai-pipeline
-          - service: knowledge-base
+          - service: "knowledge-base (deprecated)"
             context: ./knowledge_base
             dockerfile: ./knowledge_base/Dockerfile
             image: incidentfox-knowledge-base
