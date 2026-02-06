@@ -91,8 +91,9 @@ spec:
         - name: agent
           image: {{ required "services.agent.image is required" .Values.services.agent.image }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-          # Run server.py (API server) not sandbox_server.py (sandbox runtime)
-          command: ["python", "/app/server.py"]
+          # Run unified-agent sandbox server (FastAPI on port 8888 or configured port)
+          command: ["python", "-m", "unified_agent.sandbox.server"]
+          workingDir: /app
           ports:
             - containerPort: {{ .Values.services.agent.servicePort }}
               name: http

@@ -186,7 +186,7 @@ services:
   agent:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
-    servicePort: 8000  # server.py listens on 8000
+    servicePort: 8888  # unified-agent sandbox server listens on 8888
     serviceAccount:
       create: true
       name: incidentfox-agent

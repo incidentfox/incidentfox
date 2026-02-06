@@ -219,7 +219,7 @@ services:
     enabled: true
     image: "incidentfox/unified-agent:v1.0.0"
     replicas: 2
-    servicePort: 8080
+    servicePort: 8888  # unified-agent sandbox server listens on 8888
     # Time to allow for graceful shutdown (marking in-flight runs as failed)
     terminationGracePeriodSeconds: 60
     serviceAccount:
