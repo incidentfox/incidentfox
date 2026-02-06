@@ -107,6 +107,10 @@ def load_env_credentials() -> dict[str, dict]:
                 "HONEYCOMB_DOMAIN"
             ),  # Optional: defaults to api.honeycomb.io
         },
+        "clickup": {
+            "api_key": os.getenv("CLICKUP_API_TOKEN"),
+            "team_id": os.getenv("CLICKUP_TEAM_ID"),
+        },
     }
 
 
@@ -223,6 +227,7 @@ async def list_integrations(request: Request):
         "kubernetes",
         "github",
         "honeycomb",
+        "clickup",
     ]
 
     available = []
@@ -267,6 +272,10 @@ def is_integration_configured(integration_id: str, creds: dict | None) -> bool:
 
     # Honeycomb: api_key required (domain optional, defaults to api.honeycomb.io)
     if integration_id == "honeycomb":
+        return bool(creds.get("api_key"))
+
+    # ClickUp: api_key required (team_id optional, can be auto-detected)
+    if integration_id == "clickup":
         return bool(creds.get("api_key"))
 
     # Default: api_key required (coralogix, incident_io, etc.)
@@ -332,6 +341,13 @@ def get_integration_metadata(integration_id: str, creds: dict) -> dict:
     elif integration_id == "honeycomb":
         # Return domain (defaults to api.honeycomb.io if not set)
         return {"url": creds.get("domain") or "https://api.honeycomb.io"}
+
+    elif integration_id == "clickup":
+        # Return team_id if configured
+        metadata = {"url": "https://api.clickup.com"}
+        if creds.get("team_id"):
+            metadata["team_id"] = creds.get("team_id")
+        return metadata
 
     # Default: just indicate it's configured (incident_io, etc.)
     return {}
@@ -794,6 +810,78 @@ async def honeycomb_proxy(path: str, request: Request):
 
 
 @app.api_route(
+    "/clickup/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def clickup_proxy(path: str, request: Request):
+    """Reverse proxy for ClickUp API requests.
+
+    ClickUp uses Authorization header with the API token.
+    """
+    import httpx
+
+    logger.info(f"ClickUp proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get ClickUp credentials
+    creds = await get_credentials(tenant_id, team_id, "clickup")
+    if not creds or not creds.get("api_key"):
+        logger.error(f"ClickUp not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="ClickUp integration not configured",
+        )
+
+    # Build ClickUp API URL
+    target_url = f"https://api.clickup.com/api/v2/{path}"
+    logger.info(f"ClickUp proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("clickup", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"ClickUp request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="ClickUp request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"ClickUp request error: {e}")
+        raise HTTPException(status_code=502, detail=f"ClickUp request failed: {e}")
+
+
+@app.api_route(
     "/datadog/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
 )
@@ -1107,6 +1195,11 @@ def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
         # Honeycomb uses X-Honeycomb-Team header
         api_key = creds.get("api_key", "")
         return {"X-Honeycomb-Team": api_key}
+
+    elif integration_id == "clickup":
+        # ClickUp uses Authorization header with API token
+        api_key = creds.get("api_key", "")
+        return {"Authorization": api_key}
 
     # Default: Bearer token
     api_key = creds.get("api_key", "")

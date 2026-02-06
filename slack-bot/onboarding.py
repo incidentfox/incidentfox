@@ -615,6 +615,44 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         ],
     },
     {
+        "id": "clickup",
+        "name": "ClickUp",
+        "category": "project_management",
+        "status": "active",
+        "icon": ":clickup:",
+        "icon_fallback": ":clipboard:",
+        "description": "Query and manage tasks for incident tracking and project management.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your ClickUp account\n"
+            "2. Go to *Settings* (gear icon) > *Apps*\n"
+            "3. Click *Generate* under API Token section\n"
+            "4. Copy the Personal API Token\n"
+            "5. Optionally, copy your Team/Workspace ID from Settings > Teams\n"
+            "6. Paste the API token below"
+        ),
+        "docs_url": "https://clickup.com/api",
+        "context_prompt_placeholder": 'e.g., \'Our incident tasks are in the "SRE" space. Use the "Incidents" list. Severity is tracked in a custom field.\'',
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Token",
+                "type": "secret",
+                "required": True,
+                "placeholder": "pk_12345678_ABCDEFGHIJKLMNOP",
+                "hint": "ClickUp Personal API Token",
+            },
+            {
+                "id": "team_id",
+                "name": "Team/Workspace ID (Optional)",
+                "type": "string",
+                "required": False,
+                "placeholder": "12345678",
+                "hint": "Leave blank to auto-detect. Find in Settings > Teams",
+            },
+        ],
+    },
+    {
         "id": "dynatrace",
         "name": "Dynatrace",
         "category": "observability",

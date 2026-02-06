@@ -148,6 +148,16 @@ spec:
                 port:
                   number: {{ .Values.services.k8sGateway.servicePort }}
           {{- end }}
+          {{- if .Values.services.configService.enabled }}
+          # GitHub App callback - route directly to config-service
+          - path: /github/callback
+            pathType: Exact
+            backend:
+              service:
+                name: incidentfox-config-service
+                port:
+                  number: {{ .Values.services.configService.servicePort }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:

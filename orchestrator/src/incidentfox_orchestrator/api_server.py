@@ -8,7 +8,7 @@ from typing import Any, Optional
 from uuid import UUID
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -32,7 +32,7 @@ from incidentfox_orchestrator.k8s import (
     delete_dependency_discovery_cronjob,
     delete_pipeline_cronjob,
 )
-from incidentfox_orchestrator.models import Base, ProvisioningRun
+from incidentfox_orchestrator.models import A2ATask, Base, ProvisioningRun
 
 # TeamSlackChannel is deprecated - routing is now handled by Config Service
 from incidentfox_orchestrator.webhooks.router import router as webhook_router
@@ -1997,6 +1997,389 @@ def create_app() -> FastAPI:
 
         except httpx.RequestError as e:
             return MeetingBotStopResponse(ok=False, error=f"Request failed: {e}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # A2A Protocol (Agent-to-Agent)
+    # Based on Google's A2A specification for inter-agent communication.
+    # https://github.com/google/A2A
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    A2A_AGENT_CARD = {
+        "name": "IncidentFox",
+        "description": "AI-powered incident investigation and infrastructure automation agent",
+        "url": os.getenv("A2A_PUBLIC_URL", "https://incidentfox.example.com/api/a2a"),
+        "provider": {
+            "organization": "IncidentFox",
+            "url": "https://incidentfox.io",
+        },
+        "version": "1.0.0",
+        "capabilities": {
+            "streaming": False,
+            "pushNotifications": False,
+            "stateTransitionHistory": True,
+        },
+        "authentication": {
+            "schemes": ["bearer"],
+        },
+        "defaultInputModes": ["text"],
+        "defaultOutputModes": ["text", "json"],
+        "skills": [
+            {
+                "id": "incident-investigation",
+                "name": "Incident Investigation",
+                "description": "Investigate production incidents, find root causes, and suggest fixes",
+                "tags": ["incident", "debugging", "root-cause-analysis"],
+                "examples": [
+                    "Investigate why pod nginx-abc123 is crashing",
+                    "What's causing high latency in the payments service?",
+                    "Analyze the recent spike in error rates",
+                ],
+            },
+            {
+                "id": "kubernetes-troubleshooting",
+                "name": "Kubernetes Troubleshooting",
+                "description": "Debug Kubernetes issues including pods, deployments, and services",
+                "tags": ["kubernetes", "k8s", "containers", "debugging"],
+                "examples": [
+                    "List all crashing pods in the production namespace",
+                    "Why is the deployment not rolling out?",
+                    "Check resource usage for pods with high memory",
+                ],
+            },
+            {
+                "id": "aws-debugging",
+                "name": "AWS Resource Debugging",
+                "description": "Investigate AWS infrastructure issues",
+                "tags": ["aws", "cloud", "infrastructure"],
+                "examples": [
+                    "Check the status of EC2 instance i-abc123",
+                    "Why is the Lambda function timing out?",
+                    "Analyze CloudWatch logs for errors",
+                ],
+            },
+            {
+                "id": "metrics-analysis",
+                "name": "Metrics & Anomaly Detection",
+                "description": "Analyze metrics, detect anomalies, and forecast trends",
+                "tags": ["metrics", "monitoring", "anomaly-detection", "forecasting"],
+                "examples": [
+                    "Detect anomalies in the latency metrics",
+                    "Forecast when disk space will run out",
+                    "Correlate CPU usage with error rates",
+                ],
+            },
+            {
+                "id": "code-analysis",
+                "name": "Code Analysis",
+                "description": "Analyze code, review changes, and identify bugs",
+                "tags": ["code", "review", "debugging"],
+                "examples": [
+                    "Review the latest PR for potential issues",
+                    "Find the source of the null pointer exception",
+                    "Analyze the authentication flow for security issues",
+                ],
+            },
+        ],
+    }
+
+    def _a2a_validate_auth(authorization: str) -> None:
+        """Validate A2A authentication via A2A_SECRET."""
+        a2a_secret = (os.getenv("A2A_SECRET") or "").strip()
+        if not a2a_secret:
+            return  # No secret configured = no auth required
+        if not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing bearer token")
+        token = authorization[7:]
+        if token != a2a_secret:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+    def _a2a_task_to_response(task: A2ATask) -> dict:
+        """Convert A2ATask model to A2A protocol response."""
+        return {
+            "id": task.id,
+            "status": {
+                "state": task.status,
+                "message": task.result_message,
+                "timestamp": (
+                    task.updated_at.isoformat()
+                    if task.updated_at
+                    else _now().isoformat()
+                ),
+            },
+            "artifacts": task.artifacts,
+            "history": task.history or [],
+        }
+
+    def _a2a_run_agent_task(
+        task_id: str, user_query: str, org_id: str, team_node_id: str
+    ) -> None:
+        """Background task to run the agent and update task status."""
+        agent_api: AgentApiClient = app.state.agent_api
+        cfg: ConfigServiceClient = app.state.config_service
+
+        try:
+            # Get internal admin token for impersonation
+            internal_admin = (
+                os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or ""
+            ).strip()
+            if not internal_admin:
+                raise ValueError("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN not configured")
+
+            # Mint impersonation token
+            imp = cfg.issue_team_impersonation_token(
+                internal_admin, org_id=org_id, team_node_id=team_node_id
+            )
+            team_token = str(imp.get("token") or "")
+            if not team_token:
+                raise ValueError("Failed to mint impersonation token")
+
+            # Run the agent
+            result = agent_api.run_agent(
+                team_token=team_token,
+                agent_name="planner",
+                message=user_query,
+                context={"source": "a2a"},
+            )
+
+            # Update task with result
+            with db_session() as s:
+                task = s.get(A2ATask, task_id)
+                if task:
+                    if result.get("success", True):
+                        task.status = "completed"
+                        out = result.get("output") or result.get("final_output")
+                        task.result_message = {
+                            "role": "agent",
+                            "parts": [
+                                {
+                                    "text": (
+                                        out
+                                        if isinstance(out, str)
+                                        else __import__("json").dumps(out, indent=2)
+                                    )
+                                }
+                            ],
+                        }
+                        task.artifacts = [
+                            {"name": "investigation_result", "parts": [{"data": out}]}
+                        ]
+                    else:
+                        task.status = "failed"
+                        task.error = result.get("error", "Agent run failed")
+                        task.result_message = {
+                            "role": "agent",
+                            "parts": [{"text": task.error}],
+                        }
+
+                    task.history = (task.history or []) + [
+                        {"state": task.status, "timestamp": _now().isoformat()}
+                    ]
+                    task.updated_at = _now()
+
+            _log(
+                "a2a_task_completed",
+                task_id=task_id,
+                status=task.status if task else "unknown",
+            )
+
+        except Exception as e:
+            _log("a2a_task_failed", task_id=task_id, error=str(e))
+            with db_session() as s:
+                task = s.get(A2ATask, task_id)
+                if task:
+                    task.status = "failed"
+                    task.error = str(e)
+                    task.result_message = {
+                        "role": "agent",
+                        "parts": [{"text": f"Error: {e}"}],
+                    }
+                    task.history = (task.history or []) + [
+                        {"state": "failed", "timestamp": _now().isoformat()}
+                    ]
+                    task.updated_at = _now()
+
+    class A2ARequest(BaseModel):
+        """A2A JSON-RPC request."""
+
+        jsonrpc: str = "2.0"
+        id: Optional[str] = None
+        method: str = ""
+        params: dict = Field(default_factory=dict)
+
+    @app.post("/api/v1/a2a")
+    def a2a_dispatch(
+        body: A2ARequest,
+        background_tasks: BackgroundTasks,
+        authorization: str = Header(default=""),
+    ):
+        """
+        A2A Protocol JSON-RPC dispatcher.
+
+        Implements Google's A2A specification for inter-agent communication.
+        Methods: tasks/send, tasks/get, tasks/cancel, agent/authenticatedExtendedCard
+        """
+        _a2a_validate_auth(authorization)
+
+        method = body.method
+        params = body.params
+        request_id = body.id or f"req-{_now().timestamp()}"
+
+        _log("a2a_request", method=method, request_id=request_id)
+
+        # Route by method
+        if method == "agent/authenticatedExtendedCard":
+            return {"jsonrpc": "2.0", "id": request_id, "result": A2A_AGENT_CARD}
+
+        elif method == "tasks/send":
+            message = params.get("message")
+            if not message or not message.get("parts"):
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32602,
+                        "message": "Invalid params: message.parts required",
+                    },
+                }
+
+            user_query = "\n".join(
+                p.get("text", "") for p in message.get("parts", []) if p.get("text")
+            )
+            if not user_query:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32602,
+                        "message": "Invalid params: no text in message",
+                    },
+                }
+
+            # Create task
+            task_id = (
+                params.get("id")
+                or f"task-{_now().timestamp()}-{__import__('uuid').uuid4().hex[:9]}"
+            )
+            org_id = os.getenv("DEFAULT_ORG_ID", "org-default")
+            team_node_id = os.getenv("DEFAULT_TEAM_NODE_ID", "team-default")
+
+            with db_session() as s:
+                task = A2ATask(
+                    id=task_id,
+                    status="working",
+                    message=message,
+                    org_id=org_id,
+                    team_node_id=team_node_id,
+                    history=[
+                        {"state": "submitted", "timestamp": _now().isoformat()},
+                        {"state": "working", "timestamp": _now().isoformat()},
+                    ],
+                    created_at=_now(),
+                    updated_at=_now(),
+                )
+                s.add(task)
+                s.flush()
+
+            # Spawn background task
+            background_tasks.add_task(
+                _a2a_run_agent_task, task_id, user_query, org_id, team_node_id
+            )
+
+            _log("a2a_task_created", task_id=task_id)
+
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "id": task_id,
+                    "status": {
+                        "state": "working",
+                        "message": message,
+                        "timestamp": _now().isoformat(),
+                    },
+                    "history": [
+                        {"state": "submitted", "timestamp": _now().isoformat()},
+                        {"state": "working", "timestamp": _now().isoformat()},
+                    ],
+                },
+            }
+
+        elif method == "tasks/get":
+            task_id = params.get("id")
+            if not task_id:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {"code": -32602, "message": "Invalid params: id required"},
+                }
+
+            with db_session() as s:
+                task = s.get(A2ATask, task_id)
+                if not task:
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {"code": -32001, "message": "Task not found"},
+                    }
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": _a2a_task_to_response(task),
+                }
+
+        elif method == "tasks/cancel":
+            task_id = params.get("id")
+            if not task_id:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {"code": -32602, "message": "Invalid params: id required"},
+                }
+
+            with db_session() as s:
+                task = s.get(A2ATask, task_id)
+                if not task:
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {"code": -32001, "message": "Task not found"},
+                    }
+
+                if task.status in ("submitted", "working"):
+                    task.status = "canceled"
+                    task.history = (task.history or []) + [
+                        {"state": "canceled", "timestamp": _now().isoformat()}
+                    ]
+                    task.updated_at = _now()
+
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": _a2a_task_to_response(task),
+                }
+
+        else:
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {"code": -32601, "message": f"Method not found: {method}"},
+            }
+
+    @app.get("/api/v1/a2a")
+    def a2a_agent_card():
+        """Return public A2A agent card."""
+        return {
+            **A2A_AGENT_CARD,
+            "endpoints": {
+                "base": "/api/v1/a2a",
+                "methods": [
+                    "tasks/send",
+                    "tasks/get",
+                    "tasks/cancel",
+                    "agent/authenticatedExtendedCard",
+                ],
+            },
+        }
 
     return app
 

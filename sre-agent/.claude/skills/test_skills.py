@@ -15,6 +15,7 @@ Usage:
     python test_skills.py --skill jaeger
 
 Required environment variables per skill:
+    ClickUp:       CLICKUP_API_TOKEN
     Coralogix:     CORALOGIX_DOMAIN, CORALOGIX_API_KEY
     Datadog:       DATADOG_SITE, DATADOG_API_KEY, DATADOG_APP_KEY
     Elasticsearch: ELASTICSEARCH_URL (optional: ES_USER, ES_PASSWORD)
@@ -358,6 +359,37 @@ def test_honeycomb() -> list[TestResult]:
     return results
 
 
+def test_clickup() -> list[TestResult]:
+    """Test ClickUp skill."""
+    results = []
+
+    ok, missing = check_env_vars(["CLICKUP_API_TOKEN"])
+    if not ok:
+        return [
+            TestResult(
+                skill="project-clickup",
+                script="(env check)",
+                passed=False,
+                output="",
+                error=f"Missing env vars: {', '.join(missing)}",
+            )
+        ]
+
+    # Test list_spaces.py
+    result = run_script("project-clickup", "list_spaces.py", ["--json"])
+    result = validate_json_output(result)
+    results.append(result)
+
+    # Test search_tasks.py (basic search)
+    result2 = run_script(
+        "project-clickup", "search_tasks.py", ["--limit", "5", "--json"]
+    )
+    result2 = validate_json_output(result2)
+    results.append(result2)
+
+    return results
+
+
 # =============================================================================
 # Main Test Runner
 # =============================================================================
@@ -370,6 +402,7 @@ SKILL_TESTS = {
     "jaeger": test_jaeger,
     "prometheus": test_prometheus,
     "grafana": test_grafana,
+    "clickup": test_clickup,
 }
 
 

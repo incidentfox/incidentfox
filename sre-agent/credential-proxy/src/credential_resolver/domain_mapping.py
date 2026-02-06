@@ -21,6 +21,8 @@ DOMAIN_TO_INTEGRATION: dict[str, str] = {
     # Honeycomb (US and EU regions)
     "api.honeycomb.io": "honeycomb",
     "api.eu1.honeycomb.io": "honeycomb",
+    # ClickUp
+    "api.clickup.com": "clickup",
 }
 
 # Path prefixes for proxy mode (when host is envoy:8001, localhost:8001, etc.)
@@ -30,6 +32,7 @@ PATH_TO_INTEGRATION: dict[str, str] = {
     "/api/v1/dataprime/": "coralogix",  # Coralogix DataPrime
     "/api/v1/query": "coralogix",  # Coralogix query
     "/honeycomb/": "honeycomb",  # Honeycomb API
+    "/clickup/": "clickup",  # ClickUp API
 }
 
 # Hosts that use path-based routing (static list)
