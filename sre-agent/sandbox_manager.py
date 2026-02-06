@@ -632,7 +632,10 @@ static_resources:
                                     },
                                     {
                                         "name": "LANGFUSE_HOST",
-                                        "value": os.getenv("LANGFUSE_HOST", "https://us.cloud.langfuse.com"),
+                                        "value": os.getenv(
+                                            "LANGFUSE_HOST",
+                                            "https://us.cloud.langfuse.com",
+                                        ),
                                     },
                                     # Kubernetes context (use pre-configured kubeconfig for incidentfox-demo cluster)
                                     {
