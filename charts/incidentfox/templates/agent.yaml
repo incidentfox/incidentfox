@@ -1,4 +1,17 @@
 {{- if .Values.services.agent.enabled }}
+# =============================================================================
+# Unified Agent - Investigation agent with sandbox isolation support
+# =============================================================================
+# Two operation modes:
+# 1. Direct mode (sandbox.enabled=false): Agent runs investigations directly
+# 2. Sandbox mode (sandbox.enabled=true): Agent creates gVisor sandbox pods
+#
+# In sandbox mode, this deployment acts as a "sandbox manager" that:
+# - Receives investigation requests from orchestrator
+# - Creates isolated sandbox pods for each investigation
+# - Sandboxes run the same image in server mode (port 8888)
+# - Sandboxes connect to credential-resolver for credentials
+# =============================================================================
 {{- if .Values.services.agent.serviceAccount.create }}
 apiVersion: v1
 kind: ServiceAccount
@@ -9,6 +22,45 @@ metadata:
   annotations:
 {{ toYaml .Values.services.agent.serviceAccount.annotations | indent 4 }}
   {{- end }}
+---
+{{- end }}
+{{- if .Values.services.agent.sandbox.enabled }}
+# RBAC for sandbox management (required when sandbox mode is enabled)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: incidentfox-agent-sandbox-manager
+  namespace: {{ .Values.namespace }}
+rules:
+  # Sandbox CRD management
+  - apiGroups: ["agents.x-k8s.io"]
+    resources: ["sandboxes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # Pod observation (for sandbox status)
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  # ConfigMap for per-sandbox Envoy config
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: incidentfox-agent-sandbox-manager
+  namespace: {{ .Values.namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.services.agent.serviceAccount.name | quote }}
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: incidentfox-agent-sandbox-manager
+  apiGroup: rbac.authorization.k8s.io
 ---
 {{- end }}
 apiVersion: apps/v1
@@ -34,9 +86,6 @@ spec:
 {{ toYaml .Values.global.imagePullSecrets | indent 8 }}
       {{- end }}
       # Allow enough time for graceful shutdown to mark in-flight runs as failed
-      # Default K8s is 30s, but agent runs can take 5+ minutes. We need time to:
-      # 1. Stop accepting new requests
-      # 2. Mark all in-flight runs as failed (HTTP calls to config service)
       terminationGracePeriodSeconds: {{ .Values.services.agent.terminationGracePeriodSeconds | default 60 }}
       containers:
         - name: agent
@@ -54,18 +103,49 @@ spec:
               value: "true"
             - name: CONFIG_BASE_URL
               value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
-            # CONFIG_SERVICE_URL used by trace_recorder, config_loader, remediation_tools
             - name: CONFIG_SERVICE_URL
               value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
-            # Dedicated health server port (separate from main Sanic server)
+            # Dedicated health server port
             - name: HEALTH_SERVER_PORT
               value: {{ .Values.services.agent.healthServer.port | default 8081 | quote }}
-            # Enable K8s tools (agent has in-cluster access via service account)
+            # K8s tools configuration
+            {{- if .Values.services.agent.kubernetes.enabled }}
+            - name: K8S_ENABLED
+              value: "true"
+            - name: K8S_NAMESPACE
+              value: {{ .Values.services.agent.kubernetes.namespace | default .Values.namespace | quote }}
+            {{- else }}
             - name: K8S_ENABLED
               value: "true"
             - name: K8S_NAMESPACE
               value: {{ .Values.namespace | quote }}
+            {{- end }}
+            # =================================================================
+            # Sandbox Mode Configuration (unified-agent sandbox manager)
+            # =================================================================
+            {{- if .Values.services.agent.sandbox.enabled }}
+            # Sandbox image (same image, runs in sandbox server mode)
+            - name: SANDBOX_IMAGE
+              value: {{ .Values.services.agent.sandbox.image | default .Values.services.agent.image | quote }}
+            # Namespace for sandbox pods
+            - name: SANDBOX_NAMESPACE
+              value: {{ .Values.services.agent.sandbox.namespace | default .Values.namespace | quote }}
+            # gVisor runtime for enhanced isolation
+            - name: USE_GVISOR
+              value: {{ .Values.services.agent.sandbox.useGvisor | default "true" | quote }}
+            # Credential resolver namespace (for Envoy ext_authz)
+            - name: CREDENTIAL_RESOLVER_NAMESPACE
+              value: {{ .Values.namespace | quote }}
+            # JWT secret for signing sandbox tokens
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.jwtSecret.secretName | default "incidentfox-jwt-secret" }}
+                  key: {{ .Values.externalSecrets.contract.jwtSecret.secretKey | default "JWT_SECRET" }}
+            {{- end }}
+            # =================================================================
             # Tracing configuration (Langfuse / OTEL)
+            # =================================================================
             {{- if .Values.services.agent.tracing.enabled }}
             - name: TRACING_ENABLED
               value: "true"
@@ -88,6 +168,7 @@ spec:
               value: {{ .Values.services.agent.tracing.otlp.endpoint | quote }}
             {{- end }}
             {{- end }}
+            # Static team token (dev/single-tenant mode only)
             {{- if .Values.services.agent.staticTeamToken.enabled }}
             - name: INCIDENTFOX_TEAM_TOKEN
               valueFrom:
@@ -95,13 +176,15 @@ spec:
                   name: {{ .Values.services.agent.staticTeamToken.secretName }}
                   key: {{ .Values.services.agent.staticTeamToken.secretKey }}
             {{- end }}
+            # OpenAI API key (for direct mode, sandbox mode uses credential-resolver)
+            {{- if not .Values.services.agent.sandbox.enabled }}
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.agentOpenAI.secretName }}
                   key: {{ .Values.externalSecrets.contract.agentOpenAI.apiKeyKey }}
-          # Readiness probe: Uses dedicated health server on separate thread
-          # Returns 503 if heartbeat is stale (agent not making progress)
+            {{- end }}
+          # Readiness probe
           readinessProbe:
             httpGet:
               path: /readyz
@@ -110,8 +193,7 @@ spec:
             periodSeconds: {{ .Values.services.agent.readinessProbe.periodSeconds | default 10 }}
             timeoutSeconds: {{ .Values.services.agent.readinessProbe.timeoutSeconds | default 5 }}
             failureThreshold: {{ .Values.services.agent.readinessProbe.failureThreshold | default 3 }}
-          # Liveness probe: Uses dedicated health server on separate thread
-          # Always returns 200 if process is alive (won't be blocked by long operations)
+          # Liveness probe
           {{- if .Values.services.agent.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
@@ -136,5 +218,3 @@ spec:
       targetPort: {{ .Values.services.agent.servicePort }}
       protocol: TCP
 {{- end }}
-
-

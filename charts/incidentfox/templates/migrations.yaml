@@ -73,11 +73,11 @@ spec:
             # Orchestrator settings currently require these; they are not used by db_migrate,
             # but we provide them to satisfy Settings validation.
             - name: CONFIG_SERVICE_URL
-              value: {{ printf "http://%s-config-service:%d" .Values.releaseName (int .Values.services.configService.port) | quote }}
+              value: {{ .Values.global.configService.url | quote }}
             - name: AI_PIPELINE_API_URL
-              value: {{ printf "http://%s-ai-pipeline-api:%d" .Values.releaseName (int .Values.services.aiPipelineApi.port) | quote }}
+              value: {{ printf "http://incidentfox-ai-pipeline-api.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.aiPipelineApi.servicePort | default 8080 | int) | quote }}
             - name: AGENT_API_URL
-              value: {{ printf "http://%s-agent:%d" .Values.releaseName (int .Values.services.agent.port) | quote }}
+              value: {{ printf "http://incidentfox-agent.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.agent.servicePort | default 8080 | int) | quote }}
 {{- end }}
 
 {{- if .Values.services.aiPipelineApi.enabled }}

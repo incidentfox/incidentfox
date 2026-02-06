@@ -1,0 +1,134 @@
+{{- if .Values.services.slackBot.enabled }}
+# =============================================================================
+# Slack Bot - Multi-tenant Slack integration
+# =============================================================================
+# Handles:
+# - Slack OAuth installation flow
+# - Message/mention handling
+# - App Home Tab with integrations dashboard
+# - Webhook events from incident.io, PagerDuty
+# =============================================================================
+{{- if .Values.services.slackBot.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.services.slackBot.serviceAccount.name | default "slack-bot" }}
+  namespace: {{ .Values.namespace }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: incidentfox-slack-bot
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: incidentfox-slack-bot
+spec:
+  replicas: {{ .Values.services.slackBot.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: incidentfox-slack-bot
+  template:
+    metadata:
+      labels:
+        app: incidentfox-slack-bot
+    spec:
+      {{- if .Values.services.slackBot.serviceAccount.name }}
+      serviceAccountName: {{ .Values.services.slackBot.serviceAccount.name }}
+      {{- end }}
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 8 }}
+      {{- end }}
+      containers:
+        - name: slack-bot
+          image: {{ required "services.slackBot.image is required" .Values.services.slackBot.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.services.slackBot.servicePort | default 3000 }}
+              name: http
+          resources:
+{{ toYaml .Values.services.slackBot.resources | indent 12 }}
+          env:
+            # Slack app mode (http for production)
+            - name: SLACK_APP_MODE
+              value: "http"
+            - name: PORT
+              value: {{ .Values.services.slackBot.servicePort | default 3000 | quote }}
+            # Agent service URL (for investigations)
+            - name: SRE_AGENT_URL
+              value: {{ printf "http://incidentfox-agent.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.agent.servicePort | int) | quote }}
+            # Config Service (for multi-tenancy)
+            - name: CONFIG_SERVICE_URL
+              value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
+            - name: CONFIG_SERVICE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.configService.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.configService.adminTokenKey | quote }}
+            # Free trial settings
+            - name: FREE_TRIAL_ENABLED
+              value: {{ .Values.services.slackBot.freeTrial.enabled | default true | ternary "true" "false" | quote }}
+            - name: FREE_TRIAL_DAYS
+              value: {{ .Values.services.slackBot.freeTrial.days | default 7 | quote }}
+            {{- if .Values.externalSecrets.contract.slackBot.enabled }}
+            # Slack OAuth credentials (for public distribution)
+            - name: SLACK_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.slackBot.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.slackBot.clientIdKey | quote }}
+            - name: SLACK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.slackBot.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.slackBot.clientSecretKey | quote }}
+            - name: SLACK_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.slackBot.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.slackBot.signingSecretKey | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.slackBot.servicePort | default 3000 }}
+            initialDelaySeconds: {{ .Values.services.slackBot.readinessProbe.initialDelaySeconds | default 5 }}
+            periodSeconds: {{ .Values.services.slackBot.readinessProbe.periodSeconds | default 10 }}
+          {{- if .Values.services.slackBot.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.services.slackBot.servicePort | default 3000 }}
+            initialDelaySeconds: {{ .Values.services.slackBot.livenessProbe.initialDelaySeconds | default 10 }}
+            periodSeconds: {{ .Values.services.slackBot.livenessProbe.periodSeconds | default 30 }}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: incidentfox-slack-bot
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: incidentfox-slack-bot
+  {{- if .Values.services.slackBot.service.annotations }}
+  annotations:
+{{ toYaml .Values.services.slackBot.service.annotations | indent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.services.slackBot.service.type | default "ClusterIP" }}
+  ports:
+    {{- if eq .Values.services.slackBot.service.type "LoadBalancer" }}
+    - port: 443
+      targetPort: {{ .Values.services.slackBot.servicePort | default 3000 }}
+      protocol: TCP
+      name: https
+    {{- else }}
+    - port: {{ .Values.services.slackBot.servicePort | default 3000 }}
+      targetPort: {{ .Values.services.slackBot.servicePort | default 3000 }}
+      protocol: TCP
+      name: http
+    {{- end }}
+  selector:
+    app: incidentfox-slack-bot
+{{- end }}

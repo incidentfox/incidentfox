@@ -119,6 +119,28 @@ externalSecrets:
       webhookSecretRemoteRefKey: incidentfox/prod/recall_webhook_secret
       botName: "IncidentFox Notetaker"
       botImageUrl: "https://incidentfox-assets.s3.us-west-2.amazonaws.com/bot-avatar.png"
+    # JWT secret for sandbox credential injection (shared between unified-agent and credential-resolver)
+    jwtSecret:
+      enabled: true
+      secretName: incidentfox-jwt-secret
+      secretKey: JWT_SECRET
+      remoteRefKey: incidentfox/prod/jwt_secret
+    # Shared Anthropic API key for free trials
+    sharedAnthropicKey:
+      enabled: false
+      secretName: incidentfox-shared-anthropic
+      secretKey: ANTHROPIC_API_KEY
+      remoteRefKey: incidentfox/prod/shared_anthropic_api_key
+    # Slack Bot OAuth credentials (for multi-workspace distribution)
+    slackBot:
+      enabled: false
+      secretName: incidentfox-slack-bot
+      clientIdKey: client_id
+      clientSecretKey: client_secret
+      signingSecretKey: signing_secret
+      clientIdRemoteRefKey: incidentfox/prod/slack_client_id
+      clientSecretRemoteRefKey: incidentfox/prod/slack_client_secret
+      signingSecretRemoteRefKey: incidentfox/prod/slack_signing_secret
 
 services:
   configService:
@@ -175,18 +197,34 @@ services:
     # Admin RBAC (OIDC group -> permissions). Default keeps backwards-compatible admin:*.
     adminPermissionsDefault: "admin:*"
     adminGroupPermissionsJson: "{}"
+  # Unified Agent - Investigation agent with sandbox isolation support
+  # Now powered by unified-agent, replacing legacy agent and sre-agent architectures
   agent:
     enabled: true
-    image: "incidentfox/agent:v1.0.0"
+    image: "incidentfox/unified-agent:v1.0.0"
     replicas: 2
     servicePort: 8080
     # Time to allow for graceful shutdown (marking in-flight runs as failed)
-    # Agent runs can take 5+ minutes, but shutdown only needs time to mark them
     terminationGracePeriodSeconds: 60
     serviceAccount:
       create: true
       name: incidentfox-agent
       annotations: {}
+    # Kubernetes tools configuration (agent has in-cluster access)
+    kubernetes:
+      enabled: true
+      # Namespace for K8s tools to query (defaults to same namespace)
+      namespace: ""
+    # Sandbox mode: creates isolated gVisor pods for each investigation
+    # When disabled, agent runs investigations directly (dev/testing only)
+    sandbox:
+      enabled: false  # Enable for production with gVisor isolation
+      # Image for sandbox pods (defaults to same as agent image)
+      image: ""
+      # Namespace for sandbox pods (defaults to same namespace)
+      namespace: ""
+      # Use gVisor runtime for enhanced isolation
+      useGvisor: true
     # Tracing configuration (supports multiple backends via OTEL)
     tracing:
       enabled: false
@@ -209,17 +247,13 @@ services:
         cpu: "2000m"
         memory: "3Gi"
     # Dedicated health server runs in separate thread, always responsive
-    # even during long-running agent operations (e.g., OpenAI API calls)
     healthServer:
       port: 8081
-    # Readiness probe: checks if heartbeat is recent (agent making progress)
     readinessProbe:
       initialDelaySeconds: 5
       periodSeconds: 10
       timeoutSeconds: 5
       failureThreshold: 3
-    # Liveness probe: always returns 200 if process is alive
-    # Uses dedicated health server so it won't be blocked by long operations
     livenessProbe:
       enabled: true
       initialDelaySeconds: 20
@@ -234,13 +268,12 @@ services:
       minReplicas: 2
       maxReplicas: 10
       targetCPUUtilizationPercentage: 70
-    # Shared-runtime default: team config is resolved per-request via X-IncidentFox-Team-Token header.
-    # Set this only for single-tenant/dev mode.
+    # Static team token (dev/single-tenant mode only)
     staticTeamToken:
       enabled: false
       secretName: incidentfox-team-token
       secretKey: token
-    # Cleanup cronjob for stale agent runs (belt-and-suspenders for edge cases)
+    # Cleanup cronjob for stale agent runs
     cleanup:
       enabled: true
       schedule: "*/5 * * * *"  # Every 5 minutes
@@ -282,6 +315,45 @@ services:
     slack:
       agentMaxTurns: 50         # Max tool calls per run (enterprise: 30-100)
       agentTimeoutSeconds: 180  # 3 minutes (enterprise: 2-5 min)
+
+  # Slack Bot - Multi-tenant Slack integration
+  slackBot:
+    enabled: false
+    image: "incidentfox/slack-bot:v1.0.0"
+    replicas: 1
+    servicePort: 3000
+    serviceAccount:
+      create: true
+      name: slack-bot
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 10
+      periodSeconds: 30
+    # Free trial configuration
+    freeTrial:
+      enabled: true
+      days: 7
+    # Service configuration
+    service:
+      type: ClusterIP  # Use LoadBalancer for direct NLB exposure, or ClusterIP for Ingress
+      # Annotations for NLB with HTTPS termination (when type: LoadBalancer)
+      annotations: {}
+        # service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+        # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+        # service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:..."
+        # service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+        # service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+
   aiPipelineApi:
     enabled: false  # Deprecated - use knowledgeBase instead
     image: "incidentfox/knowledge-base:v1.0.0"
@@ -543,5 +615,46 @@ services:
       minReplicas: 2
       maxReplicas: 6
       targetCPUUtilizationPercentage: 70
+
+  # Credential Resolver - JWT-secured credential injection for sandbox pods
+  # This service validates sandbox JWTs and injects credentials via Envoy ext_authz.
+  # Sandboxes cannot access credentials directly - enhances security.
+  credentialResolver:
+    enabled: false  # Enable when using gVisor sandboxes with credential injection
+    image: "incidentfox/credential-resolver:v1.0.0"
+    replicas: 2
+    servicePort: 8002
+    # Credential source: config_service (multi-tenant SaaS) or environment (dev)
+    credentialSource: config_service
+    # JWT validation mode: strict (require valid JWT) or permissive (dev only)
+    jwtMode: strict
+    serviceAccount:
+      name: credential-resolver
+      annotations: {}
+    # Shared Anthropic API key for free trials (fallback when team has no BYOK)
+    sharedAnthropicKey:
+      enabled: false
+      secretName: incidentfox-shared-anthropic
+      secretKey: ANTHROPIC_API_KEY
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+    livenessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 5
+      failureThreshold: 3
+    pdb:
+      enabled: true
+      minAvailable: 1
 
 

@@ -1,13 +1,14 @@
-# IncidentFox Production - us-west-2 (incidentfox-prod cluster)
-# Production environment for customer-facing workloads
+# IncidentFox Staging - us-west-2 (incidentfox-demo cluster)
+# Staging environment for testing before production deployment
+# Co-located with otel-demo for end-to-end evaluation
 
-namespace: incidentfox-prod
+namespace: incidentfox
 
 global:
   imagePullPolicy: Always
   configService:
-    url: "http://incidentfox-config-service.incidentfox-prod.svc.cluster.local:8080"
-    orgId: "prod"
+    url: "http://incidentfox-config-service.incidentfox.svc.cluster.local:8080"
+    orgId: "staging"
   database:
     databaseUrlSecretName: incidentfox-database-url
     databaseUrlSecretKey: DATABASE_URL
@@ -22,10 +23,10 @@ ingress:
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     alb.ingress.kubernetes.io/healthcheck-path: "/api/health"
     alb.ingress.kubernetes.io/ssl-redirect: "443"
-  host: "ui.incidentfox.ai"
+  host: "staging.incidentfox.ai"
   tls:
     enabled: true
-    # us-west-2 ACM certificate
+    # us-west-2 ACM certificate (reuse existing)
     certificateArn: "arn:aws:acm:us-west-2:103002841599:certificate/e79b663b-062a-45de-96a0-b4e8e50e3c4f"
     redirectToHttps: true
   waf:
@@ -33,7 +34,6 @@ ingress:
     webAclArn: ""
 
 externalSecrets:
-  # ExternalSecrets managed via Helm (enable when ready to migrate)
   enabled: true
   installClusterSecretStore: true
   awsRegion: "us-west-2"
@@ -42,21 +42,21 @@ externalSecrets:
       enabled: true
       secretName: incidentfox-database-url
       secretKey: DATABASE_URL
-      remoteRefKey: incidentfox/prod/database_url
+      remoteRefKey: incidentfox/staging/database_url
     configService:
       enabled: true
       secretName: incidentfox-config-service
       adminTokenKey: ADMIN_TOKEN
       tokenPepperKey: TOKEN_PEPPER
       impersonationJwtSecretKey: IMPERSONATION_JWT_SECRET
-      adminTokenRemoteRefKey: incidentfox/prod/config_service_admin_token
-      tokenPepperRemoteRefKey: incidentfox/prod/config_service_token_pepper
-      impersonationJwtSecretRemoteRefKey: incidentfox/prod/config_service_impersonation_jwt_secret
+      adminTokenRemoteRefKey: incidentfox/staging/config_service_admin_token
+      tokenPepperRemoteRefKey: incidentfox/staging/config_service_token_pepper
+      impersonationJwtSecretRemoteRefKey: incidentfox/staging/config_service_impersonation_jwt_secret
     agentOpenAI:
       enabled: true
       secretName: incidentfox-openai
       apiKeyKey: api_key
-      apiKeyRemoteRefKey: incidentfox/prod/openai_api_key
+      apiKeyRemoteRefKey: incidentfox/staging/openai_api_key
     webUiOidc:
       enabled: false
     slack:
@@ -64,42 +64,47 @@ externalSecrets:
       secretName: incidentfox-slack
       signingSecretKey: signing_secret
       botTokenKey: bot_token
-      signingSecretRemoteRefKey: incidentfox/prod/slack_signing_secret
-      botTokenRemoteRefKey: incidentfox/prod/slack_bot_token
+      signingSecretRemoteRefKey: incidentfox/staging/slack_signing_secret
+      botTokenRemoteRefKey: incidentfox/staging/slack_bot_token
     github:
       enabled: true
       secretName: incidentfox-github
       webhookSecretKey: webhook_secret
-      remoteRefKey: incidentfox/prod/github_webhook_secret
+      remoteRefKey: incidentfox/staging/github_webhook_secret
     pagerduty:
       enabled: false
       secretName: incidentfox-pagerduty
       webhookSecretKey: webhook_secret
-      remoteRefKey: incidentfox/prod/pagerduty_webhook_secret
+      remoteRefKey: incidentfox/staging/pagerduty_webhook_secret
     incidentio:
       enabled: true
       secretName: incidentfox-incidentio
       webhookSecretKey: webhook_secret
-      remoteRefKey: incidentfox/prod/incidentio_webhook_secret
+      remoteRefKey: incidentfox/staging/incidentio_webhook_secret
     orchestratorInternal:
       enabled: true
       secretName: incidentfox-orchestrator-internal
       internalTokenKey: internal_token
-      internalTokenRemoteRefKey: incidentfox/prod/orchestrator_internal_token
+      internalTokenRemoteRefKey: incidentfox/staging/orchestrator_internal_token
     langfuse:
-      enabled: false  # Using OpenAI tracing UI instead
+      enabled: true
+      secretName: incidentfox-langfuse
+      publicKeyKey: LANGFUSE_PUBLIC_KEY
+      secretKeyKey: LANGFUSE_SECRET_KEY
+      publicKeyRemoteRefKey: incidentfox/staging/langfuse_public_key
+      secretKeyRemoteRefKey: incidentfox/staging/langfuse_secret_key
     # JWT secret for sandbox credential injection
     jwtSecret:
       enabled: true
       secretName: incidentfox-jwt-secret
       secretKey: JWT_SECRET
-      remoteRefKey: incidentfox/prod/jwt_secret
+      remoteRefKey: incidentfox/staging/jwt_secret
     # Shared Anthropic key for free trials
     sharedAnthropicKey:
       enabled: true
       secretName: incidentfox-shared-anthropic
       secretKey: ANTHROPIC_API_KEY
-      remoteRefKey: incidentfox/prod/shared_anthropic_api_key
+      remoteRefKey: incidentfox/staging/shared_anthropic_api_key
     # Slack Bot OAuth credentials
     slackBot:
       enabled: true
@@ -107,14 +112,14 @@ externalSecrets:
       clientIdKey: client_id
       clientSecretKey: client_secret
       signingSecretKey: signing_secret
-      clientIdRemoteRefKey: incidentfox/prod/slack_client_id
-      clientSecretRemoteRefKey: incidentfox/prod/slack_client_secret
-      signingSecretRemoteRefKey: incidentfox/prod/slack_signing_secret
+      clientIdRemoteRefKey: incidentfox/staging/slack_client_id
+      clientSecretRemoteRefKey: incidentfox/staging/slack_client_secret
+      signingSecretRemoteRefKey: incidentfox/staging/slack_signing_secret
 
 services:
   configService:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-config-service:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-config-service:staging"
     adminAuthMode: token
     teamAuthMode: token
     resources:
@@ -141,7 +146,7 @@ services:
 
   orchestrator:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-orchestrator:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-orchestrator:staging"
     requireAdminStar: true
     slackAgentMaxTurns: "200"
     slackAgentTimeoutSeconds: "180"
@@ -149,7 +154,7 @@ services:
   # Slack Bot - Multi-tenant Slack integration
   slackBot:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-slack-bot:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-slack-bot:staging"
     replicas: 1
     servicePort: 3000
     freeTrial:
@@ -160,7 +165,6 @@ services:
       annotations:
         service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
         service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
-        # Production SSL cert for slack.incidentfox.ai
         service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:us-west-2:103002841599:certificate/72d414bd-24e0-4e62-b579-b399a9eb2c9f"
         service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
         service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
@@ -168,34 +172,38 @@ services:
   # Unified Agent with gVisor sandbox isolation
   agent:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:staging"
     serviceAccount:
       create: true
       name: incidentfox-agent
       annotations:
-        eks.amazonaws.com/role-arn: "arn:aws:iam::103002841599:role/incidentfox-prod-agent"
-    # K8s tools - agent can access customer namespaces via k8s-gateway
+        eks.amazonaws.com/role-arn: "arn:aws:iam::103002841599:role/incidentfox-staging-agent"
+    # K8s tools - agent can access otel-demo namespace
     kubernetes:
       enabled: true
-      namespace: "incidentfox-prod"
+      namespace: "otel-demo"
     # Enable sandbox mode with gVisor isolation
     sandbox:
       enabled: true
-      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:latest"
+      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:staging"
       namespace: ""  # Same namespace as agent
       useGvisor: true
-    # Disable tracing in production (using OpenAI tracing UI)
+    # Enable tracing in staging for debugging
     tracing:
-      enabled: false
+      enabled: true
       langfuse:
-        enabled: false
+        enabled: true
+        host: "https://us.cloud.langfuse.com"
+        secretName: "incidentfox-langfuse"
+        publicKeyKey: "LANGFUSE_PUBLIC_KEY"
+        secretKeyKey: "LANGFUSE_SECRET_KEY"
       otlp:
         enabled: false
 
   # Credential Resolver for sandbox credential injection
   credentialResolver:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-credential-resolver:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-credential-resolver:staging"
     replicas: 2
     credentialSource: config_service
     jwtMode: strict
@@ -213,7 +221,7 @@ services:
   # Ultimate RAG - Knowledge base with graph queries, teaching, analytics
   ultimateRag:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ultimate-rag:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ultimate-rag:staging"
     replicas: 1
     serviceAccountRoleArn: "arn:aws:iam::103002841599:role/incidentfox-raptor-kb-role"
     defaultTree: "mega_ultra_v2"
@@ -229,9 +237,9 @@ services:
 
   webUi:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-web-ui:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-web-ui:staging"
     cookieSecure: true
-    raptorApiUrl: "http://incidentfox-rag.incidentfox-prod.svc.cluster.local:8000"
+    raptorApiUrl: "http://incidentfox-rag.incidentfox.svc.cluster.local:8000"
     oidc:
       enabled: false
     slack:
@@ -243,6 +251,6 @@ services:
   # K8s Gateway for SaaS mode (customer K8s agents)
   k8sGateway:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:staging"
     replicas: 2
     logLevel: "INFO"

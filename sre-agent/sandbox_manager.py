@@ -386,6 +386,7 @@ static_resources:
         team_id: str = "local",
         ttl_hours: int = 2,
         jwt_token: Optional[str] = None,
+        team_token: Optional[str] = None,
     ) -> SandboxInfo:
         """
         Create a new sandbox for an investigation.
@@ -400,6 +401,7 @@ static_resources:
             team_id: Team node ID for credential lookup
             ttl_hours: Hours until automatic cleanup (default: 2, balances resource usage and follow-up window)
             jwt_token: Pre-generated JWT for session reuse (if None, generates new one)
+            team_token: Team token for config-driven agents (enables loading config from Config Service)
 
         Returns:
             SandboxInfo with details about the created sandbox
@@ -478,6 +480,14 @@ static_resources:
                                         "name": "INCIDENTFOX_TEAM_ID",
                                         "value": team_id,
                                     },
+                                ]
+                                # Config-driven agents: TEAM_TOKEN enables loading config from Config Service
+                                + (
+                                    [{"name": "TEAM_TOKEN", "value": team_token}]
+                                    if team_token
+                                    else []
+                                )
+                                + [
                                     # Claude SDK: route API requests through proxy
                                     # (proxy injects x-api-key header for Anthropic)
                                     {
