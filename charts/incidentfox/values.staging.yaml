@@ -185,7 +185,7 @@ services:
   # Unified Agent with gVisor sandbox isolation
   agent:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:sandbox-label-fix"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
     servicePort: 8000  # server.py listens on 8000
     serviceAccount:
       create: true
@@ -199,7 +199,7 @@ services:
     # Enable sandbox mode with gVisor isolation
     sandbox:
       enabled: true
-      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:sandbox-label-fix"
+      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
       namespace: ""  # Same namespace as agent
       useGvisor: true
     # Enable tracing in staging for debugging

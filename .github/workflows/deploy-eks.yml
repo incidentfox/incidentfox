@@ -51,8 +51,8 @@ jobs:
         service: [agent, ai-pipeline, config-service, k8s-gateway, knowledge-base, orchestrator, ultimate-rag, web-ui]
         include:
           - service: agent
-            context: ./agent
-            dockerfile: ./agent/Dockerfile
+            context: ./unified-agent
+            dockerfile: ./unified-agent/Dockerfile
             image: incidentfox-agent
           - service: ai-pipeline
             context: ./ai_pipeline
