@@ -91,6 +91,8 @@ externalSecrets:
       enabled: false  # Using OpenAI tracing UI instead
     googleChat:
       enabled: true
+    teams:
+      enabled: true
 
 services:
   configService:
