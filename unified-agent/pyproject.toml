@@ -17,7 +17,7 @@ dependencies = [
     "aiohttp>=3.13.0",
 
     # Observability & Tracing
-    "langfuse>=2.0.0",  # Langfuse tracing (LiteLLM callback)
+    "langfuse>=2.6.0,<3.0.0",  # Langfuse tracing (LiteLLM callback, v3 breaks sdk_integration)
     "lmnr>=0.7.32",  # Laminar tracing
     "structlog>=24.4.0",
     "prometheus-client>=0.21.0",
