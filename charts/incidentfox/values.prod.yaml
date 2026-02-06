@@ -3,6 +3,12 @@
 
 namespace: incidentfox-prod
 
+# gVisor sandbox isolation for secure code execution
+gvisor:
+  enabled: true
+  installerImage: "alpine:latest"
+  pauseImage: "gcr.io/google-containers/pause:3.2"
+
 global:
   imagePullPolicy: Always
   configService:
