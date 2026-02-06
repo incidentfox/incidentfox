@@ -89,6 +89,11 @@ spec:
                   name: {{ .Values.externalSecrets.contract.slackBot.secretName | quote }}
                   key: {{ .Values.externalSecrets.contract.slackBot.signingSecretKey | quote }}
             {{- end }}
+            # Base URL for OAuth redirects (configurable per environment)
+            {{- if .Values.services.slackBot.baseUrl }}
+            - name: SLACK_BASE_URL
+              value: {{ .Values.services.slackBot.baseUrl | quote }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /health

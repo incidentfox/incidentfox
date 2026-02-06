@@ -152,6 +152,7 @@ services:
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-slack-bot:latest"
     replicas: 1
     servicePort: 3000
+    baseUrl: "https://slack.incidentfox.ai"  # OAuth redirect base URL
     freeTrial:
       enabled: true
       days: 7

@@ -82,6 +82,9 @@ SLACK_SCOPES = [
 # Check if OAuth is configured (for public distribution)
 oauth_enabled = bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET)
 
+# Base URL for Slack OAuth redirects (configurable for staging/prod)
+SLACK_BASE_URL = os.environ.get("SLACK_BASE_URL", "https://slack.incidentfox.ai")
+
 if oauth_enabled:
     # Multi-workspace OAuth mode with database-backed installation store
     # This enables horizontal scaling (multiple replicas) and persistence
@@ -96,7 +99,7 @@ if oauth_enabled:
         state_store=FileOAuthStateStore(
             expiration_seconds=600, base_dir="/tmp/slack-oauth-states"
         ),
-        redirect_uri="https://slack.incidentfox.ai/slack/oauth_redirect",
+        redirect_uri=f"{SLACK_BASE_URL}/slack/oauth_redirect",
     )
     app = App(
         signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
