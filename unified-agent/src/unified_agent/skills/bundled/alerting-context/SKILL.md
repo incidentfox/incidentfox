@@ -44,6 +44,16 @@ python .claude/skills/alerting-context/scripts/list_incidents.py --status acknow
 python .claude/skills/alerting-context/scripts/list_incidents.py --days 30
 ```
 
+### page_code_owner.py - Page a Code Owner via PagerDuty
+```bash
+python .claude/skills/alerting-context/scripts/page_code_owner.py --service-id SERVICE_ID --title TITLE [--urgency high|low] [--description TEXT]
+
+# Examples:
+python .claude/skills/alerting-context/scripts/page_code_owner.py --service-id PXXXXXX --title "Enterprise SLA: Acme Corp needs bulk export" --urgency high
+python .claude/skills/alerting-context/scripts/page_code_owner.py --service-id PXXXXXX --title "Feature request: dark mode" --urgency low --description "Free tier user request"
+python .claude/skills/alerting-context/scripts/page_code_owner.py --service-id PXXXXXX --title "URGENT: BigCo payment integration broken" --urgency high --escalation-policy-id EPXXXXXX
+```
+
 ### calculate_mttr.py - Calculate Mean Time To Resolve
 ```bash
 python .claude/skills/alerting-context/scripts/calculate_mttr.py [--service SERVICE_ID] [--days N]
@@ -110,6 +120,7 @@ python calculate_mttr.py --service PSERVICE123 --days 30
 | Active incidents | `list_incidents.py --status triggered` |
 | Acknowledged | `list_incidents.py --status acknowledged` |
 | Last 30 days | `list_incidents.py --days 30` |
+| Page code owner | `page_code_owner.py --service-id X --title "..." --urgency high` |
 | Calculate MTTR | `calculate_mttr.py --service X --days 30` |
 
 ---
