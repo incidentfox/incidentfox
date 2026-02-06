@@ -161,54 +161,54 @@ CUSTOMERS = {
 OWNERS = {
     "payments": {
         "name": "Alice",
-        "slack_id": "U07LSEDJXTM",  # Replace with real Slack ID
+        "slack_id": "U09V0JHFQ5P",
         "github": "alice",
         "backup": "Bob",
     },
     "billing": {
         "name": "Alice",
-        "slack_id": "U07LSEDJXTM",
+        "slack_id": "U09V0JHFQ5P",
         "github": "alice",
     },
     "auth": {
         "name": "Bob",
-        "slack_id": "U07M4E1RXBL",  # Replace with real Slack ID
+        "slack_id": "U0A02101LU8",
         "github": "bob",
         "backup": "Alice",
     },
     "authentication": {
         "name": "Bob",
-        "slack_id": "U07M4E1RXBL",
+        "slack_id": "U0A02101LU8",
         "github": "bob",
     },
     "frontend": {
         "name": "Alice",
-        "slack_id": "U07LSEDJXTM",
+        "slack_id": "U09V0JHFQ5P",
         "github": "alice",
     },
     "ui": {
         "name": "Alice",
-        "slack_id": "U07LSEDJXTM",
+        "slack_id": "U09V0JHFQ5P",
         "github": "alice",
     },
     "api": {
         "name": "Bob",
-        "slack_id": "U07M4E1RXBL",
+        "slack_id": "U0A02101LU8",
         "github": "bob",
     },
     "backend": {
         "name": "Bob",
-        "slack_id": "U07M4E1RXBL",
+        "slack_id": "U0A02101LU8",
         "github": "bob",
     },
     "database": {
         "name": "Bob",
-        "slack_id": "U07M4E1RXBL",
+        "slack_id": "U0A02101LU8",
         "github": "bob",
     },
     "infrastructure": {
         "name": "Bob",
-        "slack_id": "U07M4E1RXBL",
+        "slack_id": "U0A02101LU8",
         "github": "bob",
     },
 }
