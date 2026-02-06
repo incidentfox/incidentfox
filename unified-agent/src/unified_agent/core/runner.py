@@ -15,6 +15,7 @@ from typing import Any, AsyncIterator, Callable, Optional
 import litellm
 
 from .agent import Agent
+from .events import StreamEvent
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +39,6 @@ class RunResult:
     messages: list[dict] = field(default_factory=list)
     tool_calls: list[dict] = field(default_factory=list)
     status: str = "complete"  # complete, incomplete, error
-
-
-@dataclass
-class StreamEvent:
-    """Event emitted during agent execution."""
-
-    type: str  # thought, tool_start, tool_end, result, error
-    data: dict = field(default_factory=dict)
-    thread_id: str = ""
 
 
 class MaxTurnsExceeded(Exception):
