@@ -292,7 +292,7 @@ def _build_business_context() -> str:
             f'| {area} | {info["name"]} | <@{info["slack_id"]}> | {github} | {backup} |'
         )
 
-    lines.append(f"\n## Codebase Reference\n")
+    lines.append("\n## Codebase Reference\n")
     lines.append(f"**Repo:** {CODEBASE['repo']}\n")
     lines.append("| Area | Paths | Complexity | Notes | Dependencies |")
     lines.append("|------|-------|------------|-------|--------------|")
