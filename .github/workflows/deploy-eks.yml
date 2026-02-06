@@ -220,6 +220,11 @@ jobs:
             kubectl delete deployment "$RESOURCE_NAME" -n "$NS" --wait=false
           fi
 
+          # Adopt static service names that may have been created manually
+          # These are required by hardcoded Envoy configs in sandbox pods
+          patch_resource service "sandbox-router-svc"
+          patch_resource service "credential-resolver-svc"
+
       - name: Deploy with Helm (no wait)
         working-directory: charts
         run: |
