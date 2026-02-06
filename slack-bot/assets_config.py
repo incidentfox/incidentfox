@@ -35,6 +35,7 @@ INTEGRATION_LOGOS = {
     "victoriametrics": f"{ASSETS_BASE_URL}/integrations/victoria-metrics.png",
     "kloudfuse": f"{ASSETS_BASE_URL}/integrations/kloudfuse.png",
     "sentry": f"{ASSETS_BASE_URL}/integrations/sentry.png",
+    "loki": f"{ASSETS_BASE_URL}/integrations/loki.png",
     # Incident management
     "incident_io": f"{ASSETS_BASE_URL}/integrations/incident_io.png",
     "pagerduty": f"{ASSETS_BASE_URL}/integrations/pagerduty.png",
@@ -45,6 +46,7 @@ INTEGRATION_LOGOS = {
     "azure": f"{ASSETS_BASE_URL}/integrations/azure.png",
     # Source control & collaboration
     "github": f"{ASSETS_BASE_URL}/integrations/github.png",
+    "gitlab": f"{ASSETS_BASE_URL}/integrations/gitlab.png",
     "jira": f"{ASSETS_BASE_URL}/integrations/jira.png",
     "linear": f"{ASSETS_BASE_URL}/integrations/linear.png",
     "notion": f"{ASSETS_BASE_URL}/integrations/notion.png",

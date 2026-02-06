@@ -5061,6 +5061,46 @@ def handle_integration_config_submission(ack, body, client, view):
                         validation_errors.append(error_msg)
                     else:
                         config[field_id] = parsed_url
+                # Special handling for Loki URL field
+                elif integration_id == "loki" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "Loki"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
+                # Special handling for Splunk URL field
+                elif integration_id == "splunk" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "Splunk"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
+                # Special handling for Sentry URL field (self-hosted)
+                elif integration_id == "sentry" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "Sentry"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
+                # Special handling for GitLab URL field (self-hosted)
+                elif integration_id == "gitlab" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "GitLab"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
                 else:
                     config[field_id] = val
             elif field_id in existing_config:
