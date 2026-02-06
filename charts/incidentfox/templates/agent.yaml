@@ -180,32 +180,21 @@ spec:
                   name: {{ .Values.services.agent.staticTeamToken.secretName }}
                   key: {{ .Values.services.agent.staticTeamToken.secretKey }}
             {{- end }}
-            # OpenAI API key (for direct mode, sandbox mode uses credential-resolver)
+            # LLM API keys (for direct mode, sandbox mode uses credential-resolver)
             {{- if not .Values.services.agent.sandbox.enabled }}
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.agentOpenAI.secretName }}
                   key: {{ .Values.externalSecrets.contract.agentOpenAI.apiKeyKey }}
-            {{- if .Values.externalSecrets.contract.googleChat.enabled }}
-            - name: GOOGLE_CHAT_SERVICE_ACCOUNT_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecrets.contract.googleChat.secretName | quote }}
-                  key: {{ .Values.externalSecrets.contract.googleChat.serviceAccountKeyKey | quote }}
             {{- end }}
-            {{- if .Values.externalSecrets.contract.teams.enabled }}
-            - name: TEAMS_APP_ID
+            # Anthropic API key (needed for unified-agent with Claude)
+            {{- if .Values.externalSecrets.contract.sharedAnthropicKey.enabled }}
+            - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
-                  key: {{ .Values.externalSecrets.contract.teams.appIdKey | quote }}
-            - name: TEAMS_APP_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
-                  key: {{ .Values.externalSecrets.contract.teams.appPasswordKey | quote }}
-            {{- end }}
+                  name: {{ .Values.externalSecrets.contract.sharedAnthropicKey.secretName }}
+                  key: {{ .Values.externalSecrets.contract.sharedAnthropicKey.secretKey }}
             {{- end }}
           # Readiness probe (uses /health on main port since server.py doesn't have separate health server)
           readinessProbe:
