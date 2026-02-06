@@ -586,9 +586,7 @@ async def _investigate_via_sandbox(request: InvestigateRequest):
             sandbox_info = await asyncio.to_thread(manager.get_sandbox, thread_id)
 
             if sandbox_info is None:
-                yield thought_event(
-                    thread_id, "Creating isolated sandbox..."
-                ).to_sse()
+                yield thought_event(thread_id, "Creating isolated sandbox...").to_sse()
 
                 sandbox_info = await asyncio.to_thread(
                     manager.create_sandbox,
@@ -602,9 +600,7 @@ async def _investigate_via_sandbox(request: InvestigateRequest):
                     thread_id, "Waiting for sandbox to be ready..."
                 ).to_sse()
 
-                ready = await asyncio.to_thread(
-                    manager.wait_for_ready, thread_id, 120
-                )
+                ready = await asyncio.to_thread(manager.wait_for_ready, thread_id, 120)
                 if not ready:
                     yield error_event(
                         thread_id,
@@ -619,9 +615,7 @@ async def _investigate_via_sandbox(request: InvestigateRequest):
 
             # Execute in sandbox via router (streaming SSE)
             images = (
-                [img.model_dump() for img in request.images]
-                if request.images
-                else None
+                [img.model_dump() for img in request.images] if request.images else None
             )
             response = await asyncio.to_thread(
                 manager.execute_in_sandbox, sandbox_info, request.prompt, images
@@ -739,9 +733,7 @@ async def _interrupt_via_sandbox(request: InterruptRequest):
                 ).to_sse()
                 return
 
-            response = await asyncio.to_thread(
-                manager.interrupt_sandbox, sandbox_info
-            )
+            response = await asyncio.to_thread(manager.interrupt_sandbox, sandbox_info)
 
             # Forward SSE stream from sandbox
             async for chunk in _async_stream_response(response):
