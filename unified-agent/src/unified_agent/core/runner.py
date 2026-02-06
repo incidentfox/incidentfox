@@ -19,6 +19,11 @@ from .events import StreamEvent
 
 logger = logging.getLogger(__name__)
 
+# Enable Langfuse tracing if credentials are configured
+if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+    litellm.success_callback = ["langfuse"]
+    litellm.failure_callback = ["langfuse"]
+
 # Model alias mapping (short names to full LiteLLM model strings)
 MODEL_ALIASES = {
     "sonnet": "anthropic/claude-sonnet-4-20250514",

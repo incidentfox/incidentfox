@@ -437,7 +437,10 @@ static_resources:
             {"name": "LITELLM_CALLBACKS", "value": "langfuse"},
         ]
 
-        # Config-driven agents: TEAM_TOKEN enables loading config from Config Service
+        # Config-driven agents: forward Config Service URL and TEAM_TOKEN
+        config_service_url = os.getenv("CONFIG_SERVICE_URL", "")
+        if config_service_url:
+            env.append({"name": "CONFIG_SERVICE_URL", "value": config_service_url})
         if team_token:
             env.append({"name": "TEAM_TOKEN", "value": team_token})
 
