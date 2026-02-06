@@ -337,9 +337,7 @@ class ConfigServiceClient:
             token_response = self._issue_team_token(org_id, team_node_id)
             token = token_response.get("token")
             if token:
-                logger.debug(
-                    f"Issued team token for org={org_id}, team={team_node_id}"
-                )
+                logger.debug(f"Issued team token for org={org_id}, team={team_node_id}")
                 return token
             return None
         except requests.exceptions.HTTPError as e:

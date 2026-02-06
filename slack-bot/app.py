@@ -2516,9 +2516,13 @@ def handle_message(event, client, context):
             team_token = None
             try:
                 config_client = get_config_client()
-                team_token = config_client.get_team_token_for_channel(team_id, channel_id)
+                team_token = config_client.get_team_token_for_channel(
+                    team_id, channel_id
+                )
             except Exception as e:
-                logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
+                logger.warning(
+                    f"Failed to get team token for {team_id}/{channel_id}: {e}"
+                )
 
             # Build request payload
             request_payload = {
