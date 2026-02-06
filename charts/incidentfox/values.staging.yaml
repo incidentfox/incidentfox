@@ -200,6 +200,23 @@ services:
       otlp:
         enabled: false
 
+  # Sandbox Router for routing to sandbox pods
+  sandboxRouter:
+    enabled: true
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sandbox-router:staging"
+    replicas: 2
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+
+  # Sandbox Cleanup for expired sandbox garbage collection
+  sandboxCleanup:
+    enabled: true
+    image: "bitnami/kubectl:latest"
+    schedule: "*/15 * * * *"
+
   # Credential Resolver for sandbox credential injection
   credentialResolver:
     enabled: true

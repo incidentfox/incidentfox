@@ -1,0 +1,126 @@
+{{- if and .Values.services.agent.enabled .Values.services.agent.sandbox.enabled }}
+---
+# Sandbox Controller RBAC - ClusterRoles for managing Sandbox CRDs
+# These roles allow the agent to create/manage sandboxes and their associated resources.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-sandbox-controller
+  labels:
+    app: incidentfox-agent
+    app.kubernetes.io/name: sandbox-controller
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+  # Core resources needed for sandbox pods
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims", "pods", "services"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # Sandbox CRD management
+  - apiGroups: ["agents.x-k8s.io"]
+    resources: ["sandboxes"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["agents.x-k8s.io"]
+    resources: ["sandboxes/status"]
+    verbs: ["get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-sandbox-controller-extensions
+  labels:
+    app: incidentfox-agent
+    app.kubernetes.io/name: sandbox-controller-extensions
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+  # Pod management for sandbox pools
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # Sandbox CRD management
+  - apiGroups: ["agents.x-k8s.io"]
+    resources: ["sandboxes"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # Sandbox extensions (warm pools, claims, templates)
+  - apiGroups: ["extensions.agents.x-k8s.io"]
+    resources: ["sandboxclaims", "sandboxwarmpools"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["extensions.agents.x-k8s.io"]
+    resources: ["sandboxclaims/status", "sandboxwarmpools/status"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: ["extensions.agents.x-k8s.io"]
+    resources: ["sandboxtemplates"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-sandbox-service-patcher
+  labels:
+    app: incidentfox-agent
+    app.kubernetes.io/name: sandbox-service-patcher
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+  # Allow patching services for sandbox routing
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "patch", "update"]
+  # ConfigMap management for Envoy configs
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+---
+# Bind the sandbox controller role to the agent service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-sandbox-controller
+  labels:
+    app: incidentfox-agent
+    app.kubernetes.io/name: sandbox-controller
+    app.kubernetes.io/instance: {{ .Release.Name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.services.agent.serviceAccount.name }}
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-sandbox-controller
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-sandbox-controller-extensions
+  labels:
+    app: incidentfox-agent
+    app.kubernetes.io/name: sandbox-controller-extensions
+    app.kubernetes.io/instance: {{ .Release.Name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.services.agent.serviceAccount.name }}
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-sandbox-controller-extensions
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-sandbox-service-patcher
+  labels:
+    app: incidentfox-agent
+    app.kubernetes.io/name: sandbox-service-patcher
+    app.kubernetes.io/instance: {{ .Release.Name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.services.agent.serviceAccount.name }}
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-sandbox-service-patcher
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

@@ -616,6 +616,53 @@ services:
       maxReplicas: 6
       targetCPUUtilizationPercentage: 70
 
+  # Sandbox Router - Routes requests to dynamically created sandbox pods
+  # Provides stable endpoints while sandbox pods are created/destroyed.
+  sandboxRouter:
+    enabled: false  # Enable when using gVisor sandboxes
+    image: "incidentfox/sandbox-router:v1.0.0"
+    replicas: 2
+    servicePort: 8080
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
+    livenessProbe:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    hpa:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+
+  # Sandbox Cleanup - CronJob that removes expired sandbox pods
+  # Runs periodically to garbage collect sandboxes past their TTL.
+  sandboxCleanup:
+    enabled: false  # Enable when using gVisor sandboxes
+    image: "bitnami/kubectl:latest"
+    schedule: "*/15 * * * *"  # Every 15 minutes
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+    ttlSecondsAfterFinished: 3600
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+
   # Credential Resolver - JWT-secured credential injection for sandbox pods
   # This service validates sandbox JWTs and injects credentials via Envoy ext_authz.
   # Sandboxes cannot access credentials directly - enhances security.
