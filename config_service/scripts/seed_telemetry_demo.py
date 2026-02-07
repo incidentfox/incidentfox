@@ -294,7 +294,10 @@ def main() -> None:
             "agents": {
                 "planner": {
                     "enabled": True,
-                    "model": {"name": "anthropic/claude-sonnet-4-20250514", "temperature": 0.2},
+                    "model": {
+                        "name": "anthropic/claude-sonnet-4-20250514",
+                        "temperature": 0.2,
+                    },
                     "prompt": {
                         "system": TELEMETRY_SYSTEM_PROMPT,
                         "prefix": "",
