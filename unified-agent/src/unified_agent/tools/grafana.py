@@ -16,7 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 def _get_grafana_client():
-    """Get HTTP client configured for Grafana API."""
+    """Get HTTP client configured for Grafana API.
+
+    Supports two modes:
+    - Direct: GRAFANA_URL + GRAFANA_API_KEY (sends auth directly)
+    - Proxy: GRAFANA_BASE_URL points to credential-resolver proxy (handles auth)
+    """
     try:
         import httpx
     except ImportError:
@@ -25,14 +30,13 @@ def _get_grafana_client():
     url = os.getenv("GRAFANA_URL") or os.getenv("GRAFANA_BASE_URL")
     api_key = os.getenv("GRAFANA_API_KEY")
 
-    if not url or not api_key:
-        raise ValueError("GRAFANA_URL and GRAFANA_API_KEY must be set")
+    if not url:
+        raise ValueError("GRAFANA_URL or GRAFANA_BASE_URL must be set")
 
     base_url = url.rstrip("/")
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     return httpx.Client(base_url=base_url, headers=headers, timeout=30.0)
 

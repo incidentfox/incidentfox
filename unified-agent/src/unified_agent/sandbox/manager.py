@@ -546,6 +546,34 @@ static_resources:
             ]
         )
 
+        # Set integration-specific metadata env vars from CONFIGURED_INTEGRATIONS.
+        # Tools need these for URL construction (e.g., SENTRY_ORGANIZATION for API paths).
+        # API keys are NOT set here - the credential-resolver proxy handles auth.
+        try:
+            integrations = (
+                json.loads(configured_integrations) if configured_integrations else []
+            )
+        except (json.JSONDecodeError, TypeError):
+            integrations = []
+
+        for integration in integrations:
+            iid = integration.get("id", "")
+            if iid == "sentry":
+                if integration.get("organization"):
+                    env.append(
+                        {
+                            "name": "SENTRY_ORGANIZATION",
+                            "value": integration["organization"],
+                        }
+                    )
+                if integration.get("project"):
+                    env.append(
+                        {"name": "SENTRY_PROJECT", "value": integration["project"]}
+                    )
+            elif iid == "datadog":
+                if integration.get("site"):
+                    env.append({"name": "DD_SITE", "value": integration["site"]})
+
         return env
 
     def create_sandbox(
