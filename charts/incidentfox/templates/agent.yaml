@@ -131,6 +131,9 @@ spec:
             # Namespace for sandbox pods
             - name: SANDBOX_NAMESPACE
               value: {{ .Values.services.agent.sandbox.namespace | default .Values.namespace | quote }}
+            # ServiceAccount for sandbox pods (K8s tools read-only access)
+            - name: SANDBOX_SERVICE_ACCOUNT
+              value: {{ .Release.Name }}-sandbox-pod
             # gVisor runtime for enhanced isolation
             - name: USE_GVISOR
               value: {{ .Values.services.agent.sandbox.useGvisor | default "true" | quote }}

@@ -451,8 +451,6 @@ static_resources:
                 "name": "GITLAB_BASE_URL",
                 "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/gitlab",
             },
-            # Kubeconfig for K8s tools
-            {"name": "KUBECONFIG", "value": "/home/agent/.kube/config"},
             # LiteLLM observability callback (Langfuse)
             {"name": "LITELLM_CALLBACKS", "value": "langfuse"},
         ]
@@ -656,6 +654,9 @@ static_resources:
                         }
                     },
                     "spec": {
+                        "serviceAccountName": os.getenv(
+                            "SANDBOX_SERVICE_ACCOUNT", "incidentfox-sandbox-pod"
+                        ),
                         "containers": [
                             # Main agent container
                             {
