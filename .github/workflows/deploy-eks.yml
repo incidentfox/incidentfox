@@ -252,6 +252,7 @@ jobs:
           echo "Deploying with: incidentfox/${{ env.VALUES_FILE }}"
           helm upgrade --install incidentfox ./incidentfox \
             -n ${{ env.HELM_NAMESPACE }} \
+            --create-namespace \
             -f incidentfox/${{ env.VALUES_FILE }} \
             --no-hooks \
             --force \
@@ -302,16 +303,24 @@ jobs:
       - name: Wait for core services
         run: |
           echo "Waiting for core services to be ready..."
-          # Core services should start quickly (1-2 min)
-          kubectl rollout status deployment/incidentfox-config-service -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/incidentfox-agent -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+          NS="${{ env.HELM_NAMESPACE }}"
 
-          # K8s Gateway (optional - only if enabled)
-          if kubectl get deployment/incidentfox-k8s-gateway -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
-            kubectl rollout status deployment/incidentfox-k8s-gateway -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          fi
+          wait_for_deployment() {
+            local deploy=$1
+            if kubectl get deployment "$deploy" -n "$NS" &>/dev/null; then
+              echo "Waiting for $deploy..."
+              kubectl rollout status deployment/"$deploy" -n "$NS" --timeout=5m
+            else
+              echo "Skipping $deploy (not found)"
+            fi
+          }
+
+          # Core services should start quickly (1-2 min)
+          wait_for_deployment "incidentfox-config-service"
+          wait_for_deployment "incidentfox-orchestrator"
+          wait_for_deployment "incidentfox-agent"
+          wait_for_deployment "incidentfox-web-ui"
+          wait_for_deployment "incidentfox-k8s-gateway"
 
       - name: Wait for RAG services (slow startup)
         run: |

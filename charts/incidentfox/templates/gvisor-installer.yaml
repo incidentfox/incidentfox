@@ -75,31 +75,26 @@ spec:
           cp containerd-shim-runsc-v1 /host/usr/local/bin/containerd-shim-runsc-v1
           echo "runsc and shim installed"
 
-          # Configure containerd
+          # Configure containerd for gVisor runtime
+          # containerd uses /etc/containerd/config.toml (default path, no --config flag)
           echo "Configuring containerd..."
-          mkdir -p /host/etc/containerd
+          CONFIG=/host/etc/containerd/config.toml
 
-          # Remove any old/wrong gVisor runtime config (both old and new CRI paths)
-          sed -i '/\[plugins\..*containerd\.runtimes\.runsc\]/,/^\[/{ /^\[plugins/!d; /runtimes\.runsc/d; }' /host/etc/containerd/config.toml 2>/dev/null || true
-          # Also remove the old grpc.v1.cri format completely
-          sed -i '/\[plugins\."io\.containerd\.grpc\.v1\.cri"\.containerd\.runtimes\.runsc\]/,/^\[/d' /host/etc/containerd/config.toml 2>/dev/null || true
+          # Clean up any bad drop-in configs from previous installer versions
+          rm -f /host/etc/containerd/config.d/gvisor.toml 2>/dev/null || true
 
-          # Add gVisor runtime config (EKS containerd v3 format - uses cri.v1.runtime path)
-          if ! grep -q "io.containerd.cri.v1.runtime.*runtimes.runsc" /host/etc/containerd/config.toml 2>/dev/null; then
-            echo "Adding gVisor runtime configuration (containerd v3 format)..."
-            echo '' >> /host/etc/containerd/config.toml
-            echo "[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc]" >> /host/etc/containerd/config.toml
-            echo 'runtime_type = "io.containerd.runsc.v1"' >> /host/etc/containerd/config.toml
-            echo '' >> /host/etc/containerd/config.toml
-            echo "[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc.options]" >> /host/etc/containerd/config.toml
-            echo 'TypeUrl = "io.containerd.runsc.v1.options"' >> /host/etc/containerd/config.toml
+          # Add runsc runtime to containerd config (idempotent)
+          if ! grep -q 'runtimes.runsc' "$CONFIG" 2>/dev/null; then
+            echo "Adding runsc runtime to containerd config..."
+            printf '\n[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]\nruntime_type = "io.containerd.runsc.v1"\n' >> "$CONFIG"
           else
-            echo "containerd already configured for gVisor (v3 format)"
+            echo "runsc runtime already configured"
           fi
 
-          # Restart containerd using nsenter
+          # Restart containerd to pick up new runtime config
           echo "Restarting containerd..."
-          nsenter --target 1 --mount --uts --ipc --net --pid -- systemctl restart containerd || true
+          nsenter --target 1 --mount --uts --ipc --net --pid -- systemctl restart containerd
+          sleep 5
 
           echo "gVisor installation complete!"
 
