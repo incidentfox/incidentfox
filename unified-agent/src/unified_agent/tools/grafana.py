@@ -255,16 +255,16 @@ def grafana_list_datasources() -> str:
 @function_tool
 def grafana_get_alerts() -> str:
     """
-    Get all active alerts from Grafana.
+    Get all alert rules from Grafana (unified alerting API, Grafana 11+).
 
     Returns:
-        JSON with active alerts
+        JSON with alert rules
     """
     logger.info("grafana_get_alerts")
 
     try:
         with _get_grafana_client() as client:
-            response = client.get("/api/alerts")
+            response = client.get("/api/v1/provisioning/alert-rules")
             response.raise_for_status()
             alerts = response.json()
 
@@ -273,11 +273,13 @@ def grafana_get_alerts() -> str:
             "alert_count": len(alerts),
             "alerts": [
                 {
-                    "id": a.get("id"),
-                    "name": a.get("name"),
-                    "state": a.get("state"),
-                    "dashboard_uid": a.get("dashboardUid"),
-                    "panel_id": a.get("panelId"),
+                    "uid": a.get("uid"),
+                    "title": a.get("title"),
+                    "condition": a.get("condition"),
+                    "folder_uid": a.get("folderUID"),
+                    "rule_group": a.get("ruleGroup"),
+                    "no_data_state": a.get("noDataState"),
+                    "exec_err_state": a.get("execErrState"),
                 }
                 for a in alerts[:50]
             ],
