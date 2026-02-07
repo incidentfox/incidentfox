@@ -1,5 +1,7 @@
+{{- if ne (toString .Values.createNamespace) "false" }}
 apiVersion: v1
 kind: Namespace
 metadata:
   name: {{ .Values.namespace | quote }}
+{{- end }}
 
