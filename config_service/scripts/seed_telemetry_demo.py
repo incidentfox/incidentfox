@@ -224,9 +224,7 @@ def main() -> None:
 
     # Allow overriding Slack config via environment
     slack_channel_id = os.getenv("TELEMETRY_SLACK_CHANNEL_ID", "C0ADZHLL76V")
-    slack_channel_name = os.getenv(
-        "TELEMETRY_SLACK_CHANNEL_NAME", "#telemetry-demo"
-    )
+    slack_channel_name = os.getenv("TELEMETRY_SLACK_CHANNEL_NAME", "#telemetry-demo")
 
     print("Seeding telemetry-demo team...")
     print(f"  Organization: {ORG_ID}")
@@ -372,14 +370,14 @@ def main() -> None:
     print("DEMO SETUP SUMMARY")
     print("=" * 60)
     print(f"\nSlack Channel: {slack_channel_id} ({slack_channel_name})")
-    print(f"\nWorkflow:")
-    print(f"  Phase 1: Discover K8s workloads + existing Grafana dashboards")
-    print(f"  Phase 2: Identify gaps, propose dashboards, wait for approval")
-    print(f"  Phase 3: Create dashboards, verify iteratively")
-    print(f"\nAgent Config:")
-    print(f"  Model: gpt-4o (temperature=0.2)")
-    print(f"  Max turns: 50")
-    print(f"  Entrance: planner only")
+    print("\nWorkflow:")
+    print("  Phase 1: Discover K8s workloads + existing Grafana dashboards")
+    print("  Phase 2: Identify gaps, propose dashboards, wait for approval")
+    print("  Phase 3: Create dashboards, verify iteratively")
+    print("\nAgent Config:")
+    print("  Model: gpt-4o (temperature=0.2)")
+    print("  Max turns: 50")
+    print("  Entrance: planner only")
     print("\n" + "=" * 60)
     print("\nNext steps:")
     print("  1. Ensure GRAFANA_URL and GRAFANA_API_KEY (with Editor role) are set")

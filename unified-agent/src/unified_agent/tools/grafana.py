@@ -332,7 +332,10 @@ def grafana_create_dashboard(
                     panel["id"] = i + 1
                 # Ensure each panel has a datasource defaulting to Prometheus
                 if "datasource" not in panel:
-                    panel["datasource"] = {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}
+                    panel["datasource"] = {
+                        "type": "prometheus",
+                        "uid": "${DS_PROMETHEUS}",
+                    }
 
             dashboard = {
                 "title": title,
