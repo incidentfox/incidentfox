@@ -45,6 +45,10 @@ data:
               http_protocol_options:
                 allow_absolute_url: true
 
+              # Disable idle/request timeouts for long-running LLM streaming connections
+              stream_idle_timeout: 0s
+              request_timeout: 0s
+
               route_config:
                 name: proxy_routes
                 virtual_hosts:
@@ -63,12 +67,14 @@ data:
                       cluster: anthropic
                       auto_host_rewrite: true
                       timeout: 0s
+                      idle_timeout: 0s
                   - match:
                       prefix: "/api/event_logging/"
                     route:
                       cluster: anthropic
                       auto_host_rewrite: true
                       timeout: 0s
+                      idle_timeout: 0s
                   # Coralogix API paths
                   - match:
                       prefix: "/api/v1/dataprime/"
@@ -93,6 +99,7 @@ data:
                       cluster: anthropic
                       auto_host_rewrite: true
                       timeout: 0s
+                      idle_timeout: 0s
 
                 # Coralogix API (all regions)
                 - name: coralogix_us2
