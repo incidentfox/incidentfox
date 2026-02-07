@@ -26,9 +26,7 @@ ingress:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     alb.ingress.kubernetes.io/healthcheck-path: "/api/health"
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
   host: "staging.incidentfox.ai"
   tls:
     enabled: true
@@ -155,6 +153,9 @@ services:
       failureThreshold: 5
     oidc:
       enabled: false
+    encryptionKey:
+      secretName: incidentfox-encryption-key
+      secretKey: ENCRYPTION_KEY
 
   orchestrator:
     enabled: true

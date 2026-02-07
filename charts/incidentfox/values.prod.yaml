@@ -25,9 +25,7 @@ ingress:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     alb.ingress.kubernetes.io/healthcheck-path: "/api/health"
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
   host: "ui.incidentfox.ai"
   tls:
     enabled: true
@@ -120,6 +118,12 @@ externalSecrets:
       clientIdRemoteRefKey: incidentfox/prod/slack_client_id
       clientSecretRemoteRefKey: incidentfox/prod/slack_client_secret
       signingSecretRemoteRefKey: incidentfox/prod/slack_signing_secret
+    # Encryption key for config-service column encryption
+    encryptionKey:
+      enabled: true
+      secretName: incidentfox-encryption-key
+      secretKey: ENCRYPTION_KEY
+      remoteRefKey: incidentfox/prod/encryption_key
 
 services:
   configService:
@@ -149,7 +153,7 @@ services:
     oidc:
       enabled: false
     encryptionKey:
-      secretName: incidentfox-config-service
+      secretName: incidentfox-encryption-key
       secretKey: ENCRYPTION_KEY
     githubApp:
       enabled: true
