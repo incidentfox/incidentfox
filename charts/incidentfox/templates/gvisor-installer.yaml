@@ -83,10 +83,18 @@ spec:
           # Clean up any bad drop-in configs from previous installer versions
           rm -f /host/etc/containerd/config.d/gvisor.toml 2>/dev/null || true
 
+          # Detect containerd CRI plugin path (v2 uses cri.v1.runtime, v1 uses grpc.v1.cri)
+          if grep -q 'io.containerd.cri.v1.runtime' "$CONFIG" 2>/dev/null; then
+            CRI_PLUGIN='io.containerd.cri.v1.runtime'
+          else
+            CRI_PLUGIN='io.containerd.grpc.v1.cri'
+          fi
+          echo "Detected CRI plugin: $CRI_PLUGIN"
+
           # Add runsc runtime to containerd config (idempotent)
           if ! grep -q 'runtimes.runsc' "$CONFIG" 2>/dev/null; then
             echo "Adding runsc runtime to containerd config..."
-            printf '\n[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]\nruntime_type = "io.containerd.runsc.v1"\n' >> "$CONFIG"
+            printf '\n[plugins."%s".containerd.runtimes.runsc]\nruntime_type = "io.containerd.runsc.v1"\n' "$CRI_PLUGIN" >> "$CONFIG"
           else
             echo "runsc runtime already configured"
           fi

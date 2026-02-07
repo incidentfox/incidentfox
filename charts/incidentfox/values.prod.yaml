@@ -2,6 +2,7 @@
 # Production environment for customer-facing workloads
 
 namespace: incidentfox-prod
+createNamespace: false
 
 # gVisor sandbox isolation for secure code execution
 gvisor:
