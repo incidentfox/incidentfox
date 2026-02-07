@@ -10,7 +10,7 @@ import os
 from typing import Optional
 
 from ..core.agent import function_tool
-from . import register_tool
+from . import get_proxy_headers, register_tool
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,9 @@ def _get_grafana_client():
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+    else:
+        # Proxy mode: add JWT/tenant headers for credential-resolver
+        headers.update(get_proxy_headers())
 
     return httpx.Client(base_url=base_url, headers=headers, timeout=30.0)
 

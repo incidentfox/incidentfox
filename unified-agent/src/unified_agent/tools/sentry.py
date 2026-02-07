@@ -10,7 +10,7 @@ import os
 from typing import Optional
 
 from ..core.agent import function_tool
-from . import register_tool
+from . import get_proxy_headers, register_tool
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,9 @@ def _get_sentry_headers():
     headers = {"Content-Type": "application/json"}
     if config.get("auth_token"):
         headers["Authorization"] = f"Bearer {config['auth_token']}"
+    else:
+        # Proxy mode: add JWT/tenant headers for credential-resolver
+        headers.update(get_proxy_headers())
     return headers
 
 

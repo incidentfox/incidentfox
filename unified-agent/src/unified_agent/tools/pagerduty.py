@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from ..core.agent import function_tool
-from . import register_tool
+from . import get_proxy_headers, register_tool
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +30,12 @@ def _get_pagerduty_headers():
     """
     if os.getenv("PAGERDUTY_BASE_URL"):
         # Proxy mode: credential-resolver handles auth
-        return {
+        headers = {
             "Accept": "application/vnd.pagerduty+json;version=2",
             "Content-Type": "application/json",
         }
+        headers.update(get_proxy_headers())
+        return headers
 
     api_key = os.getenv("PAGERDUTY_API_KEY")
     if not api_key:

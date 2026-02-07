@@ -11,7 +11,7 @@ import os
 from typing import Optional
 
 from ..core.agent import function_tool
-from . import register_tool
+from . import get_proxy_headers, register_tool
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,15 @@ def _get_github_client():
 
     if base_url:
         # Proxy mode: credential-resolver handles auth
-        return Github(login_or_token=token or "proxy", base_url=base_url, timeout=30)
+        g = Github(login_or_token=token or "proxy", base_url=base_url, timeout=30)
+        # Inject proxy auth headers (X-Sandbox-JWT) into underlying session
+        proxy_headers = get_proxy_headers()
+        if proxy_headers:
+            try:
+                g._Github__requester._Requester__session.headers.update(proxy_headers)
+            except AttributeError:
+                logger.warning("Could not inject proxy headers into PyGithub session")
+        return g
 
     if not token:
         raise ValueError("GITHUB_TOKEN environment variable not set")
