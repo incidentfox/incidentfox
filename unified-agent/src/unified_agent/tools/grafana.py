@@ -88,7 +88,7 @@ def grafana_list_dashboards(query: str = "") -> str:
             {
                 "ok": False,
                 "error": str(e),
-                "hint": "Set GRAFANA_URL and GRAFANA_API_KEY",
+                "hint": "Set GRAFANA_BASE_URL (credential proxy) or GRAFANA_URL + GRAFANA_API_KEY (direct)",
             }
         )
     except Exception as e:
@@ -386,7 +386,7 @@ def grafana_create_dashboard(
             {
                 "ok": False,
                 "error": str(e),
-                "hint": "Set GRAFANA_URL and GRAFANA_API_KEY (with Editor role)",
+                "hint": "Set GRAFANA_BASE_URL (credential proxy) or GRAFANA_URL + GRAFANA_API_KEY (direct, Editor role)",
             }
         )
     except Exception as e:
