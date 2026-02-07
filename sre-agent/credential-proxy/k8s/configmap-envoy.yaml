@@ -56,17 +56,19 @@ data:
                   - "127.0.0.1:8001"
                   - "localhost"
                   routes:
-                  # Anthropic API paths
+                  # Anthropic API paths (timeout: 0s for long LLM completions)
                   - match:
                       prefix: "/v1/"
                     route:
                       cluster: anthropic
                       auto_host_rewrite: true
+                      timeout: 0s
                   - match:
                       prefix: "/api/event_logging/"
                     route:
                       cluster: anthropic
                       auto_host_rewrite: true
+                      timeout: 0s
                   # Coralogix API paths
                   - match:
                       prefix: "/api/v1/dataprime/"
@@ -90,6 +92,7 @@ data:
                     route:
                       cluster: anthropic
                       auto_host_rewrite: true
+                      timeout: 0s
 
                 # Coralogix API (all regions)
                 - name: coralogix_us2
