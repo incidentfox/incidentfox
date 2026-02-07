@@ -289,9 +289,112 @@ def grafana_get_alerts() -> str:
         return json.dumps({"ok": False, "error": str(e)})
 
 
+@function_tool
+def grafana_create_dashboard(
+    title: str,
+    panels: list[dict],
+    description: str = "",
+    tags: list[str] = None,
+    folder_uid: str = "",
+    overwrite: bool = False,
+) -> str:
+    """
+    Create or update a Grafana dashboard.
+
+    Args:
+        title: Dashboard title
+        panels: List of panel definitions. Each panel should have:
+            - title (str): Panel title
+            - type (str): Panel type (timeseries, stat, gauge, table, row)
+            - gridPos (dict): Position {h, w, x, y}
+            - targets (list): List of query targets with expr (PromQL) and legendFormat
+            Optional: fieldConfig, options, description
+        description: Dashboard description
+        tags: List of tags for the dashboard
+        folder_uid: Folder UID to create the dashboard in (empty for General)
+        overwrite: If true, overwrite existing dashboard with same title
+
+    Returns:
+        JSON with created dashboard uid, id, url
+    """
+    if not title:
+        return json.dumps({"ok": False, "error": "title is required"})
+    if not panels:
+        return json.dumps({"ok": False, "error": "panels list is required"})
+
+    logger.info(f"grafana_create_dashboard: title={title}, panels={len(panels)}")
+
+    try:
+        with _get_grafana_client() as client:
+            # Assign panel IDs if not set
+            for i, panel in enumerate(panels):
+                if "id" not in panel:
+                    panel["id"] = i + 1
+                # Ensure each panel has a datasource defaulting to Prometheus
+                if "datasource" not in panel:
+                    panel["datasource"] = {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}
+
+            dashboard = {
+                "title": title,
+                "description": description or "",
+                "tags": tags or [],
+                "panels": panels,
+                "timezone": "browser",
+                "refresh": "30s",
+                "time": {"from": "now-1h", "to": "now"},
+                "schemaVersion": 39,
+                "version": 0,
+                "templating": {
+                    "list": [
+                        {
+                            "name": "DS_PROMETHEUS",
+                            "type": "datasource",
+                            "query": "prometheus",
+                            "current": {},
+                        }
+                    ]
+                },
+            }
+
+            payload = {
+                "dashboard": dashboard,
+                "overwrite": overwrite,
+            }
+            if folder_uid:
+                payload["folderUid"] = folder_uid
+
+            response = client.post("/api/dashboards/db", json=payload)
+            response.raise_for_status()
+            result_data = response.json()
+
+        return json.dumps(
+            {
+                "ok": True,
+                "uid": result_data.get("uid"),
+                "id": result_data.get("id"),
+                "url": result_data.get("url"),
+                "title": title,
+                "status": result_data.get("status"),
+            }
+        )
+
+    except ValueError as e:
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set GRAFANA_URL and GRAFANA_API_KEY (with Editor role)",
+            }
+        )
+    except Exception as e:
+        logger.error(f"grafana_create_dashboard error: {e}")
+        return json.dumps({"ok": False, "error": str(e)})
+
+
 # Register tools
 register_tool("grafana_list_dashboards", grafana_list_dashboards)
 register_tool("grafana_get_dashboard", grafana_get_dashboard)
 register_tool("grafana_query_prometheus", grafana_query_prometheus)
 register_tool("grafana_list_datasources", grafana_list_datasources)
 register_tool("grafana_get_alerts", grafana_get_alerts)
+register_tool("grafana_create_dashboard", grafana_create_dashboard)

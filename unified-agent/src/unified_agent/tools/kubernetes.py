@@ -618,6 +618,133 @@ def list_namespaces() -> str:
 
 
 # =============================================================================
+# Discovery Tools
+# =============================================================================
+
+
+@function_tool
+def list_deployments(
+    namespace: str = "default",
+    label_selector: Optional[str] = None,
+) -> str:
+    """
+    List all deployments in a namespace.
+
+    Args:
+        namespace: Kubernetes namespace
+        label_selector: Label selector (e.g., "app=myapp")
+
+    Returns:
+        List of deployment summaries as JSON string
+    """
+    try:
+        start_time = time.time()
+        logger.info(
+            f"list_deployments: namespace={namespace}, label_selector={label_selector}"
+        )
+
+        _, apps_v1 = _get_k8s_client()
+        deployments = apps_v1.list_namespaced_deployment(
+            namespace=namespace,
+            label_selector=label_selector,
+            _request_timeout=K8S_API_TIMEOUT,
+        )
+
+        result = {
+            "namespace": namespace,
+            "deployment_count": len(deployments.items),
+            "deployments": [
+                {
+                    "name": d.metadata.name,
+                    "replicas": d.spec.replicas,
+                    "ready": d.status.ready_replicas or 0,
+                    "available": d.status.available_replicas or 0,
+                    "labels": d.metadata.labels or {},
+                    "age": str(d.metadata.creation_timestamp),
+                }
+                for d in deployments.items
+            ],
+        }
+
+        elapsed = time.time() - start_time
+        logger.info(
+            f"list_deployments completed: {len(deployments.items)} deployments in {elapsed*1000:.0f}ms"
+        )
+        return json.dumps(result)
+
+    except K8sConfigError as e:
+        return _make_error_response("list_deployments", str(e), namespace=namespace)
+    except Exception as e:
+        logger.error(f"list_deployments error: {e}")
+        return _make_error_response("list_deployments", str(e), namespace=namespace)
+
+
+@function_tool
+def list_services(
+    namespace: str = "default",
+    label_selector: Optional[str] = None,
+) -> str:
+    """
+    List all services in a namespace.
+
+    Args:
+        namespace: Kubernetes namespace
+        label_selector: Label selector (e.g., "app=myapp")
+
+    Returns:
+        List of service summaries as JSON string
+    """
+    try:
+        start_time = time.time()
+        logger.info(
+            f"list_services: namespace={namespace}, label_selector={label_selector}"
+        )
+
+        core_v1, _ = _get_k8s_client()
+        services = core_v1.list_namespaced_service(
+            namespace=namespace,
+            label_selector=label_selector,
+            _request_timeout=K8S_API_TIMEOUT,
+        )
+
+        result = {
+            "namespace": namespace,
+            "service_count": len(services.items),
+            "services": [
+                {
+                    "name": svc.metadata.name,
+                    "type": svc.spec.type,
+                    "cluster_ip": svc.spec.cluster_ip,
+                    "ports": [
+                        {
+                            "name": port.name,
+                            "port": port.port,
+                            "target_port": str(port.target_port),
+                            "protocol": port.protocol,
+                        }
+                        for port in (svc.spec.ports or [])
+                    ],
+                    "selector": svc.spec.selector or {},
+                    "age": str(svc.metadata.creation_timestamp),
+                }
+                for svc in services.items
+            ],
+        }
+
+        elapsed = time.time() - start_time
+        logger.info(
+            f"list_services completed: {len(services.items)} services in {elapsed*1000:.0f}ms"
+        )
+        return json.dumps(result)
+
+    except K8sConfigError as e:
+        return _make_error_response("list_services", str(e), namespace=namespace)
+    except Exception as e:
+        logger.error(f"list_services error: {e}")
+        return _make_error_response("list_services", str(e), namespace=namespace)
+
+
+# =============================================================================
 # Register Tools
 # =============================================================================
 
@@ -629,3 +756,5 @@ register_tool("describe_deployment", describe_deployment)
 register_tool("get_deployment_history", get_deployment_history)
 register_tool("describe_service", describe_service)
 register_tool("list_namespaces", list_namespaces)
+register_tool("list_deployments", list_deployments)
+register_tool("list_services", list_services)
