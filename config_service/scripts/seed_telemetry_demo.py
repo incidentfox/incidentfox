@@ -294,7 +294,7 @@ def main() -> None:
             "agents": {
                 "planner": {
                     "enabled": True,
-                    "model": {"name": "gpt-4o", "temperature": 0.2},
+                    "model": {"name": "anthropic/claude-sonnet-4-20250514", "temperature": 0.2},
                     "prompt": {
                         "system": TELEMETRY_SYSTEM_PROMPT,
                         "prefix": "",
@@ -375,7 +375,7 @@ def main() -> None:
     print("  Phase 2: Identify gaps, propose dashboards, wait for approval")
     print("  Phase 3: Create dashboards, verify iteratively")
     print("\nAgent Config:")
-    print("  Model: gpt-4o (temperature=0.2)")
+    print("  Model: anthropic/claude-sonnet-4 (temperature=0.2)")
     print("  Max turns: 50")
     print("  Entrance: planner only")
     print("\n" + "=" * 60)
