@@ -26,8 +26,8 @@ ingress:
   host: "staging.incidentfox.ai"
   tls:
     enabled: true
-    # us-west-2 ACM certificate (reuse existing)
-    certificateArn: "arn:aws:acm:us-west-2:103002841599:certificate/e79b663b-062a-45de-96a0-b4e8e50e3c4f"
+    # us-west-2 wildcard ACM certificate (*.incidentfox.ai)
+    certificateArn: "arn:aws:acm:us-west-2:103002841599:certificate/01a210b9-5f7b-4c60-a807-707d9f8d234b"
     redirectToHttps: true
   waf:
     enabled: false
@@ -35,7 +35,7 @@ ingress:
 
 externalSecrets:
   enabled: true
-  installClusterSecretStore: true
+  installClusterSecretStore: false  # Already exists in cluster
   awsRegion: "us-west-2"
   contract:
     databaseUrl:
@@ -119,7 +119,7 @@ externalSecrets:
 services:
   configService:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-config-service:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-config-service:latest"
     adminAuthMode: token
     teamAuthMode: token
     resources:
@@ -146,7 +146,7 @@ services:
 
   orchestrator:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-orchestrator:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-orchestrator:latest"
     requireAdminStar: true
     slackAgentMaxTurns: "200"
     slackAgentTimeoutSeconds: "180"
@@ -154,7 +154,7 @@ services:
   # Slack Bot - Multi-tenant Slack integration
   slackBot:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-slack-bot:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-slack-bot:latest"
     replicas: 1
     servicePort: 3000
     freeTrial:
@@ -172,7 +172,8 @@ services:
   # Unified Agent with gVisor sandbox isolation
   agent:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
+    servicePort: 8888
     serviceAccount:
       create: true
       name: incidentfox-agent
@@ -185,7 +186,7 @@ services:
     # Enable sandbox mode with gVisor isolation
     sandbox:
       enabled: true
-      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:staging"
+      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
       namespace: ""  # Same namespace as agent
       useGvisor: true
     # Enable tracing in staging for debugging
@@ -203,7 +204,7 @@ services:
   # Credential Resolver for sandbox credential injection
   credentialResolver:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-credential-resolver:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:7b5ab37"
     replicas: 2
     credentialSource: config_service
     jwtMode: strict
@@ -221,7 +222,7 @@ services:
   # Ultimate RAG - Knowledge base with graph queries, teaching, analytics
   ultimateRag:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ultimate-rag:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ultimate-rag:latest"
     replicas: 1
     serviceAccountRoleArn: "arn:aws:iam::103002841599:role/incidentfox-raptor-kb-role"
     defaultTree: "mega_ultra_v2"
@@ -237,7 +238,7 @@ services:
 
   webUi:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-web-ui:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-web-ui:latest"
     cookieSecure: true
     raptorApiUrl: "http://incidentfox-rag.incidentfox.svc.cluster.local:8000"
     oidc:
@@ -251,6 +252,6 @@ services:
   # K8s Gateway for SaaS mode (customer K8s agents)
   k8sGateway:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:latest"
     replicas: 2
     logLevel: "INFO"
