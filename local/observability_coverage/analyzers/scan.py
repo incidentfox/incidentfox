@@ -34,20 +34,24 @@ from typing import Optional
 @dataclass
 class Gap:
     """A detected observability gap."""
+
     file: str
     line: int
     end_line: Optional[int]
-    category: str        # error_handling, external_call, auth, state_transition, data_mutation
-    severity: str        # critical, high, medium
-    gap_type: str        # specific gap identifier
-    description: str     # human-readable description
-    code_snippet: str    # the problematic code
-    suggestion_hint: str # hint for LLM on what to suggest
+    category: (
+        str  # error_handling, external_call, auth, state_transition, data_mutation
+    )
+    severity: str  # critical, high, medium
+    gap_type: str  # specific gap identifier
+    description: str  # human-readable description
+    code_snippet: str  # the problematic code
+    suggestion_hint: str  # hint for LLM on what to suggest
 
 
 @dataclass
 class FileReport:
     """Analysis report for a single file."""
+
     file: str
     language: str
     lines: int
@@ -55,15 +59,16 @@ class FileReport:
     logging_library: Optional[str]
     has_metrics: bool
     has_tracing: bool
-    error_handlers: int      # total catch/except blocks
-    logged_handlers: int     # handlers that have logging
-    external_calls: int      # HTTP/DB/API calls detected
+    error_handlers: int  # total catch/except blocks
+    logged_handlers: int  # handlers that have logging
+    external_calls: int  # HTTP/DB/API calls detected
     gaps: list = field(default_factory=list)
 
 
 @dataclass
 class ScanReport:
     """Full scan report."""
+
     files_scanned: int
     total_gaps: int
     critical: int
@@ -79,75 +84,75 @@ class ScanReport:
 
 # Logging library detection
 PYTHON_LOGGING = re.compile(
-    r'(?:import\s+(?:logging|structlog)|from\s+(?:logging|structlog|\..*logging)\s+import|'
-    r'logger\s*=\s*(?:logging\.getLogger|structlog\.get_logger|get_logger))',
+    r"(?:import\s+(?:logging|structlog)|from\s+(?:logging|structlog|\..*logging)\s+import|"
+    r"logger\s*=\s*(?:logging\.getLogger|structlog\.get_logger|get_logger))",
     re.MULTILINE,
 )
 JS_LOGGING = re.compile(
     r'(?:require\s*\(\s*[\'"](?:winston|pino|bunyan|log4js)[\'"]|'
-    r'import\s+.*(?:winston|pino|bunyan|log4js)|'
-    r'const\s+logger\s*=)',
+    r"import\s+.*(?:winston|pino|bunyan|log4js)|"
+    r"const\s+logger\s*=)",
     re.MULTILINE,
 )
 GO_LOGGING = re.compile(
-    r'(?:import\s+.*(?:log/slog|zerolog|logrus|zap)|'
-    r'slog\.\w+|log\.\w+|logger\.\w+)',
+    r"(?:import\s+.*(?:log/slog|zerolog|logrus|zap)|"
+    r"slog\.\w+|log\.\w+|logger\.\w+)",
     re.MULTILINE,
 )
 
 # Logging call detection
 PYTHON_LOG_CALLS = re.compile(
-    r'(?:logger|log|logging)\.\s*(?:debug|info|warning|warn|error|critical|fatal|exception)\s*\(',
+    r"(?:logger|log|logging)\.\s*(?:debug|info|warning|warn|error|critical|fatal|exception)\s*\(",
     re.MULTILINE,
 )
 JS_LOG_CALLS = re.compile(
-    r'(?:logger|log|console)\.\s*(?:debug|info|warn|error|log|trace)\s*\(',
+    r"(?:logger|log|console)\.\s*(?:debug|info|warn|error|log|trace)\s*\(",
     re.MULTILINE,
 )
 GO_LOG_CALLS = re.compile(
-    r'(?:slog|log|logger)\.\s*(?:Debug|Info|Warn|Error|Fatal)\s*(?:f|w|Context)?\s*\(',
+    r"(?:slog|log|logger)\.\s*(?:Debug|Info|Warn|Error|Fatal)\s*(?:f|w|Context)?\s*\(",
     re.MULTILINE,
 )
 
 # Metrics detection
 METRICS_PATTERN = re.compile(
-    r'(?:prometheus|prom_client|statsd|datadog|metrics|counter|histogram|gauge)\.',
+    r"(?:prometheus|prom_client|statsd|datadog|metrics|counter|histogram|gauge)\.",
     re.IGNORECASE | re.MULTILINE,
 )
 
 # Tracing detection
 TRACING_PATTERN = re.compile(
-    r'(?:opentelemetry|otel|tracer|span|trace\.|@trace|tracing)',
+    r"(?:opentelemetry|otel|tracer|span|trace\.|@trace|tracing)",
     re.IGNORECASE | re.MULTILINE,
 )
 
 # External call detection
 PYTHON_EXTERNAL = re.compile(
-    r'(?:requests\.(?:get|post|put|delete|patch|head)|'
-    r'httpx\.(?:get|post|put|delete|patch|head|AsyncClient|Client)|'
-    r'aiohttp\.ClientSession|'
-    r'urllib\.request|'
-    r'session\.(?:execute|query|add|delete|commit|flush)|'  # SQLAlchemy
-    r'cursor\.(?:execute|fetchone|fetchall)|'  # DB cursor
-    r'redis\.\w+|'
-    r'boto3\.\w+|'
-    r'\.publish\(|\.send_message\()',  # Queue operations
+    r"(?:requests\.(?:get|post|put|delete|patch|head)|"
+    r"httpx\.(?:get|post|put|delete|patch|head|AsyncClient|Client)|"
+    r"aiohttp\.ClientSession|"
+    r"urllib\.request|"
+    r"session\.(?:execute|query|add|delete|commit|flush)|"  # SQLAlchemy
+    r"cursor\.(?:execute|fetchone|fetchall)|"  # DB cursor
+    r"redis\.\w+|"
+    r"boto3\.\w+|"
+    r"\.publish\(|\.send_message\()",  # Queue operations
     re.MULTILINE,
 )
 JS_EXTERNAL = re.compile(
-    r'(?:fetch\s*\(|axios\.\w+|\.get\s*\(|\.post\s*\(|'
-    r'supabase\.\w+|prisma\.\w+|mongoose\.\w+|'
-    r'\.query\s*\(|\.execute\s*\(|'
-    r'new\s+(?:Redis|S3Client|DynamoDBClient))',
+    r"(?:fetch\s*\(|axios\.\w+|\.get\s*\(|\.post\s*\(|"
+    r"supabase\.\w+|prisma\.\w+|mongoose\.\w+|"
+    r"\.query\s*\(|\.execute\s*\(|"
+    r"new\s+(?:Redis|S3Client|DynamoDBClient))",
     re.MULTILINE,
 )
 
 # Auth pattern detection
 AUTH_PATTERN = re.compile(
-    r'(?:authenticate|authorize|login|logout|verify_token|check_permission|'
-    r'jwt\.(?:sign|verify|decode)|bcrypt|hash_password|check_password|'
-    r'session\.create|session\.destroy|'
-    r'raise\s+(?:ValueError|AuthError|PermissionError|HTTPException).*(?:token|auth|permission|forbidden|unauthorized))',
+    r"(?:authenticate|authorize|login|logout|verify_token|check_permission|"
+    r"jwt\.(?:sign|verify|decode)|bcrypt|hash_password|check_password|"
+    r"session\.create|session\.destroy|"
+    r"raise\s+(?:ValueError|AuthError|PermissionError|HTTPException).*(?:token|auth|permission|forbidden|unauthorized))",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -155,6 +160,7 @@ AUTH_PATTERN = re.compile(
 # ============================================================================
 # Python AST Analyzer (the good stuff)
 # ============================================================================
+
 
 class PythonAnalyzer(ast.NodeVisitor):
     """AST-based analyzer for Python files."""
@@ -181,11 +187,20 @@ class PythonAnalyzer(ast.NodeVisitor):
                 func = node.func
                 # logger.error(...), log.info(...), logging.warning(...)
                 if isinstance(func, ast.Attribute) and func.attr in (
-                    "debug", "info", "warning", "warn", "error",
-                    "critical", "fatal", "exception",
+                    "debug",
+                    "info",
+                    "warning",
+                    "warn",
+                    "error",
+                    "critical",
+                    "fatal",
+                    "exception",
                 ):
                     if isinstance(func.value, ast.Name) and func.value.id in (
-                        "logger", "log", "logging", "self",
+                        "logger",
+                        "log",
+                        "logging",
+                        "self",
                     ):
                         return True
                     # self.logger.error(...)
@@ -209,7 +224,9 @@ class PythonAnalyzer(ast.NodeVisitor):
         if len(body) == 1:
             if isinstance(body[0], ast.Pass):
                 return True
-            if isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+            if isinstance(body[0], ast.Expr) and isinstance(
+                body[0].value, ast.Constant
+            ):
                 if body[0].value.value is ...:
                     return True
         return False
@@ -245,19 +262,23 @@ class PythonAnalyzer(ast.NodeVisitor):
                 gap_type = "except_no_log"
                 desc = "Exception caught but not logged"
 
-            snippet = self._get_lines(node.lineno, min(node.end_lineno or node.lineno, node.lineno + 5))
+            snippet = self._get_lines(
+                node.lineno, min(node.end_lineno or node.lineno, node.lineno + 5)
+            )
 
-            self.gaps.append(Gap(
-                file=self.filepath,
-                line=node.lineno,
-                end_line=node.end_lineno,
-                category="error_handling",
-                severity=severity,
-                gap_type=gap_type,
-                description=desc,
-                code_snippet=snippet,
-                suggestion_hint="Add structured logging with error context, exception type, and business impact",
-            ))
+            self.gaps.append(
+                Gap(
+                    file=self.filepath,
+                    line=node.lineno,
+                    end_line=node.end_lineno,
+                    category="error_handling",
+                    severity=severity,
+                    gap_type=gap_type,
+                    description=desc,
+                    code_snippet=snippet,
+                    suggestion_hint="Add structured logging with error context, exception type, and business impact",
+                )
+            )
 
         self.generic_visit(node)
 
@@ -281,40 +302,68 @@ class PythonAnalyzer(ast.NodeVisitor):
             return
 
         # Check for auth-related functions without logging
-        auth_keywords = ("auth", "login", "logout", "verify", "permission", "token", "credential")
+        auth_keywords = (
+            "auth",
+            "login",
+            "logout",
+            "verify",
+            "permission",
+            "token",
+            "credential",
+        )
         is_auth_func = any(kw in func_name.lower() for kw in auth_keywords)
 
         if is_auth_func and not self._has_logging_in_body(node.body):
-            self.gaps.append(Gap(
-                file=self.filepath,
-                line=node.lineno,
-                end_line=node.end_lineno,
-                category="auth",
-                severity="high",
-                gap_type="auth_no_logging",
-                description=f"Auth function `{func_name}` has no logging — auth failures are invisible",
-                code_snippet=self._get_lines(node.lineno, min(node.lineno + 3, node.end_lineno or node.lineno)),
-                suggestion_hint="Log auth decisions (success/failure) with user context but NOT secrets",
-            ))
+            self.gaps.append(
+                Gap(
+                    file=self.filepath,
+                    line=node.lineno,
+                    end_line=node.end_lineno,
+                    category="auth",
+                    severity="high",
+                    gap_type="auth_no_logging",
+                    description=f"Auth function `{func_name}` has no logging — auth failures are invisible",
+                    code_snippet=self._get_lines(
+                        node.lineno,
+                        min(node.lineno + 3, node.end_lineno or node.lineno),
+                    ),
+                    suggestion_hint="Log auth decisions (success/failure) with user context but NOT secrets",
+                )
+            )
 
         # Check for external calls in function body
         if PYTHON_EXTERNAL.search(func_source):
             self.external_calls += 1
             # Check if there's any timing/latency tracking
-            has_timing = any(kw in func_source for kw in ("time.monotonic", "time.time", "perf_counter", "timer", "latency", "duration"))
+            has_timing = any(
+                kw in func_source
+                for kw in (
+                    "time.monotonic",
+                    "time.time",
+                    "perf_counter",
+                    "timer",
+                    "latency",
+                    "duration",
+                )
+            )
             if not has_timing and "test" not in func_name.lower():
                 # Only flag if function has external calls but no timing
-                self.gaps.append(Gap(
-                    file=self.filepath,
-                    line=node.lineno,
-                    end_line=node.end_lineno,
-                    category="external_call",
-                    severity="medium",
-                    gap_type="external_call_no_timing",
-                    description=f"Function `{func_name}` makes external calls without latency tracking",
-                    code_snippet=self._get_lines(node.lineno, min(node.lineno + 2, node.end_lineno or node.lineno)),
-                    suggestion_hint="Add timing around external calls to track latency in logs or metrics",
-                ))
+                self.gaps.append(
+                    Gap(
+                        file=self.filepath,
+                        line=node.lineno,
+                        end_line=node.end_lineno,
+                        category="external_call",
+                        severity="medium",
+                        gap_type="external_call_no_timing",
+                        description=f"Function `{func_name}` makes external calls without latency tracking",
+                        code_snippet=self._get_lines(
+                            node.lineno,
+                            min(node.lineno + 2, node.end_lineno or node.lineno),
+                        ),
+                        suggestion_hint="Add timing around external calls to track latency in logs or metrics",
+                    )
+                )
 
     def visit_Return(self, node: ast.Return):
         """Check for silent early returns in important contexts."""
@@ -336,7 +385,10 @@ class PythonAnalyzer(ast.NodeVisitor):
 # Regex-based analyzer for JS/TS/Go/Java
 # ============================================================================
 
-def analyze_with_regex(source: str, filepath: str, language: str) -> tuple[list[Gap], int, int, int]:
+
+def analyze_with_regex(
+    source: str, filepath: str, language: str
+) -> tuple[list[Gap], int, int, int]:
     """
     Regex-based analysis for non-Python files.
     Returns (gaps, error_handlers, logged_handlers, external_calls).
@@ -359,7 +411,7 @@ def analyze_with_regex(source: str, filepath: str, language: str) -> tuple[list[
 
     # Find catch blocks and check for logging
     catch_pattern = re.compile(
-        r'(?:catch\s*\([^)]*\)|except\s+\w+|rescue\s+=>?)',
+        r"(?:catch\s*\([^)]*\)|except\s+\w+|rescue\s+=>?)",
         re.MULTILINE,
     )
 
@@ -375,37 +427,41 @@ def analyze_with_regex(source: str, filepath: str, language: str) -> tuple[list[
             logged_handlers += 1
         else:
             snippet = "\n".join(lines[line_num - 1 : min(line_num + 4, len(lines))])
-            gaps.append(Gap(
-                file=filepath,
-                line=line_num,
-                end_line=min(line_num + 5, len(lines)),
-                category="error_handling",
-                severity="high",
-                gap_type="catch_no_log",
-                description="Catch block without logging",
-                code_snippet=snippet,
-                suggestion_hint="Add structured error logging with context",
-            ))
+            gaps.append(
+                Gap(
+                    file=filepath,
+                    line=line_num,
+                    end_line=min(line_num + 5, len(lines)),
+                    category="error_handling",
+                    severity="high",
+                    gap_type="catch_no_log",
+                    description="Catch block without logging",
+                    code_snippet=snippet,
+                    suggestion_hint="Add structured error logging with context",
+                )
+            )
 
     # Count external calls
     for match in ext_pattern.finditer(source):
         external_calls += 1
 
     # Check for empty catch blocks specifically
-    empty_catch = re.compile(r'catch\s*\([^)]*\)\s*\{\s*\}', re.MULTILINE)
+    empty_catch = re.compile(r"catch\s*\([^)]*\)\s*\{\s*\}", re.MULTILINE)
     for match in empty_catch.finditer(source):
-        line_num = source[:match.start()].count("\n") + 1
-        gaps.append(Gap(
-            file=filepath,
-            line=line_num,
-            end_line=line_num + 1,
-            category="error_handling",
-            severity="critical",
-            gap_type="empty_catch",
-            description="Empty catch block — errors are completely invisible",
-            code_snippet=match.group(0),
-            suggestion_hint="Add error logging with full context",
-        ))
+        line_num = source[: match.start()].count("\n") + 1
+        gaps.append(
+            Gap(
+                file=filepath,
+                line=line_num,
+                end_line=line_num + 1,
+                category="error_handling",
+                severity="critical",
+                gap_type="empty_catch",
+                description="Empty catch block — errors are completely invisible",
+                code_snippet=match.group(0),
+                suggestion_hint="Add error logging with full context",
+            )
+        )
 
     return gaps, error_handlers, logged_handlers, external_calls
 
@@ -474,7 +530,9 @@ def analyze_file(filepath: str) -> Optional[FileReport]:
                 logging_lib = lib
                 break
     else:
-        has_logging = bool(PYTHON_LOG_CALLS.search(source) or JS_LOG_CALLS.search(source))
+        has_logging = bool(
+            PYTHON_LOG_CALLS.search(source) or JS_LOG_CALLS.search(source)
+        )
         logging_lib = None
 
     has_metrics = bool(METRICS_PATTERN.search(source))
@@ -521,11 +579,24 @@ def scan_path(target: str, max_files: int = 200) -> ScanReport:
         for root, dirs, files in os.walk(target_path):
             # Skip common non-source directories
             dirs[:] = [
-                d for d in dirs
-                if d not in (
-                    "node_modules", ".git", "__pycache__", ".venv", "venv",
-                    "dist", "build", ".next", ".cache", "vendor",
-                    ".mypy_cache", ".pytest_cache", ".tox", "egg-info",
+                d
+                for d in dirs
+                if d
+                not in (
+                    "node_modules",
+                    ".git",
+                    "__pycache__",
+                    ".venv",
+                    "venv",
+                    "dist",
+                    "build",
+                    ".next",
+                    ".cache",
+                    "vendor",
+                    ".mypy_cache",
+                    ".pytest_cache",
+                    ".tox",
+                    "egg-info",
                 )
             ]
             for fname in sorted(files):
@@ -600,7 +671,7 @@ def main():
     else:
         # Human-readable summary
         print(f"\n{'='*60}")
-        print(f"  OBSERVABILITY COVERAGE SCAN")
+        print("  OBSERVABILITY COVERAGE SCAN")
         print(f"{'='*60}")
         print(f"  Files scanned:  {report.files_scanned}")
         print(f"  Score:          {report.score}/10")
@@ -614,13 +685,17 @@ def main():
             if not file_report["gaps"]:
                 continue
             print(f"\n  {file_report['file']}")
-            print(f"  Language: {file_report['language']} | "
-                  f"Logging: {'yes (' + (file_report['logging_library'] or 'unknown') + ')' if file_report['has_logging'] else 'NO'} | "
-                  f"Handlers: {file_report['logged_handlers']}/{file_report['error_handlers']} logged")
+            print(
+                f"  Language: {file_report['language']} | "
+                f"Logging: {'yes (' + (file_report['logging_library'] or 'unknown') + ')' if file_report['has_logging'] else 'NO'} | "
+                f"Handlers: {file_report['logged_handlers']}/{file_report['error_handlers']} logged"
+            )
             print(f"  {'─'*56}")
 
             for gap in file_report["gaps"]:
-                icon = {"critical": "!!!", "high": " ! ", "medium": " . "}[gap["severity"]]
+                icon = {"critical": "!!!", "high": " ! ", "medium": " . "}[
+                    gap["severity"]
+                ]
                 print(f"  [{icon}] Line {gap['line']}: {gap['description']}")
                 # Show first 2 lines of snippet
                 snippet_lines = gap["code_snippet"].splitlines()[:2]

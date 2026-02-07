@@ -34,13 +34,14 @@ from typing import Optional
 @dataclass
 class LogPattern:
     """A single observed logging pattern."""
+
     file: str
     line: int
-    level: str              # debug, info, warning, error, critical
-    event_name: str         # first arg if string literal
-    fields: list[str]       # keyword argument names
+    level: str  # debug, info, warning, error, critical
+    event_name: str  # first arg if string literal
+    fields: list[str]  # keyword argument names
     in_error_handler: bool  # inside try/except
-    function_name: str      # enclosing function
+    function_name: str  # enclosing function
     has_correlation_id: bool
     has_user_context: bool
     has_error_context: bool
@@ -49,29 +50,53 @@ class LogPattern:
 @dataclass
 class OrgProfile:
     """Learned observability profile for an organization/codebase."""
+
     files_scanned: int
     total_log_statements: int
-    logging_libraries: dict          # library -> count of files using it
-    log_level_distribution: dict     # level -> count
-    naming_convention: str           # snake_case, camelCase, dot.notation
-    common_fields: list[str]         # most common log fields across codebase
-    common_event_prefixes: list[str] # e.g., ["mcp_", "github_", "slack_"]
-    error_handler_patterns: dict     # what good error handlers look like
-    field_consistency: dict          # field name -> how consistently it's used
-    correlation_id_usage: float      # % of log statements with correlation ID
+    logging_libraries: dict  # library -> count of files using it
+    log_level_distribution: dict  # level -> count
+    naming_convention: str  # snake_case, camelCase, dot.notation
+    common_fields: list[str]  # most common log fields across codebase
+    common_event_prefixes: list[str]  # e.g., ["mcp_", "github_", "slack_"]
+    error_handler_patterns: dict  # what good error handlers look like
+    field_consistency: dict  # field name -> how consistently it's used
+    correlation_id_usage: float  # % of log statements with correlation ID
     well_instrumented_files: list[str]  # files with best coverage (exemplars)
     poorly_instrumented_files: list[str]  # files with worst coverage
-    suggestions: list[dict]          # cross-file consistency suggestions
+    suggestions: list[dict]  # cross-file consistency suggestions
 
 
 class PatternExtractor(ast.NodeVisitor):
     """Extract logging patterns from Python AST."""
 
-    LOG_METHODS = {"debug", "info", "warning", "warn", "error", "critical", "fatal", "exception"}
+    LOG_METHODS = {
+        "debug",
+        "info",
+        "warning",
+        "warn",
+        "error",
+        "critical",
+        "fatal",
+        "exception",
+    }
     LOGGER_NAMES = {"logger", "log", "logging", "self"}
-    CORRELATION_FIELDS = {"correlation_id", "request_id", "trace_id", "span_id", "run_id"}
+    CORRELATION_FIELDS = {
+        "correlation_id",
+        "request_id",
+        "trace_id",
+        "span_id",
+        "run_id",
+    }
     USER_FIELDS = {"user_id", "userId", "user", "org_id", "team_id", "team_node_id"}
-    ERROR_FIELDS = {"error", "err", "exception", "exc_info", "error_code", "error_message", "reason"}
+    ERROR_FIELDS = {
+        "error",
+        "err",
+        "exception",
+        "exc_info",
+        "error_code",
+        "error_message",
+        "reason",
+    }
 
     def __init__(self, source: str, filepath: str):
         self.source = source
@@ -108,7 +133,10 @@ class PatternExtractor(ast.NodeVisitor):
             is_logger = False
             if isinstance(func.value, ast.Name) and func.value.id in self.LOGGER_NAMES:
                 is_logger = True
-            elif isinstance(func.value, ast.Attribute) and func.value.attr in self.LOGGER_NAMES:
+            elif (
+                isinstance(func.value, ast.Attribute)
+                and func.value.attr in self.LOGGER_NAMES
+            ):
                 is_logger = True
 
             if is_logger:
@@ -120,7 +148,11 @@ class PatternExtractor(ast.NodeVisitor):
         """Extract a logging pattern from a call node."""
         # Get event name (first positional string arg)
         event_name = ""
-        if call.args and isinstance(call.args[0], ast.Constant) and isinstance(call.args[0].value, str):
+        if (
+            call.args
+            and isinstance(call.args[0], ast.Constant)
+            and isinstance(call.args[0].value, str)
+        ):
             event_name = call.args[0].value
 
         # Get field names from keyword args
@@ -134,18 +166,20 @@ class PatternExtractor(ast.NodeVisitor):
         has_user = bool(set(fields) & self.USER_FIELDS)
         has_error = bool(set(fields) & self.ERROR_FIELDS) or has_exc_info
 
-        self.patterns.append(LogPattern(
-            file=self.filepath,
-            line=call.lineno,
-            level=level,
-            event_name=event_name,
-            fields=fields,
-            in_error_handler=self._in_except,
-            function_name=self._current_function,
-            has_correlation_id=has_correlation,
-            has_user_context=has_user,
-            has_error_context=has_error,
-        ))
+        self.patterns.append(
+            LogPattern(
+                file=self.filepath,
+                line=call.lineno,
+                level=level,
+                event_name=event_name,
+                fields=fields,
+                in_error_handler=self._in_except,
+                function_name=self._current_function,
+                has_correlation_id=has_correlation,
+                has_user_context=has_user,
+                has_error_context=has_error,
+            )
+        )
 
     def extract(self) -> list[LogPattern]:
         try:
@@ -162,7 +196,9 @@ def _detect_naming_convention(event_names: list[str]) -> str:
         return "unknown"
 
     snake = sum(1 for n in event_names if "_" in n and n == n.lower())
-    camel = sum(1 for n in event_names if any(c.isupper() for c in n[1:]) and "_" not in n)
+    camel = sum(
+        1 for n in event_names if any(c.isupper() for c in n[1:]) and "_" not in n
+    )
     dot = sum(1 for n in event_names if "." in n)
 
     counts = {"snake_case": snake, "camelCase": camel, "dot.notation": dot}
@@ -174,11 +210,13 @@ def _extract_prefixes(event_names: list[str], min_count: int = 3) -> list[str]:
     """Extract common event name prefixes."""
     prefix_counts = Counter()
     for name in event_names:
-        parts = re.split(r'[_.]', name)
+        parts = re.split(r"[_.]", name)
         if len(parts) >= 2:
             prefix_counts[parts[0] + "_"] += 1
 
-    return [prefix for prefix, count in prefix_counts.most_common(10) if count >= min_count]
+    return [
+        prefix for prefix, count in prefix_counts.most_common(10) if count >= min_count
+    ]
 
 
 def learn_patterns(target: str, max_files: int = 300) -> OrgProfile:
@@ -190,7 +228,9 @@ def learn_patterns(target: str, max_files: int = 300) -> OrgProfile:
     target_path = Path(target)
     all_patterns: list[LogPattern] = []
     file_pattern_counts: dict[str, int] = {}
-    file_handler_counts: dict[str, tuple[int, int]] = {}  # file -> (total_handlers, logged_handlers)
+    file_handler_counts: dict[str, tuple[int, int]] = (
+        {}
+    )  # file -> (total_handlers, logged_handlers)
     logging_libs: Counter = Counter()
 
     files_scanned = 0
@@ -201,11 +241,26 @@ def learn_patterns(target: str, max_files: int = 300) -> OrgProfile:
     else:
         paths = []
         for root, dirs, files in os.walk(target_path):
-            dirs[:] = [d for d in dirs if d not in (
-                "node_modules", ".git", "__pycache__", ".venv", "venv",
-                "dist", "build", ".next", ".cache", "vendor",
-                ".mypy_cache", ".pytest_cache", ".tox",
-            )]
+            dirs[:] = [
+                d
+                for d in dirs
+                if d
+                not in (
+                    "node_modules",
+                    ".git",
+                    "__pycache__",
+                    ".venv",
+                    "venv",
+                    "dist",
+                    "build",
+                    ".next",
+                    ".cache",
+                    "vendor",
+                    ".mypy_cache",
+                    ".pytest_cache",
+                    ".tox",
+                )
+            ]
             for fname in sorted(files):
                 if fname.endswith(".py") and not fname.startswith("test_"):
                     paths.append(os.path.join(root, fname))
@@ -245,7 +300,9 @@ def learn_patterns(target: str, max_files: int = 300) -> OrgProfile:
                     total_handlers += 1
                     # Check if handler has logging (simplified)
                     handler_source = ast.get_source_segment(source, node) or ""
-                    if re.search(r'logger\.\w+|log\.\w+|logging\.\w+|_log\(', handler_source):
+                    if re.search(
+                        r"logger\.\w+|log\.\w+|logging\.\w+|_log\(", handler_source
+                    ):
                         logged_handlers += 1
             file_handler_counts[fpath] = (total_handlers, logged_handlers)
         except SyntaxError:
@@ -283,9 +340,8 @@ def learn_patterns(target: str, max_files: int = 300) -> OrgProfile:
         "with_error_context": error_with_context,
         "with_correlation_id": error_with_corr,
         "common_error_fields": [
-            f for f, _ in Counter(
-                f for p in error_logs for f in p.fields
-            ).most_common(10)
+            f
+            for f, _ in Counter(f for p in error_logs for f in p.fields).most_common(10)
         ],
     }
 
@@ -329,41 +385,49 @@ def learn_patterns(target: str, max_files: int = 300) -> OrgProfile:
     # Suggestion: inconsistent correlation ID usage
     if 0.1 < corr_usage < 0.8:
         files_without_corr = [
-            p.file for p in all_patterns
+            p.file
+            for p in all_patterns
             if not p.has_correlation_id and p.level in ("error", "warning", "info")
         ]
         unique_files = list(set(files_without_corr))[:5]
-        suggestions.append({
-            "type": "correlation_id_inconsistency",
-            "severity": "high",
-            "message": f"Correlation IDs used in {corr_usage:.0%} of log statements. "
-                       f"These files are missing them: {', '.join(os.path.basename(f) for f in unique_files)}",
-            "files": unique_files,
-        })
+        suggestions.append(
+            {
+                "type": "correlation_id_inconsistency",
+                "severity": "high",
+                "message": f"Correlation IDs used in {corr_usage:.0%} of log statements. "
+                f"These files are missing them: {', '.join(os.path.basename(f) for f in unique_files)}",
+                "files": unique_files,
+            }
+        )
 
     # Suggestion: error handlers without error context
     if error_logs and error_with_context / max(len(error_logs), 1) < 0.5:
-        suggestions.append({
-            "type": "error_context_missing",
-            "severity": "high",
-            "message": f"Only {error_with_context}/{len(error_logs)} error handler logs include error context "
-                       f"(error message, error code, exc_info). "
-                       f"Best practice in this codebase: {error_handler_patterns['common_error_fields'][:5]}",
-        })
+        suggestions.append(
+            {
+                "type": "error_context_missing",
+                "severity": "high",
+                "message": f"Only {error_with_context}/{len(error_logs)} error handler logs include error context "
+                f"(error message, error code, exc_info). "
+                f"Best practice in this codebase: {error_handler_patterns['common_error_fields'][:5]}",
+            }
+        )
 
     # Suggestion: files with error handlers but no logging at all
     dark_files = [
-        fpath for fpath, (total, logged) in file_handler_counts.items()
+        fpath
+        for fpath, (total, logged) in file_handler_counts.items()
         if total > 2 and logged == 0
     ]
     if dark_files:
-        suggestions.append({
-            "type": "completely_dark_files",
-            "severity": "critical",
-            "message": f"{len(dark_files)} files have error handlers but ZERO logging. "
-                       f"These are completely blind in production.",
-            "files": dark_files[:10],
-        })
+        suggestions.append(
+            {
+                "type": "completely_dark_files",
+                "severity": "critical",
+                "message": f"{len(dark_files)} files have error handlers but ZERO logging. "
+                f"These are completely blind in production.",
+                "files": dark_files[:10],
+            }
+        )
 
     return OrgProfile(
         files_scanned=files_scanned,
@@ -396,7 +460,7 @@ def main():
         print(json.dumps(asdict(profile), indent=2, default=str))
     else:
         print(f"\n{'='*60}")
-        print(f"  OBSERVABILITY PATTERN PROFILE")
+        print("  OBSERVABILITY PATTERN PROFILE")
         print(f"{'='*60}")
         print(f"  Files scanned:      {profile.files_scanned}")
         print(f"  Log statements:     {profile.total_log_statements}")
@@ -405,19 +469,21 @@ def main():
         print(f"  Correlation ID %:   {profile.correlation_id_usage:.0%}")
         print(f"{'='*60}")
 
-        print(f"\n  Log Level Distribution:")
-        for level, count in sorted(profile.log_level_distribution.items(), key=lambda x: -x[1]):
+        print("\n  Log Level Distribution:")
+        for level, count in sorted(
+            profile.log_level_distribution.items(), key=lambda x: -x[1]
+        ):
             bar = "█" * min(count // 5, 40)
             print(f"    {level:>10}: {count:>4} {bar}")
 
-        print(f"\n  Top Fields (your conventions):")
+        print("\n  Top Fields (your conventions):")
         for f in profile.common_fields[:10]:
             consistency = profile.field_consistency.get(f, 0)
             print(f"    {f:>25}: used in {consistency:.0%} of logged files")
 
         print(f"\n  Event Prefixes: {', '.join(profile.common_event_prefixes)}")
 
-        print(f"\n  Error Handler Logging:")
+        print("\n  Error Handler Logging:")
         ehp = profile.error_handler_patterns
         print(f"    Total error logs:      {ehp['total_error_logs']}")
         print(f"    With error context:    {ehp['with_error_context']}")
@@ -425,19 +491,21 @@ def main():
         print(f"    Common error fields:   {ehp['common_error_fields'][:5]}")
 
         if profile.well_instrumented_files:
-            print(f"\n  Well-instrumented (exemplars):")
+            print("\n  Well-instrumented (exemplars):")
             for f in profile.well_instrumented_files:
                 print(f"    + {f}")
 
         if profile.poorly_instrumented_files:
-            print(f"\n  Poorly-instrumented (needs work):")
+            print("\n  Poorly-instrumented (needs work):")
             for f in profile.poorly_instrumented_files:
                 print(f"    - {f}")
 
         if profile.suggestions:
-            print(f"\n  Cross-Codebase Suggestions:")
+            print("\n  Cross-Codebase Suggestions:")
             for s in profile.suggestions:
-                icon = {"critical": "!!!", "high": " ! ", "medium": " . "}.get(s["severity"], " ? ")
+                icon = {"critical": "!!!", "high": " ! ", "medium": " . "}.get(
+                    s["severity"], " ? "
+                )
                 print(f"    [{icon}] {s['message']}")
 
         print()
