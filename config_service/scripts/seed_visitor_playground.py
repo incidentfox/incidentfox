@@ -163,7 +163,7 @@ def main() -> None:
                         },
                         # Basic agent config
                         "agent": {
-                            "model": "gpt-5.2",
+                            "model": "anthropic/claude-sonnet-4-5-20250929",
                             "max_tool_calls": 50,
                         },
                     },
