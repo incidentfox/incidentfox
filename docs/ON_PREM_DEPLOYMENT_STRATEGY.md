@@ -59,7 +59,7 @@ IncidentFox is currently architected as a cloud-native SaaS product running on A
                          │
               ┌──────────┴──────────┐
               │   OpenAI API        │
-              │   (gpt-4o/4-turbo)  │
+              │   (gpt-5.2/4-turbo)  │
               └─────────────────────┘
 ```
 
@@ -354,7 +354,7 @@ global:
   openai:
     # Connected: OpenAI API
     apiKey: sk-proj-xxxx
-    model: gpt-4o
+    model: gpt-5.2
 
     # Air-gapped: Local LLM
     # provider: vllm

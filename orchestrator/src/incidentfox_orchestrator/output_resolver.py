@@ -195,6 +195,41 @@ def resolve_output_destinations(
                 }
             )
 
+    elif trigger_source == "google_chat":
+        # Default: reply in same thread/space
+        gchat_creds = (team_config or {}).get("integrations", {}).get("google_chat", {})
+        dest: Dict[str, Any] = {
+            "type": "google_chat",
+            "space_id": trigger_payload.get("space_id"),
+            "space_name": trigger_payload.get("space_name"),
+            "thread_key": trigger_payload.get("thread_key"),
+            "user_id": trigger_payload.get("user_id"),
+            "user_display_name": trigger_payload.get("user_display_name"),
+        }
+        # Add service account credentials from team config if available
+        if gchat_creds.get("service_account_key"):
+            dest["service_account_key"] = gchat_creds["service_account_key"]
+        destinations.append(dest)
+
+    elif trigger_source == "teams":
+        # Default: reply in same conversation
+        teams_creds = (team_config or {}).get("integrations", {}).get("teams", {})
+        dest = {
+            "type": "teams",
+            "channel_id": trigger_payload.get("channel_id"),
+            "conversation_id": trigger_payload.get("conversation_id"),
+            "conversation_reference": trigger_payload.get("conversation_reference"),
+            "initial_message_id": trigger_payload.get("initial_message_id"),
+            "user_id": trigger_payload.get("user_id"),
+            "user_name": trigger_payload.get("user_name"),
+        }
+        # Add bot credentials from team config if available
+        if teams_creds.get("app_id"):
+            dest["app_id"] = teams_creds["app_id"]
+        if teams_creds.get("app_password"):
+            dest["app_password"] = teams_creds["app_password"]
+        destinations.append(dest)
+
     elif trigger_source == "api":
         # API calls: use team default destinations (NEW) or legacy default
         if default_destinations:

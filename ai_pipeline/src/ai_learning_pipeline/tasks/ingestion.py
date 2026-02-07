@@ -289,7 +289,7 @@ class KnowledgeIngestionTask:
                 conflict_check_enabled=True,
                 min_importance_to_store=0.2,
                 min_confidence_to_auto_resolve=0.8,
-                model=os.getenv("LLM_MODEL", "gpt-4o-2024-08-06"),
+                model=os.getenv("LLM_MODEL", "gpt-5.2"),
                 temperature=0.1,
             )
 

@@ -95,7 +95,7 @@ Customizations are stored as overrides on top of the template baseline.
       "description": "Orchestrates investigation by delegating to specialized agents",
       "enabled": true,
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.3,
         "max_tokens": 4000
       },
@@ -121,7 +121,7 @@ Customizations are stored as overrides on top of the template baseline.
       "description": "Deep-dive investigation with full toolkit",
       "enabled": true,
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.1,
         "max_tokens": 8000
       },

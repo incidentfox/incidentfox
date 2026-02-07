@@ -380,7 +380,7 @@ Authorization: Bearer <ADMIN_TOKEN>
       "planner": {
         "enabled": true,
         "model": {
-          "name": "gpt-4o",
+          "name": "gpt-5.2",
           "temperature": 0.3
         }
       }

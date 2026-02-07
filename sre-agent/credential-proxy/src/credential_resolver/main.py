@@ -111,6 +111,27 @@ def load_env_credentials() -> dict[str, dict]:
             "api_key": os.getenv("CLICKUP_API_TOKEN"),
             "team_id": os.getenv("CLICKUP_TEAM_ID"),
         },
+        "loki": {
+            "domain": os.getenv("LOKI_URL"),
+            "api_key": os.getenv("LOKI_TOKEN"),
+        },
+        "splunk": {
+            "domain": os.getenv("SPLUNK_URL"),
+            "api_key": os.getenv("SPLUNK_TOKEN"),
+        },
+        "sentry": {
+            "api_key": os.getenv("SENTRY_AUTH_TOKEN"),
+            "organization": os.getenv("SENTRY_ORGANIZATION"),
+            "project": os.getenv("SENTRY_PROJECT"),
+            "domain": os.getenv("SENTRY_URL"),
+        },
+        "pagerduty": {
+            "api_key": os.getenv("PAGERDUTY_API_KEY"),
+        },
+        "gitlab": {
+            "api_key": os.getenv("GITLAB_TOKEN"),
+            "domain": os.getenv("GITLAB_URL"),
+        },
     }
 
 
@@ -228,6 +249,11 @@ async def list_integrations(request: Request):
         "github",
         "honeycomb",
         "clickup",
+        "loki",
+        "splunk",
+        "sentry",
+        "pagerduty",
+        "gitlab",
     ]
 
     available = []
@@ -276,6 +302,26 @@ def is_integration_configured(integration_id: str, creds: dict | None) -> bool:
 
     # ClickUp: api_key required (team_id optional, can be auto-detected)
     if integration_id == "clickup":
+        return bool(creds.get("api_key"))
+
+    # Loki: domain required (auth optional)
+    if integration_id == "loki":
+        return bool(creds.get("domain"))
+
+    # Splunk: domain + api_key required
+    if integration_id == "splunk":
+        return bool(creds.get("domain") and creds.get("api_key"))
+
+    # Sentry: api_key + organization required (domain optional for self-hosted)
+    if integration_id == "sentry":
+        return bool(creds.get("api_key") and creds.get("organization"))
+
+    # PagerDuty: api_key required (SaaS-only at api.pagerduty.com)
+    if integration_id == "pagerduty":
+        return bool(creds.get("api_key"))
+
+    # GitLab: api_key required (domain optional, defaults to gitlab.com)
+    if integration_id == "gitlab":
         return bool(creds.get("api_key"))
 
     # Default: api_key required (coralogix, incident_io, etc.)
@@ -348,6 +394,32 @@ def get_integration_metadata(integration_id: str, creds: dict) -> dict:
         if creds.get("team_id"):
             metadata["team_id"] = creds.get("team_id")
         return metadata
+
+    elif integration_id == "loki":
+        # Return URL
+        return {"url": creds.get("domain")}
+
+    elif integration_id == "splunk":
+        # Return URL
+        return {"url": creds.get("domain")}
+
+    elif integration_id == "sentry":
+        # Return org, project, and URL (defaults to sentry.io)
+        metadata = {
+            "url": creds.get("domain") or "https://sentry.io",
+            "organization": creds.get("organization"),
+        }
+        if creds.get("project"):
+            metadata["project"] = creds.get("project")
+        return metadata
+
+    elif integration_id == "pagerduty":
+        # SaaS-only, fixed URL
+        return {"url": "https://api.pagerduty.com"}
+
+    elif integration_id == "gitlab":
+        # Return URL (defaults to gitlab.com)
+        return {"url": creds.get("domain") or "https://gitlab.com"}
 
     # Default: just indicate it's configured (incident_io, etc.)
     return {}
@@ -983,6 +1055,249 @@ async def datadog_proxy(path: str, request: Request):
 
 
 @app.api_route(
+    "/loki/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def loki_proxy(path: str, request: Request):
+    """Reverse proxy for Loki API requests.
+
+    Loki auth is optional (many internal deployments are open).
+    """
+    return await generic_proxy("loki", path, request, require_api_key=False)
+
+
+@app.api_route(
+    "/splunk/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def splunk_proxy(path: str, request: Request):
+    """Reverse proxy for Splunk API requests."""
+    return await generic_proxy("splunk", path, request)
+
+
+@app.api_route(
+    "/sentry/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def sentry_proxy(path: str, request: Request):
+    """Reverse proxy for Sentry API requests.
+
+    Defaults to sentry.io but supports self-hosted Sentry instances.
+    """
+    import httpx
+
+    logger.info(f"Sentry proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get Sentry credentials
+    creds = await get_credentials(tenant_id, team_id, "sentry")
+    if not creds or not creds.get("api_key"):
+        logger.error(f"Sentry not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Sentry integration not configured",
+        )
+
+    # Build Sentry API URL (default to sentry.io)
+    domain = creds.get("domain", "https://sentry.io")
+    if not domain.startswith(("http://", "https://")):
+        domain = f"https://{domain}"
+    target_url = f"{domain.rstrip('/')}/api/0/{path}"
+    logger.info(f"Sentry proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("sentry", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"Sentry request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="Sentry request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"Sentry request error: {e}")
+        raise HTTPException(status_code=502, detail=f"Sentry request failed: {e}")
+
+
+@app.api_route(
+    "/pagerduty/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def pagerduty_proxy(path: str, request: Request):
+    """Reverse proxy for PagerDuty API requests.
+
+    PagerDuty is SaaS-only at api.pagerduty.com.
+    """
+    import httpx
+
+    logger.info(f"PagerDuty proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get PagerDuty credentials
+    creds = await get_credentials(tenant_id, team_id, "pagerduty")
+    if not creds or not creds.get("api_key"):
+        logger.error(f"PagerDuty not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="PagerDuty integration not configured",
+        )
+
+    # Build PagerDuty API URL (always api.pagerduty.com)
+    target_url = f"https://api.pagerduty.com/{path}"
+    logger.info(f"PagerDuty proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("pagerduty", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"PagerDuty request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="PagerDuty request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"PagerDuty request error: {e}")
+        raise HTTPException(status_code=502, detail=f"PagerDuty request failed: {e}")
+
+
+@app.api_route(
+    "/gitlab/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def gitlab_proxy(path: str, request: Request):
+    """Reverse proxy for GitLab API requests.
+
+    Defaults to gitlab.com but supports self-hosted GitLab instances.
+    """
+    import httpx
+
+    logger.info(f"GitLab proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get GitLab credentials
+    creds = await get_credentials(tenant_id, team_id, "gitlab")
+    if not creds or not creds.get("api_key"):
+        logger.error(f"GitLab not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="GitLab integration not configured",
+        )
+
+    # Build GitLab API URL (default to gitlab.com)
+    domain = creds.get("domain", "https://gitlab.com")
+    if not domain.startswith(("http://", "https://")):
+        domain = f"https://{domain}"
+    target_url = f"{domain.rstrip('/')}/api/v4/{path}"
+    logger.info(f"GitLab proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("gitlab", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"GitLab request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="GitLab request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"GitLab request error: {e}")
+        raise HTTPException(status_code=502, detail=f"GitLab request failed: {e}")
+
+
+@app.api_route(
     "/check", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 )
 @app.api_route(
@@ -1200,6 +1515,33 @@ def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
         # ClickUp uses Authorization header with API token
         api_key = creds.get("api_key", "")
         return {"Authorization": api_key}
+
+    elif integration_id == "loki":
+        # Loki uses Bearer token (optional - some deployments are open)
+        api_key = creds.get("api_key", "")
+        if api_key:
+            return {"Authorization": f"Bearer {api_key}"}
+        return {}
+
+    elif integration_id == "splunk":
+        # Splunk uses Bearer token
+        api_key = creds.get("api_key", "")
+        return {"Authorization": f"Bearer {api_key}"}
+
+    elif integration_id == "sentry":
+        # Sentry uses Bearer token
+        api_key = creds.get("api_key", "")
+        return {"Authorization": f"Bearer {api_key}"}
+
+    elif integration_id == "pagerduty":
+        # PagerDuty uses Token-based auth
+        api_key = creds.get("api_key", "")
+        return {"Authorization": f"Token token={api_key}"}
+
+    elif integration_id == "gitlab":
+        # GitLab uses PRIVATE-TOKEN header
+        api_key = creds.get("api_key", "")
+        return {"PRIVATE-TOKEN": api_key}
 
     # Default: Bearer token
     api_key = creds.get("api_key", "")

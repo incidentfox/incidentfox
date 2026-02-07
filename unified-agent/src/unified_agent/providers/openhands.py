@@ -432,7 +432,7 @@ class OpenHandsProvider(LLMProvider):
     Supported models (via LiteLLM):
     - anthropic/claude-sonnet-4-20250514
     - gemini/gemini-2.0-flash
-    - openai/gpt-4o
+    - openai/gpt-5.2
     """
 
     def __init__(self, config: ProviderConfig):

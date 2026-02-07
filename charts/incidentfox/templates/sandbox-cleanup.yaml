@@ -1,0 +1,132 @@
+{{- if and .Values.services.agent.enabled .Values.services.agent.sandbox.enabled .Values.services.sandboxCleanup.enabled }}
+---
+# Sandbox Cleanup - CronJob that removes expired sandbox pods
+# Runs periodically to clean up sandboxes that have exceeded their TTL.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-sandbox-cleanup
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: sandbox-cleanup
+    app.kubernetes.io/name: sandbox-cleanup
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-sandbox-cleanup
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: sandbox-cleanup
+    app.kubernetes.io/name: sandbox-cleanup
+    app.kubernetes.io/instance: {{ .Release.Name }}
+rules:
+  - apiGroups: ["agents.x-k8s.io"]
+    resources: ["sandboxes"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-sandbox-cleanup
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: sandbox-cleanup
+    app.kubernetes.io/name: sandbox-cleanup
+    app.kubernetes.io/instance: {{ .Release.Name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-sandbox-cleanup
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-sandbox-cleanup
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-sandbox-cleanup
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: sandbox-cleanup
+    app.kubernetes.io/name: sandbox-cleanup
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  schedule: {{ .Values.services.sandboxCleanup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.services.sandboxCleanup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.services.sandboxCleanup.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: {{ .Values.services.sandboxCleanup.ttlSecondsAfterFinished }}
+      template:
+        spec:
+          serviceAccountName: {{ .Release.Name }}-sandbox-cleanup
+          restartPolicy: OnFailure
+          containers:
+            - name: cleanup
+              image: {{ .Values.services.sandboxCleanup.image }}
+              resources:
+                {{- toYaml .Values.services.sandboxCleanup.resources | nindent 16 }}
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+
+                  echo "=== Sandbox Cleanup Job Started ==="
+                  echo "Current time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                  echo "Namespace: {{ .Values.namespace }}"
+
+                  # Get current time in seconds since epoch
+                  NOW=$(date +%s)
+
+                  echo ""
+                  echo "Checking sandboxes for expired TTL..."
+
+                  DELETED=0
+                  KEPT=0
+
+                  # Get all sandboxes as JSON and process
+                  kubectl get sandbox -n {{ .Values.namespace }} -o json | \
+                  jq -r '.items[] | "\(.metadata.name) \(.spec.shutdownTime // "none")"' | \
+                  while read -r NAME SHUTDOWN; do
+                    if [ "$SHUTDOWN" = "none" ] || [ -z "$SHUTDOWN" ]; then
+                      echo "  SKIP: $NAME (no shutdownTime set)"
+                      continue
+                    fi
+
+                    # Convert shutdownTime to seconds since epoch
+                    SHUTDOWN_EPOCH=$(date -d "$SHUTDOWN" +%s 2>/dev/null || echo "0")
+
+                    if [ "$SHUTDOWN_EPOCH" = "0" ]; then
+                      echo "  WARN: $NAME (invalid shutdownTime: $SHUTDOWN)"
+                      continue
+                    fi
+
+                    if [ "$NOW" -gt "$SHUTDOWN_EPOCH" ]; then
+                      echo "  DELETE: $NAME (expired at $SHUTDOWN)"
+                      kubectl delete sandbox "$NAME" -n {{ .Values.namespace }} --wait=false || true
+
+                      # Also clean up associated ConfigMap
+                      kubectl delete configmap "envoy-config-$NAME" -n {{ .Values.namespace }} --ignore-not-found=true || true
+
+                      DELETED=$((DELETED + 1))
+                    else
+                      REMAINING=$((SHUTDOWN_EPOCH - NOW))
+                      echo "  KEEP: $NAME (expires in ${REMAINING}s)"
+                      KEPT=$((KEPT + 1))
+                    fi
+                  done
+
+                  echo ""
+                  echo "=== Cleanup Complete ==="
+                  echo "Sandboxes remaining: $(kubectl get sandbox -n {{ .Values.namespace }} --no-headers 2>/dev/null | wc -l)"
+{{- end }}

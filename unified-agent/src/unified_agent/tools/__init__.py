@@ -116,9 +116,35 @@ def _load_all_tools():
         pass
 
 
+def get_proxy_headers() -> dict[str, str]:
+    """Get auth headers for credential-resolver proxy requests.
+
+    In proxy mode (sandbox), tools route through the credential-resolver
+    which handles actual API auth. But the proxy needs JWT or tenant headers
+    to identify the tenant/team for credential lookup.
+
+    Returns headers dict to merge into tool HTTP requests.
+    """
+    import os
+
+    headers: dict[str, str] = {}
+
+    # Priority 1: JWT-based auth (production sandboxes)
+    sandbox_jwt = os.getenv("SANDBOX_JWT")
+    if sandbox_jwt:
+        headers["X-Sandbox-JWT"] = sandbox_jwt
+    else:
+        # Priority 2: Tenant headers (local dev without JWT)
+        headers["X-Tenant-Id"] = os.getenv("INCIDENTFOX_TENANT_ID") or "local"
+        headers["X-Team-Id"] = os.getenv("INCIDENTFOX_TEAM_ID") or "local"
+
+    return headers
+
+
 # Export registry functions
 __all__ = [
     "register_tool",
     "get_tool_registry",
     "get_tool",
+    "get_proxy_headers",
 ]

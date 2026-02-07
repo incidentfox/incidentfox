@@ -113,6 +113,30 @@ spec:
             - name: RECALL_BOT_IMAGE_URL
               value: {{ .Values.externalSecrets.contract.recall.botImageUrl | default "https://incidentfox-assets.s3.us-west-2.amazonaws.com/bot-avatar.png" | quote }}
             {{- end }}
+            {{- if .Values.externalSecrets.contract.googleChat.enabled }}
+            - name: GOOGLE_CHAT_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.googleChat.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.googleChat.projectIdKey | quote }}
+            - name: GOOGLE_CHAT_SERVICE_ACCOUNT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.googleChat.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.googleChat.serviceAccountKeyKey | quote }}
+            {{- end }}
+            {{- if .Values.externalSecrets.contract.teams.enabled }}
+            - name: TEAMS_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.teams.appIdKey | quote }}
+            - name: TEAMS_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.teams.appPasswordKey | quote }}
+            {{- end }}
             # Slack-triggered agent run parameters (enterprise defaults)
             - name: ORCHESTRATOR_SLACK_AGENT_MAX_TURNS
               value: {{ default 50 .Values.services.orchestrator.slack.agentMaxTurns | quote }}

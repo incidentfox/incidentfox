@@ -510,6 +510,45 @@ INTEGRATIONS: List[Dict[str, Any]] = [
             },
         ],
     },
+    {
+        "id": "gitlab",
+        "name": "GitLab",
+        "category": "scm",
+        "status": "active",
+        "icon": ":gitlab:",
+        "icon_fallback": ":fox_face:",
+        "description": "Search code, merge requests, pipelines, and deployments.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your GitLab instance\n"
+            "2. Go to *User Settings* (click your avatar) > *Access Tokens*\n"
+            "3. Click *Add new token*\n"
+            "4. Name it 'IncidentFox', set an expiration date\n"
+            "5. Select the `api` scope (full API access)\n"
+            "6. Click *Create personal access token* and copy the token\n"
+            "7. Paste the token and your GitLab URL below"
+        ),
+        "docs_url": "https://docs.gitlab.com/ee/api/rest/",
+        "context_prompt_placeholder": "e.g., 'Main repos: group/api, group/frontend. Production branch is main. CI/CD pipelines are in .gitlab-ci.yml.'",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "Personal Access Token",
+                "type": "secret",
+                "required": True,
+                "placeholder": "glpat-...",
+                "hint": "GitLab personal access token with api scope",
+            },
+            {
+                "id": "domain",
+                "name": "GitLab URL (Optional)",
+                "type": "string",
+                "required": False,
+                "placeholder": "https://gitlab.com (default) or https://gitlab.yourcompany.com",
+                "hint": "Leave blank for gitlab.com. Set this for self-hosted GitLab",
+            },
+        ],
+    },
     # COMING SOON INTEGRATIONS
     {
         "id": "cloudwatch",
@@ -524,10 +563,30 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "pagerduty",
         "name": "PagerDuty",
         "category": "incident",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":pagerduty:",
         "icon_fallback": ":bell:",
         "description": "Acknowledge alerts and pull incident context.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your PagerDuty account\n"
+            "2. Go to *Integrations* > *API Access Keys*\n"
+            "3. Click *Create New API Key*\n"
+            "4. Enter a description (e.g., 'IncidentFox') and select *Read-only* access\n"
+            "5. Click *Create Key* and copy the API key below"
+        ),
+        "docs_url": "https://developer.pagerduty.com/api-reference/",
+        "context_prompt_placeholder": "e.g., 'Our critical services are api-gateway and payment-service. SEV1 incidents require immediate response. Escalation policy is Backend On-Call.'",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "u+your-api-key",
+                "hint": "PagerDuty REST API key (read-only recommended)",
+            },
+        ],
     },
     {
         "id": "opsgenie",
@@ -551,10 +610,38 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "splunk",
         "name": "Splunk",
         "category": "observability",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":splunk:",
         "icon_fallback": ":mag:",
         "description": "Query logs and metrics from Splunk.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your Splunk instance\n"
+            "2. Go to *Settings* > *Tokens* (under Data Inputs)\n"
+            "3. Click *New Token*, give it a name (e.g., 'IncidentFox')\n"
+            "4. Set allowed indexes as needed\n"
+            "5. Copy the token and your Splunk URL below"
+        ),
+        "docs_url": "https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTprolog",
+        "context_prompt_placeholder": "e.g., 'Our logs are in the main index. Use sourcetype=access_combined for web logs. Error events have level=ERROR.'",
+        "fields": [
+            {
+                "id": "domain",
+                "name": "Splunk URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "https://mysplunk.example.com:8089 or https://input-prd-p-xxxxx.cloud.splunk.com:8089",
+                "hint": "Your Splunk REST API URL (usually port 8089)",
+            },
+            {
+                "id": "api_key",
+                "name": "Auth Token",
+                "type": "secret",
+                "required": True,
+                "placeholder": "your-splunk-token",
+                "hint": "Splunk authentication token (Bearer or HEC token)",
+            },
+        ],
     },
     {
         "id": "opensearch",
@@ -653,6 +740,42 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         ],
     },
     {
+        "id": "loki",
+        "name": "Loki",
+        "category": "observability",
+        "status": "active",
+        "icon": ":loki:",
+        "icon_fallback": ":bar_chart:",
+        "description": "Query and search logs from Grafana Loki.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Get your Loki endpoint URL (e.g., from Grafana Cloud or your self-hosted instance)\n"
+            "2. If authentication is required, get a bearer token or basic auth credentials\n"
+            "   • *Grafana Cloud*: Go to *My Account* > *Grafana Cloud* > *Loki Details* > copy the URL and generate an API key\n"
+            "3. Paste your Loki URL and credentials below"
+        ),
+        "docs_url": "https://grafana.com/docs/loki/latest/reference/loki-http-api/",
+        "context_prompt_placeholder": "e.g., 'Our logs use app=myservice label. Production logs have env=prod. Error logs are level=error.'",
+        "fields": [
+            {
+                "id": "domain",
+                "name": "Loki URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "https://logs-prod-us-central1.grafana.net or http://loki:3100",
+                "hint": "Your Loki endpoint URL",
+            },
+            {
+                "id": "api_key",
+                "name": "Bearer Token or API Key",
+                "type": "secret",
+                "required": False,
+                "placeholder": "Optional bearer token or API key",
+                "hint": "Required for Grafana Cloud. Leave blank for unauthenticated Loki",
+            },
+        ],
+    },
+    {
         "id": "dynatrace",
         "name": "Dynatrace",
         "category": "observability",
@@ -692,10 +815,55 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "sentry",
         "name": "Sentry",
         "category": "observability",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":sentry:",
         "icon_fallback": ":bug:",
         "description": "Query application errors and performance issues.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your Sentry account\n"
+            "2. Go to *Settings* > *Auth Tokens* (under Account)\n"
+            "3. Click *Create New Token*\n"
+            "4. Select these scopes: `project:read`, `issue:read`, `event:read`\n"
+            "5. Click *Create Token* and copy it\n"
+            "6. Enter the token, your organization slug, and optionally a default project below"
+        ),
+        "docs_url": "https://docs.sentry.io/api/",
+        "context_prompt_placeholder": "e.g., 'Our main project is api-backend. Critical errors are tagged with level=fatal. We use the production environment.'",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "Auth Token",
+                "type": "secret",
+                "required": True,
+                "placeholder": "sntrys_...",
+                "hint": "Sentry auth token with project:read, issue:read, and event:read scopes",
+            },
+            {
+                "id": "organization",
+                "name": "Organization Slug",
+                "type": "string",
+                "required": True,
+                "placeholder": "my-org",
+                "hint": "Your Sentry organization slug (from the URL: sentry.io/organizations/<slug>/)",
+            },
+            {
+                "id": "project",
+                "name": "Default Project (Optional)",
+                "type": "string",
+                "required": False,
+                "placeholder": "my-project",
+                "hint": "Default project slug to query (optional)",
+            },
+            {
+                "id": "domain",
+                "name": "Sentry URL (Optional)",
+                "type": "string",
+                "required": False,
+                "placeholder": "https://sentry.io (default) or https://sentry.yourcompany.com",
+                "hint": "Leave blank for sentry.io. Set this for self-hosted Sentry",
+            },
+        ],
     },
     {
         "id": "gcp",

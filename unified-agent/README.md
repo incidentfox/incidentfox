@@ -24,7 +24,7 @@ Config Service (agent definitions as JSON)
 │  │ OpenHands Provider (LiteLLM)                    │   │
 │  │ - anthropic/claude-sonnet-4-20250514            │   │
 │  │ - gemini/gemini-2.0-flash                       │   │
-│  │ - openai/gpt-4o                                 │   │
+│  │ - openai/gpt-5.2                                 │   │
 │  └─────────────────────────────────────────────────┘   │
 │                    │                                    │
 │  ┌─────────────────▼─────────────────────────────┐    │
@@ -164,8 +164,8 @@ await provider.close()
 | Anthropic | `anthropic/claude-haiku-4-20250514` | Fastest |
 | Google | `gemini/gemini-2.0-flash` | Fast, cost-effective |
 | Google | `gemini/gemini-1.5-pro` | Better reasoning |
-| OpenAI | `openai/gpt-4o` | Good balance |
-| OpenAI | `openai/gpt-4o-mini` | Cost-effective |
+| OpenAI | `openai/gpt-5.2` | Good balance |
+| OpenAI | `openai/gpt-5.2-mini` | Cost-effective |
 
 ## Built-in Tools
 

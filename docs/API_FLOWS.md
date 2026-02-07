@@ -474,7 +474,7 @@ ORDER BY
     "node_id": "extend",
     "config_json": {
       "agents": {
-        "planner": {"model": "gpt-4o", "tools": [...]}
+        "planner": {"model": "gpt-5.2", "tools": [...]}
       },
       "integrations": {...}
     }
@@ -541,7 +541,7 @@ effective = deep_merge_dicts([
 # Base defaults
 {
   "agents": {
-    "planner": {"model": "gpt-4o", "tools": ["tool1", "tool2"]}
+    "planner": {"model": "gpt-5.2", "tools": ["tool1", "tool2"]}
   }
 }
 
@@ -567,7 +567,7 @@ effective = deep_merge_dicts([
 # EFFECTIVE CONFIG (merged)
 {
   "agents": {
-    "planner": {"model": "gpt-4o", "tools": ["tool1", "tool2"]}
+    "planner": {"model": "gpt-5.2", "tools": ["tool1", "tool2"]}
   },
   "integrations": {
     "slack": {"enabled": true}
@@ -614,7 +614,7 @@ effective['available_tools'] = enabled_tools
   "team_node_id": "extend-sre",
   "agents": {
     "planner": {
-      "model": "gpt-4o",
+      "model": "gpt-5.2",
       "prompt": {
         "system": "You are an expert SRE...",
         "instructions": [...]

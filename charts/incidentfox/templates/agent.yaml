@@ -91,11 +91,12 @@ spec:
         - name: agent
           image: {{ required "services.agent.image is required" .Values.services.agent.image }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          # Run unified-agent sandbox server (FastAPI on port 8888 or configured port)
+          command: ["python", "-m", "unified_agent.sandbox.server"]
+          workingDir: /app
           ports:
             - containerPort: {{ .Values.services.agent.servicePort }}
               name: http
-            - containerPort: {{ .Values.services.agent.healthServer.port | default 8081 }}
-              name: health
           resources:
 {{ toYaml .Values.services.agent.resources | indent 12 }}
           env:
@@ -130,11 +131,17 @@ spec:
             # Namespace for sandbox pods
             - name: SANDBOX_NAMESPACE
               value: {{ .Values.services.agent.sandbox.namespace | default .Values.namespace | quote }}
+            # ServiceAccount for sandbox pods (K8s tools read-only access)
+            - name: SANDBOX_SERVICE_ACCOUNT
+              value: {{ .Release.Name }}-sandbox-pod
             # gVisor runtime for enhanced isolation
             - name: USE_GVISOR
               value: {{ .Values.services.agent.sandbox.useGvisor | default "true" | quote }}
             # Credential resolver namespace (for Envoy ext_authz)
             - name: CREDENTIAL_RESOLVER_NAMESPACE
+              value: {{ .Values.namespace | quote }}
+            # Router namespace (for sandbox-router service)
+            - name: ROUTER_NAMESPACE
               value: {{ .Values.namespace | quote }}
             # JWT secret for signing sandbox tokens
             - name: JWT_SECRET
@@ -176,7 +183,7 @@ spec:
                   name: {{ .Values.services.agent.staticTeamToken.secretName }}
                   key: {{ .Values.services.agent.staticTeamToken.secretKey }}
             {{- end }}
-            # OpenAI API key (for direct mode, sandbox mode uses credential-resolver)
+            # LLM API keys (for direct mode, sandbox mode uses credential-resolver)
             {{- if not .Values.services.agent.sandbox.enabled }}
             - name: OPENAI_API_KEY
               valueFrom:
@@ -184,11 +191,19 @@ spec:
                   name: {{ .Values.externalSecrets.contract.agentOpenAI.secretName }}
                   key: {{ .Values.externalSecrets.contract.agentOpenAI.apiKeyKey }}
             {{- end }}
-          # Readiness probe
+            # Anthropic API key (needed for unified-agent with Claude)
+            {{- if .Values.externalSecrets.contract.sharedAnthropicKey.enabled }}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.sharedAnthropicKey.secretName }}
+                  key: {{ .Values.externalSecrets.contract.sharedAnthropicKey.secretKey }}
+            {{- end }}
+          # Readiness probe (uses /health on main port since server.py doesn't have separate health server)
           readinessProbe:
             httpGet:
-              path: /readyz
-              port: {{ .Values.services.agent.healthServer.port | default 8081 }}
+              path: {{ .Values.services.agent.readinessProbe.path | default "/health" }}
+              port: {{ .Values.services.agent.servicePort }}
             initialDelaySeconds: {{ .Values.services.agent.readinessProbe.initialDelaySeconds | default 5 }}
             periodSeconds: {{ .Values.services.agent.readinessProbe.periodSeconds | default 10 }}
             timeoutSeconds: {{ .Values.services.agent.readinessProbe.timeoutSeconds | default 5 }}
@@ -197,8 +212,8 @@ spec:
           {{- if .Values.services.agent.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
-              path: /livez
-              port: {{ .Values.services.agent.healthServer.port | default 8081 }}
+              path: {{ .Values.services.agent.livenessProbe.path | default "/health" }}
+              port: {{ .Values.services.agent.servicePort }}
             initialDelaySeconds: {{ .Values.services.agent.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.services.agent.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.services.agent.livenessProbe.timeoutSeconds | default 5 }}

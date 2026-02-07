@@ -23,6 +23,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -42,6 +43,7 @@ from ..core.events import (
     tool_start_event,
 )
 from ..core.runner import Runner, RunResult
+from .manager import SandboxExecutionError, SandboxManager
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +99,45 @@ _session_lock = asyncio.Lock()
 # Cached config and agents (rebuilt on config reload)
 _cached_config: Optional[Config] = None
 _cached_agents: Optional[Dict[str, Agent]] = None
+
+# Sandbox manager (lazy initialized, used when USE_GVISOR=true)
+_sandbox_manager: Optional[SandboxManager] = None
+
+
+def _is_sandbox_mode() -> bool:
+    """Check if running in sandbox manager mode (creates gVisor pods)."""
+    return os.getenv("USE_GVISOR", "false").lower() == "true"
+
+
+def _get_sandbox_manager() -> SandboxManager:
+    """Get or create the sandbox manager."""
+    global _sandbox_manager
+    if _sandbox_manager is None:
+        namespace = os.getenv("SANDBOX_NAMESPACE") or os.getenv("NAMESPACE", "default")
+        image = os.getenv("SANDBOX_IMAGE") or os.getenv("UNIFIED_AGENT_IMAGE")
+        _sandbox_manager = SandboxManager(namespace=namespace, image=image)
+    return _sandbox_manager
+
+
+async def _async_stream_response(response):
+    """Convert sync streaming response to async generator.
+
+    Reads chunks from a synchronous requests.Response in a thread pool
+    to avoid blocking the async event loop.
+    """
+
+    def _get_next(it):
+        try:
+            return next(it)
+        except StopIteration:
+            return None
+
+    it = response.iter_content(chunk_size=None)
+    while True:
+        chunk = await asyncio.to_thread(_get_next, it)
+        if chunk is None:
+            break
+        yield chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk
 
 
 def _get_effective_config() -> Dict[str, Any]:
@@ -272,6 +313,25 @@ class ExecuteRequest(BaseModel):
     max_turns: Optional[int] = None
 
 
+class InvestigateRequest(BaseModel):
+    """
+    Request to investigate - compatibility endpoint for slack-bot.
+
+    This model accepts the legacy /investigate request format used by slack-bot,
+    which includes team_token in the request body instead of environment.
+    """
+
+    prompt: str
+    thread_id: Optional[str] = None
+    tenant_id: Optional[str] = None  # Slack team_id for credential lookup
+    team_id: Optional[str] = None  # Slack team_id
+    team_token: Optional[str] = None  # Team token for config loading
+    images: Optional[List[ImageData]] = None
+    file_attachments: Optional[List[Dict[str, Any]]] = (
+        None  # File metadata (not used yet)
+    )
+
+
 class InterruptRequest(BaseModel):
     """Request to interrupt the investigation."""
 
@@ -298,6 +358,7 @@ async def health():
         "status": "healthy",
         "service": "unified-agent-sandbox",
         "version": "2.0.0",
+        "mode": "sandbox-manager" if _is_sandbox_mode() else "direct",
         "active_sessions": len(_sessions),
         "model": config.llm_model,
         "tenant_id": config.tenant_id,
@@ -472,6 +533,114 @@ async def execute(request: ExecuteRequest):
     )
 
 
+@app.post("/investigate")
+async def investigate(request: InvestigateRequest):
+    """
+    Investigation endpoint - routes to sandbox or direct execution.
+
+    In sandbox mode (USE_GVISOR=true):
+      - Creates/reuses gVisor sandbox pod via SandboxManager
+      - Routes request through sandbox-router
+      - Credentials injected via Envoy sidecar + credential-resolver
+
+    In direct mode:
+      - Executes agent locally (no isolation)
+    """
+    if _is_sandbox_mode():
+        return await _investigate_via_sandbox(request)
+    return await _investigate_direct(request)
+
+
+async def _investigate_direct(request: InvestigateRequest):
+    """Execute investigation directly in this process (no sandbox)."""
+    # Set team_token as env var if provided (for config service auth)
+    if request.team_token:
+        os.environ["TEAM_TOKEN"] = request.team_token
+        logger.info(f"Set TEAM_TOKEN from request for thread {request.thread_id}")
+
+        # Reload config to pick up new team token
+        global _cached_config, _cached_agents
+        _cached_config = None
+        _cached_agents = None
+
+    # Forward to execute with compatible fields
+    execute_request = ExecuteRequest(
+        prompt=request.prompt,
+        thread_id=request.thread_id,
+        images=request.images,
+    )
+    return await execute(execute_request)
+
+
+async def _investigate_via_sandbox(request: InvestigateRequest):
+    """Execute investigation in an isolated gVisor sandbox pod."""
+    thread_id = request.thread_id or f"inv-{int(time.time())}"
+    tenant_id = request.tenant_id or os.getenv("INCIDENTFOX_TENANT_ID", "default")
+    team_id = request.team_id or os.getenv("INCIDENTFOX_TEAM_ID", "default")
+
+    manager = _get_sandbox_manager()
+
+    async def stream():
+        try:
+            # Check for existing sandbox for this thread
+            sandbox_info = await asyncio.to_thread(manager.get_sandbox, thread_id)
+
+            if sandbox_info is None:
+                yield thought_event(thread_id, "Creating isolated sandbox...").to_sse()
+
+                sandbox_info = await asyncio.to_thread(
+                    manager.create_sandbox,
+                    thread_id=thread_id,
+                    tenant_id=tenant_id,
+                    team_id=team_id,
+                    team_token=request.team_token,
+                )
+
+                yield thought_event(
+                    thread_id, "Waiting for sandbox to be ready..."
+                ).to_sse()
+
+                ready = await asyncio.to_thread(manager.wait_for_ready, thread_id, 120)
+                if not ready:
+                    yield error_event(
+                        thread_id,
+                        "Sandbox failed to start within timeout",
+                        recoverable=False,
+                    ).to_sse()
+                    return
+
+                yield thought_event(
+                    thread_id, "Sandbox ready. Starting investigation..."
+                ).to_sse()
+
+            # Execute in sandbox via router (streaming SSE)
+            images = (
+                [img.model_dump() for img in request.images] if request.images else None
+            )
+            response = await asyncio.to_thread(
+                manager.execute_in_sandbox, sandbox_info, request.prompt, images
+            )
+
+            # Forward SSE stream from sandbox pod
+            async for chunk in _async_stream_response(response):
+                yield chunk
+
+        except SandboxExecutionError as e:
+            logger.error(f"Sandbox execution failed: {e}", exc_info=True)
+            yield error_event(thread_id, str(e), recoverable=False).to_sse()
+        except Exception as e:
+            logger.error(f"Sandbox error: {e}", exc_info=True)
+            yield error_event(
+                thread_id, f"Sandbox error: {e}", recoverable=False
+            ).to_sse()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 def _convert_runner_event(thread_id: str, event: dict) -> StreamEvent:
     """Convert Runner event dict to StreamEvent."""
     event_type = event.get("type", "unknown")
@@ -505,6 +674,13 @@ async def interrupt(request: InterruptRequest):
 
     After interrupt, new messages can be sent via execute endpoint.
     """
+    if _is_sandbox_mode():
+        return await _interrupt_via_sandbox(request)
+    return await _interrupt_direct(request)
+
+
+async def _interrupt_direct(request: InterruptRequest):
+    """Interrupt a local execution."""
     thread_id = request.thread_id
 
     async def stream():
@@ -529,6 +705,42 @@ async def interrupt(request: InterruptRequest):
             ).to_sse()
 
         except Exception as e:
+            yield error_event(
+                thread_id, f"Interrupt failed: {e}", recoverable=False
+            ).to_sse()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+async def _interrupt_via_sandbox(request: InterruptRequest):
+    """Interrupt an execution running in a sandbox pod."""
+    thread_id = request.thread_id
+    manager = _get_sandbox_manager()
+
+    async def stream():
+        try:
+            sandbox_info = await asyncio.to_thread(manager.get_sandbox, thread_id)
+            if sandbox_info is None:
+                yield error_event(
+                    thread_id, "No active sandbox found", recoverable=False
+                ).to_sse()
+                return
+
+            response = await asyncio.to_thread(manager.interrupt_sandbox, sandbox_info)
+
+            # Forward SSE stream from sandbox
+            async for chunk in _async_stream_response(response):
+                yield chunk
+
+        except Exception as e:
+            logger.error(f"Sandbox interrupt failed: {e}", exc_info=True)
             yield error_event(
                 thread_id, f"Interrupt failed: {e}", recoverable=False
             ).to_sse()
@@ -572,18 +784,25 @@ async def cleanup_session(thread_id: str):
 async def startup_event():
     """Initialize on startup."""
     config = get_config()
+    sandbox_mode = _is_sandbox_mode()
     logger.info("Sandbox server starting...")
+    logger.info(f"  Mode: {'sandbox-manager' if sandbox_mode else 'direct'}")
     logger.info(f"  Tenant: {config.tenant_id}")
     logger.info(f"  Team: {config.team_id}")
     logger.info(f"  Model: {config.llm_model}")
     logger.info(f"  Config loaded: {config.team_config is not None}")
 
-    # Pre-build agents
-    try:
-        agents = _build_agents_from_config()
-        logger.info(f"  Agents available: {list(agents.keys())}")
-    except Exception as e:
-        logger.warning(f"  Failed to pre-build agents: {e}")
+    if sandbox_mode:
+        logger.info(f"  Sandbox image: {os.getenv('SANDBOX_IMAGE', 'not set')}")
+        logger.info(f"  Sandbox namespace: {os.getenv('SANDBOX_NAMESPACE', 'not set')}")
+        logger.info(f"  gVisor: {os.getenv('USE_GVISOR', 'false')}")
+    else:
+        # Pre-build agents only in direct mode (sandbox pods build their own)
+        try:
+            agents = _build_agents_from_config()
+            logger.info(f"  Agents available: {list(agents.keys())}")
+        except Exception as e:
+            logger.warning(f"  Failed to pre-build agents: {e}")
 
 
 @app.on_event("shutdown")

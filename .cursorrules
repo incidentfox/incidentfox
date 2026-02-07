@@ -278,7 +278,7 @@ Agents are **dynamically constructed from JSON** - no code changes needed!
    {
      "agents": {
        "security_agent": {
-         "model": "gpt-4o",
+         "model": "gpt-5.2",
          "prompt": {
            "system": "You are an expert security analyst...",
            "instructions": [

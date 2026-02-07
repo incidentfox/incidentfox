@@ -19,6 +19,9 @@ dependencies = [
   "kubernetes>=29.0.0",  # For K8s CronJob and Deployment management
   "slack-bolt>=1.18.0",  # Slack Bolt SDK for webhook handling
   "slack-sdk>=3.27.0",   # Slack SDK for API calls
+  "google-auth>=2.37.0",  # Google Chat JWT verification
+  "botbuilder-core>=4.15.0",  # MS Teams Bot Framework
+  "botbuilder-schema>=4.15.0",  # MS Teams message types
 ]
 
 [project.optional-dependencies]

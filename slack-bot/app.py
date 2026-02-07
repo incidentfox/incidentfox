@@ -82,6 +82,9 @@ SLACK_SCOPES = [
 # Check if OAuth is configured (for public distribution)
 oauth_enabled = bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET)
 
+# Base URL for Slack OAuth redirects (configurable for staging/prod)
+SLACK_BASE_URL = os.environ.get("SLACK_BASE_URL", "https://slack.incidentfox.ai")
+
 if oauth_enabled:
     # Multi-workspace OAuth mode with database-backed installation store
     # This enables horizontal scaling (multiple replicas) and persistence
@@ -96,7 +99,7 @@ if oauth_enabled:
         state_store=FileOAuthStateStore(
             expiration_seconds=600, base_dir="/tmp/slack-oauth-states"
         ),
-        redirect_uri="https://slack.incidentfox.ai/slack/oauth_redirect",
+        redirect_uri=f"{SLACK_BASE_URL}/slack/oauth_redirect",
     )
     app = App(
         signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
@@ -1760,12 +1763,14 @@ def handle_mention(event, say, client, context):
     try:
         # Get team token for config-driven agents
         # This enables the agent to load team config (agent definitions, tools, LLM settings)
+        # Uses channel-based routing: checks if this channel maps to a specific team,
+        # falls back to workspace-based routing ("default" team) if no mapping exists.
         team_token = None
         try:
             config_client = get_config_client()
-            team_token = config_client.get_team_token(team_id)
+            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
-            logger.warning(f"Failed to get team token for {team_id}: {e}")
+            logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
 
         # Build request payload with prompt and optional images
         request_payload = {
@@ -2173,12 +2178,13 @@ Use all available tools to gather context about this issue."""
 
     try:
         # Get team token for config-driven agents
+        # Uses channel-based routing with fallback to workspace-based routing
         team_token = None
         try:
             config_client = get_config_client()
-            team_token = config_client.get_team_token(team_id)
+            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
-            logger.warning(f"Failed to get team token for {team_id}: {e}")
+            logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
 
         # Call sre-agent to investigate
         request_payload = {
@@ -2506,12 +2512,17 @@ def handle_message(event, client, context):
 
         try:
             # Get team token for config-driven agents
+            # For DMs, channel routing won't match, falls back to workspace-based routing
             team_token = None
             try:
                 config_client = get_config_client()
-                team_token = config_client.get_team_token(team_id)
+                team_token = config_client.get_team_token_for_channel(
+                    team_id, channel_id
+                )
             except Exception as e:
-                logger.warning(f"Failed to get team token for {team_id}: {e}")
+                logger.warning(
+                    f"Failed to get team token for {team_id}/{channel_id}: {e}"
+                )
 
             # Build request payload
             request_payload = {
@@ -3019,12 +3030,13 @@ def handle_nudge_invoke(ack, body, client, context, respond):
     # Call sre-agent with SSE streaming
     try:
         # Get team token for config-driven agents
+        # Uses channel-based routing with fallback to workspace-based routing
         team_token = None
         try:
             config_client = get_config_client()
-            team_token = config_client.get_team_token(team_id)
+            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
-            logger.warning(f"Failed to get team token for {team_id}: {e}")
+            logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
 
         request_payload = {
             "prompt": enriched_prompt,
@@ -3212,12 +3224,13 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
 
     try:
         # Get team token for config-driven agents
+        # Uses channel-based routing with fallback to workspace-based routing
         team_token = None
         try:
             config_client = get_config_client()
-            team_token = config_client.get_team_token(team_id)
+            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
-            logger.warning(f"Failed to get team token for {team_id}: {e}")
+            logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
 
         # Call sre-agent to investigate
         request_payload = {
@@ -5043,6 +5056,46 @@ def handle_integration_config_submission(ack, body, client, view):
                     onboarding = get_onboarding_modules()
                     is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
                         val, "Honeycomb"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
+                # Special handling for Loki URL field
+                elif integration_id == "loki" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "Loki"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
+                # Special handling for Splunk URL field
+                elif integration_id == "splunk" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "Splunk"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
+                # Special handling for Sentry URL field (self-hosted)
+                elif integration_id == "sentry" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "Sentry"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
+                # Special handling for GitLab URL field (self-hosted)
+                elif integration_id == "gitlab" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "GitLab"
                     )
                     if not is_valid:
                         validation_errors.append(error_msg)

@@ -4,6 +4,12 @@
 
 namespace: incidentfox
 
+# gVisor sandbox isolation for secure code execution
+gvisor:
+  enabled: true
+  installerImage: "alpine:latest"
+  pauseImage: "gcr.io/google-containers/pause:3.2"
+
 global:
   imagePullPolicy: Always
   configService:
@@ -49,14 +55,14 @@ externalSecrets:
       adminTokenKey: ADMIN_TOKEN
       tokenPepperKey: TOKEN_PEPPER
       impersonationJwtSecretKey: IMPERSONATION_JWT_SECRET
-      adminTokenRemoteRefKey: incidentfox/staging/config_service_admin_token
-      tokenPepperRemoteRefKey: incidentfox/staging/config_service_token_pepper
-      impersonationJwtSecretRemoteRefKey: incidentfox/staging/config_service_impersonation_jwt_secret
+      adminTokenRemoteRefKey: incidentfox-config-service/admin_token
+      tokenPepperRemoteRefKey: incidentfox-config-service/token_pepper
+      impersonationJwtSecretRemoteRefKey: incidentfox-config-service/impersonation_jwt_secret
     agentOpenAI:
       enabled: true
       secretName: incidentfox-openai
       apiKeyKey: api_key
-      apiKeyRemoteRefKey: incidentfox/staging/openai_api_key
+      apiKeyRemoteRefKey: incidentfox/prod/openai_api_key  # Using prod key for staging
     webUiOidc:
       enabled: false
     slack:
@@ -65,7 +71,7 @@ externalSecrets:
       signingSecretKey: signing_secret
       botTokenKey: bot_token
       signingSecretRemoteRefKey: incidentfox/staging/slack_signing_secret
-      botTokenRemoteRefKey: incidentfox/staging/slack_bot_token
+      botTokenRemoteRefKey: incidentfox/prod/slack_bot_token  # Using prod token for staging
     github:
       enabled: true
       secretName: incidentfox-github
@@ -85,7 +91,7 @@ externalSecrets:
       enabled: true
       secretName: incidentfox-orchestrator-internal
       internalTokenKey: internal_token
-      internalTokenRemoteRefKey: incidentfox/staging/orchestrator_internal_token
+      internalTokenRemoteRefKey: incidentfox/prod/orchestrator_internal_token  # Using prod token for staging
     langfuse:
       enabled: true
       secretName: incidentfox-langfuse
@@ -115,6 +121,12 @@ externalSecrets:
       clientIdRemoteRefKey: incidentfox/staging/slack_client_id
       clientSecretRemoteRefKey: incidentfox/staging/slack_client_secret
       signingSecretRemoteRefKey: incidentfox/staging/slack_signing_secret
+    # Encryption key for config-service column encryption
+    encryptionKey:
+      enabled: true
+      secretName: incidentfox-encryption-key
+      secretKey: ENCRYPTION_KEY
+      remoteRefKey: incidentfox/staging/encryption_key
 
 services:
   configService:
@@ -157,6 +169,7 @@ services:
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-slack-bot:latest"
     replicas: 1
     servicePort: 3000
+    baseUrl: "https://slack-staging.incidentfox.ai"  # OAuth redirect base URL (staging)
     freeTrial:
       enabled: true
       days: 7
@@ -173,7 +186,7 @@ services:
   agent:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
-    servicePort: 8888
+    servicePort: 8888  # unified-agent sandbox server listens on 8888
     serviceAccount:
       create: true
       name: incidentfox-agent
@@ -201,10 +214,27 @@ services:
       otlp:
         enabled: false
 
+  # Sandbox Router for routing to sandbox pods
+  sandboxRouter:
+    enabled: true
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/sandbox-router:latest"
+    replicas: 2
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+
+  # Sandbox Cleanup for expired sandbox garbage collection
+  sandboxCleanup:
+    enabled: true
+    image: "bitnami/kubectl:latest"
+    schedule: "*/15 * * * *"
+
   # Credential Resolver for sandbox credential injection
   credentialResolver:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:7b5ab37"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:fec4ecc"
     replicas: 2
     credentialSource: config_service
     jwtMode: strict

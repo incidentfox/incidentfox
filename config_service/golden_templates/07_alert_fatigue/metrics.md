@@ -2,7 +2,7 @@
 
 **Template:** 07_alert_fatigue
 **Role:** Sub-agent
-**Model:** gpt-4o
+**Model:** gpt-5.2
 
 ---
 

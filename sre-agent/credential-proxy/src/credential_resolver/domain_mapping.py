@@ -23,6 +23,12 @@ DOMAIN_TO_INTEGRATION: dict[str, str] = {
     "api.eu1.honeycomb.io": "honeycomb",
     # ClickUp
     "api.clickup.com": "clickup",
+    # Sentry
+    "sentry.io": "sentry",
+    # PagerDuty
+    "api.pagerduty.com": "pagerduty",
+    # GitLab
+    "gitlab.com": "gitlab",
 }
 
 # Path prefixes for proxy mode (when host is envoy:8001, localhost:8001, etc.)

@@ -149,7 +149,7 @@ class LLMEntityExtractor(EntityExtractor):
 
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
+        model: str = "gpt-5.2-mini",
     ):
         self.model = model
         self._client = None

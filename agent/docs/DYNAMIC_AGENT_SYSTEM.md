@@ -79,7 +79,7 @@ The Dynamic Agent System allows agents to be defined and customized via JSON con
       "name": "Planner",
       "description": "Orchestrates complex investigation tasks",
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.3,
         "max_tokens": 16000
       },
@@ -101,7 +101,7 @@ The Dynamic Agent System allows agents to be defined and customized via JSON con
       "name": "Investigation Agent",
       "description": "General incident investigation with observability tools",
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.4,
         "max_tokens": 16000
       },
@@ -118,7 +118,7 @@ The Dynamic Agent System allows agents to be defined and customized via JSON con
     "k8s": {
       "enabled": true,
       "name": "Kubernetes Agent",
-      "model": {"name": "gpt-4o", "temperature": 0.3},
+      "model": {"name": "gpt-5.2", "temperature": 0.3},
       "max_turns": 15,
       "tools": {
         "enabled": [
@@ -139,7 +139,7 @@ The Dynamic Agent System allows agents to be defined and customized via JSON con
 | `enabled` | boolean | No (default: true) | Whether agent is available |
 | `name` | string | No | Display name |
 | `description` | string | No | What the agent does |
-| `model.name` | string | No (default: gpt-4o) | Model to use |
+| `model.name` | string | No (default: gpt-5.2) | Model to use |
 | `model.temperature` | float | No (default: 0.4) | Temperature 0-2 |
 | `model.max_tokens` | int | No | Max output tokens |
 | `prompt.system` | string | No | System prompt |
@@ -209,7 +209,7 @@ def build_agent_from_config(
     return Agent(
         name=name,
         instructions=system_prompt,
-        model=model_config.get('name', 'gpt-4o'),
+        model=model_config.get('name', 'gpt-5.2'),
         model_settings=ModelSettings(temperature=model_config.get('temperature', 0.4)),
         tools=tools,
         output_type=AgentResult,
@@ -425,7 +425,7 @@ errors = validate_agent_config({
 ```
 
 Validation checks:
-- Model name is valid (gpt-4o, gpt-4o-mini, etc.)
+- Model name is valid (gpt-5.2, gpt-5.2-mini, etc.)
 - Temperature is 0-2
 - max_turns is 1-100
 - Tool names exist in registry

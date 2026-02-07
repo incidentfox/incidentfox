@@ -7,6 +7,8 @@ Handles all external webhook endpoints:
 - /webhooks/github - GitHub webhooks
 - /webhooks/pagerduty - PagerDuty webhooks
 - /webhooks/incidentio - Incident.io webhooks
+- /webhooks/google-chat - Google Chat App webhooks
+- /webhooks/teams - MS Teams Bot Framework webhooks
 
 Slack endpoints use Slack Bolt SDK for:
 - Automatic signature verification
@@ -37,13 +39,16 @@ from incidentfox_orchestrator.webhooks.signatures import (
     SignatureVerificationError,
     verify_circleback_signature,
     verify_github_signature,
+    verify_google_chat_bearer_token,
     verify_incidentio_signature,
     verify_pagerduty_signature,
     verify_recall_signature,
 )
 
 if TYPE_CHECKING:
+    from incidentfox_orchestrator.webhooks.google_chat_app import GoogleChatIntegration
     from incidentfox_orchestrator.webhooks.slack_bolt_app import SlackBoltIntegration
+    from incidentfox_orchestrator.webhooks.teams_bot import TeamsIntegration
 
 
 def _log(event: str, **fields: Any) -> None:
@@ -2074,3 +2079,110 @@ async def _handle_recall_transcript_data(
             bot_id=bot_id,
             error=str(e),
         )
+
+
+# ============================================================================
+# Google Chat App Webhooks
+# ============================================================================
+
+
+@router.post("/google-chat")
+async def google_chat_webhook(
+    request: Request,
+    authorization: str = Header(default="", alias="Authorization"),
+):
+    """
+    Handle Google Chat App webhooks.
+
+    Google Chat sends:
+    - MESSAGE: User messages mentioning the bot
+    - ADDED_TO_SPACE: Bot added to a space
+    - REMOVED_FROM_SPACE: Bot removed
+    - CARD_CLICKED: Interactive card button clicks
+
+    Auth: Bearer token (JWT from chat@system.gserviceaccount.com)
+    """
+    gchat_integration: Optional["GoogleChatIntegration"] = getattr(
+        request.app.state, "google_chat", None
+    )
+    if gchat_integration is None:
+        _log("google_chat_not_initialized")
+        raise HTTPException(
+            status_code=503, detail="Google Chat integration not initialized"
+        )
+
+    # Verify JWT
+    google_chat_project_id = os.getenv("GOOGLE_CHAT_PROJECT_ID", "").strip()
+    try:
+        verify_google_chat_bearer_token(
+            authorization=authorization or None,
+            expected_audience=google_chat_project_id,
+        )
+    except SignatureVerificationError as e:
+        _log("google_chat_auth_failed", reason=e.reason)
+        raise HTTPException(status_code=401, detail=f"auth_failed: {e.reason}")
+
+    # Parse event
+    raw_body = await request.body()
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="invalid_json")
+
+    event_type = payload.get("type", "")
+    correlation_id = __import__("uuid").uuid4().hex
+
+    _log(
+        "google_chat_webhook_received",
+        event_type=event_type,
+        correlation_id=correlation_id,
+    )
+
+    # Handle event and return response
+    response = await gchat_integration.handle_event(
+        event_type=event_type,
+        event_data=payload,
+        correlation_id=correlation_id,
+    )
+
+    return JSONResponse(content=response)
+
+
+# ============================================================================
+# MS Teams Bot Framework Webhooks
+# ============================================================================
+
+
+@router.post("/teams")
+async def teams_webhook(
+    request: Request,
+    authorization: str = Header(default="", alias="Authorization"),
+):
+    """
+    Handle MS Teams Bot Framework webhooks.
+
+    Teams sends Activity objects for:
+    - message: User messages
+    - conversationUpdate: Bot added/removed
+    - invoke: Adaptive Card actions
+
+    Auth: JWT validated by BotFrameworkAdapter against Azure AD
+    """
+    teams_integration: Optional["TeamsIntegration"] = getattr(
+        request.app.state, "teams_bot", None
+    )
+    if teams_integration is None:
+        _log("teams_not_initialized")
+        raise HTTPException(status_code=503, detail="Teams integration not initialized")
+
+    raw_body = await request.body()
+
+    _log("teams_webhook_received")
+
+    try:
+        # BotFrameworkAdapter handles auth internally
+        await teams_integration.process_activity(raw_body, authorization or "")
+        return JSONResponse(content={"ok": True}, status_code=200)
+    except Exception as e:
+        _log("teams_webhook_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))

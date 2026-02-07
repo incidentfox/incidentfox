@@ -11,19 +11,38 @@ import os
 from typing import Optional
 
 from ..core.agent import function_tool
-from . import register_tool
+from . import get_proxy_headers, register_tool
 
 logger = logging.getLogger(__name__)
 
 
 def _get_github_client():
-    """Get GitHub client."""
+    """Get GitHub client.
+
+    Supports two modes:
+    - Direct: GITHUB_TOKEN (authenticates directly with GitHub API)
+    - Proxy: GITHUB_BASE_URL points to credential-resolver proxy (handles auth)
+    """
     try:
         from github import Github
     except ImportError:
         raise RuntimeError("PyGithub not installed: pip install PyGithub")
 
+    base_url = os.getenv("GITHUB_BASE_URL")
     token = os.getenv("GITHUB_TOKEN")
+
+    if base_url:
+        # Proxy mode: credential-resolver handles auth
+        g = Github(login_or_token=token or "proxy", base_url=base_url, timeout=30)
+        # Inject proxy auth headers (X-Sandbox-JWT) into underlying session
+        proxy_headers = get_proxy_headers()
+        if proxy_headers:
+            try:
+                g._Github__requester._Requester__session.headers.update(proxy_headers)
+            except AttributeError:
+                logger.warning("Could not inject proxy headers into PyGithub session")
+        return g
+
     if not token:
         raise ValueError("GITHUB_TOKEN environment variable not set")
 

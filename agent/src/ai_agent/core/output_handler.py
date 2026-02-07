@@ -157,6 +157,22 @@ def _register_default_handlers(registry: OutputHandlerRegistry) -> None:
     registry.register(GitHubPRCommentHandler())
     registry.register(GitHubIssueCommentHandler())
 
+    # Google Chat (optional - requires google-api-python-client)
+    try:
+        from .output_handlers.google_chat import GoogleChatOutputHandler
+
+        registry.register(GoogleChatOutputHandler())
+    except ImportError:
+        logger.debug("google_chat_handler_not_available", reason="SDK not installed")
+
+    # MS Teams (optional - requires botbuilder)
+    try:
+        from .output_handlers.teams import TeamsOutputHandler
+
+        registry.register(TeamsOutputHandler())
+    except ImportError:
+        logger.debug("teams_handler_not_available", reason="SDK not installed")
+
     # Future handlers:
     # registry.register(PagerDutyNoteHandler())
     # registry.register(IncidentIOTimelineHandler())

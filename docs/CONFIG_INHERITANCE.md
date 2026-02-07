@@ -36,7 +36,7 @@ Agents are configured using a dict-based schema that enables granular control:
     "planner": {
       "enabled": true,
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.3
       },
       "tools": {
@@ -126,7 +126,7 @@ When a child config defines a primitive value (string, number, boolean), it comp
 
 ```yaml
 # Org
-model: "gpt-4o"
+model: "gpt-5.2"
 
 # Team
 model: "claude-sonnet-4"
@@ -271,7 +271,7 @@ Platform admin creates org-level defaults:
   "agents": {
     "planner": {
       "enabled": true,
-      "model": {"name": "gpt-4o", "temperature": 0.3},
+      "model": {"name": "gpt-5.2", "temperature": 0.3},
       "tools": {
         "think": true,
         "llm_call": true,
@@ -330,7 +330,7 @@ A team adds their custom tools:
   "agents": {
     "planner": {
       "enabled": true,
-      "model": {"name": "gpt-4o", "temperature": 0.3},
+      "model": {"name": "gpt-5.2", "temperature": 0.3},
       "tools": {
         "think": true,
         "llm_call": true,

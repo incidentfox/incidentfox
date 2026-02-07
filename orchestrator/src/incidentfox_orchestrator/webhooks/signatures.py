@@ -6,6 +6,8 @@ Each external service has its own signature scheme:
 - GitHub: HMAC-SHA256 with sha256= prefix
 - PagerDuty: HMAC-SHA256 with v1= prefix
 - Incident.io: HMAC-SHA256
+- Google Chat: Google-signed JWT (Bearer token)
+- MS Teams: Azure AD JWT (handled by BotFrameworkAdapter)
 
 All verifications use constant-time comparison to prevent timing attacks.
 """
@@ -339,3 +341,68 @@ def verify_recall_signature(
 
     if not _constant_time_compare(expected_digest, provided_digest):
         raise SignatureVerificationError("bad_signature", "recall")
+
+
+def verify_google_chat_bearer_token(
+    *,
+    authorization: Optional[str],
+    expected_audience: str,
+) -> dict:
+    """
+    Verify Google Chat bearer token (JWT signed by chat@system.gserviceaccount.com).
+
+    Google Chat sends a JWT in the Authorization header:
+    - Issuer: chat@system.gserviceaccount.com
+    - Audience: Your project number or service URL
+    - The JWT is signed by Google's public keys
+
+    Args:
+        authorization: Authorization header value ("Bearer <token>")
+        expected_audience: Expected audience claim (project number or URL)
+
+    Returns:
+        Decoded JWT claims (contains user info, space info, etc.)
+
+    Raises:
+        SignatureVerificationError: If verification fails
+    """
+    if not authorization:
+        raise SignatureVerificationError("missing_authorization_header", "google_chat")
+
+    # Extract bearer token
+    if not authorization.startswith("Bearer "):
+        raise SignatureVerificationError("invalid_authorization_format", "google_chat")
+
+    token = authorization[7:]  # Remove "Bearer " prefix
+
+    if not token:
+        raise SignatureVerificationError("missing_bearer_token", "google_chat")
+
+    try:
+        from google.auth.transport import requests as google_requests
+        from google.oauth2 import id_token
+
+        # Verify the token using Google's public keys
+        # This validates signature, expiration, issuer, and audience
+        claims = id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            audience=expected_audience,
+        )
+
+        # Verify issuer is Google Chat
+        issuer = claims.get("iss", "")
+        if issuer != "chat@system.gserviceaccount.com":
+            raise SignatureVerificationError(
+                f"invalid_issuer (got {issuer})", "google_chat"
+            )
+
+        return claims
+
+    except ImportError:
+        raise SignatureVerificationError(
+            "google-auth library not installed", "google_chat"
+        )
+    except ValueError as e:
+        # id_token.verify_oauth2_token raises ValueError for invalid tokens
+        raise SignatureVerificationError(f"invalid_token: {e}", "google_chat")

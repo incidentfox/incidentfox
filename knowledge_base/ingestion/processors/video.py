@@ -108,7 +108,7 @@ class VideoProcessor(BaseProcessor):
 
         # Update metadata
         content.metadata.processing_steps.append("video_processing")
-        content.metadata.processing_model = "whisper-1 + gpt-4o"
+        content.metadata.processing_model = "whisper-1 + gpt-5.2"
         content.metadata.processing_cost_usd = total_cost
         content.metadata.processing_duration_seconds = time.time() - start_time
         content.metadata.custom_metadata["video_duration"] = duration_seconds

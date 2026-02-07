@@ -100,7 +100,7 @@ class PipelineConfig:
     min_confidence_to_auto_resolve: float = 0.8  # Below this, flag for review
 
     # Model Configuration
-    model: str = "gpt-4o-2024-08-06"
+    model: str = "gpt-5.2"
     temperature: float = 0.1
 
     # Rate Limiting

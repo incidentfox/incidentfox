@@ -421,7 +421,7 @@ def trace_llm_call(
     Trace an LLM call (for Langfuse generation tracking).
 
     Args:
-        model: Model name (e.g., "gpt-4o")
+        model: Model name (e.g., "gpt-5.2")
         prompt: The prompt sent to the model
         **kwargs: Additional parameters
     """

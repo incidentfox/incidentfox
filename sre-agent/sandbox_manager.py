@@ -453,7 +453,7 @@ static_resources:
                 "podTemplate": {
                     "metadata": {
                         "labels": {
-                            "app": "incidentfox-agent",
+                            "app": "incidentfox-sandbox",  # Different from incidentfox-agent to avoid service routing
                             "thread-id": thread_id,
                         }
                     },
@@ -608,6 +608,34 @@ static_resources:
                                     {
                                         "name": "DISABLE_LAMINAR",
                                         "value": "true",
+                                    },
+                                    # Langfuse observability (optional)
+                                    {
+                                        "name": "LANGFUSE_PUBLIC_KEY",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "incidentfox-langfuse",
+                                                "key": "LANGFUSE_PUBLIC_KEY",
+                                                "optional": True,
+                                            }
+                                        },
+                                    },
+                                    {
+                                        "name": "LANGFUSE_SECRET_KEY",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "name": "incidentfox-langfuse",
+                                                "key": "LANGFUSE_SECRET_KEY",
+                                                "optional": True,
+                                            }
+                                        },
+                                    },
+                                    {
+                                        "name": "LANGFUSE_HOST",
+                                        "value": os.getenv(
+                                            "LANGFUSE_HOST",
+                                            "https://us.cloud.langfuse.com",
+                                        ),
                                     },
                                     # Kubernetes context (use pre-configured kubeconfig for incidentfox-demo cluster)
                                     {

@@ -219,6 +219,8 @@ def test_model_alias_resolution():
 
     assert "anthropic/claude-sonnet" in normalize_model_name("sonnet")
     assert "anthropic/claude-opus" in normalize_model_name("opus")
+    # gpt-5.2 is the current default, gpt-4o still supported for backwards compatibility
+    assert normalize_model_name("gpt-5.2") == "openai/gpt-5.2"
     assert normalize_model_name("gpt-4o") == "openai/gpt-4o"
     assert normalize_model_name("gemini-2.0-flash") == "gemini/gemini-2.0-flash"
 

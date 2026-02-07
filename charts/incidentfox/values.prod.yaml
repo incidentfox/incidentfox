@@ -3,6 +3,12 @@
 
 namespace: incidentfox-prod
 
+# gVisor sandbox isolation for secure code execution
+gvisor:
+  enabled: true
+  installerImage: "alpine:latest"
+  pauseImage: "gcr.io/google-containers/pause:3.2"
+
 global:
   imagePullPolicy: Always
   configService:
@@ -88,6 +94,10 @@ externalSecrets:
       internalTokenRemoteRefKey: incidentfox/prod/orchestrator_internal_token
     langfuse:
       enabled: false  # Using OpenAI tracing UI instead
+    googleChat:
+      enabled: true
+    teams:
+      enabled: true
     # JWT secret for sandbox credential injection
     jwtSecret:
       enabled: true
@@ -165,6 +175,7 @@ services:
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-slack-bot:latest"
     replicas: 1
     servicePort: 3000
+    baseUrl: "https://slack.incidentfox.ai"  # OAuth redirect base URL
     freeTrial:
       enabled: true
       days: 7
@@ -205,6 +216,23 @@ services:
         enabled: false
       otlp:
         enabled: false
+
+  # Sandbox Router for routing to sandbox pods
+  sandboxRouter:
+    enabled: true
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/sandbox-router:latest"
+    replicas: 2
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+
+  # Sandbox Cleanup for expired sandbox garbage collection
+  sandboxCleanup:
+    enabled: true
+    image: "bitnami/kubectl:latest"
+    schedule: "*/15 * * * *"
 
   # Credential Resolver for sandbox credential injection
   credentialResolver:

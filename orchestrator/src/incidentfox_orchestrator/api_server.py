@@ -235,6 +235,45 @@ def create_app() -> FastAPI:
             app_.state.slack_bolt = None
             _log("slack_bolt_not_configured", reason="SLACK_SIGNING_SECRET not set")
 
+        # Google Chat integration
+        google_chat_project_id = (os.getenv("GOOGLE_CHAT_PROJECT_ID") or "").strip()
+        if google_chat_project_id:
+            from incidentfox_orchestrator.webhooks.google_chat_app import (
+                GoogleChatIntegration,
+            )
+
+            app_.state.google_chat = GoogleChatIntegration(
+                config_service=app_.state.config_service,
+                agent_api=app_.state.agent_api,
+                audit_api=app_.state.audit_api,
+                google_chat_project_id=google_chat_project_id,
+            )
+            _log("google_chat_initialized")
+        else:
+            app_.state.google_chat = None
+            _log("google_chat_not_configured", reason="GOOGLE_CHAT_PROJECT_ID not set")
+
+        # MS Teams Bot integration
+        teams_app_id = (os.getenv("TEAMS_APP_ID") or "").strip()
+        teams_app_password = (os.getenv("TEAMS_APP_PASSWORD") or "").strip()
+        if teams_app_id and teams_app_password:
+            from incidentfox_orchestrator.webhooks.teams_bot import TeamsIntegration
+
+            app_.state.teams_bot = TeamsIntegration(
+                config_service=app_.state.config_service,
+                agent_api=app_.state.agent_api,
+                audit_api=app_.state.audit_api,
+                app_id=teams_app_id,
+                app_password=teams_app_password,
+            )
+            _log("teams_bot_initialized")
+        else:
+            app_.state.teams_bot = None
+            _log(
+                "teams_bot_not_configured",
+                reason="TEAMS_APP_ID or TEAMS_APP_PASSWORD not set",
+            )
+
         yield
 
     app = FastAPI(title="IncidentFox Orchestrator", version="0.1.0", lifespan=lifespan)

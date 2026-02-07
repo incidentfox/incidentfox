@@ -165,7 +165,7 @@ class TestDictBasedMerge:
 
     def test_primitive_replacement(self):
         """Test that primitives are replaced."""
-        base = {"model": "gpt-4o", "temperature": 0.7, "enabled": True}
+        base = {"model": "gpt-5.2", "temperature": 0.7, "enabled": True}
 
         override = {"model": "claude-sonnet-4", "temperature": 0.3}
 

@@ -262,6 +262,94 @@ class ConfigServiceClient:
             logger.error(f"Failed to issue team token for {slack_team_id}: {e}")
             return None
 
+    def lookup_routing(self, channel_id: str) -> Optional[Dict[str, str]]:
+        """
+        Look up team routing by Slack channel ID.
+
+        This enables channel-based routing where different Slack channels
+        can be mapped to different teams within the same workspace.
+
+        Args:
+            channel_id: Slack channel ID (e.g., "C0ADSDTFF41")
+
+        Returns:
+            Dict with org_id and team_node_id if a match is found, None otherwise.
+            Example: {"org_id": "incidentfox-demo", "team_node_id": "weirwood-demo"}
+        """
+        url = f"{self.base_url}/api/v1/internal/routing/lookup"
+        headers = {
+            "X-Internal-Service": "slack-bot",
+            "Content-Type": "application/json",
+        }
+        payload = {"identifiers": {"slack_channel_id": channel_id}}
+
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("found"):
+                logger.info(
+                    f"Channel routing found: channel={channel_id} -> "
+                    f"org={result['org_id']}, team={result['team_node_id']}"
+                )
+                return {
+                    "org_id": result["org_id"],
+                    "team_node_id": result["team_node_id"],
+                }
+
+            logger.debug(f"No channel routing found for {channel_id}")
+            return None
+
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Channel routing lookup failed for {channel_id}: {e}")
+            return None
+
+    def get_team_token_for_channel(
+        self, slack_team_id: str, channel_id: str
+    ) -> Optional[str]:
+        """
+        Get a team token, using channel-based routing if available.
+
+        This method first tries to find a team mapped to the specific channel.
+        If no channel mapping exists, it falls back to workspace-based routing
+        (the "default" team for the workspace).
+
+        Args:
+            slack_team_id: Slack workspace ID (team_id)
+            channel_id: Slack channel ID
+
+        Returns:
+            Team token string, or None if not found/provisioned.
+        """
+        # Try channel-based routing first
+        routing = self.lookup_routing(channel_id)
+
+        if routing:
+            org_id = routing["org_id"]
+            team_node_id = routing["team_node_id"]
+        else:
+            # Fall back to workspace-based routing
+            org_id = f"slack-{slack_team_id}"
+            team_node_id = "default"
+
+        try:
+            token_response = self._issue_team_token(org_id, team_node_id)
+            token = token_response.get("token")
+            if token:
+                logger.debug(f"Issued team token for org={org_id}, team={team_node_id}")
+                return token
+            return None
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                logger.warning(f"Team not found: org={org_id}, team={team_node_id}")
+                return None
+            logger.error(f"Failed to issue team token: {e}")
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to issue team token: {e}")
+            return None
+
     def _issue_org_admin_token(
         self,
         org_id: str,
