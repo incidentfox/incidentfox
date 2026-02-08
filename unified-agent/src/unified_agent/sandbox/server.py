@@ -134,8 +134,16 @@ def _get_allowed_tools(config: Config) -> list[str]:
     Maps team config tool settings to the tool names expected by OpenHandsProvider.
     """
     default_tools = [
-        "Bash", "Read", "Write", "Edit", "Glob", "Grep",
-        "WebSearch", "WebFetch", "Skill", "Task",
+        "Bash",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep",
+        "WebSearch",
+        "WebFetch",
+        "Skill",
+        "Task",
     ]
 
     if config.team_config is None:
@@ -143,9 +151,8 @@ def _get_allowed_tools(config: Config) -> list[str]:
 
     # Get root agent config (prefer 'investigator' or first available)
     agents_config = config.team_config.agents_config
-    root_config = (
-        agents_config.get("investigator")
-        or next(iter(agents_config.values()), None)
+    root_config = agents_config.get("investigator") or next(
+        iter(agents_config.values()), None
     )
 
     if root_config is None:
@@ -183,9 +190,7 @@ async def get_or_create_session(thread_id: str) -> AgentSession:
 
             session = AgentSession(thread_id=thread_id, provider=provider)
             _sessions[thread_id] = session
-            logger.info(
-                f"Created session {thread_id} with model: {config.llm_model}"
-            )
+            logger.info(f"Created session {thread_id} with model: {config.llm_model}")
 
         return _sessions[thread_id]
 
@@ -324,7 +329,8 @@ async def list_sessions():
                 "has_provider": session.provider is not None,
                 "history_length": (
                     len(session.provider._conversation_history)
-                    if session.provider and hasattr(session.provider, "_conversation_history")
+                    if session.provider
+                    and hasattr(session.provider, "_conversation_history")
                     else 0
                 ),
             }
@@ -664,7 +670,7 @@ async def startup_event():
         logger.info(f"  Sandbox namespace: {os.getenv('SANDBOX_NAMESPACE', 'not set')}")
         logger.info(f"  gVisor: {os.getenv('USE_GVISOR', 'false')}")
     else:
-        logger.info(f"  Provider: OpenHands (LiteLLM)")
+        logger.info("  Provider: OpenHands (LiteLLM)")
         logger.info(f"  Allowed tools: {_get_allowed_tools(config)}")
         logger.info(f"  Workspace: {os.getenv('WORKSPACE_DIR', '/workspace')}")
 
