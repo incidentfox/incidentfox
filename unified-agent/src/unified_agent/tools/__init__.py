@@ -72,6 +72,11 @@ def _load_all_tools():
     except ImportError:
         pass
 
+    try:
+        from . import gitlab
+    except ImportError:
+        pass
+
     # Observability
     try:
         from . import grafana
@@ -91,6 +96,16 @@ def _load_all_tools():
     # Incident management
     try:
         from . import pagerduty
+    except ImportError:
+        pass
+
+    try:
+        from . import blameless
+    except ImportError:
+        pass
+
+    try:
+        from . import firehydrant
     except ImportError:
         pass
 

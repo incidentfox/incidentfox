@@ -15,6 +15,8 @@ This script adds schemas for integrations that have tools defined but no schema:
 - Microsoft Teams
 - Elasticsearch
 - Confluence
+- Blameless
+- FireHydrant
 """
 
 import os
@@ -335,6 +337,14 @@ INTEGRATION_SCHEMAS = [
                 "description": "GitLab personal access token with api scope",
             },
             {
+                "name": "verify_ssl",
+                "type": "boolean",
+                "required": False,
+                "level": "org",
+                "description": "Verify SSL certificates (disable for self-signed certs)",
+                "default_value": True,
+            },
+            {
                 "name": "default_project",
                 "type": "string",
                 "required": False,
@@ -525,6 +535,64 @@ INTEGRATION_SCHEMAS = [
                 "required": False,
                 "level": "team",
                 "description": "Default space key",
+            },
+        ],
+    },
+    {
+        "id": "blameless",
+        "name": "Blameless",
+        "category": "incident-management",
+        "description": "Blameless incident management and retrospective platform",
+        "docs_url": "https://docs.blameless.com/",
+        "display_order": 12,
+        "featured": True,
+        "fields": [
+            {
+                "name": "api_key",
+                "type": "secret",
+                "required": True,
+                "level": "org",
+                "description": "Blameless API key",
+            },
+            {
+                "name": "instance_url",
+                "type": "string",
+                "required": True,
+                "level": "org",
+                "description": "Your Blameless instance URL",
+                "placeholder": "https://your-org.blameless.io",
+            },
+        ],
+    },
+    {
+        "id": "firehydrant",
+        "name": "FireHydrant",
+        "category": "incident-management",
+        "description": "FireHydrant incident management with services, environments, and runbooks",
+        "docs_url": "https://firehydrant.com/docs/api/",
+        "display_order": 13,
+        "featured": True,
+        "fields": [
+            {
+                "name": "api_key",
+                "type": "secret",
+                "required": True,
+                "level": "org",
+                "description": "FireHydrant API token",
+            },
+            {
+                "name": "environment_id",
+                "type": "string",
+                "required": False,
+                "level": "team",
+                "description": "Default environment for this team",
+            },
+            {
+                "name": "service_id",
+                "type": "string",
+                "required": False,
+                "level": "team",
+                "description": "Default service for this team",
             },
         ],
     },

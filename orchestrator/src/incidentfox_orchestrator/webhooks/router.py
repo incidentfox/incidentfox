@@ -7,6 +7,8 @@ Handles all external webhook endpoints:
 - /webhooks/github - GitHub webhooks
 - /webhooks/pagerduty - PagerDuty webhooks
 - /webhooks/incidentio - Incident.io webhooks
+- /webhooks/blameless - Blameless webhooks
+- /webhooks/firehydrant - FireHydrant webhooks
 - /webhooks/google-chat - Google Chat App webhooks
 - /webhooks/teams - MS Teams Bot Framework webhooks
 
@@ -37,7 +39,9 @@ from incidentfox_orchestrator.context_enrichment import (
 )
 from incidentfox_orchestrator.webhooks.signatures import (
     SignatureVerificationError,
+    verify_blameless_signature,
     verify_circleback_signature,
+    verify_firehydrant_signature,
     verify_github_signature,
     verify_google_chat_bearer_token,
     verify_incidentio_signature,
@@ -2186,3 +2190,392 @@ async def teams_webhook(
     except Exception as e:
         _log("teams_webhook_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Blameless Webhooks
+# ============================================================================
+
+
+@router.post("/blameless")
+async def blameless_webhook(
+    request: Request,
+    background: BackgroundTasks,
+    x_blameless_signature: str = Header(default="", alias="X-Blameless-Signature"),
+):
+    """
+    Handle Blameless webhooks.
+
+    Blameless sends webhooks for incident lifecycle events:
+    - incident.created
+    - incident.updated
+    - incident.resolved
+    - retrospective.completed
+    """
+    webhook_secret = (os.getenv("BLAMELESS_WEBHOOK_SECRET") or "").strip()
+
+    raw_body = (await request.body()).decode("utf-8")
+
+    # Verify signature
+    try:
+        verify_blameless_signature(
+            webhook_secret=webhook_secret,
+            signature=x_blameless_signature or None,
+            raw_body=raw_body,
+        )
+    except SignatureVerificationError as e:
+        _log("blameless_webhook_signature_failed", reason=e.reason)
+        raise HTTPException(
+            status_code=401, detail=f"signature_verification_failed: {e.reason}"
+        )
+
+    # Parse payload
+    try:
+        payload = json.loads(raw_body) if raw_body else {}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="invalid_json")
+
+    _log("blameless_webhook_received")
+
+    # Extract team/incident info for routing
+    event_type = payload.get("event_type", payload.get("type", ""))
+    incident = payload.get("incident", payload.get("data", {}))
+    incident_id = incident.get("id", "")
+    team_id = incident.get("team_id", incident.get("team", {}).get("id", ""))
+
+    if incident_id:
+        background.add_task(
+            _process_blameless_webhook,
+            request=request,
+            team_id=team_id,
+            incident_id=incident_id,
+            event_type=event_type,
+            incident_data=incident,
+        )
+
+    return JSONResponse(content={"ok": True})
+
+
+async def _process_blameless_webhook(
+    request: Request,
+    team_id: str,
+    incident_id: str,
+    event_type: str,
+    incident_data: dict,
+) -> None:
+    """Process Blameless webhook asynchronously."""
+    from incidentfox_orchestrator.clients import (
+        AgentApiClient,
+        ConfigServiceClient,
+    )
+
+    correlation_id = __import__("uuid").uuid4().hex
+
+    _log(
+        "blameless_webhook_processing",
+        correlation_id=correlation_id,
+        team_id=team_id,
+        incident_id=incident_id,
+    )
+
+    try:
+        cfg: ConfigServiceClient = request.app.state.config_service
+        agent_api: AgentApiClient = request.app.state.agent_api
+
+        # Look up team via routing
+        routing = cfg.lookup_routing(
+            internal_service_name="orchestrator",
+            identifiers={"blameless_team_id": team_id},
+        )
+
+        if not routing.get("found"):
+            _log(
+                "blameless_webhook_no_routing",
+                correlation_id=correlation_id,
+                team_id=team_id,
+            )
+            return
+
+        org_id = routing["org_id"]
+        team_node_id = routing["team_node_id"]
+
+        admin_token = (os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or "").strip()
+        if not admin_token:
+            return
+
+        imp = cfg.issue_team_impersonation_token(
+            admin_token, org_id=org_id, team_node_id=team_node_id
+        )
+        team_token = str(imp.get("token") or "")
+        if not team_token:
+            return
+
+        # Get team config
+        entrance_agent_name = "planner"
+        dedicated_agent_url: Optional[str] = None
+        effective_config: dict = {}
+        try:
+            effective_config = cfg.get_effective_config(team_token=team_token)
+            entrance_agent_name = effective_config.get("entrance_agent", "planner")
+            dedicated_agent_url = effective_config.get("agent", {}).get(
+                "dedicated_service_url"
+            )
+        except Exception:
+            pass
+
+        # Build message
+        title = incident_data.get("title") or incident_data.get("name", "")
+        severity = incident_data.get("severity", "")
+        message = f"Blameless {event_type}: {title} (severity: {severity})"
+
+        # Resolve output destinations
+        from incidentfox_orchestrator.output_resolver import resolve_output_destinations
+
+        trigger_payload = {
+            "team_id": team_id,
+            "incident_id": incident_id,
+            "event_type": event_type,
+        }
+
+        output_destinations = resolve_output_destinations(
+            trigger_source="blameless",
+            trigger_payload=trigger_payload,
+            team_config=effective_config,
+        )
+
+        agent_context: dict = {
+            "metadata": {
+                "blameless": {
+                    "event_type": event_type,
+                    "team_id": team_id,
+                    "incident_data": incident_data,
+                },
+                "trigger": "blameless",
+            },
+        }
+
+        result = agent_api.run_agent(
+            team_token=team_token,
+            agent_name=entrance_agent_name,
+            message=message,
+            context=agent_context,
+            timeout=int(
+                os.getenv("ORCHESTRATOR_BLAMELESS_AGENT_TIMEOUT_SECONDS", "300")
+            ),
+            max_turns=int(os.getenv("ORCHESTRATOR_BLAMELESS_AGENT_MAX_TURNS", "50")),
+            correlation_id=correlation_id,
+            agent_base_url=dedicated_agent_url,
+            output_destinations=output_destinations,
+            trigger_source="blameless",
+        )
+
+        _log(
+            "blameless_webhook_completed",
+            correlation_id=correlation_id,
+            team_id=team_id,
+        )
+
+    except Exception as e:
+        _log(
+            "blameless_webhook_failed",
+            correlation_id=correlation_id,
+            error=str(e),
+        )
+
+
+# ============================================================================
+# FireHydrant Webhooks
+# ============================================================================
+
+
+@router.post("/firehydrant")
+async def firehydrant_webhook(
+    request: Request,
+    background: BackgroundTasks,
+    x_firehydrant_signature: str = Header(default="", alias="X-FireHydrant-Signature"),
+):
+    """
+    Handle FireHydrant webhooks.
+
+    FireHydrant sends webhooks for incident lifecycle events:
+    - incident.opened
+    - incident.updated
+    - incident.resolved
+    - incident.closed
+    - alert.created
+    """
+    webhook_secret = (os.getenv("FIREHYDRANT_WEBHOOK_SECRET") or "").strip()
+
+    raw_body = (await request.body()).decode("utf-8")
+
+    # Verify signature
+    try:
+        verify_firehydrant_signature(
+            webhook_secret=webhook_secret,
+            signature=x_firehydrant_signature or None,
+            raw_body=raw_body,
+        )
+    except SignatureVerificationError as e:
+        _log("firehydrant_webhook_signature_failed", reason=e.reason)
+        raise HTTPException(
+            status_code=401, detail=f"signature_verification_failed: {e.reason}"
+        )
+
+    # Parse payload
+    try:
+        payload = json.loads(raw_body) if raw_body else {}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="invalid_json")
+
+    _log("firehydrant_webhook_received")
+
+    # Extract incident info for routing
+    event_type = payload.get("type", payload.get("event_type", ""))
+    data = payload.get("data", payload)
+    incident = data.get("incident", data)
+    incident_id = incident.get("id", "")
+
+    # Extract team ID from services or teams in the incident
+    team_id = ""
+    services = incident.get("services", [])
+    if services and isinstance(services[0], dict):
+        team_id = services[0].get("id", "")
+
+    if incident_id:
+        background.add_task(
+            _process_firehydrant_webhook,
+            request=request,
+            team_id=team_id,
+            incident_id=incident_id,
+            event_type=event_type,
+            incident_data=incident,
+        )
+
+    return JSONResponse(content={"ok": True})
+
+
+async def _process_firehydrant_webhook(
+    request: Request,
+    team_id: str,
+    incident_id: str,
+    event_type: str,
+    incident_data: dict,
+) -> None:
+    """Process FireHydrant webhook asynchronously."""
+    from incidentfox_orchestrator.clients import (
+        AgentApiClient,
+        ConfigServiceClient,
+    )
+
+    correlation_id = __import__("uuid").uuid4().hex
+
+    _log(
+        "firehydrant_webhook_processing",
+        correlation_id=correlation_id,
+        team_id=team_id,
+        incident_id=incident_id,
+    )
+
+    try:
+        cfg: ConfigServiceClient = request.app.state.config_service
+        agent_api: AgentApiClient = request.app.state.agent_api
+
+        # Look up team via routing
+        routing = cfg.lookup_routing(
+            internal_service_name="orchestrator",
+            identifiers={"firehydrant_team_id": team_id},
+        )
+
+        if not routing.get("found"):
+            _log(
+                "firehydrant_webhook_no_routing",
+                correlation_id=correlation_id,
+                team_id=team_id,
+            )
+            return
+
+        org_id = routing["org_id"]
+        team_node_id = routing["team_node_id"]
+
+        admin_token = (os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or "").strip()
+        if not admin_token:
+            return
+
+        imp = cfg.issue_team_impersonation_token(
+            admin_token, org_id=org_id, team_node_id=team_node_id
+        )
+        team_token = str(imp.get("token") or "")
+        if not team_token:
+            return
+
+        # Get team config
+        entrance_agent_name = "planner"
+        dedicated_agent_url: Optional[str] = None
+        effective_config: dict = {}
+        try:
+            effective_config = cfg.get_effective_config(team_token=team_token)
+            entrance_agent_name = effective_config.get("entrance_agent", "planner")
+            dedicated_agent_url = effective_config.get("agent", {}).get(
+                "dedicated_service_url"
+            )
+        except Exception:
+            pass
+
+        # Build message
+        name = incident_data.get("name", "")
+        severity = incident_data.get("severity", "")
+        message = f"FireHydrant {event_type}: {name} (severity: {severity})"
+
+        # Resolve output destinations
+        from incidentfox_orchestrator.output_resolver import resolve_output_destinations
+
+        trigger_payload = {
+            "team_id": team_id,
+            "incident_id": incident_id,
+            "event_type": event_type,
+        }
+
+        output_destinations = resolve_output_destinations(
+            trigger_source="firehydrant",
+            trigger_payload=trigger_payload,
+            team_config=effective_config,
+        )
+
+        agent_context: dict = {
+            "metadata": {
+                "firehydrant": {
+                    "event_type": event_type,
+                    "team_id": team_id,
+                    "incident_data": incident_data,
+                },
+                "trigger": "firehydrant",
+            },
+        }
+
+        result = agent_api.run_agent(
+            team_token=team_token,
+            agent_name=entrance_agent_name,
+            message=message,
+            context=agent_context,
+            timeout=int(
+                os.getenv("ORCHESTRATOR_FIREHYDRANT_AGENT_TIMEOUT_SECONDS", "300")
+            ),
+            max_turns=int(os.getenv("ORCHESTRATOR_FIREHYDRANT_AGENT_MAX_TURNS", "50")),
+            correlation_id=correlation_id,
+            agent_base_url=dedicated_agent_url,
+            output_destinations=output_destinations,
+            trigger_source="firehydrant",
+        )
+
+        _log(
+            "firehydrant_webhook_completed",
+            correlation_id=correlation_id,
+            team_id=team_id,
+        )
+
+    except Exception as e:
+        _log(
+            "firehydrant_webhook_failed",
+            correlation_id=correlation_id,
+            error=str(e),
+        )
