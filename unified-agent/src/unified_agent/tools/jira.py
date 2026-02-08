@@ -31,9 +31,7 @@ def _get_jira_base_url():
     if jira_url:
         return f"{jira_url.rstrip('/')}/rest/api/3"
 
-    raise ValueError(
-        "JIRA_URL or JIRA_BASE_URL environment variable not set"
-    )
+    raise ValueError("JIRA_URL or JIRA_BASE_URL environment variable not set")
 
 
 def _get_jira_headers():
@@ -55,9 +53,7 @@ def _get_jira_headers():
     email = os.getenv("JIRA_EMAIL")
     api_token = os.getenv("JIRA_API_TOKEN")
     if not email or not api_token:
-        raise ValueError(
-            "JIRA_EMAIL and JIRA_API_TOKEN environment variables not set"
-        )
+        raise ValueError("JIRA_EMAIL and JIRA_API_TOKEN environment variables not set")
 
     credentials = base64.b64encode(f"{email}:{api_token}".encode()).decode()
     return {
@@ -127,7 +123,9 @@ def jira_create_issue(
         JSON with created issue details
     """
     if not project_key or not summary:
-        return json.dumps({"ok": False, "error": "project_key and summary are required"})
+        return json.dumps(
+            {"ok": False, "error": "project_key and summary are required"}
+        )
 
     logger.info(f"jira_create_issue: project={project_key}, type={issue_type}")
 
@@ -184,7 +182,11 @@ def jira_create_issue(
 
     except ValueError as e:
         return json.dumps(
-            {"ok": False, "error": str(e), "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN"}
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN",
+            }
         )
     except Exception as e:
         logger.error(f"jira_create_issue error: {e}")
@@ -211,7 +213,9 @@ def jira_create_epic(
         JSON with created epic details
     """
     if not project_key or not summary:
-        return json.dumps({"ok": False, "error": "project_key and summary are required"})
+        return json.dumps(
+            {"ok": False, "error": "project_key and summary are required"}
+        )
 
     logger.info(f"jira_create_epic: project={project_key}")
 
@@ -254,7 +258,11 @@ def jira_create_epic(
 
     except ValueError as e:
         return json.dumps(
-            {"ok": False, "error": str(e), "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN"}
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN",
+            }
         )
     except Exception as e:
         logger.error(f"jira_create_epic error: {e}")
@@ -305,7 +313,11 @@ def jira_get_issue(issue_key: str) -> str:
             "description": desc,
             "status": fields.get("status", {}).get("name"),
             "issue_type": fields.get("issuetype", {}).get("name"),
-            "priority": fields.get("priority", {}).get("name") if fields.get("priority") else None,
+            "priority": (
+                fields.get("priority", {}).get("name")
+                if fields.get("priority")
+                else None
+            ),
             "assignee": (
                 fields.get("assignee", {}).get("displayName")
                 if fields.get("assignee")
@@ -327,7 +339,11 @@ def jira_get_issue(issue_key: str) -> str:
 
     except ValueError as e:
         return json.dumps(
-            {"ok": False, "error": str(e), "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN"}
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN",
+            }
         )
     except Exception as e:
         logger.error(f"jira_get_issue error: {e}")
@@ -381,7 +397,11 @@ def jira_add_comment(issue_key: str, comment: str) -> str:
 
     except ValueError as e:
         return json.dumps(
-            {"ok": False, "error": str(e), "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN"}
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN",
+            }
         )
     except Exception as e:
         logger.error(f"jira_add_comment error: {e}")
@@ -462,7 +482,11 @@ def jira_update_issue(
 
     except ValueError as e:
         return json.dumps(
-            {"ok": False, "error": str(e), "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN"}
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN",
+            }
         )
     except Exception as e:
         logger.error(f"jira_update_issue error: {e}")
@@ -529,7 +553,11 @@ def jira_list_issues(
 
     except ValueError as e:
         return json.dumps(
-            {"ok": False, "error": str(e), "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN"}
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN",
+            }
         )
     except Exception as e:
         logger.error(f"jira_list_issues error: {e}")
@@ -569,9 +597,13 @@ def jira_search_issues(
     logger.info(f"jira_search_issues: jql={jql[:100]}")
 
     try:
-        search_fields = fields if fields else (
-            "summary,status,issuetype,priority,assignee,reporter,"
-            "created,updated,labels,description,resolution,resolutiondate"
+        search_fields = (
+            fields
+            if fields
+            else (
+                "summary,status,issuetype,priority,assignee,reporter,"
+                "created,updated,labels,description,resolution,resolutiondate"
+            )
         )
 
         data = _jira_request(
@@ -610,8 +642,12 @@ def jira_search_issues(
                 "key": item["key"],
                 "summary": f.get("summary"),
                 "status": f.get("status", {}).get("name") if f.get("status") else None,
-                "issue_type": f.get("issuetype", {}).get("name") if f.get("issuetype") else None,
-                "priority": f.get("priority", {}).get("name") if f.get("priority") else None,
+                "issue_type": (
+                    f.get("issuetype", {}).get("name") if f.get("issuetype") else None
+                ),
+                "priority": (
+                    f.get("priority", {}).get("name") if f.get("priority") else None
+                ),
                 "assignee": (
                     f.get("assignee", {}).get("displayName")
                     if f.get("assignee")
@@ -626,9 +662,7 @@ def jira_search_issues(
                 "updated": f.get("updated"),
                 "labels": f.get("labels", []),
                 "resolution": (
-                    f.get("resolution", {}).get("name")
-                    if f.get("resolution")
-                    else None
+                    f.get("resolution", {}).get("name") if f.get("resolution") else None
                 ),
                 "resolution_date": f.get("resolutiondate"),
             }
@@ -680,7 +714,11 @@ def jira_search_issues(
 
     except ValueError as e:
         return json.dumps(
-            {"ok": False, "error": str(e), "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN"}
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN",
+            }
         )
     except Exception as e:
         logger.error(f"jira_search_issues error: {e}")
