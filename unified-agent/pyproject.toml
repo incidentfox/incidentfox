@@ -37,6 +37,9 @@ dependencies = [
     "slack-sdk>=3.27.0",
     "atlassian-python-api>=3.41.0",
 
+    # Memory layer (mem0)
+    "mem0ai>=0.1.0",
+
     # Utilities
     "pyyaml>=6.0",
     "tenacity>=9.1.2",
