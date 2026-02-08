@@ -24,7 +24,7 @@ spec:
       - name: server
         # Image tag is updated by deploy script using kubectl set image
         # Default :latest is only used if deployment is applied manually
-        image: 103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest
+        image: 103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sre-agent:latest
         imagePullPolicy: Always
         command: ["python", "/app/server.py"]
         ports:
@@ -33,7 +33,7 @@ spec:
         env:
         - name: SANDBOX_IMAGE
           # Updated by deploy script to match server image tag
-          value: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
+          value: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sre-agent:latest"
         - name: SANDBOX_NAMESPACE
           valueFrom:
             fieldRef:
