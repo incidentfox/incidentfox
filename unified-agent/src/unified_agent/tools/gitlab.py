@@ -696,9 +696,7 @@ def gitlab_list_branches(project: str, search: str = "", max_results: int = 30) 
                     "default": b.default,
                     "web_url": b.web_url,
                     "commit_sha": b.commit.get("id") if b.commit else None,
-                    "commit_message": (
-                        b.commit.get("title") if b.commit else None
-                    ),
+                    "commit_message": (b.commit.get("title") if b.commit else None),
                 }
             )
 
@@ -811,9 +809,7 @@ def gitlab_list_issues(
                 }
             )
 
-        return json.dumps(
-            {"ok": True, "issues": issue_list, "count": len(issue_list)}
-        )
+        return json.dumps({"ok": True, "issues": issue_list, "count": len(issue_list)})
 
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e), "hint": "Set GITLAB_TOKEN"})
@@ -835,9 +831,7 @@ def gitlab_get_issue(project: str, issue_iid: int) -> str:
         JSON with issue details
     """
     if not project or not issue_iid:
-        return json.dumps(
-            {"ok": False, "error": "project and issue_iid are required"}
-        )
+        return json.dumps({"ok": False, "error": "project and issue_iid are required"})
 
     logger.info(f"gitlab_get_issue: project={project}, issue_iid={issue_iid}")
 
@@ -854,9 +848,7 @@ def gitlab_get_issue(project: str, issue_iid: int) -> str:
                 "description": issue.description,
                 "state": issue.state,
                 "author": issue.author.get("name") if issue.author else None,
-                "assignees": [
-                    a.get("name") for a in getattr(issue, "assignees", [])
-                ],
+                "assignees": [a.get("name") for a in getattr(issue, "assignees", [])],
                 "labels": issue.labels,
                 "milestone": (
                     issue.milestone.get("title") if issue.milestone else None

@@ -25,7 +25,9 @@ def _get_gitlab_config() -> dict:
             if token:
                 return {
                     "token": token,
-                    "url": config.get("url") or config.get("domain") or "https://gitlab.com",
+                    "url": config.get("url")
+                    or config.get("domain")
+                    or "https://gitlab.com",
                     "default_project": config.get("default_project"),
                     "verify_ssl": config.get("verify_ssl", True),
                 }
@@ -36,7 +38,8 @@ def _get_gitlab_config() -> dict:
             "token": os.getenv("GITLAB_TOKEN"),
             "url": os.getenv("GITLAB_URL", "https://gitlab.com"),
             "default_project": os.getenv("GITLAB_DEFAULT_PROJECT"),
-            "verify_ssl": os.getenv("GITLAB_VERIFY_SSL", "true").lower() in ("true", "1", "yes"),
+            "verify_ssl": os.getenv("GITLAB_VERIFY_SSL", "true").lower()
+            in ("true", "1", "yes"),
         }
 
     # 3. Not configured - raise error
