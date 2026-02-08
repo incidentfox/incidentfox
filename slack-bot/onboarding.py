@@ -2106,17 +2106,22 @@ def build_integrations_page(
 
     # Footer with Advanced Settings option
     blocks.append({"type": "divider"})
+    web_ui_url = os.environ.get("WEB_UI_URL")
+    footer_lines = [
+        ":bulb: Add more integrations anytime: click on the IncidentFox avatar → *Open App*.",
+    ]
+    if web_ui_url:
+        footer_lines.append(
+            f":computer: Prefer a web UI? Configure integrations at <{web_ui_url}/team/tools|Web Dashboard>"
+        )
+    footer_lines.append(":lock: All credentials are encrypted and stored securely.")
     blocks.append(
         {
             "type": "context",
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": (
-                        ":bulb: Add more integrations anytime: click on the IncidentFox avatar → *Open App*.\n"
-                        f":computer: Prefer a web UI? Configure integrations at <{os.environ.get('WEB_UI_URL', 'https://ui.incidentfox.ai')}/team/tools|Web Dashboard>\n"
-                        ":lock: All credentials are encrypted and stored securely."
-                    ),
+                    "text": "\n".join(footer_lines),
                 }
             ],
         }

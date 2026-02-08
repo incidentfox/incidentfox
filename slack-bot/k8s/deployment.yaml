@@ -58,9 +58,6 @@ spec:
                 secretKeyRef:
                   name: config-service-secrets
                   key: admin-token
-            # Web UI URL for links in Slack messages
-            - name: WEB_UI_URL
-              value: "https://ui.incidentfox.ai"
             # Free trial settings
             - name: FREE_TRIAL_ENABLED
               value: "true"
