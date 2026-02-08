@@ -2122,6 +2122,7 @@ def build_integrations_page(
                     "type": "mrkdwn",
                     "text": (
                         ":bulb: Add more integrations anytime: click on the IncidentFox avatar → *Open App*.\n"
+                        ":computer: Prefer a web UI? Configure integrations at <https://ui.incidentfox.ai/team/tools|ui.incidentfox.ai/team/tools>\n"
                         ":lock: All credentials are encrypted and stored securely."
                     ),
                 }
