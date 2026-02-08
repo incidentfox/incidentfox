@@ -1,6 +1,9 @@
 ---
 name: alerting-context
 description: Pull incident context from alerting platforms (PagerDuty). Use when investigating who's on-call, incident history, alert patterns, or MTTR metrics.
+category: incident
+required_integrations:
+  - pagerduty
 allowed-tools: Bash(python *)
 ---
 

@@ -672,6 +672,19 @@ def get_default_tool_config() -> Dict[str, Any]:
     return {"tools": {}}  # Empty dict - no default team-level overrides
 
 
+def get_default_skill_config() -> Dict[str, Any]:
+    """
+    Get the default team-level skill overrides.
+
+    NOTE: This returns team-level skill overrides (Dict[str, bool]), NOT the skills catalog.
+    The skills catalog with metadata comes from get_skills_catalog() and is stored in built_in_skills.
+
+    Returns empty dict because all skills are enabled by default via the catalog.
+    Teams can override specific skills via their config.
+    """
+    return {"skills": {}}  # Empty dict - no default team-level overrides
+
+
 def get_default_mcp_config() -> Dict[str, Any]:
     """
     Get default MCP server configuration.
@@ -814,6 +827,7 @@ def get_full_default_config(db: Optional[Session] = None) -> Dict[str, Any]:
     config = {}
     config.update(get_default_agent_config())
     config.update(get_default_tool_config())
+    config.update(get_default_skill_config())
     config.update(get_default_mcp_config())
     config.update(get_default_integration_config(db=db))
 

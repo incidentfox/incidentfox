@@ -273,12 +273,17 @@ class ConfigServiceRDS:
             raw_configs: Optional dict of node_id -> raw config, for source tracking
             team_node_id: Optional team node ID, for source tracking
         """
+        from ..core.skills_catalog import get_skills_catalog
         from ..core.tools_catalog import get_tools_catalog
         from ..db.config_models import IntegrationSchema
 
         # Add built-in tools catalog
         catalog = get_tools_catalog()
         config["built_in_tools"] = catalog["tools"]
+
+        # Add built-in skills catalog
+        skills_catalog = get_skills_catalog()
+        config["built_in_skills"] = skills_catalog["skills"]
 
         # Get team's raw integrations for source tracking
         team_raw_integrations: Dict[str, Any] = {}

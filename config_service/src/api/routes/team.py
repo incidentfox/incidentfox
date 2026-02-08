@@ -955,6 +955,49 @@ async def get_tools_catalog(
 
 
 # =============================================================================
+# Skills Catalog
+# =============================================================================
+
+
+class SkillsCatalogResponse(BaseModel):
+    """Response model for skills catalog."""
+
+    skills: List[Dict[str, Any]]
+    count: int
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/skills/catalog", response_model=SkillsCatalogResponse)
+async def get_skills_catalog_endpoint(
+    team: TeamPrincipal = Depends(require_team_auth),
+):
+    """
+    Get complete skills catalog for the team.
+
+    Returns all available built-in skills that can be configured for agents.
+    Skills are domain-specific knowledge and methodologies loaded on-demand.
+
+    Each skill includes:
+    - id: Skill identifier
+    - name: Human-readable name
+    - description: Skill description
+    - category: Skill category (observability, infrastructure, etc.)
+    - required_integrations: Integrations needed for this skill
+    - source: "built-in"
+    """
+    from ...core.skills_catalog import get_skills_catalog
+
+    catalog = get_skills_catalog()
+
+    return SkillsCatalogResponse(
+        skills=catalog["skills"],
+        count=catalog["count"],
+    )
+
+
+# =============================================================================
 # Output Configuration (Delivery & Notifications)
 # =============================================================================
 
