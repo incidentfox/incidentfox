@@ -458,6 +458,69 @@ INTEGRATION_SCHEMAS: Dict[str, IntegrationSchema] = {
         docs_url="https://api-docs.incident.io/",
         setup_instructions="1. Go to your incident.io dashboard\n2. Click settings > API keys\n3. Create a new key with View data permission\n4. Copy the API key",
     ),
+    "blameless": IntegrationSchema(
+        id="blameless",
+        name="Blameless",
+        description="Incident management and retrospective platform",
+        level=IntegrationLevel.ORG,
+        locked=False,
+        required=False,
+        org_fields=[
+            IntegrationFieldSchema(
+                name="api_key",
+                type="secret",
+                required=True,
+                display_name="API Key",
+                description="Blameless API key",
+            ),
+            IntegrationFieldSchema(
+                name="instance_url",
+                type="string",
+                required=True,
+                display_name="Instance URL",
+                description="Your Blameless instance URL",
+                placeholder="https://your-org.blameless.io",
+            ),
+        ],
+        team_fields=[],
+        docs_url="https://docs.blameless.com/",
+        setup_instructions="1. Go to your Blameless settings\n2. Navigate to API keys\n3. Create a new API key\n4. Copy the key and your instance URL",
+    ),
+    "firehydrant": IntegrationSchema(
+        id="firehydrant",
+        name="FireHydrant",
+        description="Incident management platform with services, environments, and runbooks",
+        level=IntegrationLevel.ORG,
+        locked=False,
+        required=False,
+        org_fields=[
+            IntegrationFieldSchema(
+                name="api_key",
+                type="secret",
+                required=True,
+                display_name="API Key",
+                description="FireHydrant API token",
+            ),
+        ],
+        team_fields=[
+            IntegrationFieldSchema(
+                name="environment_id",
+                type="string",
+                required=False,
+                display_name="Environment ID",
+                description="Default environment for this team",
+            ),
+            IntegrationFieldSchema(
+                name="service_id",
+                type="string",
+                required=False,
+                display_name="Service ID",
+                description="Default service for this team",
+            ),
+        ],
+        docs_url="https://firehydrant.com/docs/api/",
+        setup_instructions="1. Go to FireHydrant Settings > API Keys\n2. Create a new Bot token\n3. Copy the API key",
+    ),
 }
 
 
@@ -644,6 +707,22 @@ def get_integration_config_for_tool(
         "incidentio_list_incident_types": "incident_io",
         "incidentio_get_alert_analytics": "incident_io",
         "incidentio_calculate_mttr": "incident_io",
+        "blameless_list_incidents": "blameless",
+        "blameless_get_incident": "blameless",
+        "blameless_get_incident_timeline": "blameless",
+        "blameless_list_incidents_by_date_range": "blameless",
+        "blameless_list_severities": "blameless",
+        "blameless_get_retrospective": "blameless",
+        "blameless_get_alert_analytics": "blameless",
+        "blameless_calculate_mttr": "blameless",
+        "firehydrant_list_incidents": "firehydrant",
+        "firehydrant_get_incident": "firehydrant",
+        "firehydrant_get_incident_timeline": "firehydrant",
+        "firehydrant_list_incidents_by_date_range": "firehydrant",
+        "firehydrant_list_services": "firehydrant",
+        "firehydrant_list_environments": "firehydrant",
+        "firehydrant_get_alert_analytics": "firehydrant",
+        "firehydrant_calculate_mttr": "firehydrant",
     }
 
     integration_id = tool_to_integration.get(tool_name)

@@ -932,6 +932,64 @@ def load_tools_for_agent(agent_name: str) -> list[Callable]:
     except Exception as e:
         logger.warning("opsgenie_tools_load_failed", error=str(e))
 
+    # Blameless tools (uses requests - core dependency)
+    try:
+        from .blameless_tools import (
+            blameless_calculate_mttr,
+            blameless_get_alert_analytics,
+            blameless_get_incident,
+            blameless_get_incident_timeline,
+            blameless_get_retrospective,
+            blameless_list_incidents,
+            blameless_list_incidents_by_date_range,
+            blameless_list_severities,
+        )
+
+        tools.extend(
+            [
+                blameless_list_incidents,
+                blameless_get_incident,
+                blameless_get_incident_timeline,
+                blameless_list_incidents_by_date_range,
+                blameless_list_severities,
+                blameless_get_retrospective,
+                blameless_get_alert_analytics,
+                blameless_calculate_mttr,
+            ]
+        )
+        logger.debug("blameless_tools_loaded", count=8)
+    except Exception as e:
+        logger.warning("blameless_tools_load_failed", error=str(e))
+
+    # FireHydrant tools (uses requests - core dependency)
+    try:
+        from .firehydrant_tools import (
+            firehydrant_calculate_mttr,
+            firehydrant_get_alert_analytics,
+            firehydrant_get_incident,
+            firehydrant_get_incident_timeline,
+            firehydrant_list_environments,
+            firehydrant_list_incidents,
+            firehydrant_list_incidents_by_date_range,
+            firehydrant_list_services,
+        )
+
+        tools.extend(
+            [
+                firehydrant_list_incidents,
+                firehydrant_get_incident,
+                firehydrant_get_incident_timeline,
+                firehydrant_list_incidents_by_date_range,
+                firehydrant_list_services,
+                firehydrant_list_environments,
+                firehydrant_get_alert_analytics,
+                firehydrant_calculate_mttr,
+            ]
+        )
+        logger.debug("firehydrant_tools_loaded", count=8)
+    except Exception as e:
+        logger.warning("firehydrant_tools_load_failed", error=str(e))
+
     # Sentry tools (uses requests - core dependency)
     try:
         from .sentry_tools import (
