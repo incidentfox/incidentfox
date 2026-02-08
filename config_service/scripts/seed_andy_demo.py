@@ -21,7 +21,7 @@ Usage:
     poetry run python scripts/seed_andy_demo.py
 
 Environment variables:
-    ANDY_SLACK_CHANNEL_ID: Slack channel ID (default: C0PLACEHOLDER)
+    ANDY_SLACK_CHANNEL_ID: Slack channel ID (default: C0ADPFB2ADC)
 """
 
 import sys
@@ -223,7 +223,7 @@ def main() -> None:
     load_dotenv()
 
     # Allow overriding Slack config via environment
-    slack_channel_id = os.getenv("ANDY_SLACK_CHANNEL_ID", "C0PLACEHOLDER")
+    slack_channel_id = os.getenv("ANDY_SLACK_CHANNEL_ID", "C0ADPFB2ADC")
     slack_channel_name = os.getenv("ANDY_SLACK_CHANNEL_NAME", "#andy-demo")
 
     print("Seeding andy-demo team...")
