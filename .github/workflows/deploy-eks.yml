@@ -268,6 +268,7 @@ jobs:
             restart_deployment "incidentfox-k8s-gateway"
             restart_deployment "incidentfox-ultimate-rag"
             restart_deployment "incidentfox-ai-pipeline"
+            restart_deployment "incidentfox-slack-bot"
           else
             # Restart only the specific service
             case "$SERVICES" in
@@ -276,6 +277,7 @@ jobs:
               config-service) restart_deployment "incidentfox-config-service" ;;
               k8s-gateway) restart_deployment "incidentfox-k8s-gateway" ;;
               orchestrator) restart_deployment "incidentfox-orchestrator" ;;
+              slack-bot) restart_deployment "incidentfox-slack-bot" ;;
               ultimate-rag) restart_deployment "incidentfox-ultimate-rag" ;;
               web-ui) restart_deployment "incidentfox-web-ui" ;;
             esac
@@ -302,6 +304,7 @@ jobs:
           wait_for_deployment "incidentfox-agent"
           wait_for_deployment "incidentfox-web-ui"
           wait_for_deployment "incidentfox-k8s-gateway"
+          wait_for_deployment "incidentfox-slack-bot"
 
       - name: Wait for RAG services (slow startup)
         run: |
