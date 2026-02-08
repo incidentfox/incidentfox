@@ -25,7 +25,7 @@ Config Structure:
         "grafana": {
             "level": "team",
             "config_schema": {...},
-            "base_url": "https://grafana.team.com",
+            "domain": "https://grafana.team.com",
             "api_key": "glsa_..."
         }
     }
@@ -188,14 +188,14 @@ INTEGRATION_SCHEMAS: Dict[str, IntegrationSchema] = {
         required=False,
         org_fields=[
             IntegrationFieldSchema(
-                name="token",
+                name="api_key",
                 type="secret",
                 required=True,
                 display_name="Access Token",
                 description="Personal access token or GitHub App token",
             ),
             IntegrationFieldSchema(
-                name="org",
+                name="default_org",
                 type="string",
                 required=False,
                 display_name="Organization",
@@ -269,16 +269,24 @@ INTEGRATION_SCHEMAS: Dict[str, IntegrationSchema] = {
         required=False,
         org_fields=[
             IntegrationFieldSchema(
-                name="kubeconfig",
+                name="domain",
+                type="string",
+                required=True,
+                display_name="Kubernetes API URL",
+                description="Kubernetes API server URL",
+                placeholder="https://k8s.example.com:6443",
+            ),
+            IntegrationFieldSchema(
+                name="api_key",
                 type="secret",
-                required=False,
-                display_name="Kubeconfig",
-                description="Base64-encoded kubeconfig (if not using in-cluster)",
+                required=True,
+                display_name="API Token",
+                description="Kubernetes service account bearer token",
             ),
         ],
         team_fields=[
             IntegrationFieldSchema(
-                name="default_namespace",
+                name="namespace",
                 type="string",
                 required=False,
                 default="default",
@@ -303,7 +311,7 @@ INTEGRATION_SCHEMAS: Dict[str, IntegrationSchema] = {
         org_fields=[],
         team_fields=[
             IntegrationFieldSchema(
-                name="base_url",
+                name="domain",
                 type="string",
                 required=True,
                 display_name="Grafana URL",

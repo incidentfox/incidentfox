@@ -53,8 +53,11 @@ INTEGRATION_LOGOS = {
     "confluence": f"{ASSETS_BASE_URL}/integrations/confluence.png",
     "glean": f"{ASSETS_BASE_URL}/integrations/glean.png",
     "servicenow": f"{ASSETS_BASE_URL}/integrations/servicenow.png",
+    # Project management
+    "clickup": f"{ASSETS_BASE_URL}/integrations/clickup.png",
     # Infrastructure
     "kubernetes": f"{ASSETS_BASE_URL}/integrations/k8s.png",
+    "kubernetes_saas": f"{ASSETS_BASE_URL}/integrations/k8s.png",
     "temporal": f"{ASSETS_BASE_URL}/integrations/temporal.png",
     # Data
     "snowflake": f"{ASSETS_BASE_URL}/integrations/snowflake.png",
