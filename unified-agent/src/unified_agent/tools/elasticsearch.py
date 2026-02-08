@@ -110,7 +110,9 @@ def _parse_time_range(time_range: str) -> datetime:
         return now - timedelta(hours=value)
     elif unit == "d":
         return now - timedelta(days=value)
-    raise ValueError(f"Invalid time range: {time_range}. Use format like '15m', '1h', '7d'")
+    raise ValueError(
+        f"Invalid time range: {time_range}. Use format like '15m', '1h', '7d'"
+    )
 
 
 @function_tool
@@ -171,28 +173,42 @@ def elasticsearch_search_logs(
         logs = []
         for hit in hits.get("hits", []):
             source = hit.get("_source", {})
-            logs.append({
-                "timestamp": source.get("@timestamp"),
-                "message": source.get("message", ""),
-                "level": source.get("level") or source.get("log", {}).get("level"),
-                "service": source.get("service", {}).get("name") if isinstance(source.get("service"), dict) else source.get("service"),
-                "host": source.get("host", {}).get("name") if isinstance(source.get("host"), dict) else source.get("host"),
-                "index": hit.get("_index"),
-            })
+            logs.append(
+                {
+                    "timestamp": source.get("@timestamp"),
+                    "message": source.get("message", ""),
+                    "level": source.get("level") or source.get("log", {}).get("level"),
+                    "service": (
+                        source.get("service", {}).get("name")
+                        if isinstance(source.get("service"), dict)
+                        else source.get("service")
+                    ),
+                    "host": (
+                        source.get("host", {}).get("name")
+                        if isinstance(source.get("host"), dict)
+                        else source.get("host")
+                    ),
+                    "index": hit.get("_index"),
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "total_hits": total_count,
-            "count": len(logs),
-            "logs": logs,
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "total_hits": total_count,
+                "count": len(logs),
+                "logs": logs,
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({
-            "ok": False,
-            "error": str(e),
-            "hint": "Set ELASTICSEARCH_URL or ELASTICSEARCH_BASE_URL",
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set ELASTICSEARCH_URL or ELASTICSEARCH_BASE_URL",
+            }
+        )
     except Exception as e:
         logger.error(f"elasticsearch_search_logs error: {e}")
         return json.dumps({"ok": False, "error": str(e), "query": query[:80]})
@@ -293,11 +309,13 @@ def elasticsearch_search(
     except json.JSONDecodeError as e:
         return json.dumps({"ok": False, "error": f"Invalid JSON in query_body: {e}"})
     except ValueError as e:
-        return json.dumps({
-            "ok": False,
-            "error": str(e),
-            "hint": "Set ELASTICSEARCH_URL or ELASTICSEARCH_BASE_URL",
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set ELASTICSEARCH_URL or ELASTICSEARCH_BASE_URL",
+            }
+        )
     except Exception as e:
         logger.error(f"elasticsearch_search error: {e}")
         return json.dumps({"ok": False, "error": str(e), "index": index})
@@ -399,34 +417,40 @@ def elasticsearch_query_metrics(
         datapoints = []
         for bucket in buckets:
             value = bucket.get("metric_value", {}).get("value")
-            datapoints.append({
-                "timestamp": bucket.get("key_as_string"),
-                "value": value,
-                "doc_count": bucket.get("doc_count"),
-            })
+            datapoints.append(
+                {
+                    "timestamp": bucket.get("key_as_string"),
+                    "value": value,
+                    "doc_count": bucket.get("doc_count"),
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "metric_field": metric_field,
-            "stat": stat,
-            "interval": interval,
-            "datapoint_count": len(datapoints),
-            "overall": {
-                "count": overall.get("count"),
-                "min": overall.get("min"),
-                "max": overall.get("max"),
-                "avg": overall.get("avg"),
-                "sum": overall.get("sum"),
-            },
-            "datapoints": datapoints,
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "metric_field": metric_field,
+                "stat": stat,
+                "interval": interval,
+                "datapoint_count": len(datapoints),
+                "overall": {
+                    "count": overall.get("count"),
+                    "min": overall.get("min"),
+                    "max": overall.get("max"),
+                    "avg": overall.get("avg"),
+                    "sum": overall.get("sum"),
+                },
+                "datapoints": datapoints,
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({
-            "ok": False,
-            "error": str(e),
-            "hint": "Set ELASTICSEARCH_URL or ELASTICSEARCH_BASE_URL",
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set ELASTICSEARCH_URL or ELASTICSEARCH_BASE_URL",
+            }
+        )
     except Exception as e:
         logger.error(f"elasticsearch_query_metrics error: {e}")
         return json.dumps({"ok": False, "error": str(e), "metric_field": metric_field})
@@ -454,26 +478,32 @@ def elasticsearch_list_indices(pattern: str = "*") -> str:
 
         indices = []
         for idx in sorted(data, key=lambda x: x.get("index", "")):
-            indices.append({
-                "index": idx.get("index"),
-                "docs_count": idx.get("docs.count"),
-                "size": idx.get("store.size"),
-                "health": idx.get("health"),
-                "status": idx.get("status"),
-            })
+            indices.append(
+                {
+                    "index": idx.get("index"),
+                    "docs_count": idx.get("docs.count"),
+                    "size": idx.get("store.size"),
+                    "health": idx.get("health"),
+                    "status": idx.get("status"),
+                }
+            )
 
-        return json.dumps({
-            "ok": True,
-            "index_count": len(indices),
-            "indices": indices,
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "index_count": len(indices),
+                "indices": indices,
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({
-            "ok": False,
-            "error": str(e),
-            "hint": "Set ELASTICSEARCH_URL or ELASTICSEARCH_BASE_URL",
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set ELASTICSEARCH_URL or ELASTICSEARCH_BASE_URL",
+            }
+        )
     except Exception as e:
         logger.error(f"elasticsearch_list_indices error: {e}")
         return json.dumps({"ok": False, "error": str(e)})
@@ -522,11 +552,13 @@ def elasticsearch_get_cluster_stats() -> str:
         return json.dumps(result)
 
     except ValueError as e:
-        return json.dumps({
-            "ok": False,
-            "error": str(e),
-            "hint": "Set ELASTICSEARCH_URL or ELASTICSEARCH_BASE_URL",
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set ELASTICSEARCH_URL or ELASTICSEARCH_BASE_URL",
+            }
+        )
     except Exception as e:
         logger.error(f"elasticsearch_get_cluster_stats error: {e}")
         return json.dumps({"ok": False, "error": str(e)})
