@@ -31,7 +31,6 @@ on:
           - ultimate-rag
           - web-ui
           - ai-pipeline
-          - knowledge-base (deprecated)
       skip_deploy:
         description: 'Skip Helm deployment (build & push only)'
         required: false
@@ -51,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [agent, config-service, credential-resolver, k8s-gateway, orchestrator, sandbox-router, slack-bot, ultimate-rag, web-ui, ai-pipeline, "knowledge-base (deprecated)"]
+        service: [agent, config-service, credential-resolver, k8s-gateway, orchestrator, sandbox-router, slack-bot, ultimate-rag, web-ui, ai-pipeline]
         include:
           - service: agent
             context: ./unified-agent
@@ -93,10 +92,6 @@ jobs:
             context: ./ai_pipeline
             dockerfile: ./ai_pipeline/Dockerfile
             image: incidentfox-ai-pipeline
-          - service: "knowledge-base (deprecated)"
-            context: ./knowledge_base
-            dockerfile: ./knowledge_base/Dockerfile
-            image: incidentfox-knowledge-base
 
     steps:
       - name: Check if service should be built
@@ -208,7 +203,6 @@ jobs:
         run: |
           # Fix resources that exist but weren't created by this Helm release
           # This adds required Helm ownership labels so Helm can manage them
-          RESOURCE_NAME="incidentfox-knowledge-base"
           NS="${{ env.HELM_NAMESPACE }}"
 
           # Helper function to patch a resource with Helm ownership metadata
@@ -223,17 +217,6 @@ jobs:
                 meta.helm.sh/release-namespace="$NS" --overwrite
             fi
           }
-
-          # Patch all knowledge-base resources
-          patch_resource serviceaccount "$RESOURCE_NAME"
-          patch_resource service "$RESOURCE_NAME"
-          patch_resource poddisruptionbudget "$RESOURCE_NAME"
-
-          # Deployment selector is immutable - must delete and let Helm recreate
-          if kubectl get deployment "$RESOURCE_NAME" -n "$NS" &>/dev/null; then
-            echo "Deleting deployment/$RESOURCE_NAME (selector is immutable, Helm will recreate)..."
-            kubectl delete deployment "$RESOURCE_NAME" -n "$NS" --wait=false
-          fi
 
           # Adopt static service names that may have been created manually
           # These are required by hardcoded Envoy configs in sandbox pods
@@ -283,7 +266,6 @@ jobs:
             restart_deployment "incidentfox-agent"
             restart_deployment "incidentfox-web-ui"
             restart_deployment "incidentfox-k8s-gateway"
-            restart_deployment "incidentfox-knowledge-base"
             restart_deployment "incidentfox-ultimate-rag"
             restart_deployment "incidentfox-ai-pipeline"
           else
@@ -293,7 +275,6 @@ jobs:
               ai-pipeline) restart_deployment "incidentfox-ai-pipeline" ;;
               config-service) restart_deployment "incidentfox-config-service" ;;
               k8s-gateway) restart_deployment "incidentfox-k8s-gateway" ;;
-              knowledge-base) restart_deployment "incidentfox-knowledge-base" ;;
               orchestrator) restart_deployment "incidentfox-orchestrator" ;;
               ultimate-rag) restart_deployment "incidentfox-ultimate-rag" ;;
               web-ui) restart_deployment "incidentfox-web-ui" ;;
@@ -329,11 +310,6 @@ jobs:
           # Run in parallel with background processes
           pids=()
 
-          if kubectl get deployment/incidentfox-knowledge-base -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
-            kubectl rollout status deployment/incidentfox-knowledge-base -n ${{ env.HELM_NAMESPACE }} --timeout=10m &
-            pids+=($!)
-          fi
-
           if kubectl get deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
             kubectl rollout status deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} --timeout=10m &
             pids+=($!)
@@ -349,8 +325,8 @@ jobs:
 
           if [ $failed -eq 1 ]; then
             echo "::warning::One or more RAG services failed to start. Checking pod status..."
-            kubectl get pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component in (knowledge-base, ultimate-rag)'
-            kubectl describe pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component in (knowledge-base, ultimate-rag)' | tail -100
+            kubectl get pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component=ultimate-rag'
+            kubectl describe pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component=ultimate-rag' | tail -100
             exit 1
           fi
 
@@ -365,7 +341,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Image Digests" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|knowledge-base|orchestrator|web-ui|ultimate-rag)" >> $GITHUB_STEP_SUMMARY || true
+          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|orchestrator|web-ui|ultimate-rag)" >> $GITHUB_STEP_SUMMARY || true
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Summary
