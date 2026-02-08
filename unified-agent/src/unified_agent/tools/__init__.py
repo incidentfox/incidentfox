@@ -93,6 +93,11 @@ def _load_all_tools():
     except ImportError:
         pass
 
+    try:
+        from . import elasticsearch
+    except ImportError:
+        pass
+
     # Incident management
     try:
         from . import pagerduty
