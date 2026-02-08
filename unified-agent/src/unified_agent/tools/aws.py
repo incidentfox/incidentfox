@@ -206,6 +206,87 @@ def get_cloudwatch_metrics(
 
 
 @function_tool
+def query_cloudwatch_insights(
+    log_group: str,
+    query: str,
+    start_time: int,
+    end_time: int,
+    region: str = "us-east-1",
+) -> str:
+    """
+    Run a CloudWatch Logs Insights query for advanced log analysis.
+
+    Args:
+        log_group: CloudWatch log group name
+        query: CloudWatch Insights query string
+        start_time: Start time (Unix timestamp)
+        end_time: End time (Unix timestamp)
+        region: AWS region
+
+    Returns:
+        Query results as JSON string
+
+    Example queries:
+        "fields @timestamp, @message | filter @message like /ERROR/ | sort @timestamp desc | limit 20"
+        "stats count(*) by bin(5m) as period"
+        "filter @message like /Exception/ | stats count(*) by @logStream"
+    """
+    if not log_group or not query:
+        return json.dumps({"error": "log_group and query are required"})
+
+    logger.info(f"query_cloudwatch_insights: log_group={log_group}")
+
+    try:
+        import time
+
+        session = _get_aws_session(region)
+        logs = session.client("logs")
+
+        # Start async query
+        response = logs.start_query(
+            logGroupName=log_group,
+            startTime=start_time,
+            endTime=end_time,
+            queryString=query,
+        )
+
+        query_id = response["queryId"]
+
+        # Poll for results (up to 30 seconds)
+        for _ in range(30):
+            result = logs.get_query_results(queryId=query_id)
+            status = result["status"]
+
+            if status == "Complete":
+                return json.dumps(
+                    {
+                        "log_group": log_group,
+                        "query_id": query_id,
+                        "result_count": len(result["results"]),
+                        "results": result["results"],
+                    }
+                )
+            elif status in ("Failed", "Cancelled"):
+                return json.dumps(
+                    {
+                        "error": f"Query {status.lower()}",
+                        "query_id": query_id,
+                        "log_group": log_group,
+                    }
+                )
+
+            time.sleep(1)
+
+        return json.dumps(
+            {"error": "Query timeout after 30s", "query_id": query_id, "log_group": log_group}
+        )
+
+    except Exception as e:
+        logger.error(f"query_cloudwatch_insights error: {e}")
+        return json.dumps({"error": str(e), "log_group": log_group})
+
+
+@function_tool
 def list_ecs_tasks(
     cluster: str,
     service: Optional[str] = None,
@@ -297,5 +378,6 @@ def describe_lambda_function(function_name: str, region: str = "us-east-1") -> s
 register_tool("describe_ec2_instance", describe_ec2_instance)
 register_tool("get_cloudwatch_logs", get_cloudwatch_logs)
 register_tool("get_cloudwatch_metrics", get_cloudwatch_metrics)
+register_tool("query_cloudwatch_insights", query_cloudwatch_insights)
 register_tool("list_ecs_tasks", list_ecs_tasks)
 register_tool("describe_lambda_function", describe_lambda_function)
