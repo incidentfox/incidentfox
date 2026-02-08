@@ -175,15 +175,15 @@ ONCALL_TEAM = {
     "pagerduty_service_id": "PXXXXXX",  # Replace with real service ID for demo
     "escalation_policy_id": "PXXXXXX",  # Replace with real policy ID
     "team_members": {
-        "Alice": {
+        "Long": {
             "slack_id": "U09V0JHFQ5P",
-            "role": "Senior Engineer",
-            "areas": ["backend", "api", "database"],
+            "role": "Co-founder / Engineer",
+            "areas": ["backend", "api", "infrastructure"],
         },
-        "Bob": {
+        "Jimmy": {
             "slack_id": "U0A02101LU8",
-            "role": "Senior Engineer",
-            "areas": ["frontend", "infrastructure", "integrations"],
+            "role": "Co-founder / Engineer",
+            "areas": ["frontend", "integrations", "database"],
         },
     },
 }
