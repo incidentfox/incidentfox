@@ -107,9 +107,7 @@ def main():
 
             for integration_id, renames in FIELD_RENAMES.items():
                 result = conn.execute(
-                    text(
-                        "SELECT id, fields FROM integration_schemas WHERE id = :id"
-                    ),
+                    text("SELECT id, fields FROM integration_schemas WHERE id = :id"),
                     {"id": integration_id},
                 )
                 schema_row = result.fetchone()
