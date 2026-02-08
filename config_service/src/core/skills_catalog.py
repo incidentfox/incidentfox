@@ -14,7 +14,6 @@ Each skill includes:
 
 from typing import Any, Dict, List
 
-
 BUILT_IN_SKILLS_METADATA = [
     # Methodology skills (no integration required)
     {
