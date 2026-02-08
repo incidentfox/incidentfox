@@ -32,8 +32,7 @@ def upgrade():
 
     # Create the table using raw SQL to avoid SQLAlchemy trying to
     # re-create the enum type (create_type=False is unreliable).
-    op.execute(
-        """
+    op.execute("""
         CREATE TABLE IF NOT EXISTS k8s_clusters (
             id VARCHAR(64) PRIMARY KEY,
             org_id VARCHAR(64) NOT NULL,
@@ -53,8 +52,7 @@ def upgrade():
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
         );
-        """
-    )
+        """)
 
     # Create indexes for common queries
     op.create_index(
