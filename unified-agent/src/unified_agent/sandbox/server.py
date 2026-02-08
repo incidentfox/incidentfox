@@ -7,9 +7,9 @@ It maintains persistent agent sessions per thread_id to enable interrupts.
 Streams structured events via SSE (Server-Sent Events) for client consumption.
 
 Key features:
-- **Config-driven agents**: Loads team config from Config Service via TEAM_TOKEN
-- **Multi-LLM support**: Claude, Gemini, OpenAI via LiteLLM
-- **Dynamic agent hierarchy**: Builds agents from config with topological sorting
+- **Config-driven**: Loads team config from Config Service via TEAM_TOKEN
+- **Multi-LLM support**: Claude, Gemini, OpenAI via LiteLLM (OpenHandsProvider)
+- **Conversation persistence**: Sessions maintain full conversation history across calls
 
 Endpoints:
 - GET /health - Health check
@@ -24,25 +24,20 @@ import json
 import logging
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ..core.agent import Agent
-from ..core.agent_builder import build_agent_hierarchy, normalize_model_name
 from ..core.config import Config, get_config, reload_config
 from ..core.events import (
-    StreamEvent,
     error_event,
     result_event,
     thought_event,
-    tool_end_event,
-    tool_start_event,
 )
-from ..core.runner import Runner, RunResult
+from ..providers.base import LLMProvider, ProviderConfig, create_provider
 from .manager import SandboxExecutionError, SandboxManager
 
 logger = logging.getLogger(__name__)
@@ -65,18 +60,14 @@ class AgentSession:
     Manages a persistent agent session for a thread.
 
     Sessions maintain:
-    - Built agent hierarchy from team config
-    - Conversation history for context
+    - OpenHandsProvider with conversation history
     - Interrupt flag for cancellation
     """
 
     thread_id: str
-    agents: Dict[str, Agent] = field(default_factory=dict)
-    root_agent: Optional[Agent] = None
-    conversation_history: List[Dict[str, Any]] = field(default_factory=list)
+    provider: Optional[LLMProvider] = None
     is_running: bool = False
     _interrupt_flag: bool = False
-    model: str = ""
 
     def interrupt(self):
         """Signal the session to stop."""
@@ -95,10 +86,6 @@ class AgentSession:
 # Global session manager: thread_id -> AgentSession
 _sessions: Dict[str, AgentSession] = {}
 _session_lock = asyncio.Lock()
-
-# Cached config and agents (rebuilt on config reload)
-_cached_config: Optional[Config] = None
-_cached_agents: Optional[Dict[str, Agent]] = None
 
 # Sandbox manager (lazy initialized, used when USE_GVISOR=true)
 _sandbox_manager: Optional[SandboxManager] = None
@@ -140,151 +127,70 @@ async def _async_stream_response(response):
         yield chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk
 
 
-def _get_effective_config() -> Dict[str, Any]:
+def _get_allowed_tools(config: Config) -> list[str]:
     """
-    Get effective config for agent building.
+    Get allowed tools from team config or defaults.
 
-    Converts TeamConfig to the dict format expected by build_agent_hierarchy.
+    Maps team config tool settings to the tool names expected by OpenHandsProvider.
     """
-    config = get_config()
+    default_tools = [
+        "Bash",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep",
+        "WebSearch",
+        "WebFetch",
+        "Skill",
+        "Task",
+    ]
 
     if config.team_config is None:
-        # Return minimal default config
-        return {
-            "agents": {
-                "investigator": {
-                    "enabled": True,
-                    "name": "Investigator",
-                    "model": {"name": config.llm_model},
-                    "tools": {"enabled": ["*"]},
-                }
-            }
-        }
+        return default_tools
 
-    # Convert TeamConfig to dict format
-    team_config = config.team_config
-    agents_dict = {}
-
-    for agent_name, agent_config in team_config.agents_config.items():
-        agents_dict[agent_name] = {
-            "enabled": agent_config.enabled,
-            "name": agent_config.name or agent_name,
-            "model": {
-                "name": agent_config.model.name,
-                "temperature": agent_config.model.temperature,
-                "max_tokens": agent_config.model.max_tokens,
-                "reasoning": agent_config.model.reasoning,
-                "verbosity": agent_config.model.verbosity,
-            },
-            "prompt": {
-                "system": agent_config.prompt.system,
-                "prefix": agent_config.prompt.prefix,
-                "suffix": agent_config.prompt.suffix,
-            },
-            "tools": {
-                "enabled": agent_config.tools.enabled,
-                "disabled": agent_config.tools.disabled,
-            },
-            "sub_agents": agent_config.sub_agents,
-            "max_turns": agent_config.max_turns,
-        }
-
-    # If no agents defined, create default investigator
-    if not agents_dict:
-        agents_dict["investigator"] = {
-            "enabled": True,
-            "name": "Investigator",
-            "model": {"name": config.llm_model},
-            "tools": {"enabled": ["*"]},
-        }
-
-    return {
-        "agents": agents_dict,
-        "integrations": team_config.integrations,
-        "mcp_servers": team_config.mcp_servers,
-    }
-
-
-def _build_agents_from_config() -> Dict[str, Agent]:
-    """
-    Build agent hierarchy from team configuration.
-
-    This is called once on startup and cached.
-    Agents are rebuilt if config is reloaded.
-    """
-    global _cached_config, _cached_agents
-
-    config = get_config()
-
-    # Check if we need to rebuild
-    if _cached_agents is not None and _cached_config is config:
-        return _cached_agents
-
-    effective_config = _get_effective_config()
-
-    logger.info(
-        f"Building agents from config: {list(effective_config.get('agents', {}).keys())}"
+    # Get root agent config (prefer 'investigator' or first available)
+    agents_config = config.team_config.agents_config
+    root_config = agents_config.get("investigator") or next(
+        iter(agents_config.values()), None
     )
 
-    try:
-        agents = build_agent_hierarchy(effective_config, team_config=config.team_config)
-        _cached_config = config
-        _cached_agents = agents
+    if root_config is None:
+        return default_tools
 
-        logger.info(f"Built {len(agents)} agents: {list(agents.keys())}")
-        for name, agent in agents.items():
-            logger.info(
-                f"  - {name}: model={agent.model}, tools={len(agent.tools or [])}"
-            )
+    enabled = root_config.tools.enabled
+    if "*" in enabled:
+        if root_config.tools.disabled:
+            return [t for t in default_tools if t not in root_config.tools.disabled]
+        return default_tools
 
-        return agents
-    except Exception as e:
-        logger.error(f"Failed to build agents from config: {e}")
-        # Return minimal default agent on error
-        from ..core.agent import Agent
-
-        default_agent = Agent(
-            name="Investigator",
-            instructions="You are an expert SRE investigator. Help debug production issues.",
-            model=config.llm_model,
-        )
-        return {"investigator": default_agent}
+    return enabled
 
 
 async def get_or_create_session(thread_id: str) -> AgentSession:
     """
     Get existing session or create new one for thread_id.
 
-    Sessions use agents built from team configuration loaded via TEAM_TOKEN.
+    Creates an OpenHandsProvider-based session that maintains conversation
+    history across calls, enabling multi-turn investigations.
     """
     async with _session_lock:
         if thread_id not in _sessions:
-            # Build agents from config
-            agents = _build_agents_from_config()
-
-            # Get root agent (prefer 'investigator' or 'planner', fallback to first)
-            root_agent = (
-                agents.get("investigator")
-                or agents.get("planner")
-                or next(iter(agents.values()), None)
-            )
-
-            if root_agent is None:
-                raise RuntimeError("No agents available - check configuration")
-
             config = get_config()
 
-            session = AgentSession(
+            provider_config = ProviderConfig(
+                cwd=os.getenv("WORKSPACE_DIR", "/workspace"),
                 thread_id=thread_id,
-                agents=agents,
-                root_agent=root_agent,
                 model=config.llm_model,
+                allowed_tools=_get_allowed_tools(config),
             )
 
+            provider = create_provider(provider_config)
+            await provider.start()
+
+            session = AgentSession(thread_id=thread_id, provider=provider)
             _sessions[thread_id] = session
-            logger.info(
-                f"Created session {thread_id} with root agent: {root_agent.name}"
-            )
+            logger.info(f"Created session {thread_id} with model: {config.llm_model}")
 
         return _sessions[thread_id]
 
@@ -372,26 +278,17 @@ async def get_loaded_config():
     """
     View the loaded configuration (for debugging).
 
-    Shows which agents are configured and their settings.
+    Shows provider settings and active sessions.
     """
     config = get_config()
-    effective = _get_effective_config()
 
     return {
         "tenant_id": config.tenant_id,
         "team_id": config.team_id,
         "llm_model": config.llm_model,
         "config_source": "config_service" if os.getenv("TEAM_TOKEN") else "local",
-        "agents": {
-            name: {
-                "enabled": cfg.get("enabled", True),
-                "model": cfg.get("model", {}).get("name", "default"),
-                "tools_enabled": cfg.get("tools", {}).get("enabled", []),
-                "sub_agents": list(cfg.get("sub_agents", {}).keys()),
-            }
-            for name, cfg in effective.get("agents", {}).items()
-        },
-        "integrations": list(effective.get("integrations", {}).keys()),
+        "allowed_tools": _get_allowed_tools(config),
+        "active_sessions": len(_sessions),
     }
 
 
@@ -401,22 +298,23 @@ async def reload_configuration():
     Force reload of configuration from Config Service.
 
     Useful after config changes to pick up new agent settings.
+    Clears all sessions so new ones are created with updated config.
     """
-    global _cached_config, _cached_agents
-
-    # Clear cache
-    _cached_config = None
-    _cached_agents = None
+    # Close existing sessions
+    async with _session_lock:
+        for session in _sessions.values():
+            if session.provider:
+                await session.provider.close()
+        _sessions.clear()
 
     # Reload config
     reload_config()
-
-    # Rebuild agents
-    agents = _build_agents_from_config()
+    config = get_config()
 
     return {
         "status": "reloaded",
-        "agents": list(agents.keys()),
+        "model": config.llm_model,
+        "tools": _get_allowed_tools(config),
     }
 
 
@@ -428,9 +326,13 @@ async def list_sessions():
             {
                 "thread_id": thread_id,
                 "is_running": session.is_running,
-                "root_agent": session.root_agent.name if session.root_agent else None,
-                "model": session.model,
-                "history_length": len(session.conversation_history),
+                "has_provider": session.provider is not None,
+                "history_length": (
+                    len(session.provider._conversation_history)
+                    if session.provider
+                    and hasattr(session.provider, "_conversation_history")
+                    else 0
+                ),
             }
             for thread_id, session in _sessions.items()
         ]
@@ -446,7 +348,6 @@ async def execute(request: ExecuteRequest):
     Supports multi-LLM (Claude, Gemini, OpenAI) based on config.
     """
     thread_id = request.thread_id or os.getenv("THREAD_ID", "default")
-    max_turns = request.max_turns or int(os.getenv("AGENT_MAX_TURNS", "25"))
 
     # Get or create session
     try:
@@ -465,28 +366,31 @@ async def execute(request: ExecuteRequest):
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    # Get agent to use (specific or root)
-    agent = session.root_agent
-    if request.agent and request.agent in session.agents:
-        agent = session.agents[request.agent]
-
     # Reset interrupt flag
     session.reset_interrupt()
     session.is_running = True
 
+    # Build images list for multimodal input
+    images_list = None
+    if request.images:
+        images_list = [
+            {
+                "type": img.type,
+                "media_type": img.media_type,
+                "data": img.data,
+            }
+            for img in request.images
+        ]
+
     async def stream():
         try:
-            logger.info(
-                f"Starting execution for thread {thread_id} with agent {agent.name}"
-            )
+            logger.info(f"Starting execution for thread {thread_id}")
             event_count = 0
 
-            # Stream events from Runner
-            async for event in Runner.run_streaming(
-                agent,
+            # Stream events from provider (maintains conversation history)
+            async for event in session.provider.execute(
                 request.prompt,
-                max_turns=max_turns,
-                context={"thread_id": thread_id},
+                images=images_list,
             ):
                 if session.was_interrupted:
                     yield thought_event(thread_id, "Execution interrupted.").to_sse()
@@ -500,13 +404,8 @@ async def execute(request: ExecuteRequest):
 
                 event_count += 1
 
-                # Convert Runner StreamEvent to our StreamEvent format
                 if hasattr(event, "to_sse"):
                     yield event.to_sse()
-                elif isinstance(event, dict):
-                    # Handle dict events from Runner
-                    sse_event = _convert_runner_event(thread_id, event)
-                    yield sse_event.to_sse()
                 else:
                     yield f"data: {json.dumps({'type': 'unknown', 'data': str(event)})}\n\n"
 
@@ -559,9 +458,7 @@ async def _investigate_direct(request: InvestigateRequest):
         logger.info(f"Set TEAM_TOKEN from request for thread {request.thread_id}")
 
         # Reload config to pick up new team token
-        global _cached_config, _cached_agents
-        _cached_config = None
-        _cached_agents = None
+        reload_config()
 
     # Forward to execute with compatible fields
     execute_request = ExecuteRequest(
@@ -639,32 +536,6 @@ async def _investigate_via_sandbox(request: InvestigateRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
-
-def _convert_runner_event(thread_id: str, event: dict) -> StreamEvent:
-    """Convert Runner event dict to StreamEvent."""
-    event_type = event.get("type", "unknown")
-    data = event.get("data", {})
-
-    if event_type == "thought":
-        return thought_event(thread_id, data.get("text", ""))
-    elif event_type == "tool_start":
-        return tool_start_event(thread_id, data.get("tool", ""), data.get("args", {}))
-    elif event_type == "tool_end":
-        return tool_end_event(
-            thread_id,
-            data.get("tool", ""),
-            success=data.get("success", True),
-            output=data.get("output", ""),
-        )
-    elif event_type == "result":
-        return result_event(thread_id, data.get("text", ""), success=True)
-    elif event_type == "error":
-        return error_event(
-            thread_id, data.get("message", "Unknown error"), recoverable=False
-        )
-    else:
-        return thought_event(thread_id, str(data))
 
 
 @app.post("/interrupt")
@@ -776,6 +647,8 @@ async def cleanup_session(thread_id: str):
         if thread_id in _sessions:
             session = _sessions.pop(thread_id)
             session.interrupt()
+            if session.provider:
+                await session.provider.close()
             return {"status": "cleaned", "thread_id": thread_id}
         return {"status": "not_found", "thread_id": thread_id}
 
@@ -797,12 +670,9 @@ async def startup_event():
         logger.info(f"  Sandbox namespace: {os.getenv('SANDBOX_NAMESPACE', 'not set')}")
         logger.info(f"  gVisor: {os.getenv('USE_GVISOR', 'false')}")
     else:
-        # Pre-build agents only in direct mode (sandbox pods build their own)
-        try:
-            agents = _build_agents_from_config()
-            logger.info(f"  Agents available: {list(agents.keys())}")
-        except Exception as e:
-            logger.warning(f"  Failed to pre-build agents: {e}")
+        logger.info("  Provider: OpenHands (LiteLLM)")
+        logger.info(f"  Allowed tools: {_get_allowed_tools(config)}")
+        logger.info(f"  Workspace: {os.getenv('WORKSPACE_DIR', '/workspace')}")
 
 
 @app.on_event("shutdown")
@@ -811,6 +681,8 @@ async def shutdown_event():
     async with _session_lock:
         for session in _sessions.values():
             session.interrupt()
+            if session.provider:
+                await session.provider.close()
         _sessions.clear()
 
 

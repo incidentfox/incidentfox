@@ -278,7 +278,11 @@ def query_cloudwatch_insights(
             time.sleep(1)
 
         return json.dumps(
-            {"error": "Query timeout after 30s", "query_id": query_id, "log_group": log_group}
+            {
+                "error": "Query timeout after 30s",
+                "query_id": query_id,
+                "log_group": log_group,
+            }
         )
 
     except Exception as e:

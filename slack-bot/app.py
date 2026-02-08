@@ -1460,6 +1460,71 @@ def _extract_file_attachments_from_event(event: dict, client) -> list:
     return attachments
 
 
+def _format_thread_context(messages, current_message_ts, bot_user_id=None):
+    """
+    Format Slack thread messages since last bot response as context.
+
+    Filters to only human messages that occurred AFTER the bot's last response,
+    providing the agent with context about what was discussed between runs.
+
+    Args:
+        messages: List of thread messages from conversations.replies
+        current_message_ts: Timestamp of the current triggering message (to exclude)
+        bot_user_id: Bot's user ID to filter out its own messages
+
+    Returns:
+        Formatted context string with <thread_context> tags, or None if no relevant messages
+    """
+    from datetime import datetime
+
+    # Find last bot message timestamp
+    last_bot_ts = "0"
+    for msg in messages:
+        if msg.get("bot_id") or (bot_user_id and msg.get("user") == bot_user_id):
+            msg_ts = msg.get("ts", "0")
+            if float(msg_ts) > float(last_bot_ts):
+                last_bot_ts = msg_ts
+
+    relevant = []
+    for msg in messages:
+        ts = msg.get("ts", "0")
+
+        # Skip the current triggering message
+        if ts == current_message_ts:
+            continue
+
+        # Skip bot messages
+        if msg.get("bot_id"):
+            continue
+        if bot_user_id and msg.get("user") == bot_user_id:
+            continue
+
+        # Only include messages AFTER the last bot response
+        if float(ts) <= float(last_bot_ts):
+            continue
+
+        text = msg.get("text", "").strip()
+        if not text:
+            continue
+
+        try:
+            time_str = datetime.fromtimestamp(float(ts)).strftime("%H:%M")
+        except (ValueError, TypeError):
+            time_str = "??:??"
+
+        relevant.append(f"[{time_str}] <@{msg.get('user', 'unknown')}>: {text}")
+
+    if not relevant:
+        return None
+
+    return (
+        "<thread_context>\n"
+        "Messages in this thread since my last response:\n\n"
+        + "\n".join(relevant)
+        + "\n</thread_context>\n\n"
+    )
+
+
 def _resolve_mentions(text: str, client, bot_user_id: str):
     """
     Resolve all user and bot mentions in text to human-readable names.
@@ -1583,6 +1648,28 @@ def handle_mention(event, say, client, context):
         except Exception as e:
             logger.warning(f"Failed to get bot user ID: {e}")
             bot_user_id = None
+
+    # Fetch thread context for follow-up messages (enriches prompt with
+    # human messages since the last bot response in the thread)
+    thread_context_text = None
+    is_followup = event.get("thread_ts") is not None
+
+    if is_followup:
+        try:
+            thread_replies = client.conversations_replies(
+                channel=channel_id,
+                ts=thread_ts,
+                limit=50,
+            )
+            thread_context_text = _format_thread_context(
+                thread_replies.get("messages", []),
+                current_message_ts=event["ts"],
+                bot_user_id=bot_user_id,
+            )
+            if thread_context_text:
+                logger.info(f"Thread context enrichment added for thread {thread_ts}")
+        except Exception as e:
+            logger.warning(f"Failed to fetch thread context: {e}")
 
     # Resolve all mentions (users and bots) to human-readable names
     resolved_text, id_to_name_mapping = _resolve_mentions(text, client, bot_user_id)
@@ -1712,6 +1799,10 @@ def handle_mention(event, say, client, context):
     context_lines.append("Only share files that are genuinely useful to the user.")
 
     enriched_prompt = prompt_text + "\n" + "\n".join(context_lines)
+
+    # Prepend thread context if available (human messages since last bot response)
+    if thread_context_text:
+        enriched_prompt = thread_context_text + enriched_prompt
 
     # Post minimal initial message with loading indicator
     # Will be updated immediately with first event

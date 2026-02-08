@@ -76,8 +76,8 @@ echo ""
 echo "2️⃣  Creating ECR repositories..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Create incidentfox-agent repository
-REPO_NAME="incidentfox-agent"
+# Create incidentfox-sre-agent repository
+REPO_NAME="incidentfox-sre-agent"
 if aws ecr describe-repositories --repository-names $REPO_NAME --region $REGION >/dev/null 2>&1; then
     echo "✅ Repository already exists: $REPO_NAME"
 else
@@ -286,7 +286,7 @@ echo "╚═══════════════════════�
 echo ""
 echo "📊 What was created:"
 echo "  ✅ EKS cluster: $CLUSTER_NAME"
-echo "  ✅ ECR repositories: incidentfox-agent, credential-resolver, slack-bot"
+echo "  ✅ ECR repositories: incidentfox-sre-agent, credential-resolver, slack-bot"
 echo "  ✅ agent-sandbox controller"
 echo "  ✅ gVisor runtime"
 echo "  ✅ Namespace: $NAMESPACE"
