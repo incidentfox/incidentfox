@@ -302,6 +302,188 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
             )
             # Note: Agent service handles run failure recording
 
+    @app.event("message")
+    async def handle_message(event: dict, ack):
+        """
+        Handle regular channel messages for auto-triage teams.
+
+        Only processes messages in channels where the team config has
+        auto_triage: true. All other channels are ignored (preserving
+        existing @mention-only behavior).
+
+        Flow:
+        1. Ack immediately
+        2. Filter out bot messages, edits, and @mentions
+        3. Look up team via routing
+        4. Check for auto_triage flag in team config
+        5. If enabled, route message to triage agent
+        """
+        await ack()
+
+        # Filter out messages we shouldn't process
+        subtype = event.get("subtype")
+        if subtype:
+            # Skip edits, bot_message, channel_join, etc.
+            return
+
+        if event.get("bot_id"):
+            # Skip bot messages (including our own)
+            return
+
+        text = event.get("text", "")
+        if not text:
+            return
+
+        # Skip if this is an @mention (handled by handle_app_mention)
+        if BOT_MENTION_PATTERN.search(text):
+            return
+
+        channel_id = event.get("channel", "")
+        user_id = event.get("user", "")
+        event_ts = event.get("event_ts", "")
+        thread_ts = event.get("thread_ts") or event_ts
+
+        correlation_id = uuid.uuid4().hex
+
+        try:
+            cfg = integration.config_service
+            agent_api = integration.agent_api
+
+            # Look up team via routing
+            routing = await asyncio.to_thread(
+                cfg.lookup_routing,
+                internal_service_name="orchestrator",
+                identifiers={"slack_channel_id": channel_id},
+            )
+
+            if not routing.get("found"):
+                # No team owns this channel - ignore
+                return
+
+            org_id = routing["org_id"]
+            team_node_id = routing["team_node_id"]
+
+            # Get impersonation token
+            admin_token = (os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or "").strip()
+            if not admin_token:
+                return
+
+            imp = await asyncio.to_thread(
+                cfg.issue_team_impersonation_token,
+                admin_token,
+                org_id=org_id,
+                team_node_id=team_node_id,
+            )
+            team_token = str(imp.get("token") or "")
+            if not team_token:
+                return
+
+            # Fetch effective config and check for auto_triage flag
+            effective_config: Dict[str, Any] = {}
+            try:
+                effective_config = await asyncio.to_thread(
+                    cfg.get_effective_config, team_token=team_token
+                )
+            except Exception as e:
+                _log(
+                    "slack_message_config_fetch_failed",
+                    correlation_id=correlation_id,
+                    error=str(e),
+                )
+                return
+
+            if not effective_config.get("auto_triage"):
+                # Team does not have auto-triage enabled - ignore
+                return
+
+            _log(
+                "slack_message_auto_triage",
+                correlation_id=correlation_id,
+                channel_id=channel_id,
+                user_id=user_id,
+                org_id=org_id,
+                team_node_id=team_node_id,
+            )
+
+            entrance_agent_name = effective_config.get("entrance_agent", "planner")
+            dedicated_agent_url = effective_config.get("agent", {}).get(
+                "dedicated_service_url"
+            )
+
+            session_id = generate_session_id(channel_id, thread_ts)
+            run_id = uuid.uuid4().hex
+
+            # Resolve output destinations
+            from incidentfox_orchestrator.output_resolver import (
+                resolve_output_destinations,
+            )
+
+            trigger_payload = {
+                "channel_id": channel_id,
+                "thread_ts": thread_ts,
+                "event_ts": event_ts,
+                "user_id": user_id,
+            }
+
+            output_destinations = resolve_output_destinations(
+                trigger_source="slack",
+                trigger_payload=trigger_payload,
+                team_config=effective_config,
+            )
+
+            for dest in output_destinations:
+                if dest.get("type") == "slack":
+                    dest["run_id"] = run_id
+                    dest["correlation_id"] = correlation_id
+
+            # Route to agent
+            result = await asyncio.to_thread(
+                partial(
+                    agent_api.run_agent,
+                    team_token=team_token,
+                    agent_name=entrance_agent_name,
+                    message=text,
+                    context={
+                        "user_id": user_id,
+                        "session_id": session_id,
+                        "metadata": {
+                            "slack": {
+                                "channel_id": channel_id,
+                                "event_ts": event_ts,
+                                "thread_ts": thread_ts,
+                            },
+                            "trigger": "slack_auto_triage",
+                        },
+                    },
+                    timeout=int(
+                        os.getenv("ORCHESTRATOR_SLACK_AGENT_TIMEOUT_SECONDS", "300")
+                    ),
+                    max_turns=int(
+                        os.getenv("ORCHESTRATOR_SLACK_AGENT_MAX_TURNS", "50")
+                    ),
+                    correlation_id=correlation_id,
+                    agent_base_url=dedicated_agent_url,
+                    output_destinations=output_destinations,
+                    trigger_source="slack",
+                )
+            )
+
+            _log(
+                "slack_message_auto_triage_completed",
+                correlation_id=correlation_id,
+                channel_id=channel_id,
+                org_id=org_id,
+                team_node_id=team_node_id,
+            )
+
+        except Exception as e:
+            _log(
+                "slack_message_auto_triage_failed",
+                correlation_id=correlation_id,
+                channel_id=channel_id,
+                error=str(e),
+            )
+
     @app.action("feedback_positive")
     async def handle_feedback_positive(ack, body, respond):
         """Handle positive feedback button click."""
