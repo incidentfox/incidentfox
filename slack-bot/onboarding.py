@@ -9,6 +9,7 @@ Handles:
 
 import json
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from assets_config import get_integration_logo_url
@@ -2113,6 +2114,7 @@ def build_integrations_page(
                     "type": "mrkdwn",
                     "text": (
                         ":bulb: Add more integrations anytime: click on the IncidentFox avatar → *Open App*.\n"
+                        f":computer: Prefer a web UI? Configure integrations at <{os.environ.get('WEB_UI_URL', 'https://ui.incidentfox.ai')}/team/tools|Web Dashboard>\n"
                         ":lock: All credentials are encrypted and stored securely."
                     ),
                 }
