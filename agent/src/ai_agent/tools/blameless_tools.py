@@ -117,9 +117,11 @@ def blameless_list_incidents(
                         "created_at": incident.get("created_at"),
                         "updated_at": incident.get("updated_at"),
                         "resolved_at": incident.get("resolved_at"),
-                        "commander": incident.get("commander", {}).get("name")
-                        if isinstance(incident.get("commander"), dict)
-                        else incident.get("commander"),
+                        "commander": (
+                            incident.get("commander", {}).get("name")
+                            if isinstance(incident.get("commander"), dict)
+                            else incident.get("commander")
+                        ),
                         "url": incident.get("url") or incident.get("permalink"),
                     }
                 )
@@ -189,9 +191,11 @@ def blameless_get_incident(incident_id: str) -> dict[str, Any]:
             roles.append(
                 {
                     "role": role.get("role") or role.get("name"),
-                    "assignee": role.get("user", {}).get("name")
-                    if isinstance(role.get("user"), dict)
-                    else role.get("assignee"),
+                    "assignee": (
+                        role.get("user", {}).get("name")
+                        if isinstance(role.get("user"), dict)
+                        else role.get("assignee")
+                    ),
                 }
             )
 
@@ -207,12 +211,16 @@ def blameless_get_incident(incident_id: str) -> dict[str, Any]:
             "created_at": incident.get("created_at"),
             "updated_at": incident.get("updated_at"),
             "resolved_at": incident.get("resolved_at"),
-            "commander": incident.get("commander", {}).get("name")
-            if isinstance(incident.get("commander"), dict)
-            else incident.get("commander"),
-            "communication_lead": incident.get("communication_lead", {}).get("name")
-            if isinstance(incident.get("communication_lead"), dict)
-            else incident.get("communication_lead"),
+            "commander": (
+                incident.get("commander", {}).get("name")
+                if isinstance(incident.get("commander"), dict)
+                else incident.get("commander")
+            ),
+            "communication_lead": (
+                incident.get("communication_lead", {}).get("name")
+                if isinstance(incident.get("communication_lead"), dict)
+                else incident.get("communication_lead")
+            ),
             "roles": roles,
             "slack_channel": incident.get("slack_channel")
             or incident.get("slack_channel_name"),
@@ -273,9 +281,11 @@ def blameless_get_incident_timeline(
                     or event.get("message")
                     or event.get("summary"),
                     "created_at": event.get("created_at") or event.get("timestamp"),
-                    "user": event.get("user", {}).get("name")
-                    if isinstance(event.get("user"), dict)
-                    else event.get("user"),
+                    "user": (
+                        event.get("user", {}).get("name")
+                        if isinstance(event.get("user"), dict)
+                        else event.get("user")
+                    ),
                 }
             )
 
@@ -366,9 +376,7 @@ def blameless_list_incidents_by_date_range(
                         resolved_dt = datetime.fromisoformat(
                             resolved_at_str.replace("Z", "+00:00")
                         )
-                        mttr_minutes = (
-                            resolved_dt - created_dt
-                        ).total_seconds() / 60
+                        mttr_minutes = (resolved_dt - created_dt).total_seconds() / 60
                     except (ValueError, TypeError):
                         pass
 
@@ -383,9 +391,11 @@ def blameless_list_incidents_by_date_range(
                         "mttr_minutes": (
                             round(mttr_minutes, 2) if mttr_minutes else None
                         ),
-                        "commander": incident.get("commander", {}).get("name")
-                        if isinstance(incident.get("commander"), dict)
-                        else incident.get("commander"),
+                        "commander": (
+                            incident.get("commander", {}).get("name")
+                            if isinstance(incident.get("commander"), dict)
+                            else incident.get("commander")
+                        ),
                         "url": incident.get("url") or incident.get("permalink"),
                     }
                 )
@@ -453,9 +463,7 @@ def blameless_list_incidents_by_date_range(
             since=since,
             until=until,
         )
-        raise ToolExecutionError(
-            "blameless_list_incidents_by_date_range", str(e), e
-        )
+        raise ToolExecutionError("blameless_list_incidents_by_date_range", str(e), e)
 
 
 def blameless_list_severities() -> list[dict[str, Any]]:
@@ -551,17 +559,17 @@ def blameless_get_retrospective(incident_id: str) -> dict[str, Any]:
                     "id": item.get("id"),
                     "title": item.get("title") or item.get("description"),
                     "status": item.get("status"),
-                    "assignee": item.get("assignee", {}).get("name")
-                    if isinstance(item.get("assignee"), dict)
-                    else item.get("assignee"),
+                    "assignee": (
+                        item.get("assignee", {}).get("name")
+                        if isinstance(item.get("assignee"), dict)
+                        else item.get("assignee")
+                    ),
                     "due_date": item.get("due_date"),
                     "priority": item.get("priority"),
                 }
             )
 
-        logger.info(
-            "blameless_retrospective_fetched", incident_id=incident_id
-        )
+        logger.info("blameless_retrospective_fetched", incident_id=incident_id)
 
         return {
             "incident_id": incident_id,
@@ -657,9 +665,7 @@ def blameless_get_alert_analytics(
             created_at = incident.get("created_at", "")
             if created_at:
                 try:
-                    created = datetime.fromisoformat(
-                        created_at.replace("Z", "+00:00")
-                    )
+                    created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
                     stats["hours_distribution"][created.hour] += 1
                 except (ValueError, TypeError):
                     pass
@@ -669,9 +675,7 @@ def blameless_get_alert_analytics(
         for title, stats in title_stats.items():
             fire_count = stats["fire_count"]
             mttr_vals = stats["mttr_values"]
-            avg_mttr = (
-                round(sum(mttr_vals) / len(mttr_vals), 2) if mttr_vals else None
-            )
+            avg_mttr = round(sum(mttr_vals) / len(mttr_vals), 2) if mttr_vals else None
 
             # Determine if noisy
             resolve_rate = (
@@ -688,9 +692,7 @@ def blameless_get_alert_analytics(
                 hours_dist.get(h, 0) for h in [0, 1, 2, 3, 4, 5, 22, 23]
             )
             off_hours_rate = (
-                round(off_hours_count / fire_count * 100, 1)
-                if fire_count > 0
-                else 0
+                round(off_hours_count / fire_count * 100, 1) if fire_count > 0 else 0
             )
 
             peak_hour = max(hours_dist, key=hours_dist.get) if hours_dist else None
@@ -711,11 +713,7 @@ def blameless_get_alert_analytics(
                         "reason": (
                             "High frequency incident"
                             if is_noisy
-                            else (
-                                "Quick auto-resolve pattern"
-                                if is_flapping
-                                else None
-                            )
+                            else ("Quick auto-resolve pattern" if is_flapping else None)
                         ),
                     },
                 }
@@ -726,9 +724,7 @@ def blameless_get_alert_analytics(
 
         # Overall summary
         total_unique = len(alert_analytics)
-        noisy_count = sum(
-            1 for a in alert_analytics if a["classification"]["is_noisy"]
-        )
+        noisy_count = sum(1 for a in alert_analytics if a["classification"]["is_noisy"])
         flapping_count = sum(
             1 for a in alert_analytics if a["classification"]["is_flapping"]
         )

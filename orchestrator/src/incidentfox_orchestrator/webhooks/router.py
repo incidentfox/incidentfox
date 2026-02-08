@@ -2392,9 +2392,7 @@ async def _process_blameless_webhook(
 async def firehydrant_webhook(
     request: Request,
     background: BackgroundTasks,
-    x_firehydrant_signature: str = Header(
-        default="", alias="X-FireHydrant-Signature"
-    ),
+    x_firehydrant_signature: str = Header(default="", alias="X-FireHydrant-Signature"),
 ):
     """
     Handle FireHydrant webhooks.
@@ -2562,9 +2560,7 @@ async def _process_firehydrant_webhook(
             timeout=int(
                 os.getenv("ORCHESTRATOR_FIREHYDRANT_AGENT_TIMEOUT_SECONDS", "300")
             ),
-            max_turns=int(
-                os.getenv("ORCHESTRATOR_FIREHYDRANT_AGENT_MAX_TURNS", "50")
-            ),
+            max_turns=int(os.getenv("ORCHESTRATOR_FIREHYDRANT_AGENT_MAX_TURNS", "50")),
             correlation_id=correlation_id,
             agent_base_url=dedicated_agent_url,
             output_destinations=output_destinations,

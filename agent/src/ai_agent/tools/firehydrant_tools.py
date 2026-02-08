@@ -114,16 +114,13 @@ def firehydrant_list_incidents(
                         "started_at": incident.get("started_at"),
                         "resolved_at": milestones.get("resolved"),
                         "environments": [
-                            env.get("name")
-                            for env in incident.get("environments", [])
+                            env.get("name") for env in incident.get("environments", [])
                         ],
                         "services": [
-                            svc.get("name")
-                            for svc in incident.get("services", [])
+                            svc.get("name") for svc in incident.get("services", [])
                         ],
                         "functionalities": [
-                            f.get("name")
-                            for f in incident.get("functionalities", [])
+                            f.get("name") for f in incident.get("functionalities", [])
                         ],
                         "incident_url": incident.get("incident_url"),
                     }
@@ -284,14 +281,15 @@ def firehydrant_get_incident_timeline(
                 {
                     "id": event.get("id"),
                     "type": event.get("type"),
-                    "occurred_at": event.get("occurred_at")
-                    or event.get("created_at"),
+                    "occurred_at": event.get("occurred_at") or event.get("created_at"),
                     "description": event.get("description")
                     or event.get("body")
                     or event.get("summary"),
-                    "author": event.get("author", {}).get("name")
-                    if isinstance(event.get("author"), dict)
-                    else event.get("author"),
+                    "author": (
+                        event.get("author", {}).get("name")
+                        if isinstance(event.get("author"), dict)
+                        else event.get("author")
+                    ),
                     "visibility": event.get("visibility"),
                 }
             )
@@ -378,9 +376,7 @@ def firehydrant_list_incidents_by_date_range(
                 resolved_at_str = None
                 for ms in incident.get("milestones", []):
                     if (ms.get("type") or ms.get("slug")) == "resolved":
-                        resolved_at_str = ms.get("occurred_at") or ms.get(
-                            "created_at"
-                        )
+                        resolved_at_str = ms.get("occurred_at") or ms.get("created_at")
 
                 # Calculate MTTR if resolved
                 mttr_minutes = None
@@ -393,9 +389,7 @@ def firehydrant_list_incidents_by_date_range(
                         resolved_dt = datetime.fromisoformat(
                             resolved_at_str.replace("Z", "+00:00")
                         )
-                        mttr_minutes = (
-                            resolved_dt - started_dt
-                        ).total_seconds() / 60
+                        mttr_minutes = (resolved_dt - started_dt).total_seconds() / 60
                     except (ValueError, TypeError):
                         pass
 
@@ -412,12 +406,10 @@ def firehydrant_list_incidents_by_date_range(
                             round(mttr_minutes, 2) if mttr_minutes else None
                         ),
                         "services": [
-                            svc.get("name")
-                            for svc in incident.get("services", [])
+                            svc.get("name") for svc in incident.get("services", [])
                         ],
                         "environments": [
-                            env.get("name")
-                            for env in incident.get("environments", [])
+                            env.get("name") for env in incident.get("environments", [])
                         ],
                         "incident_url": incident.get("incident_url"),
                     }
@@ -487,9 +479,7 @@ def firehydrant_list_incidents_by_date_range(
             since=since,
             until=until,
         )
-        raise ToolExecutionError(
-            "firehydrant_list_incidents_by_date_range", str(e), e
-        )
+        raise ToolExecutionError("firehydrant_list_incidents_by_date_range", str(e), e)
 
 
 def firehydrant_list_services() -> list[dict[str, Any]]:
@@ -532,15 +522,17 @@ def firehydrant_list_services() -> list[dict[str, Any]]:
                         "description": svc.get("description"),
                         "slug": svc.get("slug"),
                         "tier": svc.get("service_tier"),
-                        "owner": svc.get("owner", {}).get("name")
-                        if isinstance(svc.get("owner"), dict)
-                        else None,
+                        "owner": (
+                            svc.get("owner", {}).get("name")
+                            if isinstance(svc.get("owner"), dict)
+                            else None
+                        ),
                         "labels": svc.get("labels", {}),
-                        "active_incidents_count": svc.get(
-                            "active_incidents", []
-                        ).__len__()
-                        if isinstance(svc.get("active_incidents"), list)
-                        else 0,
+                        "active_incidents_count": (
+                            svc.get("active_incidents", []).__len__()
+                            if isinstance(svc.get("active_incidents"), list)
+                            else 0
+                        ),
                     }
                 )
 
@@ -591,9 +583,7 @@ def firehydrant_list_environments() -> list[dict[str, Any]]:
                     "name": env.get("name"),
                     "description": env.get("description"),
                     "slug": env.get("slug"),
-                    "active_incidents_count": len(
-                        env.get("active_incidents", [])
-                    ),
+                    "active_incidents_count": len(env.get("active_incidents", [])),
                 }
             )
 
@@ -697,9 +687,7 @@ def firehydrant_get_alert_analytics(
             created_at = incident.get("created_at", "")
             if created_at:
                 try:
-                    created = datetime.fromisoformat(
-                        created_at.replace("Z", "+00:00")
-                    )
+                    created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
                     stats["hours_distribution"][created.hour] += 1
                 except (ValueError, TypeError):
                     pass
@@ -709,9 +697,7 @@ def firehydrant_get_alert_analytics(
         for name, stats in name_stats.items():
             fire_count = stats["fire_count"]
             mttr_vals = stats["mttr_values"]
-            avg_mttr = (
-                round(sum(mttr_vals) / len(mttr_vals), 2) if mttr_vals else None
-            )
+            avg_mttr = round(sum(mttr_vals) / len(mttr_vals), 2) if mttr_vals else None
 
             # Determine if noisy
             is_noisy = fire_count > 10
@@ -723,9 +709,7 @@ def firehydrant_get_alert_analytics(
                 hours_dist.get(h, 0) for h in [0, 1, 2, 3, 4, 5, 22, 23]
             )
             off_hours_rate = (
-                round(off_hours_count / fire_count * 100, 1)
-                if fire_count > 0
-                else 0
+                round(off_hours_count / fire_count * 100, 1) if fire_count > 0 else 0
             )
 
             peak_hour = max(hours_dist, key=hours_dist.get) if hours_dist else None
@@ -746,11 +730,7 @@ def firehydrant_get_alert_analytics(
                         "reason": (
                             "High frequency incident"
                             if is_noisy
-                            else (
-                                "Quick auto-resolve pattern"
-                                if is_flapping
-                                else None
-                            )
+                            else ("Quick auto-resolve pattern" if is_flapping else None)
                         ),
                     },
                 }
@@ -761,9 +741,7 @@ def firehydrant_get_alert_analytics(
 
         # Overall summary
         total_unique = len(alert_analytics)
-        noisy_count = sum(
-            1 for a in alert_analytics if a["classification"]["is_noisy"]
-        )
+        noisy_count = sum(1 for a in alert_analytics if a["classification"]["is_noisy"])
         flapping_count = sum(
             1 for a in alert_analytics if a["classification"]["is_flapping"]
         )
@@ -897,9 +875,7 @@ def firehydrant_calculate_mttr(
             e, "firehydrant_calculate_mttr", "firehydrant"
         )
     except Exception as e:
-        logger.error(
-            "firehydrant_mttr_failed", error=str(e), severity=severity
-        )
+        logger.error("firehydrant_mttr_failed", error=str(e), severity=severity)
         raise ToolExecutionError("firehydrant_calculate_mttr", str(e), e)
 
 
