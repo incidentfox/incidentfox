@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 def _get_firehydrant_base_url():
     """Get FireHydrant API base URL (supports proxy mode)."""
-    return os.getenv(
-        "FIREHYDRANT_BASE_URL", "https://api.firehydrant.io"
-    ).rstrip("/")
+    return os.getenv("FIREHYDRANT_BASE_URL", "https://api.firehydrant.io").rstrip("/")
 
 
 def _get_firehydrant_headers():
@@ -121,12 +119,10 @@ def firehydrant_list_incidents(
                         "started_at": incident.get("started_at"),
                         "resolved_at": milestones.get("resolved"),
                         "services": [
-                            svc.get("name")
-                            for svc in incident.get("services", [])
+                            svc.get("name") for svc in incident.get("services", [])
                         ],
                         "environments": [
-                            env.get("name")
-                            for env in incident.get("environments", [])
+                            env.get("name") for env in incident.get("environments", [])
                         ],
                         "incident_url": incident.get("incident_url"),
                     }
@@ -283,14 +279,15 @@ def firehydrant_get_incident_timeline(
                 {
                     "id": event.get("id"),
                     "type": event.get("type"),
-                    "occurred_at": event.get("occurred_at")
-                    or event.get("created_at"),
+                    "occurred_at": event.get("occurred_at") or event.get("created_at"),
                     "description": event.get("description")
                     or event.get("body")
                     or event.get("summary"),
-                    "author": event.get("author", {}).get("name")
-                    if isinstance(event.get("author"), dict)
-                    else event.get("author"),
+                    "author": (
+                        event.get("author", {}).get("name")
+                        if isinstance(event.get("author"), dict)
+                        else event.get("author")
+                    ),
                     "visibility": event.get("visibility"),
                 }
             )
@@ -376,9 +373,7 @@ def firehydrant_list_incidents_by_date_range(
                 resolved_at_str = None
                 for ms in incident.get("milestones", []):
                     if (ms.get("type") or ms.get("slug")) == "resolved":
-                        resolved_at_str = ms.get("occurred_at") or ms.get(
-                            "created_at"
-                        )
+                        resolved_at_str = ms.get("occurred_at") or ms.get("created_at")
 
                 # Calculate MTTR
                 mttr_minutes = None
@@ -391,9 +386,7 @@ def firehydrant_list_incidents_by_date_range(
                         resolved_dt = datetime.fromisoformat(
                             resolved_at_str.replace("Z", "+00:00")
                         )
-                        mttr_minutes = (
-                            resolved_dt - started_dt
-                        ).total_seconds() / 60
+                        mttr_minutes = (resolved_dt - started_dt).total_seconds() / 60
                     except (ValueError, TypeError):
                         pass
 
@@ -406,12 +399,11 @@ def firehydrant_list_incidents_by_date_range(
                         "created_at": created_at_str,
                         "started_at": started_at_str,
                         "resolved_at": resolved_at_str,
-                        "mttr_minutes": round(mttr_minutes, 2)
-                        if mttr_minutes
-                        else None,
+                        "mttr_minutes": (
+                            round(mttr_minutes, 2) if mttr_minutes else None
+                        ),
                         "services": [
-                            svc.get("name")
-                            for svc in incident.get("services", [])
+                            svc.get("name") for svc in incident.get("services", [])
                         ],
                     }
                 )
@@ -431,9 +423,11 @@ def firehydrant_list_incidents_by_date_range(
                 "incidents": all_incidents,
                 "count": len(all_incidents),
                 "resolved_count": len(resolved),
-                "avg_mttr_minutes": round(sum(mttr_values) / len(mttr_values), 2)
-                if mttr_values
-                else None,
+                "avg_mttr_minutes": (
+                    round(sum(mttr_values) / len(mttr_values), 2)
+                    if mttr_values
+                    else None
+                ),
             }
         )
 
@@ -487,9 +481,11 @@ def firehydrant_list_services() -> str:
                         "description": svc.get("description"),
                         "slug": svc.get("slug"),
                         "tier": svc.get("service_tier"),
-                        "owner": svc.get("owner", {}).get("name")
-                        if isinstance(svc.get("owner"), dict)
-                        else None,
+                        "owner": (
+                            svc.get("owner", {}).get("name")
+                            if isinstance(svc.get("owner"), dict)
+                            else None
+                        ),
                     }
                 )
 
@@ -617,9 +613,7 @@ def firehydrant_get_alert_analytics(
                             break
                     if svc_name:
                         incidents = [
-                            i
-                            for i in incidents
-                            if svc_name in i.get("services", [])
+                            i for i in incidents if svc_name in i.get("services", [])
                         ]
             except Exception:
                 pass
@@ -655,9 +649,7 @@ def firehydrant_get_alert_analytics(
             created_at = incident.get("created_at", "")
             if created_at:
                 try:
-                    created = datetime.fromisoformat(
-                        created_at.replace("Z", "+00:00")
-                    )
+                    created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
                     stats["hours_distribution"][created.hour] += 1
                 except (ValueError, TypeError):
                     pass
@@ -666,9 +658,7 @@ def firehydrant_get_alert_analytics(
         for name, stats in name_stats.items():
             fire_count = stats["fire_count"]
             mttr_vals = stats["mttr_values"]
-            avg_mttr = (
-                round(sum(mttr_vals) / len(mttr_vals), 2) if mttr_vals else None
-            )
+            avg_mttr = round(sum(mttr_vals) / len(mttr_vals), 2) if mttr_vals else None
 
             is_noisy = fire_count > 10
             is_flapping = fire_count > 20 and avg_mttr is not None and avg_mttr < 10
@@ -678,9 +668,7 @@ def firehydrant_get_alert_analytics(
                 hours_dist.get(h, 0) for h in [0, 1, 2, 3, 4, 5, 22, 23]
             )
             off_hours_rate = (
-                round(off_hours_count / fire_count * 100, 1)
-                if fire_count > 0
-                else 0
+                round(off_hours_count / fire_count * 100, 1) if fire_count > 0 else 0
             )
 
             analytics.append(
@@ -769,9 +757,7 @@ def firehydrant_calculate_mttr(
                             break
                     if svc_name:
                         incidents = [
-                            i
-                            for i in incidents
-                            if svc_name in i.get("services", [])
+                            i for i in incidents if svc_name in i.get("services", [])
                         ]
             except Exception:
                 pass
@@ -826,7 +812,9 @@ def firehydrant_calculate_mttr(
 register_tool("firehydrant_list_incidents", firehydrant_list_incidents)
 register_tool("firehydrant_get_incident", firehydrant_get_incident)
 register_tool("firehydrant_get_incident_timeline", firehydrant_get_incident_timeline)
-register_tool("firehydrant_list_incidents_by_date_range", firehydrant_list_incidents_by_date_range)
+register_tool(
+    "firehydrant_list_incidents_by_date_range", firehydrant_list_incidents_by_date_range
+)
 register_tool("firehydrant_list_services", firehydrant_list_services)
 register_tool("firehydrant_list_environments", firehydrant_list_environments)
 register_tool("firehydrant_get_alert_analytics", firehydrant_get_alert_analytics)
