@@ -510,16 +510,20 @@ class OpenHandsProvider(LLMProvider):
 
     def _build_system_prompt(self) -> str:
         """Build the full system prompt with skills and context."""
-        parts = [
-            "You are an AI agent for incident investigation and infrastructure automation.",
-            "",
-            "## Core Principles",
-            "- Always investigate before acting",
-            "- Use dry-run mode for dangerous operations",
-            "- Report findings clearly and concisely",
-            "- Use subagents for isolated deep-dive analysis",
-            "",
-        ]
+        # Use custom system prompt from team config if available
+        if self.config.system_prompt:
+            parts = [self.config.system_prompt]
+        else:
+            parts = [
+                "You are an AI agent for incident investigation and infrastructure automation.",
+                "",
+                "## Core Principles",
+                "- Always investigate before acting",
+                "- Use dry-run mode for dangerous operations",
+                "- Report findings clearly and concisely",
+                "- Use subagents for isolated deep-dive analysis",
+                "",
+            ]
 
         if self._skills_loader:
             parts.append(self._skills_loader.get_skill_summaries())
