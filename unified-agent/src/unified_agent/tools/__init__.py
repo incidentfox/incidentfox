@@ -72,6 +72,11 @@ def _load_all_tools():
     except ImportError:
         pass
 
+    try:
+        from . import gitlab
+    except ImportError:
+        pass
+
     # Observability
     try:
         from . import grafana

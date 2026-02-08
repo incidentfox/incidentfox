@@ -335,6 +335,14 @@ INTEGRATION_SCHEMAS = [
                 "description": "GitLab personal access token with api scope",
             },
             {
+                "name": "verify_ssl",
+                "type": "boolean",
+                "required": False,
+                "level": "org",
+                "description": "Verify SSL certificates (disable for self-signed certs)",
+                "default_value": True,
+            },
+            {
                 "name": "default_project",
                 "type": "string",
                 "required": False,
