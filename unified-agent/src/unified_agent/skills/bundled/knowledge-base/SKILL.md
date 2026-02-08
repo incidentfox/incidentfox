@@ -1,6 +1,9 @@
 ---
 name: knowledge-base
 description: Search runbooks, documentation, and knowledge base articles from Confluence. Use when looking for incident response procedures, service documentation, post-mortems, or troubleshooting guides.
+category: documentation
+required_integrations:
+  - confluence
 allowed-tools: Bash(python *)
 ---
 

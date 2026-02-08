@@ -30,6 +30,7 @@ import {
   Trash2,
   LayoutTemplate,
   Server,
+  BookOpen,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/apiClient';
 import { QuickStartWizard } from '@/components/onboarding/QuickStartWizard';
@@ -75,6 +76,7 @@ interface AgentConfig {
   disable_default_sub_agents?: string[];  // Team overrides to disable inherited sub-agents
   enable_extra_sub_agents?: string[];     // Team overrides to add team-specific sub-agents
   mcps?: { [mcp_id: string]: boolean };  // Dict format: {mcp_id: boolean}
+  skills?: { [skill_id: string]: boolean };
   max_turns: number;
   handoff_strategy?: string;
   source: 'org' | 'team';
@@ -85,6 +87,14 @@ interface ToolDefinition {
   description: string;
   source: 'built-in' | 'mcp';
   mcp_server?: string;
+}
+
+interface SkillDefinition {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  required_integrations: string[];
 }
 
 interface RemoteAgentConfig {
@@ -148,6 +158,7 @@ export default function AgentSettingsPage() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [showToolPicker, setShowToolPicker] = useState(false);
   const [toolPool, setToolPool] = useState<ToolDefinition[]>([]);
+  const [skillsPool, setSkillsPool] = useState<SkillDefinition[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
 
   // NEW: MCP Servers state
@@ -187,6 +198,24 @@ export default function AgentSettingsPage() {
       console.error('Failed to load tool pool:', e);
     } finally {
       setLoadingTools(false);
+    }
+  }, []);
+
+  const loadSkillsPool = useCallback(async () => {
+    try {
+      const res = await fetch('/api/team/skills');
+      if (res.ok) {
+        const data = await res.json();
+        setSkillsPool((data.skills || []).map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description || '',
+          category: s.category || '',
+          required_integrations: s.required_integrations || [],
+        })));
+      }
+    } catch (err) {
+      console.error('Failed to load skills pool:', err);
     }
   }, []);
 
@@ -314,7 +343,8 @@ export default function AgentSettingsPage() {
   useEffect(() => {
     loadAgents();
     loadToolPool();
-  }, [loadAgents, loadToolPool]);
+    loadSkillsPool();
+  }, [loadAgents, loadToolPool, loadSkillsPool]);
 
   // Pre-fill team overrides when raw data loads
   useEffect(() => {
@@ -585,6 +615,7 @@ export default function AgentSettingsPage() {
               // Use canonical sub_agents dict format: {agent_id: boolean}
               sub_agents: editingAgent.sub_agents,
               mcps: editingAgent.mcps,
+              skills: editingAgent.skills,
               max_turns: editingAgent.max_turns,
               handoff_strategy: editingAgent.handoff_strategy,
             },
@@ -1601,6 +1632,78 @@ export default function AgentSettingsPage() {
                         </>
                       );
                     })()}
+                  </div>
+                </div>
+
+                {/* Skills Section */}
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-violet-500" />
+                      <h3 className="font-semibold text-gray-900 dark:text-white">Skills</h3>
+                      <span className="text-xs text-gray-500">(click to enable/disable)</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* Enabled skills */}
+                    {skillsPool.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {skillsPool
+                          .filter(skill => {
+                            const agentSkills = editingAgent?.skills || {};
+                            return agentSkills[skill.id] === true;
+                          })
+                          .map(skill => (
+                            <button
+                              key={skill.id}
+                              onClick={() => {
+                                if (!editingAgent) return;
+                                const agentSkills = { ...(editingAgent.skills || {}) };
+                                agentSkills[skill.id] = false;
+                                setEditingAgent({ ...editingAgent, skills: agentSkills });
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-violet-500 text-white hover:bg-violet-600 transition-colors"
+                              title={skill.description}
+                            >
+                              <BookOpen className="w-3.5 h-3.5" />
+                              {skill.name}
+                              <X className="w-3 h-3 ml-1" />
+                            </button>
+                          ))}
+                      </div>
+                    )}
+
+                    {/* Available skills to add */}
+                    {skillsPool.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {skillsPool
+                          .filter(skill => {
+                            const agentSkills = editingAgent?.skills || {};
+                            return agentSkills[skill.id] !== true;
+                          })
+                          .map(skill => (
+                            <button
+                              key={skill.id}
+                              onClick={() => {
+                                if (!editingAgent) return;
+                                const agentSkills = { ...(editingAgent.skills || {}) };
+                                agentSkills[skill.id] = true;
+                                setEditingAgent({ ...editingAgent, skills: agentSkills });
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-violet-500 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                              title={skill.description}
+                            >
+                              <BookOpen className="w-3.5 h-3.5" />
+                              {skill.name}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+
+                    {skillsPool.length === 0 && (
+                      <p className="text-sm text-gray-500">Loading skills...</p>
+                    )}
                   </div>
                 </div>
 

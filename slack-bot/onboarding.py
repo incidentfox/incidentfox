@@ -9,6 +9,7 @@ Handles:
 
 import json
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from assets_config import get_integration_logo_url
@@ -521,23 +522,24 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "setup_instructions": (
             "*Setup Instructions:*\n"
             "1. Log into your GitLab instance\n"
-            "2. Go to *User Settings* (click your avatar) > *Access Tokens*\n"
-            "3. Click *Add new token*\n"
-            "4. Name it 'IncidentFox', set an expiration date\n"
-            "5. Select the `api` scope (full API access)\n"
-            "6. Click *Create personal access token* and copy the token\n"
-            "7. Paste the token and your GitLab URL below"
+            "2. Create an access token with `api` scope:\n"
+            "   • *Personal token:* User Settings > Access Tokens\n"
+            "   • *Group token (recommended for enterprise):* Group > Settings > Access Tokens\n"
+            "   • *Project token:* Project > Settings > Access Tokens\n"
+            "3. Name it 'IncidentFox', set an expiration date\n"
+            "4. Click *Create* and copy the token\n"
+            "5. Paste the token and your GitLab URL below"
         ),
         "docs_url": "https://docs.gitlab.com/ee/api/rest/",
         "context_prompt_placeholder": "e.g., 'Main repos: group/api, group/frontend. Production branch is main. CI/CD pipelines are in .gitlab-ci.yml.'",
         "fields": [
             {
                 "id": "api_key",
-                "name": "Personal Access Token",
+                "name": "Access Token",
                 "type": "secret",
                 "required": True,
                 "placeholder": "glpat-...",
-                "hint": "GitLab personal access token with api scope",
+                "hint": "Personal, group, or project access token with api scope",
             },
             {
                 "id": "domain",
@@ -546,6 +548,14 @@ INTEGRATIONS: List[Dict[str, Any]] = [
                 "required": False,
                 "placeholder": "https://gitlab.com (default) or https://gitlab.yourcompany.com",
                 "hint": "Leave blank for gitlab.com. Set this for self-hosted GitLab",
+            },
+            {
+                "id": "verify_ssl",
+                "name": "Verify SSL Certificates",
+                "type": "boolean",
+                "required": False,
+                "hint": "Uncheck for self-hosted GitLab with self-signed certificates",
+                "default": True,
             },
         ],
     },
@@ -2105,16 +2115,22 @@ def build_integrations_page(
 
     # Footer with Advanced Settings option
     blocks.append({"type": "divider"})
+    web_ui_url = os.environ.get("WEB_UI_URL")
+    footer_lines = [
+        ":bulb: Add more integrations anytime: click on the IncidentFox avatar → *Open App*.",
+    ]
+    if web_ui_url:
+        footer_lines.append(
+            f":computer: Prefer a web UI? Configure integrations at <{web_ui_url}/team/tools|Web Dashboard>"
+        )
+    footer_lines.append(":lock: All credentials are encrypted and stored securely.")
     blocks.append(
         {
             "type": "context",
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": (
-                        ":bulb: Add more integrations anytime: click on the IncidentFox avatar → *Open App*.\n"
-                        ":lock: All credentials are encrypted and stored securely."
-                    ),
+                    "text": "\n".join(footer_lines),
                 }
             ],
         }

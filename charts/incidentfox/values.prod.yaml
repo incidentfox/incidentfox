@@ -15,6 +15,7 @@ global:
   configService:
     url: "http://incidentfox-config-service.incidentfox-prod.svc.cluster.local:8080"
     orgId: "prod"
+  webUiUrl: "https://ui.incidentfox.ai"
   database:
     databaseUrlSecretName: incidentfox-database-url
     databaseUrlSecretKey: DATABASE_URL

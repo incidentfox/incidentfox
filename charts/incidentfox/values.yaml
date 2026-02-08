@@ -17,6 +17,9 @@ global:
     url: "" # e.g. http://incidentfox-config-service.incidentfox.svc.cluster.local:8080
     orgId: "pilot"
 
+  # Public URL for the web UI (used by slack-bot for links in messages)
+  webUiUrl: ""
+
 ingress:
   enabled: true
   className: alb

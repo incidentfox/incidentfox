@@ -110,7 +110,9 @@ INTEGRATION_HELP = {
         "Or configure via team settings at /team/settings/integrations/bigquery",
     ],
     "gitlab": [
-        "Set GITLAB_TOKEN environment variable",
+        "Set GITLAB_TOKEN environment variable with a personal access token (api scope)",
+        "Set GITLAB_URL for self-hosted GitLab (defaults to https://gitlab.com)",
+        "Set GITLAB_VERIFY_SSL=false for self-signed certificates",
         "Or configure via team settings at /team/settings/integrations/gitlab",
     ],
     "confluence": [

@@ -45,8 +45,8 @@ echo "   Image tag: $IMAGE_TAG"
 docker buildx create --use --name multiplatform 2>/dev/null || docker buildx use multiplatform
 docker buildx build \
     --platform linux/amd64 \
-    -t 103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:${IMAGE_TAG} \
-    -t 103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest \
+    -t 103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sre-agent:${IMAGE_TAG} \
+    -t 103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sre-agent:latest \
     --push \
     .
 
@@ -145,11 +145,11 @@ kubectl apply -f k8s/server-deployment.yaml -n incidentfox-prod
 echo ""
 echo "1️⃣2️⃣  Updating server to new image..."
 kubectl set image deployment/incidentfox-server \
-    server=103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:${IMAGE_TAG} \
+    server=103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sre-agent:${IMAGE_TAG} \
     -n incidentfox-prod
 # Also update SANDBOX_IMAGE env var so sandboxes use the same version
 kubectl set env deployment/incidentfox-server \
-    SANDBOX_IMAGE=103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:${IMAGE_TAG} \
+    SANDBOX_IMAGE=103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sre-agent:${IMAGE_TAG} \
     -n incidentfox-prod
 kubectl rollout status deployment/incidentfox-server -n incidentfox-prod --timeout=3m
 

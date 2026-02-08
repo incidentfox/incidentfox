@@ -1,6 +1,9 @@
 ---
 name: project-clickup
 description: ClickUp project management integration for incident tracking and task management
+category: project-management
+required_integrations:
+  - clickup
 allowed-tools:
   - Bash(python *)
 ---

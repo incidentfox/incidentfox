@@ -24,6 +24,12 @@ class Skill:
     description: str
     content: str
     path: str
+    category: str = ""
+    required_integrations: List[str] = None
+
+    def __post_init__(self):
+        if self.required_integrations is None:
+            self.required_integrations = []
 
     def __str__(self) -> str:
         return f"Skill({self.name})"
@@ -147,16 +153,21 @@ class SkillLoader:
 
         return None
 
-    def list_skills(self) -> List[Dict[str, str]]:
+    def list_skills(self) -> List[Dict]:
         """
-        List all available skills with their descriptions.
+        List all available skills with their metadata.
 
         Returns:
-            List of {name, description} dicts
+            List of skill metadata dicts
         """
         skills = self.discover_skills()
         return [
-            {"name": skill.name, "description": skill.description}
+            {
+                "name": skill.name,
+                "description": skill.description,
+                "category": skill.category,
+                "required_integrations": skill.required_integrations,
+            }
             for skill in skills.values()
         ]
 
@@ -192,6 +203,8 @@ class SkillLoader:
 
         name = frontmatter.get("name")
         description = frontmatter.get("description", "")
+        category = frontmatter.get("category", "")
+        required_integrations = frontmatter.get("required_integrations", [])
 
         if not name:
             # Use directory name as fallback
@@ -202,6 +215,8 @@ class SkillLoader:
             description=description,
             content=markdown_content.strip(),
             path=path,
+            category=category,
+            required_integrations=required_integrations or [],
         )
 
     def get_skill_prompt_section(self, skill_name: str) -> str:

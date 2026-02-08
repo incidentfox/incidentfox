@@ -94,6 +94,11 @@ spec:
             - name: SLACK_BASE_URL
               value: {{ .Values.services.slackBot.baseUrl | quote }}
             {{- end }}
+            # Web UI URL for links in Slack messages
+            {{- if .Values.global.webUiUrl }}
+            - name: WEB_UI_URL
+              value: {{ .Values.global.webUiUrl | quote }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /health
