@@ -110,6 +110,11 @@ def _load_all_tools():
         pass
 
     try:
+        from . import jira
+    except ImportError:
+        pass
+
+    try:
         from . import slack
     except ImportError:
         pass
