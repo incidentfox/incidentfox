@@ -238,7 +238,6 @@ jobs:
             --create-namespace \
             -f incidentfox/${{ env.VALUES_FILE }} \
             --no-hooks \
-            --force \
             --timeout 5m
 
       - name: Restart deployments to pull latest images
