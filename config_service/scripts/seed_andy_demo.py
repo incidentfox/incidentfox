@@ -202,19 +202,13 @@ def _build_business_context() -> str:
         lines.append(f"| {name} | {info['tier']} | {contact} | {notes} |")
 
     lines.append("\n## On-Call Info\n")
-    lines.append(
-        f"**PagerDuty Service ID:** `{ONCALL_TEAM['pagerduty_service_id']}`"
-    )
-    lines.append(
-        f"**Escalation Policy ID:** `{ONCALL_TEAM['escalation_policy_id']}`\n"
-    )
+    lines.append(f"**PagerDuty Service ID:** `{ONCALL_TEAM['pagerduty_service_id']}`")
+    lines.append(f"**Escalation Policy ID:** `{ONCALL_TEAM['escalation_policy_id']}`\n")
     lines.append("| Team Member | Slack | Role | Areas |")
     lines.append("|-------------|-------|------|-------|")
     for name, info in ONCALL_TEAM["team_members"].items():
         areas = ", ".join(info["areas"])
-        lines.append(
-            f"| {name} | <@{info['slack_id']}> | {info['role']} | {areas} |"
-        )
+        lines.append(f"| {name} | <@{info['slack_id']}> | {info['role']} | {areas} |")
 
     return "\n".join(lines)
 
@@ -383,7 +377,7 @@ def main() -> None:
     print("DEMO SETUP SUMMARY")
     print("=" * 60)
     print(f"\nSlack Channel: {slack_channel_id} ({slack_channel_name})")
-    print(f"\nauto_triage: True (processes ALL messages, not just @mentions)")
+    print("\nauto_triage: True (processes ALL messages, not just @mentions)")
     print("\nCustomers configured:")
     for name, info in CUSTOMERS.items():
         print(f"  - {name}: {info['tier']}")
