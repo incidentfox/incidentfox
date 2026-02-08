@@ -215,6 +215,10 @@ static_resources:
           http_protocol_options:
             allow_absolute_url: true
 
+          # Disable idle/request timeouts for long-running LLM streaming connections
+          stream_idle_timeout: 0s
+          request_timeout: 0s
+
           route_config:
             name: proxy_routes
             virtual_hosts:
@@ -230,6 +234,8 @@ static_resources:
                 route:
                   cluster: anthropic
                   auto_host_rewrite: true
+                  timeout: 0s
+                  idle_timeout: 0s
               # Coralogix API
               - match:
                   prefix: "/api/v1/dataprime/"
@@ -247,6 +253,8 @@ static_resources:
                 route:
                   cluster: anthropic
                   auto_host_rewrite: true
+                  timeout: 0s
+                  idle_timeout: 0s
 
           http_filters:
           - name: envoy.filters.http.ext_authz
@@ -451,8 +459,6 @@ static_resources:
                 "name": "GITLAB_BASE_URL",
                 "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/gitlab",
             },
-            # Kubeconfig for K8s tools
-            {"name": "KUBECONFIG", "value": "/home/agent/.kube/config"},
             # LiteLLM observability callback (Langfuse)
             {"name": "LITELLM_CALLBACKS", "value": "langfuse"},
         ]
@@ -546,6 +552,34 @@ static_resources:
             ]
         )
 
+        # Set integration-specific metadata env vars from CONFIGURED_INTEGRATIONS.
+        # Tools need these for URL construction (e.g., SENTRY_ORGANIZATION for API paths).
+        # API keys are NOT set here - the credential-resolver proxy handles auth.
+        try:
+            integrations = (
+                json.loads(configured_integrations) if configured_integrations else []
+            )
+        except (json.JSONDecodeError, TypeError):
+            integrations = []
+
+        for integration in integrations:
+            iid = integration.get("id", "")
+            if iid == "sentry":
+                if integration.get("organization"):
+                    env.append(
+                        {
+                            "name": "SENTRY_ORGANIZATION",
+                            "value": integration["organization"],
+                        }
+                    )
+                if integration.get("project"):
+                    env.append(
+                        {"name": "SENTRY_PROJECT", "value": integration["project"]}
+                    )
+            elif iid == "datadog":
+                if integration.get("site"):
+                    env.append({"name": "DD_SITE", "value": integration["site"]})
+
         return env
 
     def create_sandbox(
@@ -628,6 +662,9 @@ static_resources:
                         }
                     },
                     "spec": {
+                        "serviceAccountName": os.getenv(
+                            "SANDBOX_SERVICE_ACCOUNT", "incidentfox-sandbox-pod"
+                        ),
                         "containers": [
                             # Main agent container
                             {

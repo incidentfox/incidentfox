@@ -21,54 +21,39 @@ depends_on = None
 
 def upgrade():
     """Create k8s_clusters table and status enum."""
-    # Create the status enum
-    k8s_cluster_status = sa.Enum(
-        "disconnected", "connected", "error", name="k8s_cluster_status"
+    # Create the enum idempotently via raw SQL (PostgreSQL has no
+    # CREATE TYPE IF NOT EXISTS, so we catch duplicate_object).
+    op.execute(
+        "DO $$ BEGIN "
+        "CREATE TYPE k8s_cluster_status AS ENUM ('disconnected', 'connected', 'error'); "
+        "EXCEPTION WHEN duplicate_object THEN NULL; "
+        "END $$;"
     )
-    k8s_cluster_status.create(op.get_bind(), checkfirst=True)
 
-    # Create the table
-    op.create_table(
-        "k8s_clusters",
-        sa.Column("id", sa.String(64), primary_key=True),
-        sa.Column("org_id", sa.String(64), nullable=False),
-        sa.Column("team_node_id", sa.String(128), nullable=False),
-        # Cluster identity
-        sa.Column("cluster_name", sa.String(256), nullable=False),
-        sa.Column("display_name", sa.String(256), nullable=True),
-        # Token reference (for revocation)
-        sa.Column("token_id", sa.String(128), nullable=False, unique=True),
-        # Connection status
-        sa.Column(
-            "status",
-            k8s_cluster_status,
-            nullable=False,
-            server_default="disconnected",
-        ),
-        sa.Column("last_heartbeat_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("last_error", sa.Text, nullable=True),
-        # Agent info (populated when agent connects)
-        sa.Column("agent_version", sa.String(32), nullable=True),
-        sa.Column("agent_pod_name", sa.String(256), nullable=True),
-        # Cluster info (populated when agent connects)
-        sa.Column("kubernetes_version", sa.String(32), nullable=True),
-        sa.Column("node_count", sa.Integer, nullable=True),
-        sa.Column("namespace_count", sa.Integer, nullable=True),
-        sa.Column("cluster_info", JSONB, nullable=True),
-        # Timestamps
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            onupdate=sa.func.now(),
-            nullable=False,
-        ),
+    # Create the table using raw SQL to avoid SQLAlchemy trying to
+    # re-create the enum type (create_type=False is unreliable).
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS k8s_clusters (
+            id VARCHAR(64) PRIMARY KEY,
+            org_id VARCHAR(64) NOT NULL,
+            team_node_id VARCHAR(128) NOT NULL,
+            cluster_name VARCHAR(256) NOT NULL,
+            display_name VARCHAR(256),
+            token_id VARCHAR(128) NOT NULL UNIQUE,
+            status k8s_cluster_status NOT NULL DEFAULT 'disconnected',
+            last_heartbeat_at TIMESTAMP WITH TIME ZONE,
+            last_error TEXT,
+            agent_version VARCHAR(32),
+            agent_pod_name VARCHAR(256),
+            kubernetes_version VARCHAR(32),
+            node_count INTEGER,
+            namespace_count INTEGER,
+            cluster_info JSONB,
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+        );
+        """
     )
 
     # Create indexes for common queries

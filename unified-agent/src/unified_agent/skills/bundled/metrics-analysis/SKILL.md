@@ -1,6 +1,10 @@
 ---
 name: metrics-analysis
 description: Prometheus/Grafana metrics analysis and PromQL queries. Use when investigating latency, error rates, resource usage, or any time-series metrics.
+category: observability
+required_integrations:
+  - grafana
+  - prometheus
 allowed-tools: Bash(python *)
 ---
 

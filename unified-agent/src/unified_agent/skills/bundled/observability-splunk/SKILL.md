@@ -1,6 +1,9 @@
 ---
 name: splunk-analysis
 description: Splunk log analysis using SPL (Search Processing Language). Use when investigating issues via Splunk logs, saved searches, or alerts.
+category: observability
+required_integrations:
+  - splunk
 allowed-tools: Bash(python *)
 ---
 

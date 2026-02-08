@@ -343,6 +343,90 @@ def verify_recall_signature(
         raise SignatureVerificationError("bad_signature", "recall")
 
 
+def verify_blameless_signature(
+    *,
+    webhook_secret: str,
+    signature: Optional[str],
+    raw_body: str,
+) -> None:
+    """
+    Verify Blameless webhook signature.
+
+    Blameless uses HMAC-SHA256 with format:
+    - Signature header (X-Blameless-Signature): sha256={hex_digest}
+
+    Args:
+        webhook_secret: Blameless webhook secret
+        signature: X-Blameless-Signature header
+        raw_body: Raw request body as string
+
+    Raises:
+        SignatureVerificationError: If verification fails
+    """
+    if not webhook_secret:
+        raise SignatureVerificationError("missing_webhook_secret", "blameless")
+    if not signature:
+        raise SignatureVerificationError("missing_signature_header", "blameless")
+
+    # Handle both with and without prefix
+    if signature.startswith("sha256="):
+        provided_digest = signature[7:]
+    else:
+        provided_digest = signature
+
+    # Compute expected digest
+    expected_digest = hmac.new(
+        webhook_secret.encode("utf-8"),
+        raw_body.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not _constant_time_compare(expected_digest, provided_digest):
+        raise SignatureVerificationError("bad_signature", "blameless")
+
+
+def verify_firehydrant_signature(
+    *,
+    webhook_secret: str,
+    signature: Optional[str],
+    raw_body: str,
+) -> None:
+    """
+    Verify FireHydrant webhook signature.
+
+    FireHydrant uses HMAC-SHA256 with format:
+    - Signature header (X-FireHydrant-Signature): sha256={hex_digest}
+
+    Args:
+        webhook_secret: FireHydrant webhook secret
+        signature: X-FireHydrant-Signature header
+        raw_body: Raw request body as string
+
+    Raises:
+        SignatureVerificationError: If verification fails
+    """
+    if not webhook_secret:
+        raise SignatureVerificationError("missing_webhook_secret", "firehydrant")
+    if not signature:
+        raise SignatureVerificationError("missing_signature_header", "firehydrant")
+
+    # Handle both with and without prefix
+    if signature.startswith("sha256="):
+        provided_digest = signature[7:]
+    else:
+        provided_digest = signature
+
+    # Compute expected digest
+    expected_digest = hmac.new(
+        webhook_secret.encode("utf-8"),
+        raw_body.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not _constant_time_compare(expected_digest, provided_digest):
+        raise SignatureVerificationError("bad_signature", "firehydrant")
+
+
 def verify_google_chat_bearer_token(
     *,
     authorization: Optional[str],

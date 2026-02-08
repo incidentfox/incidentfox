@@ -11,13 +11,34 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from ..core.agent import function_tool
-from . import register_tool
+from . import get_proxy_headers, register_tool
 
 logger = logging.getLogger(__name__)
 
 
+def _is_datadog_proxy_mode():
+    """Check if Datadog is in proxy mode."""
+    return bool(os.getenv("DATADOG_BASE_URL"))
+
+
+def _datadog_proxy_request(method, path, params=None, json_body=None):
+    """Make a request to Datadog via credential-resolver proxy."""
+    import httpx
+
+    base_url = os.getenv("DATADOG_BASE_URL").rstrip("/")
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    headers.update(get_proxy_headers())
+
+    url = f"{base_url}/{path.lstrip('/')}"
+    response = httpx.request(
+        method, url, headers=headers, params=params, json=json_body, timeout=30
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def _get_datadog_client():
-    """Get Datadog API client."""
+    """Get Datadog API client (direct mode only)."""
     try:
         from datadog_api_client import ApiClient, Configuration
     except ImportError:
@@ -56,29 +77,49 @@ def query_datadog_metrics(query: str, time_range_minutes: int = 60) -> str:
     logger.info(f"query_datadog_metrics: query={query}")
 
     try:
-        from datadog_api_client.v1.api.metrics_api import MetricsApi
-
         end_time = datetime.utcnow()
         start_time = end_time - timedelta(minutes=time_range_minutes)
 
-        with _get_datadog_client() as api_client:
-            api_instance = MetricsApi(api_client)
-            response = api_instance.query_metrics(
-                _from=int(start_time.timestamp()),
-                to=int(end_time.timestamp()),
-                query=query,
+        if _is_datadog_proxy_mode():
+            data = _datadog_proxy_request(
+                "GET",
+                "/v1/query",
+                params={
+                    "from": int(start_time.timestamp()),
+                    "to": int(end_time.timestamp()),
+                    "query": query,
+                },
             )
-
-        series_data = []
-        if hasattr(response, "series") and response.series:
-            for s in response.series[:10]:  # Limit series
+            series_data = []
+            for s in (data.get("series") or [])[:10]:
                 series_data.append(
                     {
                         "metric": s.get("metric"),
                         "scope": s.get("scope"),
-                        "pointlist": s.get("pointlist", [])[-100:],  # Last 100 points
+                        "pointlist": s.get("pointlist", [])[-100:],
                     }
                 )
+        else:
+            from datadog_api_client.v1.api.metrics_api import MetricsApi
+
+            with _get_datadog_client() as api_client:
+                api_instance = MetricsApi(api_client)
+                response = api_instance.query_metrics(
+                    _from=int(start_time.timestamp()),
+                    to=int(end_time.timestamp()),
+                    query=query,
+                )
+
+            series_data = []
+            if hasattr(response, "series") and response.series:
+                for s in response.series[:10]:
+                    series_data.append(
+                        {
+                            "metric": s.get("metric"),
+                            "scope": s.get("scope"),
+                            "pointlist": s.get("pointlist", [])[-100:],
+                        }
+                    )
 
         return json.dumps(
             {
@@ -95,7 +136,7 @@ def query_datadog_metrics(query: str, time_range_minutes: int = 60) -> str:
             {
                 "ok": False,
                 "error": str(e),
-                "hint": "Set DATADOG_API_KEY and DATADOG_APP_KEY",
+                "hint": "Set DATADOG_API_KEY and DATADOG_APP_KEY, or DATADOG_BASE_URL for proxy mode",
             }
         )
     except Exception as e:
@@ -126,36 +167,60 @@ def search_datadog_logs(
     logger.info(f"search_datadog_logs: query={query}")
 
     try:
-        from datadog_api_client.v2.api.logs_api import LogsApi
-        from datadog_api_client.v2.model.logs_list_request import LogsListRequest
-        from datadog_api_client.v2.model.logs_query_filter import LogsQueryFilter
-
         start_time = datetime.utcnow() - timedelta(minutes=time_range_minutes)
 
-        with _get_datadog_client() as api_client:
-            api_instance = LogsApi(api_client)
-
-            body = LogsListRequest(
-                filter=LogsQueryFilter(
-                    query=query,
-                    _from=start_time.isoformat() + "Z",
-                    to=datetime.utcnow().isoformat() + "Z",
-                ),
+        if _is_datadog_proxy_mode():
+            data = _datadog_proxy_request(
+                "POST",
+                "/v2/logs/events/search",
+                json_body={
+                    "filter": {
+                        "query": query,
+                        "from": start_time.isoformat() + "Z",
+                        "to": datetime.utcnow().isoformat() + "Z",
+                    },
+                },
             )
+            logs = []
+            for log in (data.get("data") or [])[:limit]:
+                attrs = log.get("attributes", {})
+                logs.append(
+                    {
+                        "timestamp": attrs.get("timestamp"),
+                        "message": attrs.get("message"),
+                        "service": attrs.get("service"),
+                        "status": attrs.get("status"),
+                    }
+                )
+        else:
+            from datadog_api_client.v2.api.logs_api import LogsApi
+            from datadog_api_client.v2.model.logs_list_request import LogsListRequest
+            from datadog_api_client.v2.model.logs_query_filter import LogsQueryFilter
 
-            response = api_instance.list_logs(body=body)
+            with _get_datadog_client() as api_client:
+                api_instance = LogsApi(api_client)
 
-        logs = []
-        for log in (response.data or [])[:limit]:
-            attrs = log.attributes
-            logs.append(
-                {
-                    "timestamp": str(attrs.timestamp) if attrs.timestamp else None,
-                    "message": attrs.message,
-                    "service": attrs.service,
-                    "status": attrs.status,
-                }
-            )
+                body = LogsListRequest(
+                    filter=LogsQueryFilter(
+                        query=query,
+                        _from=start_time.isoformat() + "Z",
+                        to=datetime.utcnow().isoformat() + "Z",
+                    ),
+                )
+
+                response = api_instance.list_logs(body=body)
+
+            logs = []
+            for log in (response.data or [])[:limit]:
+                attrs = log.attributes
+                logs.append(
+                    {
+                        "timestamp": str(attrs.timestamp) if attrs.timestamp else None,
+                        "message": attrs.message,
+                        "service": attrs.service,
+                        "status": attrs.status,
+                    }
+                )
 
         return json.dumps(
             {
@@ -171,7 +236,7 @@ def search_datadog_logs(
             {
                 "ok": False,
                 "error": str(e),
-                "hint": "Set DATADOG_API_KEY and DATADOG_APP_KEY",
+                "hint": "Set DATADOG_API_KEY and DATADOG_APP_KEY, or DATADOG_BASE_URL for proxy mode",
             }
         )
     except Exception as e:

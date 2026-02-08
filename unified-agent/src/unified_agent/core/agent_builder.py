@@ -560,20 +560,10 @@ def _run_agent_in_thread(agent: Agent, query: str, max_turns: int = 25) -> Any:
 def _create_agent_tool(agent_id: str, agent: Agent, max_turns: int) -> Callable:
     """Create a function_tool wrapper for an agent."""
 
-    @function_tool
+    tool_name = f"call_{agent_id.replace('-', '_')}_agent"
+
     def call_agent(query: str) -> str:
-        """
-        Call a specialized agent with a natural language query.
-
-        The agent will investigate and return structured findings.
-
-        Args:
-            query: Natural language description of what to investigate
-
-        Returns:
-            JSON with the agent's findings and recommendations.
-            If max turns exceeded, returns partial findings with status="incomplete"
-        """
+        """Call a specialized agent with a natural language query."""
         try:
             result = _run_agent_in_thread(agent, query, max_turns)
             # Check if result is a partial work summary
@@ -587,10 +577,9 @@ def _create_agent_tool(agent_id: str, agent: Agent, max_turns: int) -> Callable:
         except Exception as e:
             return json.dumps({"error": str(e), "agent": f"{agent_id}_agent"})
 
-    # Rename the tool based on agent
-    call_agent.__name__ = f"call_{agent_id.replace('-', '_')}_agent"
-    call_agent.__doc__ = f"""
-    Call the {agent.name} to investigate.
+    # Set unique name BEFORE creating schema
+    call_agent.__name__ = tool_name
+    call_agent.__doc__ = f"""Call the {agent.name} to investigate.
 
     This agent specializes in: {agent_id}
 
@@ -605,7 +594,8 @@ def _create_agent_tool(agent_id: str, agent: Agent, max_turns: int) -> Callable:
         If max turns exceeded, returns partial findings with status="incomplete"
     """
 
-    return call_agent
+    # Apply function_tool AFTER renaming so schema gets the unique name
+    return function_tool(call_agent)
 
 
 def _get_sub_agent_ids(agent_config: dict[str, Any]) -> list[str]:

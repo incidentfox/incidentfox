@@ -29,6 +29,7 @@ import {
   ChevronRight,
   Settings,
   Trash2,
+  BookOpen,
 } from 'lucide-react';
 
 interface ConfigField {
@@ -157,6 +158,15 @@ export default function TeamToolsPage() {
     warnings: string[];
     error?: string;
   } | null>(null);
+
+  // Skills catalog state
+  const [skillsCatalog, setSkillsCatalog] = useState<Array<{
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    required_integrations: string[];
+  }>>([]);
 
   // NEW: Tool filtering modal state
   const [filteringMcp, setFilteringMcp] = useState<ToolItem | null>(null);
@@ -304,6 +314,9 @@ export default function TeamToolsPage() {
       } catch (e) {
         console.error('Failed to load integration schemas:', e);
       }
+
+      // Load skills catalog from effective config
+      setSkillsCatalog(data.built_in_skills || []);
     } catch (e) {
       console.error('Failed to load tools/MCPs:', e);
     } finally {
@@ -1144,6 +1157,94 @@ export default function TeamToolsPage() {
                 {expandedCategories.has('mcp') && (
                   <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                     {filteredServers.map(renderCard)}
+                  </div>
+                )}
+              </section>
+            </>
+          );
+        })()}
+
+        {/* Skills Section */}
+        {skillsCatalog.length > 0 && (() => {
+          const filteredSkills = skillsCatalog.filter(skill =>
+            skill.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            skill.description?.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+          const skillsByCategory: Record<string, typeof skillsCatalog> = {};
+          filteredSkills.forEach(skill => {
+            const cat = skill.category || 'other';
+            if (!skillsByCategory[cat]) skillsByCategory[cat] = [];
+            skillsByCategory[cat].push(skill);
+          });
+          const SKILL_CATEGORY_LABELS: Record<string, string> = {
+            methodology: 'Methodology',
+            observability: 'Observability',
+            infrastructure: 'Infrastructure',
+            incident: 'Incident Management',
+            communication: 'Communication',
+            code: 'Code & Deployment',
+            documentation: 'Documentation',
+            'project-management': 'Project Management',
+            other: 'Other',
+          };
+          return (
+            <>
+              <div className="space-y-4">
+                <h2 className="text-sm font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                  Skills ({skillsCatalog.length} available)
+                </h2>
+              </div>
+
+              <section className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => {
+                    const next = new Set(expandedCategories);
+                    next.has('skills') ? next.delete('skills') : next.add('skills');
+                    setExpandedCategories(next);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800"
+                >
+                  {expandedCategories.has('skills') ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  <BookOpen className="w-4 h-4 text-violet-500" />
+                  <span className="font-medium text-gray-900 dark:text-white">All Skills</span>
+                  <span className="text-xs text-gray-500">
+                    {searchQuery ? `${filteredSkills.length} of ${skillsCatalog.length}` : `${skillsCatalog.length} total`}
+                  </span>
+                </button>
+                {expandedCategories.has('skills') && (
+                  <div className="p-4 space-y-4">
+                    {Object.entries(skillsByCategory)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([category, skills]) => (
+                        <div key={category}>
+                          <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                            {SKILL_CATEGORY_LABELS[category] || category}
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {skills.map(skill => (
+                              <div
+                                key={skill.id}
+                                className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                              >
+                                <BookOpen className="w-4 h-4 text-violet-500 mt-0.5 flex-shrink-0" />
+                                <div className="min-w-0">
+                                  <div className="font-medium text-sm text-gray-900 dark:text-white">{skill.name}</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{skill.description}</div>
+                                  {skill.required_integrations?.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1.5">
+                                      {skill.required_integrations.map((int: string) => (
+                                        <span key={int} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">
+                                          {int}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 )}
               </section>

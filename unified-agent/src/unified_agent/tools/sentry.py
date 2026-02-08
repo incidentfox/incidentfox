@@ -10,20 +10,37 @@ import os
 from typing import Optional
 
 from ..core.agent import function_tool
-from . import register_tool
+from . import get_proxy_headers, register_tool
 
 logger = logging.getLogger(__name__)
 
 
 def _get_sentry_config():
-    """Get Sentry configuration."""
+    """Get Sentry configuration.
+
+    Supports two modes:
+    - Direct: SENTRY_AUTH_TOKEN + SENTRY_ORGANIZATION (sends to sentry.io)
+    - Proxy: SENTRY_BASE_URL points to credential-resolver proxy (handles auth).
+             The proxy adds /api/0/ prefix, so base_url should NOT include it.
+    """
+    base_url = os.getenv("SENTRY_BASE_URL")
     auth_token = os.getenv("SENTRY_AUTH_TOKEN")
     organization = os.getenv("SENTRY_ORGANIZATION")
+
+    if base_url:
+        # Proxy mode: credential-resolver handles auth
+        return {
+            "base_url": base_url.rstrip("/"),
+            "auth_token": auth_token,  # May be None
+            "organization": organization or "",
+            "project": os.getenv("SENTRY_PROJECT"),
+        }
 
     if not auth_token or not organization:
         raise ValueError("SENTRY_AUTH_TOKEN and SENTRY_ORGANIZATION must be set")
 
     return {
+        "base_url": "https://sentry.io/api/0",
         "auth_token": auth_token,
         "organization": organization,
         "project": os.getenv("SENTRY_PROJECT"),
@@ -33,10 +50,13 @@ def _get_sentry_config():
 def _get_sentry_headers():
     """Get Sentry API headers."""
     config = _get_sentry_config()
-    return {
-        "Authorization": f"Bearer {config['auth_token']}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
+    if config.get("auth_token"):
+        headers["Authorization"] = f"Bearer {config['auth_token']}"
+    else:
+        # Proxy mode: add JWT/tenant headers for credential-resolver
+        headers.update(get_proxy_headers())
+    return headers
 
 
 @function_tool
@@ -68,7 +88,7 @@ def sentry_list_issues(
         if not project_slug:
             return json.dumps({"ok": False, "error": "project must be specified"})
 
-        url = f"https://sentry.io/api/0/projects/{config['organization']}/{project_slug}/issues/"
+        url = f"{config['base_url']}/projects/{config['organization']}/{project_slug}/issues/"
 
         params = {"limit": limit}
         if query:
@@ -135,7 +155,8 @@ def sentry_get_issue_details(issue_id: str) -> str:
         import requests
 
         headers = _get_sentry_headers()
-        url = f"https://sentry.io/api/0/issues/{issue_id}/"
+        config = _get_sentry_config()
+        url = f"{config['base_url']}/issues/{issue_id}/"
 
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
@@ -189,9 +210,7 @@ def sentry_list_projects() -> str:
         config = _get_sentry_config()
         headers = _get_sentry_headers()
 
-        url = (
-            f"https://sentry.io/api/0/organizations/{config['organization']}/projects/"
-        )
+        url = f"{config['base_url']}/organizations/{config['organization']}/projects/"
 
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
@@ -257,7 +276,7 @@ def sentry_get_project_stats(
         config = _get_sentry_config()
         headers = _get_sentry_headers()
 
-        url = f"https://sentry.io/api/0/projects/{config['organization']}/{project}/stats/"
+        url = f"{config['base_url']}/projects/{config['organization']}/{project}/stats/"
 
         params = {
             "stat": stat,
@@ -313,7 +332,7 @@ def sentry_list_releases(project: str, limit: int = 10) -> str:
         config = _get_sentry_config()
         headers = _get_sentry_headers()
 
-        url = f"https://sentry.io/api/0/projects/{config['organization']}/{project}/releases/"
+        url = f"{config['base_url']}/projects/{config['organization']}/{project}/releases/"
 
         params = {"per_page": limit}
 

@@ -11,13 +11,32 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from ..core.agent import function_tool
-from . import register_tool
+from . import get_proxy_headers, register_tool
 
 logger = logging.getLogger(__name__)
 
 
+def _get_pagerduty_base_url():
+    """Get PagerDuty API base URL (supports proxy mode)."""
+    return os.getenv("PAGERDUTY_BASE_URL", "https://api.pagerduty.com").rstrip("/")
+
+
 def _get_pagerduty_headers():
-    """Get PagerDuty API headers."""
+    """Get PagerDuty API headers.
+
+    Supports two modes:
+    - Direct: PAGERDUTY_API_KEY (sends Token auth directly)
+    - Proxy: PAGERDUTY_BASE_URL points to credential-resolver (handles auth)
+    """
+    if os.getenv("PAGERDUTY_BASE_URL"):
+        # Proxy mode: credential-resolver handles auth
+        headers = {
+            "Accept": "application/vnd.pagerduty+json;version=2",
+            "Content-Type": "application/json",
+        }
+        headers.update(get_proxy_headers())
+        return headers
+
     api_key = os.getenv("PAGERDUTY_API_KEY")
     if not api_key:
         raise ValueError("PAGERDUTY_API_KEY environment variable not set")
@@ -51,7 +70,7 @@ def pagerduty_get_incident(incident_id: str) -> str:
         headers = _get_pagerduty_headers()
 
         response = requests.get(
-            f"https://api.pagerduty.com/incidents/{incident_id}",
+            f"{_get_pagerduty_base_url()}/incidents/{incident_id}",
             headers=headers,
             timeout=30,
         )
@@ -121,7 +140,7 @@ def pagerduty_get_incident_log_entries(
         headers = _get_pagerduty_headers()
 
         response = requests.get(
-            f"https://api.pagerduty.com/incidents/{incident_id}/log_entries",
+            f"{_get_pagerduty_base_url()}/incidents/{incident_id}/log_entries",
             headers=headers,
             params={"limit": max_results},
             timeout=30,
@@ -195,7 +214,7 @@ def pagerduty_list_incidents(
             params["service_ids[]"] = [s.strip() for s in service_ids.split(",")]
 
         response = requests.get(
-            "https://api.pagerduty.com/incidents",
+            f"{_get_pagerduty_base_url()}/incidents",
             headers=headers,
             params=params,
             timeout=30,
@@ -258,7 +277,7 @@ def pagerduty_get_escalation_policy(policy_id: str) -> str:
         headers = _get_pagerduty_headers()
 
         response = requests.get(
-            f"https://api.pagerduty.com/escalation_policies/{policy_id}",
+            f"{_get_pagerduty_base_url()}/escalation_policies/{policy_id}",
             headers=headers,
             timeout=30,
         )
@@ -338,7 +357,7 @@ def pagerduty_calculate_mttr(service_id: str = "", days: int = 30) -> str:
             params["service_ids[]"] = service_id
 
         response = requests.get(
-            "https://api.pagerduty.com/incidents",
+            f"{_get_pagerduty_base_url()}/incidents",
             headers=headers,
             params=params,
             timeout=30,

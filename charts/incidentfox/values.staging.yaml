@@ -27,14 +27,12 @@ ingress:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     alb.ingress.kubernetes.io/healthcheck-path: "/api/health"
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
   host: "staging.incidentfox.ai"
   tls:
     enabled: true
-    # us-west-2 ACM certificate (reuse existing)
-    certificateArn: "arn:aws:acm:us-west-2:103002841599:certificate/e79b663b-062a-45de-96a0-b4e8e50e3c4f"
+    # us-west-2 wildcard ACM certificate (*.incidentfox.ai)
+    certificateArn: "arn:aws:acm:us-west-2:103002841599:certificate/01a210b9-5f7b-4c60-a807-707d9f8d234b"
     redirectToHttps: true
   waf:
     enabled: false
@@ -42,7 +40,7 @@ ingress:
 
 externalSecrets:
   enabled: true
-  installClusterSecretStore: true
+  installClusterSecretStore: false  # Already exists in cluster
   awsRegion: "us-west-2"
   contract:
     databaseUrl:
@@ -156,6 +154,9 @@ services:
       failureThreshold: 5
     oidc:
       enabled: false
+    encryptionKey:
+      secretName: incidentfox-encryption-key
+      secretKey: ENCRYPTION_KEY
 
   orchestrator:
     enabled: true
