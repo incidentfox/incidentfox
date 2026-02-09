@@ -5931,8 +5931,8 @@ if __name__ == "__main__":
 
                 # Save via the app-specific installation store
                 bolt_app_instance = registry.get_app(slug)
-                if bolt_app_instance and hasattr(bolt_app_instance, "_oauth_flow"):
-                    bolt_app_instance._oauth_flow.installation_store.save(installation)
+                if bolt_app_instance and bolt_app_instance._oauth_flow and bolt_app_instance._oauth_flow.settings:
+                    bolt_app_instance._oauth_flow.settings.installation_store.save(installation)
                 else:
                     # Fallback: use a direct store with slug
                     store = ConfigServiceInstallationStore(
