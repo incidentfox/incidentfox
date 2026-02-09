@@ -1084,10 +1084,6 @@ export default function TeamToolsPage() {
             <Server className="w-3.5 h-3.5" />
             <span>{customServers.length} MCP Servers</span>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300">
-            <Wrench className="w-3.5 h-3.5" />
-            <span>{allBuiltInTools.length} Tools</span>
-          </div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300">
             <BookOpen className="w-3.5 h-3.5" />
             <span>{skillsCatalog.length} Skills</span>
