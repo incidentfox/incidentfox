@@ -1130,6 +1130,12 @@ class OpenHandsProvider(LLMProvider):
                     messages.append(assistant_msg_dict)
 
                     if assistant_message.tool_calls:
+                        # Capture text content alongside tool calls
+                        # (Claude often includes user-facing text with tool_use)
+                        if assistant_message.content:
+                            yield thought_event(self.thread_id, assistant_message.content)
+                            final_text = assistant_message.content
+
                         for tool_call in assistant_message.tool_calls:
                             tool_name = tool_call.function.name
                             tool_args_str = tool_call.function.arguments
