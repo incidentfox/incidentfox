@@ -803,45 +803,20 @@ class OpenHandsProvider(LLMProvider):
                 }
             )
 
-        # PagerDuty create incident - always available (agent decides when to use it)
-        tools.append(
-            {
-                "type": "function",
-                "function": {
-                    "name": "pagerduty_create_incident",
-                    "description": "Create a PagerDuty incident to page the on-call responder. Use 'high' urgency for phone calls, 'low' for email/push notifications.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "service_id": {
-                                "type": "string",
-                                "description": "PagerDuty service ID to create the incident on",
-                            },
-                            "title": {
-                                "type": "string",
-                                "description": "Incident title (e.g. '[Enterprise] Acme Corp: API outage')",
-                            },
-                            "urgency": {
-                                "type": "string",
-                                "enum": ["high", "low"],
-                                "description": "Urgency level - 'high' (phone call) or 'low' (email/push)",
-                            },
-                            "description": {
-                                "type": "string",
-                                "description": "Incident body with details about the issue",
-                            },
-                            "escalation_policy_id": {
-                                "type": "string",
-                                "description": "Optional escalation policy ID override",
-                            },
-                        },
-                        "required": ["service_id", "title"],
-                    },
-                },
-            }
-        )
+        # Add all registered tools (pagerduty, kubernetes, github, etc.)
+        tools.extend(self._get_registry_tools_schema())
 
         return tools
+
+    def _get_registry_tools_schema(self) -> list[dict]:
+        """Get OpenAI-compatible schemas for all registered tools."""
+        from ..tools import get_tool_registry
+
+        schemas = []
+        for name, func in get_tool_registry().items():
+            if hasattr(func, "_tool_schema") and func._tool_schema:
+                schemas.append(func._tool_schema)
+        return schemas
 
     async def _execute_tool(
         self,
@@ -1034,20 +1009,19 @@ class OpenHandsProvider(LLMProvider):
                 except Exception as e:
                     yield (f"Fetch error: {str(e)}", False, "FetchError")
 
-            elif tool_name == "pagerduty_create_incident":
-                from ..tools.pagerduty import pagerduty_create_incident
-
-                result = pagerduty_create_incident(
-                    service_id=args.get("service_id", ""),
-                    title=args.get("title", ""),
-                    urgency=args.get("urgency", "high"),
-                    description=args.get("description", ""),
-                    escalation_policy_id=args.get("escalation_policy_id", ""),
-                )
-                yield (result, True, None)
-
             else:
-                yield (f"Unknown tool: {tool_name}", False, "UnknownTool")
+                # Try registry tools (pagerduty, kubernetes, github, etc.)
+                from ..tools import get_tool
+
+                tool_func = get_tool(tool_name)
+                if tool_func:
+                    if asyncio.iscoroutinefunction(tool_func):
+                        result = await tool_func(**args)
+                    else:
+                        result = tool_func(**args)
+                    yield (result, True, None)
+                else:
+                    yield (f"Unknown tool: {tool_name}", False, "UnknownTool")
 
         except subprocess.TimeoutExpired:
             yield ("Command timed out", False, "Timeout")
