@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from src.db import repository
 from src.db.config_models import NodeConfiguration
 from src.db.config_repository import get_or_create_node_configuration
-from src.db.models import GitHubInstallation, OrgNode, SlackInstallation
+from src.db.models import GitHubInstallation, OrgNode, SlackApp, SlackInstallation
 from src.db.session import get_db
 
 logger = structlog.get_logger()
@@ -1803,6 +1803,156 @@ def get_recall_transcript_segments(
     )
 
 
+# ==================== Slack App Registry (Multi-App) ====================
+
+
+class SlackAppCreateRequest(BaseModel):
+    """Request to register a new Slack app."""
+
+    slug: str
+    display_name: str
+    app_id: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    signing_secret: Optional[str] = None
+    bot_scopes: Optional[str] = None
+    oauth_redirect_url: Optional[str] = None
+
+
+class SlackAppUpdateRequest(BaseModel):
+    """Request to update a Slack app."""
+
+    display_name: Optional[str] = None
+    app_id: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    signing_secret: Optional[str] = None
+    bot_scopes: Optional[str] = None
+    oauth_redirect_url: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class SlackAppResponse(BaseModel):
+    """Response with Slack app data."""
+
+    slug: str
+    display_name: str
+    app_id: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    signing_secret: Optional[str] = None
+    bot_scopes: Optional[str] = None
+    oauth_redirect_url: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+@router.post("/slack/apps", response_model=SlackAppResponse)
+def create_slack_app(
+    request: SlackAppCreateRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """Register a new Slack app for multi-app support."""
+    existing = session.query(SlackApp).filter(SlackApp.slug == request.slug).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Slack app '{request.slug}' already exists")
+
+    app = SlackApp(
+        slug=request.slug,
+        display_name=request.display_name,
+        app_id=request.app_id,
+        client_id=request.client_id,
+        client_secret=request.client_secret,
+        signing_secret=request.signing_secret,
+        bot_scopes=request.bot_scopes,
+        oauth_redirect_url=request.oauth_redirect_url,
+    )
+    session.add(app)
+    session.commit()
+
+    logger.info("slack_app_created", slug=app.slug)
+    return _slack_app_to_response(app)
+
+
+@router.get("/slack/apps", response_model=List[SlackAppResponse])
+def list_slack_apps(
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """List all active Slack apps."""
+    apps = session.query(SlackApp).filter(SlackApp.is_active.is_(True)).all()
+    return [_slack_app_to_response(a) for a in apps]
+
+
+@router.get("/slack/apps/{slug}", response_model=SlackAppResponse)
+def get_slack_app(
+    slug: str,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """Get a specific Slack app by slug (includes decrypted secrets)."""
+    app = session.query(SlackApp).filter(SlackApp.slug == slug).first()
+    if not app:
+        raise HTTPException(status_code=404, detail=f"Slack app '{slug}' not found")
+    return _slack_app_to_response(app)
+
+
+@router.patch("/slack/apps/{slug}", response_model=SlackAppResponse)
+def update_slack_app(
+    slug: str,
+    request: SlackAppUpdateRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """Update a Slack app configuration."""
+    app = session.query(SlackApp).filter(SlackApp.slug == slug).first()
+    if not app:
+        raise HTTPException(status_code=404, detail=f"Slack app '{slug}' not found")
+
+    for field, value in request.model_dump(exclude_unset=True).items():
+        setattr(app, field, value)
+
+    session.commit()
+    logger.info("slack_app_updated", slug=slug)
+    return _slack_app_to_response(app)
+
+
+@router.delete("/slack/apps/{slug}")
+def delete_slack_app(
+    slug: str,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """Soft-delete a Slack app (set is_active=false)."""
+    app = session.query(SlackApp).filter(SlackApp.slug == slug).first()
+    if not app:
+        raise HTTPException(status_code=404, detail=f"Slack app '{slug}' not found")
+
+    app.is_active = False
+    session.commit()
+    logger.info("slack_app_deleted", slug=slug)
+    return {"deleted": True, "slug": slug}
+
+
+def _slack_app_to_response(app: SlackApp) -> SlackAppResponse:
+    """Convert a SlackApp model to response."""
+    return SlackAppResponse(
+        slug=app.slug,
+        display_name=app.display_name,
+        app_id=app.app_id,
+        client_id=app.client_id,
+        client_secret=app.client_secret,
+        signing_secret=app.signing_secret,
+        bot_scopes=app.bot_scopes,
+        oauth_redirect_url=app.oauth_redirect_url,
+        is_active=app.is_active,
+        created_at=app.created_at,
+        updated_at=app.updated_at,
+    )
+
+
 # ==================== Slack Installation Storage ====================
 
 
@@ -1813,6 +1963,7 @@ class SlackInstallationRequest(BaseModel):
     team_id: str
     user_id: Optional[str] = None
     app_id: Optional[str] = None
+    slack_app_slug: Optional[str] = None
     bot_token: str
     bot_id: Optional[str] = None
     bot_user_id: Optional[str] = None
@@ -1835,6 +1986,7 @@ class SlackInstallationResponse(BaseModel):
     team_id: str
     user_id: Optional[str] = None
     app_id: Optional[str] = None
+    slack_app_slug: Optional[str] = None
     bot_token: str
     bot_id: Optional[str] = None
     bot_user_id: Optional[str] = None
@@ -1860,6 +2012,7 @@ def _installation_to_response(
         team_id=installation.team_id,
         user_id=installation.user_id,
         app_id=installation.app_id,
+        slack_app_slug=installation.slack_app_slug,
         bot_token=installation.bot_token,
         bot_id=installation.bot_id,
         bot_user_id=installation.bot_user_id,
@@ -1890,19 +2043,26 @@ def save_slack_installation(
     Save a Slack OAuth installation.
 
     This is an upsert operation - if an installation with the same
-    (enterprise_id, team_id, user_id) exists, it will be updated.
+    (slack_app_slug, enterprise_id, team_id, user_id) exists, it will be updated.
     """
     logger.info(
         "save_slack_installation",
         enterprise_id=request.enterprise_id,
         team_id=request.team_id,
         user_id=request.user_id,
+        slack_app_slug=request.slack_app_slug,
     )
 
     # Look for existing installation
     query = session.query(SlackInstallation).filter(
         SlackInstallation.team_id == request.team_id,
     )
+
+    if request.slack_app_slug:
+        query = query.filter(SlackInstallation.slack_app_slug == request.slack_app_slug)
+    else:
+        query = query.filter(SlackInstallation.slack_app_slug.is_(None))
+
     if request.enterprise_id:
         query = query.filter(SlackInstallation.enterprise_id == request.enterprise_id)
     else:
@@ -1918,6 +2078,7 @@ def save_slack_installation(
     if existing:
         # Update existing installation
         existing.app_id = request.app_id
+        existing.slack_app_slug = request.slack_app_slug
         existing.bot_token = request.bot_token
         existing.bot_id = request.bot_id
         existing.bot_user_id = request.bot_user_id
@@ -1945,6 +2106,7 @@ def save_slack_installation(
     # Create new installation
     installation = SlackInstallation(
         id=str(uuid_lib.uuid4()),
+        slack_app_slug=request.slack_app_slug,
         enterprise_id=request.enterprise_id,
         team_id=request.team_id,
         user_id=request.user_id,
@@ -1978,6 +2140,7 @@ def find_slack_installation(
     team_id: str,
     enterprise_id: Optional[str] = None,
     user_id: Optional[str] = None,
+    slack_app_slug: Optional[str] = None,
     is_enterprise_install: bool = False,
     session: Session = Depends(get_db),
     service: str = Depends(require_internal_service),
@@ -1985,11 +2148,15 @@ def find_slack_installation(
     """
     Find a Slack installation by team_id, enterprise_id, and user_id.
 
+    Optionally filter by slack_app_slug for multi-app support.
     Returns None (null) if not found.
     """
     query = session.query(SlackInstallation).filter(
         SlackInstallation.team_id == team_id,
     )
+
+    if slack_app_slug:
+        query = query.filter(SlackInstallation.slack_app_slug == slack_app_slug)
 
     if enterprise_id:
         query = query.filter(SlackInstallation.enterprise_id == enterprise_id)
@@ -2014,6 +2181,7 @@ def delete_slack_installation(
     team_id: str,
     enterprise_id: Optional[str] = None,
     user_id: Optional[str] = None,
+    slack_app_slug: Optional[str] = None,
     session: Session = Depends(get_db),
     service: str = Depends(require_internal_service),
 ):
@@ -2025,11 +2193,15 @@ def delete_slack_installation(
         enterprise_id=enterprise_id,
         team_id=team_id,
         user_id=user_id,
+        slack_app_slug=slack_app_slug,
     )
 
     query = session.query(SlackInstallation).filter(
         SlackInstallation.team_id == team_id,
     )
+
+    if slack_app_slug:
+        query = query.filter(SlackInstallation.slack_app_slug == slack_app_slug)
 
     if enterprise_id:
         query = query.filter(SlackInstallation.enterprise_id == enterprise_id)

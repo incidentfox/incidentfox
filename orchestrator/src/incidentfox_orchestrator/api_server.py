@@ -218,22 +218,19 @@ def create_app() -> FastAPI:
             app_.state.correlation_service = None
             _log("correlation_service_not_configured")
 
-        # Slack Bolt integration for Slack webhooks
-        slack_signing_secret = (os.getenv("SLACK_SIGNING_SECRET") or "").strip()
-        if slack_signing_secret:
-            from incidentfox_orchestrator.webhooks.slack_bolt_app import (
-                SlackBoltIntegration,
-            )
+        # Slack Bolt integration for Slack webhooks (multi-app support)
+        # Loads signing secrets from config service DB; falls back to
+        # SLACK_SIGNING_SECRET env var if no apps configured in DB.
+        from incidentfox_orchestrator.webhooks.slack_bolt_app import (
+            SlackBoltIntegration,
+        )
 
-            app_.state.slack_bolt = SlackBoltIntegration(
-                config_service=app_.state.config_service,
-                agent_api=app_.state.agent_api,
-                audit_api=app_.state.audit_api,
-            )
-            _log("slack_bolt_initialized")
-        else:
-            app_.state.slack_bolt = None
-            _log("slack_bolt_not_configured", reason="SLACK_SIGNING_SECRET not set")
+        app_.state.slack_bolt = SlackBoltIntegration(
+            config_service=app_.state.config_service,
+            agent_api=app_.state.agent_api,
+            audit_api=app_.state.audit_api,
+        )
+        _log("slack_bolt_initialized", apps=app_.state.slack_bolt.list_slugs())
 
         # Google Chat integration
         google_chat_project_id = (os.getenv("GOOGLE_CHAT_PROJECT_ID") or "").strip()

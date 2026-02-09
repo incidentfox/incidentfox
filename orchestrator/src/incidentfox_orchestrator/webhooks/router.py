@@ -155,18 +155,52 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 # ============================================================================
 
 
+@router.post("/slack/{slug}/events")
+async def slack_events_for_app(request: Request, slug: str):
+    """
+    Handle Slack Events API webhooks for a specific app (by slug).
+
+    Each app has its own signing_secret for signature verification.
+    """
+    bolt_integration: Optional[SlackBoltIntegration] = getattr(
+        request.app.state, "slack_bolt", None
+    )
+    if bolt_integration is None:
+        _log("slack_bolt_not_initialized")
+        raise HTTPException(status_code=503, detail="Slack integration not initialized")
+
+    handler = bolt_integration.get_handler(slug)
+    if handler is None:
+        raise HTTPException(status_code=404, detail=f"Unknown Slack app: {slug}")
+
+    return await handler.handle(request)
+
+
+@router.post("/slack/{slug}/interactions")
+async def slack_interactions_for_app(request: Request, slug: str):
+    """
+    Handle Slack Interactivity for a specific app (by slug).
+    """
+    bolt_integration: Optional[SlackBoltIntegration] = getattr(
+        request.app.state, "slack_bolt", None
+    )
+    if bolt_integration is None:
+        _log("slack_bolt_not_initialized")
+        raise HTTPException(status_code=503, detail="Slack integration not initialized")
+
+    handler = bolt_integration.get_handler(slug)
+    if handler is None:
+        raise HTTPException(status_code=404, detail=f"Unknown Slack app: {slug}")
+
+    return await handler.handle(request)
+
+
+# Legacy routes (backward compat - forward to default app's handler)
+
+
 @router.post("/slack/events")
 async def slack_events(request: Request):
-    """
-    Handle Slack Events API webhooks via Slack Bolt SDK.
-
-    Bolt automatically handles:
-    - Signature verification using SLACK_SIGNING_SECRET
-    - URL verification challenges
-    - Event parsing and routing to registered handlers
-
-    The actual event processing is in slack_handlers.py.
-    """
+    """Legacy: Handle Slack events for default app."""
     bolt_integration: Optional[SlackBoltIntegration] = getattr(
         request.app.state, "slack_bolt", None
     )
@@ -184,16 +218,7 @@ async def slack_events(request: Request):
 
 @router.post("/slack/interactions")
 async def slack_interactions(request: Request):
-    """
-    Handle Slack Interactivity & Shortcuts via Slack Bolt SDK.
-
-    Bolt automatically handles:
-    - Signature verification
-    - Form-encoded payload parsing
-    - Routing to registered action handlers (feedback buttons, etc.)
-
-    The actual interaction handlers are in slack_handlers.py.
-    """
+    """Legacy: Handle Slack interactions for default app."""
     bolt_integration: Optional[SlackBoltIntegration] = getattr(
         request.app.state, "slack_bolt", None
     )
