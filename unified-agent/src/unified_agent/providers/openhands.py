@@ -810,10 +810,20 @@ class OpenHandsProvider(LLMProvider):
 
     # Built-in tool names that have custom execution logic in _execute_tool.
     # Registry tools with these names are skipped to avoid duplicates.
-    _BUILTIN_TOOL_NAMES = frozenset({
-        "bash", "read_file", "write_file", "edit_file",
-        "glob", "grep", "task", "skill", "web_search", "web_fetch",
-    })
+    _BUILTIN_TOOL_NAMES = frozenset(
+        {
+            "bash",
+            "read_file",
+            "write_file",
+            "edit_file",
+            "glob",
+            "grep",
+            "task",
+            "skill",
+            "web_search",
+            "web_fetch",
+        }
+    )
 
     def _get_registry_tools_schema(self) -> list[dict]:
         """Get OpenAI-compatible schemas for all registered tools."""
