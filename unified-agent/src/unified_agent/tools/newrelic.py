@@ -94,7 +94,9 @@ def query_newrelic_nrql(
         "SELECT count(*) FROM Log WHERE level = 'ERROR' FACET service SINCE 1 hour ago"
     """
     if not account_id or not nrql_query:
-        return json.dumps({"ok": False, "error": "account_id and nrql_query are required"})
+        return json.dumps(
+            {"ok": False, "error": "account_id and nrql_query are required"}
+        )
 
     logger.info(f"query_newrelic_nrql: account={account_id}, query={nrql_query[:80]}")
 
@@ -111,18 +113,22 @@ def query_newrelic_nrql(
         }
         """
 
-        data = _newrelic_request({
-            "query": graphql_query,
-            "variables": {"accountId": int(account_id), "nrql": nrql_query},
-        })
+        data = _newrelic_request(
+            {
+                "query": graphql_query,
+                "variables": {"accountId": int(account_id), "nrql": nrql_query},
+            }
+        )
 
         # Check for GraphQL errors
         if "errors" in data:
-            return json.dumps({
-                "ok": False,
-                "error": data["errors"][0].get("message", "GraphQL query failed"),
-                "account_id": account_id,
-            })
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": data["errors"][0].get("message", "GraphQL query failed"),
+                    "account_id": account_id,
+                }
+            )
 
         results = (
             data.get("data", {})
@@ -132,20 +138,24 @@ def query_newrelic_nrql(
             .get("results", [])
         )
 
-        return json.dumps({
-            "ok": True,
-            "account_id": account_id,
-            "query": nrql_query,
-            "result_count": len(results),
-            "results": results,
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "account_id": account_id,
+                "query": nrql_query,
+                "result_count": len(results),
+                "results": results,
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({
-            "ok": False,
-            "error": str(e),
-            "hint": "Set NEWRELIC_API_KEY or NEWRELIC_BASE_URL",
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set NEWRELIC_API_KEY or NEWRELIC_BASE_URL",
+            }
+        )
     except Exception as e:
         logger.error(f"query_newrelic_nrql error: {e}")
         return json.dumps({"ok": False, "error": str(e), "account_id": account_id})
@@ -171,7 +181,9 @@ def get_newrelic_apm_summary(
         JSON with APM summary metrics
     """
     if not app_name or not account_id:
-        return json.dumps({"ok": False, "error": "app_name and account_id are required"})
+        return json.dumps(
+            {"ok": False, "error": "app_name and account_id are required"}
+        )
 
     logger.info(f"get_newrelic_apm_summary: app={app_name}, account={account_id}")
 
@@ -191,20 +203,24 @@ def get_newrelic_apm_summary(
             else:
                 summary[metric_name] = None
 
-        return json.dumps({
-            "ok": True,
-            "app_name": app_name,
-            "account_id": account_id,
-            "time_range": time_range,
-            "summary": summary,
-        })
+        return json.dumps(
+            {
+                "ok": True,
+                "app_name": app_name,
+                "account_id": account_id,
+                "time_range": time_range,
+                "summary": summary,
+            }
+        )
 
     except ValueError as e:
-        return json.dumps({
-            "ok": False,
-            "error": str(e),
-            "hint": "Set NEWRELIC_API_KEY or NEWRELIC_BASE_URL",
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": str(e),
+                "hint": "Set NEWRELIC_API_KEY or NEWRELIC_BASE_URL",
+            }
+        )
     except Exception as e:
         logger.error(f"get_newrelic_apm_summary error: {e}")
         return json.dumps({"ok": False, "error": str(e), "app_name": app_name})
