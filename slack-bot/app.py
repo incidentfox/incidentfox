@@ -2799,6 +2799,59 @@ def handle_message(event, client, context):
                 if not prompt_text and not images and not file_attachments:
                     return  # Nothing to process
 
+                # ==========================================================
+                # Skip filter: decide if bot should respond at all
+                # ==========================================================
+
+                # 1) Small talk / non-actionable — silently ignore
+                _normalized = prompt_text.lower().strip().rstrip("!.?")
+                _SKIP_PHRASES = {
+                    "hi", "hey", "hello", "yo", "sup",
+                    "thanks", "thank you", "thx", "ty",
+                    "ok", "okay", "k", "got it", "cool", "nice",
+                    "bye", "goodbye", "see you", "cya",
+                    "good morning", "good afternoon", "good evening",
+                    "gm", "morning", "np", "no problem",
+                    "sounds good", "will do", "noted", "ack",
+                    "lol", "lmao", "haha", "hah",
+                    "yes", "no", "yep", "nope", "yeah", "nah",
+                    "sure", "agreed", "makes sense",
+                }
+                if _normalized in _SKIP_PHRASES and not images and not file_attachments:
+                    logger.info(
+                        f"⏭️ Auto-triage skip: non-actionable "
+                        f"'{prompt_text}'"
+                    )
+                    return
+
+                # 2) Thread with another human already engaged — stand down
+                _msg_thread_ts = event.get("thread_ts")
+                if _msg_thread_ts:
+                    try:
+                        thread_replies = client.conversations_replies(
+                            channel=channel_id, ts=_msg_thread_ts, limit=30
+                        )
+                        _other_humans = {
+                            msg.get("user")
+                            for msg in thread_replies.get("messages", [])
+                            if msg.get("user")
+                            and not msg.get("bot_id")
+                            and msg.get("user") != user_id
+                        }
+                        if _other_humans:
+                            logger.info(
+                                f"⏭️ Auto-triage skip: dev already in "
+                                f"thread {_msg_thread_ts} "
+                                f"(users: {_other_humans})"
+                            )
+                            return
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to check thread engagement: {e}"
+                        )
+
+                # ==========================================================
+
                 # Build enriched prompt
                 context_lines = ["\n### Slack Context"]
                 context_lines.append(
