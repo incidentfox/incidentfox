@@ -297,10 +297,12 @@ class ConfigServiceClient:
                 logger.info(
                     f"Channel routing found: channel={channel_id} -> "
                     f"org={result['org_id']}, team={result['team_node_id']}"
+                    f", auto_triage={result.get('auto_triage', False)}"
                 )
                 return {
                     "org_id": result["org_id"],
                     "team_node_id": result["team_node_id"],
+                    "auto_triage": result.get("auto_triage", False),
                 }
 
             logger.debug(f"No channel routing found for {channel_id}")

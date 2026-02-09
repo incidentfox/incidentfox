@@ -182,6 +182,7 @@ def build_progress_message(
     message_ts: Optional[str] = None,
     trigger_user_id: Optional[str] = None,
     trigger_text: Optional[str] = None,
+    minimal_ui: bool = False,
 ) -> list:
     """
     Build Block Kit blocks for an in-progress investigation.
@@ -201,6 +202,24 @@ def build_progress_message(
     """
     blocks = []
     thoughts = thoughts or []
+
+    # Minimal UI: just show a simple loading indicator, no thoughts/tools/buttons
+    if minimal_ui:
+        if loading_url:
+            blocks.append(
+                {
+                    "type": "context",
+                    "elements": [
+                        {"type": "image", "image_url": loading_url, "alt_text": "Loading"},
+                        {"type": "mrkdwn", "text": "Working on it..."},
+                    ],
+                }
+            )
+        else:
+            blocks.append(
+                {"type": "context", "elements": [{"type": "mrkdwn", "text": "Working on it..."}]}
+            )
+        return blocks
 
     # Use URL parameters (ignore deprecated file_id params)
     loading_icon = loading_url
@@ -463,6 +482,7 @@ def build_final_message(
     result_files: Optional[List[dict]] = None,
     trigger_user_id: Optional[str] = None,
     trigger_text: Optional[str] = None,
+    minimal_ui: bool = False,
 ) -> list:
     """
     Build Block Kit blocks for a completed investigation.
@@ -493,6 +513,24 @@ def build_final_message(
 
     # Use URL parameter (ignore deprecated file_id param)
     done_icon = done_url
+
+    # Minimal UI: skip trigger context, thoughts, View Session, feedback
+    # Only show the result text (customer-facing response)
+    if minimal_ui:
+        final_text = _extract_clean_result(result_text, thoughts)
+        if error:
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"Something went wrong. Please try again later."},
+                }
+            )
+            return blocks
+        if final_text:
+            formatted = slack_mrkdwn(final_text)
+            text_blocks, _ = _add_text_blocks(formatted, max_blocks=45)
+            blocks.extend(text_blocks)
+        return blocks
 
     # Add trigger context if this was a nudge-initiated investigation
     if trigger_user_id and trigger_text:

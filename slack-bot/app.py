@@ -175,6 +175,10 @@ class MessageState:
     trigger_user_id: Optional[str] = None  # Who clicked "Yes" on the nudge
     trigger_text: Optional[str] = None  # The message that triggered it
 
+    # Minimal UI mode (for auto_triage / customer-facing channels)
+    # Hides internal details: progress thoughts, tool usage, View Session, feedback
+    minimal_ui: bool = False
+
     # Subagent tracking
     # Key: tool_use_id of Task tool, Value: {description, subagent_type, completed, tools: [...]}
     subagents: Dict[str, dict] = field(default_factory=dict)
@@ -311,6 +315,7 @@ def build_progress_blocks(state: MessageState, client, team_id: str) -> list:
         message_ts=state.message_ts,
         trigger_user_id=state.trigger_user_id,
         trigger_text=state.trigger_text,
+        minimal_ui=state.minimal_ui,
     )
 
 
@@ -334,6 +339,7 @@ def build_final_blocks(state: MessageState, client, team_id: str) -> list:
         result_files=state.result_files,
         trigger_user_id=state.trigger_user_id,
         trigger_text=state.trigger_text,
+        minimal_ui=state.minimal_ui,
     )
 
 
@@ -1859,6 +1865,10 @@ def handle_mention(event, say, client, context):
         team_token = None
         try:
             config_client = get_config_client()
+            # Check if this channel is auto_triage (customer-facing, minimal UI)
+            routing = config_client.lookup_routing(channel_id)
+            if routing and routing.get("auto_triage"):
+                state.minimal_ui = True
             team_token = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
             logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")

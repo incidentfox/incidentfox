@@ -676,6 +676,7 @@ class RoutingLookupResponse(BaseModel):
     matched_by: Optional[str] = None  # Which identifier matched
     matched_value: Optional[str] = None
     tried: List[str] = []  # Which identifiers were tried
+    auto_triage: bool = False  # Whether the team processes ALL messages (not just @mentions)
 
 
 def _normalize_identifier(identifier_type: str, value: str) -> str:
@@ -818,6 +819,7 @@ def lookup_routing(
                     matched_by=identifier_type,
                     matched_value=value,
                     tried=tried,
+                    auto_triage=bool(config_row.config_json.get("auto_triage")),
                 )
 
     logger.info("routing_lookup_no_match", tried=tried)
