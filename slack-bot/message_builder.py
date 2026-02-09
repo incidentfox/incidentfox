@@ -515,21 +515,55 @@ def build_final_message(
     done_icon = done_url
 
     # Minimal UI: skip trigger context, thoughts, View Session, feedback
-    # Only show the result text (customer-facing response)
+    # Only show the result text (customer-facing response) + page button
     if minimal_ui:
         final_text = _extract_clean_result(result_text, thoughts)
         if error:
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"Something went wrong. Please try again later."},
+                    "text": {"type": "mrkdwn", "text": "Something went wrong. Please try again later."},
                 }
             )
-            return blocks
-        if final_text:
+        elif final_text:
             formatted = slack_mrkdwn(final_text)
-            text_blocks, _ = _add_text_blocks(formatted, max_blocks=45)
+            text_blocks, _ = _add_text_blocks(formatted, max_blocks=44)
             blocks.extend(text_blocks)
+
+        # "Page an engineer" safety-net button
+        page_value = {}
+        if message_ts:
+            page_value["message_ts"] = message_ts
+        if thread_id:
+            page_value["thread_id"] = thread_id
+
+        import json as _json
+
+        blocks.append(
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Page an engineer",
+                        },
+                        "action_id": "urgent_page",
+                        "value": _json.dumps(page_value),
+                        "confirm": {
+                            "title": {"type": "plain_text", "text": "Page on-call engineer?"},
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": "This will page an engineer immediately via PagerDuty. Use this if your issue is urgent or blocking.",
+                            },
+                            "confirm": {"type": "plain_text", "text": "Yes, page now"},
+                            "deny": {"type": "plain_text", "text": "Cancel"},
+                        },
+                    }
+                ],
+            }
+        )
         return blocks
 
     # Add trigger context if this was a nudge-initiated investigation

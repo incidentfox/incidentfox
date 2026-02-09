@@ -3693,6 +3693,225 @@ def handle_negative_feedback(ack, body):
     logger.info(f"Negative feedback: {body.get('message', {}).get('ts')}")
 
 
+@app.action("urgent_page")
+def handle_urgent_page(ack, body, client, context):
+    """Handle 'Page an engineer' button in auto-triage channels."""
+    ack()
+
+    value = json.loads(body["actions"][0].get("value", "{}"))
+    channel_id = body.get("channel", {}).get("id")
+    user_id = body.get("user", {}).get("id")
+    team_id = body.get("team", {}).get("id") or "unknown"
+    # Use the thread_ts of the message containing the button
+    message = body.get("message", {})
+    thread_ts = message.get("thread_ts") or message.get("ts")
+
+    logger.info(
+        f"🚨 URGENT PAGE: user={user_id}, channel={channel_id}, "
+        f"thread_ts={thread_ts}"
+    )
+
+    if not channel_id or not thread_ts:
+        logger.error("Missing channel_id or thread_ts for urgent page")
+        return
+
+    # Remove the page button from the original message to prevent double-clicks
+    original_blocks = message.get("blocks", [])
+    updated_blocks = [
+        b for b in original_blocks if not (
+            b.get("type") == "actions"
+            and any(
+                e.get("action_id") == "urgent_page"
+                for e in b.get("elements", [])
+            )
+        )
+    ]
+    # Add a context block showing the button was used
+    updated_blocks.append(
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"_<@{user_id}> paged an engineer_",
+                }
+            ],
+        }
+    )
+    try:
+        client.chat_update(
+            channel=channel_id,
+            ts=message.get("ts"),
+            blocks=updated_blocks,
+            text=message.get("text", ""),
+        )
+    except Exception as e:
+        logger.warning(f"Failed to update original message: {e}")
+
+    # Generate thread_id
+    sanitized_thread_ts = thread_ts.replace(".", "-")
+    sanitized_channel = channel_id.lower()
+    thread_id = f"slack-{sanitized_channel}-{sanitized_thread_ts}"
+
+    # Get user's name
+    sender_name = "Unknown User"
+    try:
+        user_response = client.users_info(user=user_id)
+        if user_response["ok"]:
+            user = user_response["user"]
+            profile = user.get("profile", {})
+            sender_name = (
+                profile.get("display_name")
+                or profile.get("real_name")
+                or user.get("name", "Unknown User")
+            )
+    except Exception as e:
+        logger.warning(f"Failed to get sender name: {e}")
+
+    # Build prompt that tells the agent to page immediately
+    # Include the original conversation context from the thread
+    original_text = ""
+    try:
+        replies = client.conversations_replies(
+            channel=channel_id, ts=thread_ts, limit=20
+        )
+        for msg in replies.get("messages", []):
+            if not msg.get("bot_id"):
+                original_text = msg.get("text", "")
+                break  # First non-bot message is the original request
+    except Exception as e:
+        logger.warning(f"Failed to fetch thread for context: {e}")
+
+    prompt = (
+        f"URGENT: The user {sender_name} (<@{user_id}>) pressed the "
+        f"'Page an engineer' button. Their original request was: "
+        f"\"{original_text}\"\n\n"
+        f"Page the on-call engineer NOW via pagerduty_create_incident. "
+        f"This is urgent. Also create a Jira ticket if one hasn't been "
+        f"created already for this request."
+        f"\n\n### Slack Context\n"
+        f"**Requested by:** {sender_name} (User ID: {user_id})\n"
+        f"**Channel:** <#{channel_id}> (Channel ID: {channel_id})"
+    )
+
+    # Post initial message
+    from assets_config import get_asset_url
+
+    loading_url = get_asset_url("loading")
+    initial_blocks = (
+        [
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "image",
+                        "image_url": loading_url,
+                        "alt_text": "Loading",
+                    },
+                    {"type": "mrkdwn", "text": "Paging an engineer..."},
+                ],
+            }
+        ]
+        if loading_url
+        else [
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": "Paging an engineer..."}
+                ],
+            }
+        ]
+    )
+
+    try:
+        initial_response = client.chat_postMessage(
+            channel=channel_id,
+            thread_ts=thread_ts,
+            text="Paging an engineer...",
+            blocks=initial_blocks,
+        )
+    except Exception as e:
+        logger.error(f"Failed to post urgent page message: {e}")
+        return
+
+    response_message_ts = initial_response["ts"]
+
+    state = MessageState(
+        channel_id=channel_id,
+        message_ts=response_message_ts,
+        thread_ts=thread_ts,
+        thread_id=thread_id,
+        minimal_ui=True,
+    )
+
+    try:
+        team_token = None
+        try:
+            config_client = get_config_client()
+            team_token = config_client.get_team_token_for_channel(
+                team_id, channel_id
+            )
+        except Exception as e:
+            logger.warning(f"Failed to get team token: {e}")
+
+        request_payload = {
+            "prompt": prompt,
+            "thread_id": thread_id,
+            "tenant_id": team_id,
+            "team_id": team_id,
+        }
+        if team_token:
+            request_payload["team_token"] = team_token
+
+        response = requests.post(
+            f"{SRE_AGENT_URL}/investigate",
+            json=request_payload,
+            stream=True,
+            timeout=300,
+            headers={"Accept": "text/event-stream"},
+        )
+
+        if response.status_code != 200:
+            error_detail = (
+                response.text[:200] if response.text else "Unknown error"
+            )
+            state.error = (
+                f"Server error ({response.status_code}): {error_detail}"
+            )
+            update_slack_message(client, state, team_id, final=True)
+            return
+
+        event_count = 0
+        for line in response.iter_lines(decode_unicode=True):
+            if line:
+                sse_event = parse_sse_event(line)
+                if sse_event:
+                    event_count += 1
+                    handle_stream_event(state, sse_event, client, team_id)
+
+        import time
+
+        _investigation_cache[state.message_ts] = state
+        _cache_timestamps[state.message_ts] = time.time()
+
+        if event_count == 0 and not state.error:
+            state.error = "No response received from agent"
+
+        update_slack_message(client, state, team_id, final=True)
+        save_investigation_snapshot(state)
+
+    except requests.exceptions.ConnectionError:
+        state.error = "Could not connect to investigation service."
+        update_slack_message(client, state, team_id, final=True)
+    except requests.exceptions.Timeout:
+        state.error = "Investigation timed out."
+        update_slack_message(client, state, team_id, final=True)
+    except Exception as e:
+        logger.exception(f"Error during urgent page: {e}")
+        state.error = f"Unexpected error: {str(e)}"
+        update_slack_message(client, state, team_id, final=True)
+
+
 @app.action("view_investigation_session")
 def handle_view_session(ack, body, client):
     """Handle "View Session" button - open modal with chronological timeline."""
