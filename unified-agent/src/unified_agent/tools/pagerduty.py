@@ -421,9 +421,107 @@ def pagerduty_calculate_mttr(service_id: str = "", days: int = 30) -> str:
         return json.dumps({"ok": False, "error": str(e)})
 
 
+@function_tool
+def pagerduty_create_incident(
+    service_id: str,
+    title: str,
+    urgency: str = "high",
+    description: str = "",
+    escalation_policy_id: str = "",
+) -> str:
+    """
+    Create a PagerDuty incident to page the on-call responder.
+
+    Use this to page a code owner or on-call engineer for urgent issues.
+
+    Args:
+        service_id: PagerDuty service ID to create the incident on
+        title: Incident title (e.g. "[Enterprise] Acme Corp: bulk CSV export")
+        urgency: Incident urgency - "high" (phone call) or "low" (email/push)
+        description: Incident body with details
+        escalation_policy_id: Optional escalation policy ID override
+
+    Returns:
+        JSON with the created incident details
+    """
+    if not service_id:
+        return json.dumps({"ok": False, "error": "service_id is required"})
+    if not title:
+        return json.dumps({"ok": False, "error": "title is required"})
+
+    logger.info(
+        f"pagerduty_create_incident: service_id={service_id}, title={title}, urgency={urgency}"
+    )
+
+    try:
+        import requests
+
+        headers = _get_pagerduty_headers()
+
+        payload = {
+            "incident": {
+                "type": "incident",
+                "title": title,
+                "urgency": urgency,
+                "service": {
+                    "id": service_id,
+                    "type": "service_reference",
+                },
+            }
+        }
+
+        if description:
+            payload["incident"]["body"] = {
+                "type": "incident_body",
+                "details": description,
+            }
+
+        if escalation_policy_id:
+            payload["incident"]["escalation_policy"] = {
+                "id": escalation_policy_id,
+                "type": "escalation_policy_reference",
+            }
+
+        response = requests.post(
+            f"{_get_pagerduty_base_url()}/incidents",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+
+        incident = response.json()["incident"]
+
+        return json.dumps(
+            {
+                "ok": True,
+                "id": incident["id"],
+                "incident_number": incident.get("incident_number"),
+                "title": incident["title"],
+                "status": incident["status"],
+                "urgency": incident["urgency"],
+                "service": incident["service"]["summary"],
+                "assignments": [
+                    a.get("assignee", {}).get("summary")
+                    for a in incident.get("assignments", [])
+                ],
+                "url": incident["html_url"],
+            }
+        )
+
+    except ValueError as e:
+        return json.dumps(
+            {"ok": False, "error": str(e), "hint": "Set PAGERDUTY_API_KEY"}
+        )
+    except Exception as e:
+        logger.error(f"pagerduty_create_incident error: {e}")
+        return json.dumps({"ok": False, "error": str(e)})
+
+
 # Register tools
 register_tool("pagerduty_get_incident", pagerduty_get_incident)
 register_tool("pagerduty_get_incident_log_entries", pagerduty_get_incident_log_entries)
 register_tool("pagerduty_list_incidents", pagerduty_list_incidents)
 register_tool("pagerduty_get_escalation_policy", pagerduty_get_escalation_policy)
 register_tool("pagerduty_calculate_mttr", pagerduty_calculate_mttr)
+register_tool("pagerduty_create_incident", pagerduty_create_incident)

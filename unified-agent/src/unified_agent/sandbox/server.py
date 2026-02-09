@@ -127,6 +127,24 @@ async def _async_stream_response(response):
         yield chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk
 
 
+def _get_root_agent_config(config: Config):
+    """
+    Get the root agent config from team config.
+
+    Prefers 'investigator', then 'planner', then first available.
+    Returns None if no team config or no agents configured.
+    """
+    if config.team_config is None:
+        return None
+
+    agents_config = config.team_config.agents_config
+    return (
+        agents_config.get("investigator")
+        or agents_config.get("planner")
+        or next(iter(agents_config.values()), None)
+    )
+
+
 def _get_allowed_tools(config: Config) -> list[str]:
     """
     Get allowed tools from team config or defaults.
@@ -146,15 +164,7 @@ def _get_allowed_tools(config: Config) -> list[str]:
         "Task",
     ]
 
-    if config.team_config is None:
-        return default_tools
-
-    # Get root agent config (prefer 'investigator' or first available)
-    agents_config = config.team_config.agents_config
-    root_config = agents_config.get("investigator") or next(
-        iter(agents_config.values()), None
-    )
-
+    root_config = _get_root_agent_config(config)
     if root_config is None:
         return default_tools
 
@@ -165,6 +175,19 @@ def _get_allowed_tools(config: Config) -> list[str]:
         return default_tools
 
     return enabled
+
+
+def _get_system_prompt(config: Config) -> Optional[str]:
+    """
+    Get custom system prompt from team config, if any.
+
+    Returns the root agent's system prompt, or None for default.
+    """
+    root_config = _get_root_agent_config(config)
+    if root_config is None:
+        return None
+
+    return root_config.prompt.system or None
 
 
 async def get_or_create_session(thread_id: str) -> AgentSession:
@@ -178,11 +201,13 @@ async def get_or_create_session(thread_id: str) -> AgentSession:
         if thread_id not in _sessions:
             config = get_config()
 
+            system_prompt = _get_system_prompt(config)
             provider_config = ProviderConfig(
                 cwd=os.getenv("WORKSPACE_DIR", "/workspace"),
                 thread_id=thread_id,
                 model=config.llm_model,
                 allowed_tools=_get_allowed_tools(config),
+                system_prompt=system_prompt,
             )
 
             provider = create_provider(provider_config)
@@ -190,7 +215,10 @@ async def get_or_create_session(thread_id: str) -> AgentSession:
 
             session = AgentSession(thread_id=thread_id, provider=provider)
             _sessions[thread_id] = session
-            logger.info(f"Created session {thread_id} with model: {config.llm_model}")
+            logger.info(
+                f"Created session {thread_id} with model: {config.llm_model}"
+                f", custom_prompt: {bool(system_prompt)}"
+            )
 
         return _sessions[thread_id]
 
