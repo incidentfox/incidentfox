@@ -315,8 +315,16 @@ export default function TeamToolsPage() {
         console.error('Failed to load integration schemas:', e);
       }
 
-      // Load skills catalog from effective config
-      setSkillsCatalog(data.built_in_skills || []);
+      // Load skills catalog from dedicated endpoint
+      try {
+        const skillsRes = await fetch('/api/team/skills');
+        if (skillsRes.ok) {
+          const skillsData = await skillsRes.json();
+          setSkillsCatalog(skillsData.skills || []);
+        }
+      } catch (e) {
+        console.error('Failed to load skills catalog:', e);
+      }
     } catch (e) {
       console.error('Failed to load tools/MCPs:', e);
     } finally {
