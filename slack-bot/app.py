@@ -2724,11 +2724,265 @@ def handle_message(event, client, context):
         return  # DM handled, don't process further
 
     # ============================================================================
-    # INCIDENT.IO ALERT DETECTION - Check for "New alert" messages from bots
+    # AUTO-TRIAGE CHANNEL - Respond to ALL messages (no @mention needed)
     # ============================================================================
     subtype = event.get("subtype")
     bot_id = event.get("bot_id")
     text = event.get("text", "")
+    user_id = event.get("user")
+    channel_id = event.get("channel")
+
+    # Only check auto_triage for non-bot, non-subtype, human messages
+    if not bot_id and not subtype and user_id and channel_id:
+        is_auto_triage = False
+        try:
+            config_client = get_config_client()
+            routing = config_client.lookup_routing(channel_id)
+            is_auto_triage = bool(routing and routing.get("auto_triage"))
+        except Exception as e:
+            logger.warning(f"Failed to check auto_triage for {channel_id}: {e}")
+
+        if is_auto_triage:
+            # Skip messages that @mention the bot (handled by handle_mention)
+            bot_user_id = context.get("bot_user_id")
+            if bot_user_id and f"<@{bot_user_id}>" in text:
+                logger.info(
+                    "⏭️ Auto-triage: Skipping @mention (handled by app_mention)"
+                )
+            else:
+                logger.info(
+                    f"🤖 AUTO-TRIAGE: channel={channel_id}, user={user_id}, "
+                    f"text={text[:100]}"
+                )
+
+                team_id = event.get("team") or context.get("team_id", "unknown")
+                thread_ts = event.get("thread_ts") or event["ts"]
+
+                # Generate thread_id
+                sanitized_thread_ts = thread_ts.replace(".", "-")
+                sanitized_channel = channel_id.lower()
+                thread_id = f"slack-{sanitized_channel}-{sanitized_thread_ts}"
+
+                # Get bot user ID
+                if not bot_user_id:
+                    try:
+                        auth_response = client.auth_test()
+                        bot_user_id = auth_response.get("user_id")
+                    except Exception:
+                        pass
+
+                # Resolve mentions
+                resolved_text, id_to_name_mapping = _resolve_mentions(
+                    text, client, bot_user_id
+                )
+
+                # Extract images and files
+                images = _extract_images_from_event(event, client)
+                file_attachments = _extract_file_attachments_from_event(event, client)
+
+                # Get sender name
+                sender_name = "Unknown User"
+                try:
+                    user_response = client.users_info(user=user_id)
+                    if user_response["ok"]:
+                        user = user_response["user"]
+                        profile = user.get("profile", {})
+                        sender_name = (
+                            profile.get("display_name")
+                            or profile.get("real_name")
+                            or user.get("name", "Unknown User")
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to get sender name for {user_id}: {e}")
+
+                prompt_text = resolved_text.strip()
+                if not prompt_text and not images and not file_attachments:
+                    return  # Nothing to process
+
+                # Build enriched prompt
+                context_lines = ["\n### Slack Context"]
+                context_lines.append(
+                    f"**Requested by:** {sender_name} (User ID: {user_id})"
+                )
+                if id_to_name_mapping:
+                    context_lines.append("\n**User/Bot ID to Name Mapping:**")
+                    for uid, name in id_to_name_mapping.items():
+                        context_lines.append(f"- {name}: {uid}")
+
+                enriched_prompt = prompt_text + "\n" + "\n".join(context_lines)
+
+                # Thread context for follow-up messages
+                if event.get("thread_ts") is not None:
+                    try:
+                        thread_replies = client.conversations_replies(
+                            channel=channel_id, ts=thread_ts, limit=50
+                        )
+                        thread_context_text = _format_thread_context(
+                            thread_replies.get("messages", []),
+                            current_message_ts=event["ts"],
+                            bot_user_id=bot_user_id,
+                        )
+                        if thread_context_text:
+                            enriched_prompt = thread_context_text + enriched_prompt
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch thread context: {e}")
+
+                # Post initial "Working on it..." message
+                from assets_config import get_asset_url
+
+                loading_url = get_asset_url("loading")
+                initial_blocks = (
+                    [
+                        {
+                            "type": "context",
+                            "elements": [
+                                {
+                                    "type": "image",
+                                    "image_url": loading_url,
+                                    "alt_text": "Loading",
+                                },
+                                {"type": "mrkdwn", "text": "Working on it..."},
+                            ],
+                        }
+                    ]
+                    if loading_url
+                    else [
+                        {
+                            "type": "context",
+                            "elements": [
+                                {"type": "mrkdwn", "text": "Working on it..."}
+                            ],
+                        }
+                    ]
+                )
+
+                initial_response = client.chat_postMessage(
+                    channel=channel_id,
+                    thread_ts=thread_ts,
+                    text="Working on it...",
+                    blocks=initial_blocks,
+                )
+
+                response_message_ts = initial_response["ts"]
+
+                # Initialize state with minimal_ui=True
+                state = MessageState(
+                    channel_id=channel_id,
+                    message_ts=response_message_ts,
+                    thread_ts=thread_ts,
+                    thread_id=thread_id,
+                    minimal_ui=True,
+                )
+
+                try:
+                    # Get team token
+                    team_token = None
+                    try:
+                        team_token = config_client.get_team_token_for_channel(
+                            team_id, channel_id
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to get team token: {e}")
+
+                    request_payload = {
+                        "prompt": enriched_prompt,
+                        "thread_id": thread_id,
+                        "tenant_id": team_id,
+                        "team_id": team_id,
+                    }
+
+                    if team_token:
+                        request_payload["team_token"] = team_token
+
+                    if images:
+                        request_payload["images"] = [
+                            {
+                                "type": "base64",
+                                "media_type": img["media_type"],
+                                "data": img["data"],
+                                "filename": img.get("filename", "image"),
+                            }
+                            for img in images
+                        ]
+
+                    if file_attachments:
+                        request_payload["file_attachments"] = [
+                            {
+                                "filename": att["filename"],
+                                "size": att["size"],
+                                "media_type": att["media_type"],
+                                "download_url": att["download_url"],
+                                "auth_header": att["auth_header"],
+                            }
+                            for att in file_attachments
+                        ]
+
+                    # Call agent with SSE streaming
+                    response = requests.post(
+                        f"{SRE_AGENT_URL}/investigate",
+                        json=request_payload,
+                        stream=True,
+                        timeout=300,
+                        headers={"Accept": "text/event-stream"},
+                    )
+
+                    if response.status_code != 200:
+                        error_detail = (
+                            response.text[:200] if response.text else "Unknown error"
+                        )
+                        state.error = (
+                            f"Server error ({response.status_code}): {error_detail}"
+                        )
+                        update_slack_message(client, state, team_id, final=True)
+                        return
+
+                    # Process SSE stream
+                    event_count = 0
+                    for line in response.iter_lines(decode_unicode=True):
+                        if line:
+                            sse_event = parse_sse_event(line)
+                            if sse_event:
+                                event_count += 1
+                                handle_stream_event(
+                                    state, sse_event, client, team_id
+                                )
+
+                    import time
+
+                    _investigation_cache[state.message_ts] = state
+                    _cache_timestamps[state.message_ts] = time.time()
+
+                    logger.info(
+                        f"✅ Auto-triage investigation completed "
+                        f"(processed {event_count} events)"
+                    )
+
+                    if event_count == 0 and not state.error:
+                        state.error = "No response received from agent"
+
+                    update_slack_message(client, state, team_id, final=True)
+                    save_investigation_snapshot(state)
+
+                except requests.exceptions.ConnectionError:
+                    state.error = (
+                        "Could not connect to investigation service."
+                    )
+                    update_slack_message(client, state, team_id, final=True)
+                except requests.exceptions.Timeout:
+                    state.error = "Investigation timed out."
+                    update_slack_message(client, state, team_id, final=True)
+                except Exception as e:
+                    logger.exception(
+                        f"Error during auto-triage investigation: {e}"
+                    )
+                    state.error = f"Unexpected error: {str(e)}"
+                    update_slack_message(client, state, team_id, final=True)
+
+                return  # Auto-triage handled
+
+    # ============================================================================
+    # INCIDENT.IO ALERT DETECTION - Check for "New alert" messages from bots
+    # ============================================================================
 
     # Check if this is a "New alert from" message (from any bot)
     # Incident.io alerts have this pattern regardless of which bot posts them
