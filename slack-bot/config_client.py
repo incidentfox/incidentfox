@@ -74,6 +74,7 @@ class ConfigServiceClient:
         slack_team_id: str,
         slack_team_name: str,
         installer_user_id: str = None,
+        slack_app_slug: str = None,
     ) -> Dict[str, Any]:
         """
         Provision a new workspace in config_service.
@@ -91,15 +92,19 @@ class ConfigServiceClient:
 
         try:
             # Step 1: Create org node
+            metadata = {
+                "slack_team_id": slack_team_id,
+                "slack_team_name": slack_team_name,
+                "installer_user_id": installer_user_id,
+                "provisioned_at": datetime.utcnow().isoformat(),
+            }
+            if slack_app_slug:
+                metadata["slack_app_slug"] = slack_app_slug
+
             org_response = self._create_org_node(
                 org_id=org_id,
                 name=slack_team_name,
-                metadata={
-                    "slack_team_id": slack_team_id,
-                    "slack_team_name": slack_team_name,
-                    "installer_user_id": installer_user_id,
-                    "provisioned_at": datetime.utcnow().isoformat(),
-                },
+                metadata=metadata,
             )
             logger.info(
                 f"Created org node for workspace {slack_team_name}: {org_response}"

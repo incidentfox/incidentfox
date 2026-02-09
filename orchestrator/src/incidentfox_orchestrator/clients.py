@@ -454,6 +454,26 @@ class ConfigServiceClient:
         r.raise_for_status()
         return dict(r.json())
 
+    def list_slack_apps(self) -> List[Dict[str, Any]]:
+        """
+        List all active Slack app configurations from config service.
+
+        Returns list of dicts with: slug, display_name, app_id,
+        client_id, client_secret, signing_secret, bot_scopes, etc.
+        """
+        url = f"{self.base_url}/api/v1/internal/slack/apps"
+        headers = {"X-Internal-Service": "orchestrator"}
+        try:
+            if self._http is not None:
+                r = self._http.get(url, headers=headers)
+            else:
+                with httpx.Client(timeout=15.0) as c:
+                    r = c.get(url, headers=headers)
+            r.raise_for_status()
+            return list(r.json())
+        except Exception:
+            return []
+
 
 class PipelineApiClient:
     def __init__(

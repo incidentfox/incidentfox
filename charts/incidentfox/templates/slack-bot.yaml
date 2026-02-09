@@ -72,7 +72,8 @@ spec:
             - name: FREE_TRIAL_DAYS
               value: {{ .Values.services.slackBot.freeTrial.days | default 7 | quote }}
             {{- if .Values.externalSecrets.contract.slackBot.enabled }}
-            # Slack OAuth credentials (for public distribution)
+            # Slack OAuth credentials (DEPRECATED: migrate to slack_apps DB table)
+            # Kept as fallback when no apps are configured in config service
             - name: SLACK_CLIENT_ID
               valueFrom:
                 secretKeyRef:

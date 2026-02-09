@@ -38,10 +38,12 @@ class ConfigServiceInstallationStore(InstallationStore):
         base_url: str = None,
         service_name: str = "slack-bot",
         client_id: str = None,
+        slack_app_slug: str = None,
     ):
         self.base_url = (base_url or CONFIG_SERVICE_URL).rstrip("/")
         self.service_name = service_name
         self.client_id = client_id
+        self.slack_app_slug = slack_app_slug
 
     def _headers(self):
         """Headers for internal service calls."""
@@ -70,6 +72,7 @@ class ConfigServiceInstallationStore(InstallationStore):
                 "team_id": installation.team_id,
                 "user_id": None,  # Bot-level installation
                 "app_id": installation.app_id,
+                "slack_app_slug": self.slack_app_slug,
                 "bot_token": installation.bot_token,
                 "bot_id": installation.bot_id,
                 "bot_user_id": installation.bot_user_id,
@@ -112,6 +115,7 @@ class ConfigServiceInstallationStore(InstallationStore):
                 "team_id": installation.team_id,
                 "user_id": installation.user_id,
                 "app_id": installation.app_id,
+                "slack_app_slug": self.slack_app_slug,
                 "bot_token": installation.bot_token,
                 "bot_id": installation.bot_id,
                 "bot_user_id": installation.bot_user_id,
@@ -177,6 +181,8 @@ class ConfigServiceInstallationStore(InstallationStore):
             "team_id": team_id,
             "is_enterprise_install": is_enterprise_install or False,
         }
+        if self.slack_app_slug:
+            params["slack_app_slug"] = self.slack_app_slug
         if enterprise_id:
             params["enterprise_id"] = enterprise_id
         if user_id:
@@ -280,6 +286,8 @@ class ConfigServiceInstallationStore(InstallationStore):
         )
 
         params = {"team_id": team_id}
+        if self.slack_app_slug:
+            params["slack_app_slug"] = self.slack_app_slug
         if enterprise_id:
             params["enterprise_id"] = enterprise_id
         if user_id:

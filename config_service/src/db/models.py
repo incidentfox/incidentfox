@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
+import sqlalchemy as sa
 from sqlalchemy import (
     JSON,
     BigInteger,
@@ -1378,24 +1379,67 @@ class VisitorSession(Base):
     )
 
 
+class SlackApp(Base):
+    """
+    Registry of Slack app configurations for multi-app (white-label) support.
+
+    Each row represents a separate Slack app registered on api.slack.com,
+    with its own signing secret, OAuth credentials, and display name.
+    """
+
+    __tablename__ = "slack_apps"
+
+    slug: Mapped[str] = mapped_column(String(64), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    app_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    # Encrypted Slack app credentials
+    client_id: Mapped[Optional[str]] = mapped_column(EncryptedText, nullable=True)
+    client_secret: Mapped[Optional[str]] = mapped_column(EncryptedText, nullable=True)
+    signing_secret: Mapped[Optional[str]] = mapped_column(EncryptedText, nullable=True)
+
+    bot_scopes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    oauth_redirect_url: Mapped[Optional[str]] = mapped_column(
+        String(512), nullable=True
+    )
+
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa.func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=sa.func.now(),
+        onupdate=datetime.utcnow,
+    )
+
+    __table_args__ = (
+        Index("ix_slack_apps_app_id", "app_id", unique=True),
+    )
+
+
 class SlackInstallation(Base):
     """
     Slack OAuth installation storage.
 
     Stores bot tokens and user tokens for Slack workspaces that have
-    installed our Slack app. Used by the slack-bot service for multi-tenant
-    OAuth support.
+    installed one of our Slack apps. Used by the slack-bot service for
+    multi-tenant OAuth support.
 
-    The combination of (enterprise_id, team_id, user_id) uniquely identifies
-    an installation:
-    - enterprise_id: For Enterprise Grid installs (nullable for regular workspaces)
-    - team_id: The Slack workspace ID
-    - user_id: For user-level tokens (nullable for workspace-level installs)
+    The combination of (slack_app_slug, enterprise_id, team_id, user_id)
+    uniquely identifies an installation.
     """
 
     __tablename__ = "slack_installations"
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
+
+    # Which Slack app this installation belongs to
+    slack_app_slug: Mapped[Optional[str]] = mapped_column(
+        String(64), sa.ForeignKey("slack_apps.slug"), nullable=True
+    )
+
     enterprise_id: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True, index=True
     )
@@ -1451,6 +1495,7 @@ class SlackInstallation(Base):
     __table_args__ = (
         Index(
             "ix_slack_installations_lookup",
+            "slack_app_slug",
             "enterprise_id",
             "team_id",
             "user_id",

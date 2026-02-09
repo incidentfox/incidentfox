@@ -5718,6 +5718,73 @@ def handle_member_joined_channel(event, client, context):
         logger.warning(f"Error sending welcome message: {e}")
 
 
+# =============================================================================
+# Multi-App Handler Registration
+# =============================================================================
+
+
+def register_all_handlers(bolt_app):
+    """
+    Register all event/action/view handlers on a Bolt App instance.
+
+    Used by SlackAppRegistry to register the same handlers on multiple
+    Bolt App instances (one per white-label Slack app). The handler
+    functions are defined above as module-level functions.
+    """
+    # Event handlers
+    bolt_app.event("app_mention")(handle_mention)
+    bolt_app.event("message")(handle_message)
+    bolt_app.event("app_home_opened")(handle_app_home_opened)
+    bolt_app.event("member_joined_channel")(handle_member_joined_channel)
+
+    # Action handlers (string patterns)
+    bolt_app.action("nudge_invoke")(handle_nudge_invoke)
+    bolt_app.action("nudge_dismiss")(handle_nudge_dismiss)
+    bolt_app.action("coralogix_investigate")(handle_coralogix_investigate)
+    bolt_app.action("coralogix_dismiss")(handle_coralogix_dismiss)
+    bolt_app.action("feedback_positive")(handle_positive_feedback)
+    bolt_app.action("feedback_negative")(handle_negative_feedback)
+    bolt_app.action("view_investigation_session")(handle_view_session)
+    bolt_app.action("modal_page_prev")(handle_modal_pagination)
+    bolt_app.action("modal_page_next")(handle_modal_pagination)
+    bolt_app.action("modal_page_info")(handle_modal_page_info)
+    bolt_app.action("view_tool_output")(handle_view_tool_output)
+    bolt_app.action("view_full_output")(handle_view_full_output)
+    bolt_app.action("view_subagent_details")(handle_view_subagent_details)
+    bolt_app.action("subagent_modal_page_prev")(handle_subagent_modal_pagination)
+    bolt_app.action("subagent_modal_page_next")(handle_subagent_modal_pagination)
+    bolt_app.action("feedback")(handle_feedback)
+    bolt_app.action("button_click")(action_button_click)
+    bolt_app.action("github_app_install_button")(handle_github_app_install_button)
+    bolt_app.action("open_api_key_modal")(handle_open_api_key_modal)
+    bolt_app.action("dismiss_setup_message")(handle_dismiss_setup)
+    bolt_app.action("open_setup_wizard")(handle_open_setup_wizard)
+    bolt_app.action("dismiss_welcome")(handle_dismiss_welcome)
+    bolt_app.action("k8s_saas_add_cluster")(handle_k8s_saas_add_cluster)
+    bolt_app.action("k8s_saas_remove_cluster")(handle_k8s_saas_remove_cluster)
+    bolt_app.action("open_advanced_settings")(handle_open_advanced_settings)
+    bolt_app.action("home_retry_load")(handle_home_retry_load)
+    bolt_app.action("home_open_api_key_modal")(handle_home_api_key_modal)
+    bolt_app.action("mention_open_setup_wizard")(handle_mention_setup_wizard)
+
+    # Action handlers (regex patterns)
+    bolt_app.action(re.compile(r"^answer_q\d+_.*"))(handle_checkbox_action)
+    bolt_app.action(re.compile(r"^toggle_q\d+_opt\d+_.*"))(handle_toggle_button)
+    bolt_app.action(re.compile(r"^submit_answer_.*"))(handle_answer_submit)
+    bolt_app.action(re.compile(r"^configure_integration_.*"))(handle_configure_integration)
+    bolt_app.action(re.compile(r"^filter_category_.*"))(handle_filter_category)
+    bolt_app.action(re.compile(r"^home_(edit|add)_integration_.*"))(handle_home_integration_action)
+
+    # View handlers
+    bolt_app.view("api_key_submission")(handle_api_key_submission)
+    bolt_app.view("integrations_page")(handle_integrations_page_done)
+    bolt_app.view("k8s_saas_add_cluster_submission")(handle_k8s_saas_add_cluster_submission)
+    bolt_app.view("k8s_saas_clusters_modal")(handle_k8s_saas_clusters_modal_close)
+    bolt_app.view("k8s_saas_cluster_created_modal")(handle_k8s_saas_cluster_created_close)
+    bolt_app.view("advanced_settings_submission")(handle_advanced_settings_submission)
+    bolt_app.view("integration_config_submission")(handle_integration_config_submission)
+
+
 if __name__ == "__main__":
     logger.info("=" * 50)
     logger.info("IncidentFox Slack Bot v2.0.0")
@@ -5731,6 +5798,8 @@ if __name__ == "__main__":
         # Configure Flask to find templates and assets
         import os as os_module
 
+        from app_registry import SlackAppRegistry
+
         base_dir = os_module.path.dirname(os_module.path.abspath(__file__))
         flask_app = Flask(
             __name__,
@@ -5738,75 +5807,97 @@ if __name__ == "__main__":
             static_folder=os_module.path.join(base_dir, "assets"),
             static_url_path="/assets",
         )
+
+        # Load multi-app registry from config service
+        registry = SlackAppRegistry()
+        registry.load_all()
+
+        # Legacy handler for backward compat (default app)
         handler = SlackRequestHandler(app)
 
-        @flask_app.route("/slack/events", methods=["POST"])
-        def slack_events():
-            """Handle incoming Slack events via HTTP."""
-            return handler.handle(request)
+        # --- Slug-based routes (multi-app) ---
 
-        @flask_app.route("/slack/install", methods=["GET"])
-        def slack_install():
-            """Initiate OAuth flow for new workspace installation."""
-            if not oauth_enabled:
-                return {"error": "OAuth not configured"}, 400
+        @flask_app.route("/slack/<slug>/events", methods=["POST"])
+        def slack_events_for_app(slug):
+            """Handle incoming Slack events for a specific app."""
+            app_handler = registry.get_handler(slug)
+            if not app_handler:
+                return {"error": f"Unknown app: {slug}"}, 404
+            return app_handler.handle(request)
 
-            # Generate the OAuth URL using the Slack SDK
+        @flask_app.route("/slack/<slug>/install", methods=["GET"])
+        def slack_install_for_app(slug):
+            """Initiate OAuth flow for a specific app."""
+            creds = registry.get_credentials(slug)
+            if not creds:
+                return {"error": f"Unknown app: {slug}"}, 404
+
+            client_id = creds.get("client_id")
+            if not client_id:
+                return {"error": "OAuth not configured for this app"}, 400
+
             import uuid
 
             from slack_sdk.oauth.authorize_url_generator import AuthorizeUrlGenerator
 
+            bot_scopes = (creds.get("bot_scopes") or "").split(",")
+            bot_scopes = [s.strip() for s in bot_scopes if s.strip()] or SLACK_SCOPES
+            redirect_uri = creds.get("oauth_redirect_url", "")
+
             authorize_url_generator = AuthorizeUrlGenerator(
-                client_id=SLACK_CLIENT_ID,
-                scopes=SLACK_SCOPES,
-                redirect_uri=oauth_settings.redirect_uri,
+                client_id=client_id,
+                scopes=bot_scopes,
+                redirect_uri=redirect_uri,
             )
 
-            # Generate state for CSRF protection
             state = str(uuid.uuid4())
             install_url = authorize_url_generator.generate(state)
 
-            # Render custom branded installation page
             return render_template("install.html", install_url=install_url)
 
-        @flask_app.route("/slack/oauth_redirect", methods=["GET"])
-        def slack_oauth_redirect():
-            """Handle OAuth callback after workspace authorization."""
-            if not oauth_enabled:
-                return {"error": "OAuth not configured"}, 400
+        @flask_app.route("/slack/<slug>/oauth_redirect", methods=["GET"])
+        def slack_oauth_redirect_for_app(slug):
+            """Handle OAuth callback for a specific app."""
+            creds = registry.get_credentials(slug)
+            if not creds:
+                return {"error": f"Unknown app: {slug}"}, 404
+
+            client_id = creds.get("client_id")
+            client_secret = creds.get("client_secret")
+            if not client_id or not client_secret:
+                return {"error": "OAuth not configured for this app"}, 400
+
+            redirect_uri = creds.get("oauth_redirect_url", "")
 
             code = request.args.get("code")
             if not code:
                 error = request.args.get("error", "unknown_error")
-                logger.error(f"OAuth error: {error}")
+                logger.error(f"OAuth error for app {slug}: {error}")
                 return (
                     f"<html><body><h1>Installation Failed</h1><p>Error: {error}</p></body></html>",
                     400,
                 )
 
             try:
-                # Exchange code for token and install the app
                 from slack_sdk import WebClient
+                from slack_sdk.oauth.installation_store import Installation
 
-                client = WebClient()
+                ws_client = WebClient()
 
-                oauth_response = client.oauth_v2_access(
-                    client_id=SLACK_CLIENT_ID,
-                    client_secret=SLACK_CLIENT_SECRET,
+                oauth_response = ws_client.oauth_v2_access(
+                    client_id=client_id,
+                    client_secret=client_secret,
                     code=code,
-                    redirect_uri=oauth_settings.redirect_uri,
+                    redirect_uri=redirect_uri,
                 )
 
                 if not oauth_response.get("ok"):
                     error_msg = oauth_response.get("error", "unknown_error")
-                    logger.error(f"OAuth v2 access failed: {error_msg}")
+                    logger.error(f"OAuth v2 access failed for app {slug}: {error_msg}")
                     return (
                         f"<html><body><h1>Installation Failed</h1><p>Error: {error_msg}</p></body></html>",
                         400,
                     )
-
-                # Store the installation
-                from slack_sdk.oauth.installation_store import Bot, Installation
 
                 team_id = oauth_response["team"]["id"]
                 team_name = oauth_response["team"]["name"]
@@ -5814,7 +5905,6 @@ if __name__ == "__main__":
                 bot_id = oauth_response["bot_user_id"]
                 bot_user_id = oauth_response["bot_user_id"]
 
-                # Handle None values for enterprise and authed_user
                 enterprise = oauth_response.get("enterprise") or {}
                 authed_user = oauth_response.get("authed_user") or {}
 
@@ -5831,12 +5921,23 @@ if __name__ == "__main__":
                     user_scopes=(authed_user.get("scope") or "").split(","),
                 )
 
-                oauth_settings.installation_store.save(installation)
+                # Save via the app-specific installation store
+                bolt_app_instance = registry.get_app(slug)
+                if bolt_app_instance and hasattr(bolt_app_instance, "_oauth_flow"):
+                    bolt_app_instance._oauth_flow.installation_store.save(installation)
+                else:
+                    # Fallback: use a direct store with slug
+                    store = ConfigServiceInstallationStore(
+                        client_id=client_id,
+                        slack_app_slug=slug,
+                    )
+                    store.save(installation)
+
                 logger.info(
-                    f"Successfully installed app for team {team_name} ({team_id})"
+                    f"Successfully installed app {slug} for team {team_name} ({team_id})"
                 )
 
-                # Provision workspace in config_service for multi-tenancy
+                # Provision workspace in config_service
                 trial_enabled = False
                 try:
                     config_client = get_config_client()
@@ -5844,6 +5945,7 @@ if __name__ == "__main__":
                         slack_team_id=team_id,
                         slack_team_name=team_name,
                         installer_user_id=authed_user.get("id"),
+                        slack_app_slug=slug,
                     )
                     logger.info(
                         f"Provisioned workspace in config_service: {provision_result}"
@@ -5852,7 +5954,6 @@ if __name__ == "__main__":
                         "enabled", False
                     )
                 except Exception as provision_error:
-                    # Log but don't fail OAuth - workspace can be provisioned later
                     logger.warning(
                         f"Failed to provision workspace in config_service: {provision_error}"
                     )
@@ -5877,12 +5978,13 @@ if __name__ == "__main__":
                                 if provision_result
                                 else None
                             )
+                            display_name = creds.get("display_name", "IncidentFox")
                             welcome_blocks = onboarding.build_welcome_message(
                                 trial_info=trial_info, team_name=team_name
                             )
                             dm_client.chat_postMessage(
                                 channel=dm_channel,
-                                text="Welcome to IncidentFox!",
+                                text=f"Welcome to {display_name}!",
                                 blocks=welcome_blocks,
                             )
                             logger.info(
@@ -5891,7 +5993,6 @@ if __name__ == "__main__":
                     except Exception as dm_error:
                         logger.warning(f"Failed to send welcome DM: {dm_error}")
 
-                # Render custom success page with trial info
                 return render_template(
                     "success.html",
                     team_name=team_name,
@@ -5900,23 +6001,59 @@ if __name__ == "__main__":
                 )
 
             except Exception as e:
-                logger.error(f"OAuth error: {e}", exc_info=True)
+                logger.error(f"OAuth error for app {slug}: {e}", exc_info=True)
                 return (
                     "<html><body><h1>Installation Failed</h1><p>An unexpected error occurred. Please try again.</p></body></html>",
                     500,
                 )
 
+        # --- Legacy routes (backward compat, forward to default app) ---
+
+        @flask_app.route("/slack/events", methods=["POST"])
+        def slack_events():
+            """Legacy: Handle Slack events for default app."""
+            return handler.handle(request)
+
+        @flask_app.route("/slack/install", methods=["GET"])
+        def slack_install():
+            """Legacy: Initiate OAuth for default app."""
+            default = registry.default_slug
+            if default:
+                return slack_install_for_app(default)
+            # Fallback to original behavior
+            if not oauth_enabled:
+                return {"error": "OAuth not configured"}, 400
+
+            import uuid
+
+            from slack_sdk.oauth.authorize_url_generator import AuthorizeUrlGenerator
+
+            authorize_url_generator = AuthorizeUrlGenerator(
+                client_id=SLACK_CLIENT_ID,
+                scopes=SLACK_SCOPES,
+                redirect_uri=oauth_settings.redirect_uri,
+            )
+
+            state = str(uuid.uuid4())
+            install_url = authorize_url_generator.generate(state)
+            return render_template("install.html", install_url=install_url)
+
+        @flask_app.route("/slack/oauth_redirect", methods=["GET"])
+        def slack_oauth_redirect():
+            """Legacy: Handle OAuth callback for default app."""
+            default = registry.default_slug
+            if default:
+                return slack_oauth_redirect_for_app(default)
+            return {"error": "No app configured"}, 500
+
         @flask_app.route("/health", methods=["GET"])
         def health():
             """Health check endpoint."""
-            return {"status": "healthy"}, 200
+            return {"status": "healthy", "apps": registry.list_slugs()}, 200
 
         port = int(os.environ.get("PORT", 3000))
         logger.info(f"Starting HTTP server on port {port}")
-        logger.info(f"OAuth mode: {'enabled' if oauth_enabled else 'disabled'}")
-        if oauth_enabled:
-            logger.info("Install URL: http://<your-domain>/slack/install")
-            logger.info("OAuth Redirect URL: http://<your-domain>/slack/oauth_redirect")
+        logger.info(f"Apps loaded: {registry.list_slugs()}")
         flask_app.run(host="0.0.0.0", port=port)
     else:
         # Local dev: Socket Mode
