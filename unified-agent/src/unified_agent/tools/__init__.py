@@ -135,6 +135,204 @@ def _load_all_tools():
     except ImportError:
         pass
 
+
+    # Ported from /agent
+
+    try:
+        from . import agent
+    except ImportError:
+        pass
+
+    try:
+        from . import alembic
+    except ImportError:
+        pass
+
+    try:
+        from . import anomaly
+    except ImportError:
+        pass
+
+    try:
+        from . import azure
+    except ImportError:
+        pass
+
+    try:
+        from . import bigquery
+    except ImportError:
+        pass
+
+    try:
+        from . import browser
+    except ImportError:
+        pass
+
+    try:
+        from . import ci
+    except ImportError:
+        pass
+
+    try:
+        from . import codepipeline
+    except ImportError:
+        pass
+
+    try:
+        from . import configurable
+    except ImportError:
+        pass
+
+    try:
+        from . import confluence
+    except ImportError:
+        pass
+
+    try:
+        from . import coralogix
+    except ImportError:
+        pass
+
+    try:
+        from . import debezium
+    except ImportError:
+        pass
+
+    try:
+        from . import dependency
+    except ImportError:
+        pass
+
+    try:
+        from . import flyway
+    except ImportError:
+        pass
+
+    try:
+        from . import gcp
+    except ImportError:
+        pass
+
+    try:
+        from . import github_app
+    except ImportError:
+        pass
+
+    try:
+        from . import google_docs
+    except ImportError:
+        pass
+
+    try:
+        from . import honeycomb
+    except ImportError:
+        pass
+
+    try:
+        from . import incidentio
+    except ImportError:
+        pass
+
+    try:
+        from . import kafka
+    except ImportError:
+        pass
+
+    try:
+        from . import knowledge_base
+    except ImportError:
+        pass
+
+    try:
+        from . import linear
+    except ImportError:
+        pass
+
+    try:
+        from . import log_analysis
+    except ImportError:
+        pass
+
+    try:
+        from . import meeting
+    except ImportError:
+        pass
+
+    try:
+        from . import ml
+    except ImportError:
+        pass
+
+    try:
+        from . import msteams
+    except ImportError:
+        pass
+
+    try:
+        from . import mysql
+    except ImportError:
+        pass
+
+    try:
+        from . import newrelic
+    except ImportError:
+        pass
+
+    try:
+        from . import notion
+    except ImportError:
+        pass
+
+    try:
+        from . import observability_advisor
+    except ImportError:
+        pass
+
+    try:
+        from . import online_schema
+    except ImportError:
+        pass
+
+    try:
+        from . import opsgenie
+    except ImportError:
+        pass
+
+    try:
+        from . import package
+    except ImportError:
+        pass
+
+    try:
+        from . import postgres
+    except ImportError:
+        pass
+
+    try:
+        from . import prisma
+    except ImportError:
+        pass
+
+    try:
+        from . import schema_registry
+    except ImportError:
+        pass
+
+    try:
+        from . import snowflake
+    except ImportError:
+        pass
+
+    try:
+        from . import sourcegraph
+    except ImportError:
+        pass
+
+    try:
+        from . import splunk
+    except ImportError:
+        pass
+
     try:
         from . import meta
     except ImportError:
