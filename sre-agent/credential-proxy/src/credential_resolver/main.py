@@ -132,6 +132,25 @@ def load_env_credentials() -> dict[str, dict]:
             "api_key": os.getenv("GITLAB_TOKEN"),
             "domain": os.getenv("GITLAB_URL"),
         },
+        "jira": {
+            "domain": os.getenv("JIRA_URL"),
+            "email": os.getenv("JIRA_EMAIL"),
+            "api_key": os.getenv("JIRA_API_TOKEN"),
+        },
+        "newrelic": {
+            "api_key": os.getenv("NEWRELIC_API_KEY"),
+            "account_id": os.getenv("NEWRELIC_ACCOUNT_ID"),
+        },
+        "cloudwatch": {
+            "access_key_id": os.getenv("AWS_ACCESS_KEY_ID"),
+            "secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
+            "region": os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+        },
+        "opensearch": {
+            "domain": os.getenv("OPENSEARCH_URL"),
+            "username": os.getenv("OPENSEARCH_USERNAME"),
+            "password": os.getenv("OPENSEARCH_PASSWORD"),
+        },
     }
 
 

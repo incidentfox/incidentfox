@@ -564,10 +564,46 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "cloudwatch",
         "name": "CloudWatch",
         "category": "observability",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":cloudwatch:",
         "icon_fallback": ":cloud:",
         "description": "Query AWS CloudWatch logs and metrics.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your AWS console\n"
+            "2. Go to *IAM* > *Users* > select or create a user\n"
+            "3. Attach the *CloudWatchReadOnlyAccess* policy\n"
+            "4. Go to *Security credentials* tab > *Create access key*\n"
+            "5. Copy the Access Key ID and Secret Access Key below"
+        ),
+        "docs_url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/",
+        "context_prompt_placeholder": "e.g., 'Our Lambda logs are in /aws/lambda/api-handler. Production is in us-east-1. Error logs contain level=ERROR.'",
+        "fields": [
+            {
+                "id": "aws_access_key_id",
+                "name": "AWS Access Key ID",
+                "type": "secret",
+                "required": True,
+                "placeholder": "AKIA...",
+                "hint": "IAM access key with CloudWatch read permissions",
+            },
+            {
+                "id": "aws_secret_access_key",
+                "name": "AWS Secret Access Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "your-secret-key",
+                "hint": "IAM secret access key",
+            },
+            {
+                "id": "region",
+                "name": "AWS Region",
+                "type": "string",
+                "required": False,
+                "placeholder": "us-east-1",
+                "hint": "Default AWS region (leave blank for us-east-1)",
+            },
+        ],
     },
     {
         "id": "pagerduty",
@@ -657,19 +693,83 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "opensearch",
         "name": "OpenSearch",
         "category": "observability",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":opensearch:",
         "icon_fallback": ":mag:",
         "description": "Query logs and search data from OpenSearch.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your AWS console or OpenSearch dashboard\n"
+            "2. Navigate to your OpenSearch domain\n"
+            "3. Copy the domain endpoint URL\n"
+            "4. Create or use an existing master user with read access\n"
+            "5. Enter the endpoint and credentials below"
+        ),
+        "docs_url": "https://docs.aws.amazon.com/opensearch-service/latest/developerguide/",
+        "context_prompt_placeholder": "e.g., 'Our application logs are in the app-logs-* index pattern. Error logs have level field set to ERROR. Timestamps are in @timestamp.'",
+        "fields": [
+            {
+                "id": "domain",
+                "name": "OpenSearch Endpoint URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "https://search-my-domain-abc123.us-east-1.es.amazonaws.com",
+                "hint": "Your OpenSearch domain endpoint URL",
+            },
+            {
+                "id": "username",
+                "name": "Username",
+                "type": "string",
+                "required": False,
+                "placeholder": "admin",
+                "hint": "Master user name (if using fine-grained access control)",
+            },
+            {
+                "id": "password",
+                "name": "Password",
+                "type": "secret",
+                "required": False,
+                "placeholder": "your-password",
+                "hint": "Master user password",
+            },
+        ],
     },
     {
         "id": "newrelic",
         "name": "New Relic",
         "category": "observability",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":newrelic:",
         "icon_fallback": ":chart:",
         "description": "Query APM, logs, and infrastructure metrics.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your New Relic account\n"
+            "2. Click your name (bottom-left) > *API Keys*\n"
+            "3. Click *Create a key*, select *User* key type\n"
+            "4. Give it a name (e.g., 'IncidentFox') and click *Create*\n"
+            "5. Copy the API key and your Account ID (found in *Administration* > *Access management*)"
+        ),
+        "docs_url": "https://docs.newrelic.com/docs/apis/intro-apis/new-relic-api-keys/",
+        "context_prompt_placeholder": "e.g., 'Our main app is called api-gateway in New Relic. Production transactions use appName=api-gateway-prod. Key metrics are response time and error rate.'",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "User API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "NRAK-...",
+                "hint": "New Relic User API key (starts with NRAK-)",
+            },
+            {
+                "id": "account_id",
+                "name": "Account ID",
+                "type": "string",
+                "required": True,
+                "placeholder": "1234567",
+                "hint": "Your New Relic account ID (found under Administration > Access management)",
+            },
+        ],
     },
     {
         "id": "honeycomb",
@@ -897,10 +997,45 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "jira",
         "name": "Jira",
         "category": "scm",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":jira:",
         "icon_fallback": ":ticket:",
-        "description": "Query issues and project data.",
+        "description": "Create, search, and manage Jira issues and epics.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your Atlassian account\n"
+            "2. Go to *https://id.atlassian.com/manage-profile/security/api-tokens*\n"
+            "3. Click *Create API token*, label it 'IncidentFox'\n"
+            "4. Copy the token, your Jira URL, and email below"
+        ),
+        "docs_url": "https://developer.atlassian.com/cloud/jira/platform/rest/v3/",
+        "context_prompt_placeholder": "e.g., 'Our incident project key is OPS. Bug tickets use type=Bug. Post-mortems are labeled with post-mortem tag.'",
+        "fields": [
+            {
+                "id": "domain",
+                "name": "Jira URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "https://your-company.atlassian.net",
+                "hint": "Your Jira Cloud instance URL",
+            },
+            {
+                "id": "email",
+                "name": "Email",
+                "type": "string",
+                "required": True,
+                "placeholder": "you@company.com",
+                "hint": "Email associated with your Atlassian account",
+            },
+            {
+                "id": "api_key",
+                "name": "API Token",
+                "type": "secret",
+                "required": True,
+                "placeholder": "your-api-token",
+                "hint": "Atlassian API token from id.atlassian.com",
+            },
+        ],
     },
     {
         "id": "linear",

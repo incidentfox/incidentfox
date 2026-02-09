@@ -22,6 +22,9 @@ This script adds schemas for integrations that have tools defined but no schema:
 - ClickUp
 - Jaeger
 - Prometheus
+- New Relic
+- CloudWatch
+- OpenSearch
 """
 
 import os
@@ -728,6 +731,107 @@ INTEGRATION_SCHEMAS = [
                 "required": False,
                 "level": "org",
                 "description": "Prometheus API key or Bearer token (optional for unauthenticated instances)",
+            },
+        ],
+    },
+    {
+        "id": "newrelic",
+        "name": "New Relic",
+        "category": "observability",
+        "description": "New Relic APM for application performance monitoring, NRQL queries, and infrastructure metrics",
+        "docs_url": "https://docs.newrelic.com/docs/apis/intro-apis/new-relic-api-keys/",
+        "display_order": 21,
+        "featured": False,
+        "fields": [
+            {
+                "name": "api_key",
+                "type": "secret",
+                "required": True,
+                "level": "org",
+                "description": "New Relic User API key (starts with NRAK-)",
+                "placeholder": "NRAK-...",
+            },
+            {
+                "name": "account_id",
+                "type": "string",
+                "required": True,
+                "level": "org",
+                "description": "New Relic account ID",
+                "placeholder": "1234567",
+            },
+        ],
+    },
+    {
+        "id": "cloudwatch",
+        "name": "CloudWatch",
+        "category": "observability",
+        "description": "AWS CloudWatch for log querying and infrastructure metrics",
+        "docs_url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/",
+        "display_order": 19,
+        "featured": False,
+        "fields": [
+            {
+                "name": "aws_access_key_id",
+                "type": "secret",
+                "required": True,
+                "level": "org",
+                "description": "AWS Access Key ID with CloudWatch read permissions",
+            },
+            {
+                "name": "aws_secret_access_key",
+                "type": "secret",
+                "required": True,
+                "level": "org",
+                "description": "AWS Secret Access Key",
+            },
+            {
+                "name": "region",
+                "type": "string",
+                "required": False,
+                "level": "org",
+                "description": "Default AWS region",
+                "default_value": "us-east-1",
+            },
+        ],
+    },
+    {
+        "id": "opensearch",
+        "name": "OpenSearch",
+        "category": "observability",
+        "description": "Amazon OpenSearch / AWS OpenSearch Service for log search and analytics",
+        "docs_url": "https://docs.aws.amazon.com/opensearch-service/latest/developerguide/",
+        "display_order": 21,
+        "featured": False,
+        "fields": [
+            {
+                "name": "domain",
+                "type": "string",
+                "required": True,
+                "level": "org",
+                "description": "OpenSearch endpoint URL",
+                "placeholder": "https://search-my-domain-abc123.us-east-1.es.amazonaws.com",
+            },
+            {
+                "name": "username",
+                "type": "string",
+                "required": False,
+                "level": "org",
+                "description": "Master user name (for fine-grained access control)",
+            },
+            {
+                "name": "password",
+                "type": "secret",
+                "required": False,
+                "level": "org",
+                "description": "Master user password",
+            },
+            {
+                "name": "index_pattern",
+                "type": "string",
+                "required": False,
+                "level": "team",
+                "description": "Default index pattern",
+                "default_value": "logs-*",
             },
         ],
     },

@@ -29,6 +29,9 @@ DOMAIN_TO_INTEGRATION: dict[str, str] = {
     "api.pagerduty.com": "pagerduty",
     # GitLab
     "gitlab.com": "gitlab",
+    # New Relic
+    "api.newrelic.com": "newrelic",
+    "api.eu.newrelic.com": "newrelic",
 }
 
 # Path prefixes for proxy mode (when host is envoy:8001, localhost:8001, etc.)

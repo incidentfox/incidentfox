@@ -459,6 +459,22 @@ static_resources:
                 "name": "GITLAB_BASE_URL",
                 "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/gitlab",
             },
+            {
+                "name": "JIRA_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/jira",
+            },
+            {
+                "name": "NEWRELIC_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/newrelic",
+            },
+            {
+                "name": "ELASTICSEARCH_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/elasticsearch",
+            },
+            {
+                "name": "OPENSEARCH_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/opensearch",
+            },
             # LiteLLM observability callback (Langfuse)
             {"name": "LITELLM_CALLBACKS", "value": "langfuse"},
         ]
