@@ -488,6 +488,20 @@ static_resources:
                 }
             )
 
+        # PagerDuty API key (optional - for pagerduty_create_incident tool)
+        env.append(
+            {
+                "name": "PAGERDUTY_API_KEY",
+                "valueFrom": {
+                    "secretKeyRef": {
+                        "name": "incidentfox-pagerduty-api",
+                        "key": "api-key",
+                        "optional": True,
+                    }
+                },
+            }
+        )
+
         # Multi-LLM API keys (from K8s secrets)
         env.extend(
             [
