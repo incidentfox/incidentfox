@@ -1115,13 +1115,28 @@ class OpenHandsProvider(LLMProvider):
                 iteration += 1
 
                 try:
-                    response = await litellm.acompletion(
-                        model=self._model,
-                        messages=messages,
-                        api_key=self._api_key,
-                        tools=tools if tools else None,
-                        tool_choice="auto" if tools else None,
-                    )
+                    # Retry LLM calls on connection errors (envoy sidecar may not be ready)
+                    llm_retries = 3
+                    for llm_attempt in range(llm_retries):
+                        try:
+                            response = await litellm.acompletion(
+                                model=self._model,
+                                messages=messages,
+                                api_key=self._api_key,
+                                tools=tools if tools else None,
+                                tool_choice="auto" if tools else None,
+                            )
+                            break
+                        except (litellm.APIConnectionError, ConnectionError) as conn_err:
+                            if llm_attempt < llm_retries - 1:
+                                wait_time = (llm_attempt + 1) * 2
+                                logger.warning(
+                                    f"[OpenHands] LLM connection error (attempt {llm_attempt + 1}/{llm_retries}), "
+                                    f"retrying in {wait_time}s: {conn_err}"
+                                )
+                                await asyncio.sleep(wait_time)
+                            else:
+                                raise
 
                     assistant_message = response.choices[0].message
                     assistant_msg_dict = assistant_message.model_dump()

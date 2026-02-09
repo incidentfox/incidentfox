@@ -158,10 +158,13 @@ The internal message should be structured and developer-facing (not user-facing)
 📋 *New {{Feature Request / Bug Report / Urgent Issue}}*
 *From:* <@USER_ID> in <#CHANNEL_ID>
 *Summary:* One-line summary of what they need
+*Thread:* <MESSAGE_LINK|View thread>
 *Jira:* <https://incidentfox.atlassian.net/browse/BTS-XX|BTS-XX>
 *Routed to:* <@TEAM_MEMBER_SLACK_ID>
 *Area:* service-name
 ```
+
+IMPORTANT: The "Message link" is provided in the Slack Context section below the customer's message. Use it for the *Thread:* field. This links directly to the customer's message so engineers can quickly jump to the conversation.
 
 For urgent issues, add `🚨` and include the PagerDuty link.
 

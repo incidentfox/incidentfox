@@ -2860,6 +2860,19 @@ def handle_message(event, client, context):
                 context_lines.append(
                     f"**Channel:** <#{channel_id}> (Channel ID: {channel_id})"
                 )
+
+                # Get permalink to the original message
+                try:
+                    permalink_resp = client.chat_getPermalink(
+                        channel=channel_id, message_ts=event["ts"]
+                    )
+                    if permalink_resp.get("ok"):
+                        context_lines.append(
+                            f"**Message link:** {permalink_resp['permalink']}"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to get permalink: {e}")
+
                 if id_to_name_mapping:
                     context_lines.append("\n**User/Bot ID to Name Mapping:**")
                     for uid, name in id_to_name_mapping.items():
