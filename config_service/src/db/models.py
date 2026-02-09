@@ -1414,9 +1414,7 @@ class SlackApp(Base):
         onupdate=datetime.utcnow,
     )
 
-    __table_args__ = (
-        Index("ix_slack_apps_app_id", "app_id", unique=True),
-    )
+    __table_args__ = (Index("ix_slack_apps_app_id", "app_id", unique=True),)
 
 
 class SlackInstallation(Base):

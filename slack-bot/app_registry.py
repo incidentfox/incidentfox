@@ -18,12 +18,11 @@ import os
 from typing import Dict, Optional
 
 import requests
+from installation_store import ConfigServiceInstallationStore
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_bolt.oauth.oauth_settings import OAuthSettings
 from slack_sdk.oauth.state_store import FileOAuthStateStore
-
-from installation_store import ConfigServiceInstallationStore
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,9 @@ class SlackAppRegistry:
     """
 
     def __init__(self, config_service_url: str = None):
-        self._config_service_url = (config_service_url or CONFIG_SERVICE_URL).rstrip("/")
+        self._config_service_url = (config_service_url or CONFIG_SERVICE_URL).rstrip(
+            "/"
+        )
         self._apps: Dict[str, App] = {}
         self._handlers: Dict[str, SlackRequestHandler] = {}
         self._credentials: Dict[str, dict] = {}
@@ -63,7 +64,9 @@ class SlackAppRegistry:
             apps = []
 
         if not apps:
-            logger.warning("No Slack apps found in config service, falling back to env vars")
+            logger.warning(
+                "No Slack apps found in config service, falling back to env vars"
+            )
             self._create_from_env()
             return
 
@@ -163,7 +166,9 @@ class SlackAppRegistry:
         self._apps[slug] = bolt_app
         self._handlers[slug] = SlackRequestHandler(bolt_app)
         self._credentials[slug] = app_config
-        logger.info(f"Created Bolt app for slug={slug} (display_name={app_config.get('display_name')})")
+        logger.info(
+            f"Created Bolt app for slug={slug} (display_name={app_config.get('display_name')})"
+        )
 
     def _register_handlers(self, bolt_app: App):
         """Register all event/action/view handlers on a Bolt App instance."""

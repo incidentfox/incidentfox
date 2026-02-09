@@ -49,7 +49,9 @@ def upgrade():
         sa.Column("bot_scopes", Text, nullable=True),
         sa.Column("oauth_redirect_url", sa.String(512), nullable=True),
         sa.Column("is_active", sa.Boolean, server_default="true", nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
