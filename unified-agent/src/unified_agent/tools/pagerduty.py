@@ -17,17 +17,32 @@ logger = logging.getLogger(__name__)
 
 
 def _get_pagerduty_base_url():
-    """Get PagerDuty API base URL (supports proxy mode)."""
+    """Get PagerDuty API base URL (supports proxy mode).
+
+    When PAGERDUTY_API_KEY is set, always use the real API directly
+    even if PAGERDUTY_BASE_URL (proxy) is also configured.
+    """
+    if os.getenv("PAGERDUTY_API_KEY"):
+        return "https://api.pagerduty.com"
     return os.getenv("PAGERDUTY_BASE_URL", "https://api.pagerduty.com").rstrip("/")
 
 
 def _get_pagerduty_headers():
     """Get PagerDuty API headers.
 
-    Supports two modes:
+    Supports two modes (direct API key takes priority):
     - Direct: PAGERDUTY_API_KEY (sends Token auth directly)
     - Proxy: PAGERDUTY_BASE_URL points to credential-resolver (handles auth)
     """
+    # Direct API key takes priority over proxy
+    api_key = os.getenv("PAGERDUTY_API_KEY")
+    if api_key:
+        return {
+            "Authorization": f"Token token={api_key}",
+            "Accept": "application/vnd.pagerduty+json;version=2",
+            "Content-Type": "application/json",
+        }
+
     if os.getenv("PAGERDUTY_BASE_URL"):
         # Proxy mode: credential-resolver handles auth
         headers = {
@@ -37,15 +52,7 @@ def _get_pagerduty_headers():
         headers.update(get_proxy_headers())
         return headers
 
-    api_key = os.getenv("PAGERDUTY_API_KEY")
-    if not api_key:
-        raise ValueError("PAGERDUTY_API_KEY environment variable not set")
-
-    return {
-        "Authorization": f"Token token={api_key}",
-        "Accept": "application/vnd.pagerduty+json;version=2",
-        "Content-Type": "application/json",
-    }
+    raise ValueError("PAGERDUTY_API_KEY environment variable not set")
 
 
 @function_tool
