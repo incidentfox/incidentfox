@@ -516,6 +516,25 @@ static_resources:
             }
         )
 
+        # Jira credentials (optional - for jira_create_issue and other Jira tools)
+        for env_name, secret_key in [
+            ("JIRA_API_TOKEN", "api-token"),
+            ("JIRA_URL", "url"),
+            ("JIRA_EMAIL", "email"),
+        ]:
+            env.append(
+                {
+                    "name": env_name,
+                    "valueFrom": {
+                        "secretKeyRef": {
+                            "name": "incidentfox-jira",
+                            "key": secret_key,
+                            "optional": True,
+                        }
+                    },
+                }
+            )
+
         # Multi-LLM API keys (from K8s secrets)
         env.extend(
             [

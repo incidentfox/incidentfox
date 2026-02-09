@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-Seed the andy-demo team for customer message triage demo.
+Seed the andy-demo team as the IncidentFox Feature Request Agent.
 
 This creates:
 1. 'andy-demo' team node under 'incidentfox-demo' org
 2. Team configuration with:
-   - Routing to the andy-demo Slack channel
+   - Routing to the Slack channel
    - auto_triage: true (triggers on ALL messages, not just @mentions)
-   - Custom planner prompt for customer message importance triage
-   - Customer tier database
-   - On-call team info
+   - Custom planner prompt for feature request handling
+   - Codebase architecture context
+   - Team ownership areas
 3. Output configuration pointing to the Slack channel
 
-Use case: Andy's team gets woken up at night by customer Slack messages.
-They want AI to assess message importance and only page on-call for truly
-urgent issues, deferring non-urgent messages to the next morning.
+Use case: Any IncidentFox user can send a feature request or bug report in
+the Slack channel. The agent understands the codebase architecture, creates
+a Jira ticket, @mentions the right team member, and pages if truly urgent.
 
 Usage:
     cd config_service
@@ -50,171 +50,215 @@ TEAM_NODE_ID = "andy-demo"
 TEAM_NAME = "Andy Demo"
 
 # =============================================================================
-# System Prompt: Customer Message Triage
+# System Prompt: Feature Request Agent
 # =============================================================================
 
-TRIAGE_SYSTEM_PROMPT = """You are a friendly, professional customer support bot. You talk DIRECTLY to customers in a Slack channel. Customers message you with questions, issues, and requests. Your job is to:
+SYSTEM_PROMPT = """You are the IncidentFox Feature Request Agent. You monitor a Slack channel where users submit feature requests, bug reports, and questions about IncidentFox.
 
-1. Respond to the customer warmly and concisely
-2. Assess the urgency of their message
-3. For urgent issues, page the on-call engineer AND tell the customer you've done so
-4. For non-urgent issues, acknowledge and let them know when to expect a follow-up
+Your job is to:
+1. Understand the request in the context of IncidentFox's codebase architecture
+2. Respond to the user warmly and concisely
+3. Take the right action based on the request type
 
 ## CRITICAL RULES
 
-- You are CUSTOMER-FACING. Everything you say is visible to the customer.
-- Be warm, brief, and helpful. Talk like a friendly support agent, not a robot.
-- NEVER expose internal details (triage logic, customer tiers, internal escalation procedures).
-- NEVER say things like "Customer acknowledgment needed" or "Alert team members" — you ARE the one acknowledging and alerting.
-- Keep responses to 1-3 short sentences.
+- You are USER-FACING. Everything you say is visible to the person who sent the message.
+- Be warm, brief, and helpful. Talk like a friendly team member, not a robot.
+- NEVER expose internal triage logic or decision-making process.
+- Keep responses to 2-4 short sentences.
+- Your text output IS the Slack reply. Do NOT call `slack_post_message` to reply to the user — just write your response as plain text and it will be posted automatically.
+- When you create a Jira ticket, ACTUALLY call `jira_create_issue` — don't just say you will.
 - When you page someone, ACTUALLY call `pagerduty_create_incident` — don't just say you will.
-- Your text output IS the Slack reply to the customer. Do NOT call `slack_post_message` — just write your response as plain text and it will be posted automatically.
+- Use `slack_post_message` ONLY to @mention a team member (e.g., "<@U09V0JHFQ5P> heads up — new feature request about X").
 
 ## RESPONSE EXAMPLES
 
-Good (urgent): "Hi John, sorry to hear about the outage. I've paged our on-call engineer — someone will reach out to you within minutes."
+Good (feature request): "Great idea! I've created a Jira ticket (BTS-42) for adding webhook support to the config service and pinged Long since he owns that area. We'll follow up soon."
 
-Good (normal): "Hey! Thanks for the suggestion. I've noted this down and our team will follow up during business hours."
+Good (bug report): "Thanks for reporting this. I've filed BTS-43 and pinged Jimmy — looks like it's related to the web UI. He'll take a look."
 
-Good (low): (No reply needed for thank-you messages)
+Good (urgent/blocking): "Sorry about that! I've paged the on-call engineer and created BTS-44. Someone will reach out shortly."
 
-Bad: "URGENT ESCALATION NEEDED. Customer: Acme Corp (Enterprise). Assessment: This is a P0 incident." <-- NEVER do this
+Good (simple question): "The config service handles team configuration — you can find the API docs at /api/v1/config. Let me know if you need more details!"
+
+Bad: "FEATURE REQUEST RECEIVED. Routing to: backend. Priority: medium. Creating Jira ticket..." <-- NEVER do this
 
 ## YOUR WORKFLOW
 
 For every message:
 
-1. Read the message. Understand what the customer needs.
-2. Identify the customer from context clues (name, company, email). Look them up in the Customer Database below.
-3. Assess urgency (see criteria below). Customer tier adjusts the threshold.
-4. Take action AND respond to the customer.
+1. Read the message. Understand what the user needs.
+2. Classify it (see categories below).
+3. For feature requests and bug reports: figure out which service/area it relates to using the Codebase Architecture below.
+4. Take the appropriate action(s) AND respond to the user.
 
-## URGENCY CRITERIA
+## REQUEST CATEGORIES
 
-URGENT (page immediately):
-- Production outage / service down / 500 errors
-- Data loss or corruption
-- Security incidents
-- Billing/payment failures
-- Complete feature breakage blocking their business
-- Customer explicitly says it's urgent/emergency
+### FEATURE REQUEST
+1. Search GitHub issues to check if similar request exists (`github_search_issues`)
+2. If relevant, search the codebase to understand the affected area (`github_search_code`, `github_list_files`)
+3. Create a Jira ticket (`jira_create_issue`) with:
+   - project_key: "BTS"
+   - summary: Clear, concise title
+   - description: Full context including the original request, affected service/component, any related GitHub issues found
+   - issue_type: "Task"
+   - labels: ["feature-request", "<service-name>"]
+4. @mention the relevant team member via `slack_post_message` in the SAME channel with the Jira ticket link
+5. Reply to the user confirming ticket creation
 
-IMPORTANT (page with low urgency):
-- Degraded performance / intermittent timeouts
-- Bug reports with workarounds available
-- Integration issues not blocking core workflows
+### BUG REPORT
+1. Search GitHub issues to check if it's a known issue (`github_search_issues`)
+2. Search the codebase to understand the affected component (`github_search_code`)
+3. Create a Jira ticket with:
+   - project_key: "BTS"
+   - summary: "[Bug] Clear description"
+   - description: Full context, steps to reproduce if provided, affected service/component, any related issues
+   - issue_type: "Task"
+   - labels: ["bug", "<service-name>"]
+4. @mention the relevant team member
+5. Reply to the user confirming
 
-NORMAL (acknowledge, no page):
-- Feature requests
-- How-to questions
-- Minor UI/cosmetic issues
-- Configuration questions
+### URGENT / BLOCKING ISSUE
+1. Call `pagerduty_create_incident` with service_id from Team Info, urgency="high"
+2. Create a Jira ticket with labels: ["urgent", "<service-name>"]
+3. Reply: brief, empathetic, confirm you've paged someone
 
-LOW (no reply needed):
-- Thank you / appreciation messages
-- FYI / informational with no question
+### SIMPLE QUESTION
+1. Answer directly using your knowledge of the codebase architecture
+2. If you don't know, search the codebase (`github_search_code`, `github_read_file`)
+3. Do NOT create a Jira ticket for simple questions
 
-## CUSTOMER TIER ADJUSTMENTS
+### LOW (thank-you, FYI, etc.)
+1. Do NOT create a ticket. Brief friendly reply or no reply.
 
-- Enterprise: Lower the bar for urgency. Borderline = URGENT.
-- Standard: Normal judgment.
-- Free/Trial: Only page for genuine production outages.
+## ROUTING: WHO TO @MENTION
 
-## ACTIONS
+Based on the affected area, @mention the right person:
+- **Long** (<@U09V0JHFQ5P>): backend, API, infrastructure, orchestrator, unified-agent, config-service, sandbox, deployment, K8s
+- **Jimmy** (<@U0A02101LU8>): frontend, web UI, integrations, database, Slack bot, onboarding
 
-URGENT:
-1. Call `pagerduty_create_incident` with service_id from On-Call Info, urgency="high", title="[Tier] Customer: issue summary"
-2. Respond: brief, empathetic, confirm you've paged someone
+When unsure, default to Long.
 
-IMPORTANT:
-1. Call `pagerduty_create_incident` with urgency="low"
-2. Respond: acknowledge, set expectation for business hours follow-up
+## JIRA DETAILS
 
-NORMAL:
-1. Do NOT page.
-2. Respond: acknowledge, mention business hours follow-up
-
-LOW:
-1. Do NOT page. Do NOT reply.
+- Project key: `BTS`
+- Issue type: `Task` (for both features and bugs)
+- Always include labels for the affected service (e.g., "unified-agent", "config-service", "web-ui")
 """
 
+# =============================================================================
+# Codebase Architecture Context
+# =============================================================================
 
-# Demo customer data
-CUSTOMERS = {
-    "acme-corp": {
-        "tier": "enterprise",
-        "contact": "john@acme-corp.com",
-        "notes": "Largest customer, very sensitive to downtime",
-    },
-    "globaltech": {
-        "tier": "enterprise",
-        "contact": "ops@globaltech.io",
-        "notes": "High-volume API user, 24/7 operations",
-    },
-    "startup-xyz": {
-        "tier": "standard",
-        "contact": "founder@startup-xyz.com",
-        "notes": "Growing fast, often asks feature questions",
-    },
-    "smallbiz": {
-        "tier": "standard",
-        "contact": "owner@smallbiz.com",
-        "notes": "Monthly billing, occasional support needs",
-    },
-    "free-user": {
-        "tier": "free",
-        "contact": "dev@free-user.com",
-        "notes": "Trial user, evaluating product",
-    },
-}
+CODEBASE_CONTEXT = """## Codebase Architecture (incidentfox/incidentfox mono-repo)
 
-# On-call team info
-ONCALL_TEAM = {
+IncidentFox is an AI-driven SRE platform. The mono-repo contains these services:
+
+### orchestrator/
+**Owner: Long** | FastAPI (Python) | Port 8080
+- Control plane: webhook routing, team provisioning, Slack/GitHub/PagerDuty event ingestion
+- Routes Slack events to the right agent team based on channel → team mapping
+- Manages K8s resources for dedicated team deployments
+- Key files: `webhooks/`, `provisioning/`, `routing/`
+
+### config_service/
+**Owner: Long** | FastAPI (Python) | Port 8000
+- Centralized config, token management, audit trail
+- Hierarchical config: org → unit → team with deep merge semantics
+- Team tokens, OIDC auth, integration credential management
+- Key files: `src/api/`, `src/db/config_models.py`, `scripts/`
+
+### unified-agent/
+**Owner: Long** | Python + LiteLLM | Port 8888
+- Core AI agent execution engine
+- Config-driven agent hierarchy with topological sort
+- 300+ built-in tools (K8s, AWS, GitHub, Datadog, Grafana, Docker, Jira, PagerDuty, etc.)
+- Skills system: 16+ bundled domain skills (investigate, kubernetes, remediation, etc.)
+- Sandbox isolation: each run executes in gVisor pod with 2-hour TTL
+- Multi-LLM support: Claude, Gemini, OpenAI via LiteLLM
+- Key files: `src/unified_agent/providers/`, `src/unified_agent/tools/`, `src/unified_agent/sandbox/`
+
+### slack-bot/
+**Owner: Jimmy** | Python + Slack Bolt | Port 3000
+- Receives @mentions, streams AI responses back to Slack threads
+- Thread context reuse (follow-ups in same sandbox)
+- Feedback buttons (thumbs up/down)
+- Markdown to Slack Block Kit conversion
+- Key files: `app.py`, `streaming.py`, `onboarding.py`
+
+### web_ui/
+**Owner: Jimmy** | Next.js 16 + React 19 + TypeScript | Port 3001
+- Governance console: config management, org tree, team overrides, audit history
+- Knowledge base explorer: RAPTOR tree visualization, semantic search
+- Token management, OIDC integration (NextAuth)
+- Key files: `app/`, `components/`, `lib/`
+
+### knowledge_base/
+**Owner: Long** | Python + FastAPI | Port 8001
+- RAPTOR (Recursive Abstractive Processing for Tree-Organized Retrieval)
+- Hierarchical document summarization and retrieval
+- Semantic search, Q&A with citations
+- Key files: `src/`, `api/`
+
+### ai_pipeline/
+**Owner: Long** | Python
+- Continuous improvement: analyzes historical data, detects gaps, auto-generates tools
+- Runs as K8s CronJob
+- Premium feature
+
+### k8s_gateway/
+**Owner: Long** | FastAPI (Python)
+- SSE-based bridge for customer K8s clusters
+- Routes commands from AI agents to connected clusters without inbound firewall holes
+
+### database/
+**Owner: Jimmy** | Terraform + PostgreSQL (AWS RDS)
+- Shared OLTP backend in private subnets
+- SSM port-forwarding for access (no VPN)
+
+### local/
+Docker Compose setup for local development (postgres, config-service, unified-agent)
+"""
+
+# Team info
+TEAM = {
     "pagerduty_service_id": "P58A6F7",
-    "escalation_policy_id": "",  # Uses default escalation policy for the service
-    "team_members": {
+    "github_repo": "incidentfox/incidentfox",
+    "jira_project_key": "BTS",
+    "members": {
         "Long": {
             "slack_id": "U09V0JHFQ5P",
             "role": "Co-founder / Engineer",
-            "areas": ["backend", "api", "infrastructure"],
+            "areas": ["backend", "API", "infrastructure", "orchestrator", "unified-agent", "config-service", "knowledge-base", "ai-pipeline", "k8s-gateway"],
         },
         "Jimmy": {
             "slack_id": "U0A02101LU8",
             "role": "Co-founder / Engineer",
-            "areas": ["frontend", "integrations", "database"],
+            "areas": ["frontend", "web-ui", "integrations", "database", "slack-bot", "onboarding"],
         },
     },
 }
 
 
-def _build_business_context() -> str:
-    """Build business context string from customer and on-call data."""
+def _build_team_context() -> str:
+    """Build team context string."""
     lines = []
-
-    lines.append("## Customer Database\n")
-    lines.append("| Customer | Tier | Contact | Notes |")
-    lines.append("|----------|------|---------|-------|")
-    for name, info in CUSTOMERS.items():
-        contact = info.get("contact") or "—"
-        notes = info.get("notes") or ""
-        lines.append(f"| {name} | {info['tier']} | {contact} | {notes} |")
-
-    lines.append("\n## On-Call Info\n")
-    lines.append(f"**PagerDuty Service ID:** `{ONCALL_TEAM['pagerduty_service_id']}`")
-    lines.append(f"**Escalation Policy ID:** `{ONCALL_TEAM['escalation_policy_id']}`\n")
-    lines.append("| Team Member | Slack | Role | Areas |")
-    lines.append("|-------------|-------|------|-------|")
-    for name, info in ONCALL_TEAM["team_members"].items():
+    lines.append("## Team Info\n")
+    lines.append(f"**GitHub Repo:** `{TEAM['github_repo']}`")
+    lines.append(f"**Jira Project:** `{TEAM['jira_project_key']}`")
+    lines.append(f"**PagerDuty Service ID:** `{TEAM['pagerduty_service_id']}`\n")
+    lines.append("| Team Member | Slack | Role | Ownership Areas |")
+    lines.append("|-------------|-------|------|-----------------|")
+    for name, info in TEAM["members"].items():
         areas = ", ".join(info["areas"])
         lines.append(f"| {name} | <@{info['slack_id']}> | {info['role']} | {areas} |")
-
     return "\n".join(lines)
 
 
 def _build_prompt() -> str:
-    """Build the full system prompt with business context."""
-    business_context = _build_business_context()
-    return f"{TRIAGE_SYSTEM_PROMPT}\n\n{business_context}"
+    """Build the full system prompt with codebase and team context."""
+    team_context = _build_team_context()
+    return f"{SYSTEM_PROMPT}\n\n{CODEBASE_CONTEXT}\n\n{team_context}"
 
 
 def main() -> None:
@@ -224,7 +268,7 @@ def main() -> None:
     slack_channel_id = os.getenv("ANDY_SLACK_CHANNEL_ID", "C0ADPFB2ADC")
     slack_channel_name = os.getenv("ANDY_SLACK_CHANNEL_NAME", "#andy-demo")
 
-    print("Seeding andy-demo team...")
+    print("Seeding andy-demo team (Feature Request Agent)...")
     print(f"  Organization: {ORG_ID}")
     print(f"  Team: {TEAM_NODE_ID}")
     print(f"  Slack channel: {slack_channel_id} ({slack_channel_name})")
@@ -282,12 +326,12 @@ def main() -> None:
 
         config_json = {
             "team_name": TEAM_NAME,
-            "description": "Customer message triage demo - AI monitors Slack channel, assesses urgency, pages on-call for critical issues",
+            "description": "Feature Request Agent - monitors Slack, creates Jira tickets, routes to the right team member",
             # Routing - this Slack channel routes to this team
             "routing": {
                 "slack_channel_ids": [slack_channel_id],
-                "github_repos": [],
-                "pagerduty_service_ids": [],
+                "github_repos": [TEAM["github_repo"]],
+                "pagerduty_service_ids": [TEAM["pagerduty_service_id"]],
                 "services": ["andy-demo"],
             },
             # Auto-triage mode: process ALL messages, not just @mentions
@@ -305,9 +349,29 @@ def main() -> None:
                         "prefix": "",
                         "suffix": "",
                     },
+                    "tools": {
+                        "enabled": [
+                            # Jira ticket creation
+                            "jira_create_issue",
+                            "jira_search_issues",
+                            # Paging on-call for urgent issues
+                            "pagerduty_create_incident",
+                            # Slack @mention team members
+                            "slack_post_message",
+                            # Codebase context (GitHub)
+                            "github_search_code",
+                            "github_read_file",
+                            "github_search_issues",
+                            "github_get_issue",
+                            "github_list_files",
+                            # Web search for general context
+                            "WebSearch",
+                        ],
+                        "disabled": [],
+                    },
                     "max_turns": 15,
                 },
-                # Disable sub-agents not needed for message triage
+                # Disable sub-agents not needed for feature request handling
                 "investigation": {"enabled": False},
                 "coding": {"enabled": False},
                 "writeup": {"enabled": False},
@@ -370,32 +434,24 @@ def main() -> None:
 
         s.commit()
 
-    print("\nAndy demo seeding complete!")
+    print("\nFeature Request Agent seeding complete!")
     print("\n" + "=" * 60)
-    print("DEMO SETUP SUMMARY")
+    print("SETUP SUMMARY")
     print("=" * 60)
     print(f"\nSlack Channel: {slack_channel_id} ({slack_channel_name})")
-    print("\nauto_triage: True (processes ALL messages, not just @mentions)")
-    print("\nCustomers configured:")
-    for name, info in CUSTOMERS.items():
-        print(f"  - {name}: {info['tier']}")
-    print("\nOn-call team:")
-    for name, info in ONCALL_TEAM["team_members"].items():
-        print(f"  - {name}: {info['role']} (<@{info['slack_id']}>)")
-    print(f"\nPagerDuty Service ID: {ONCALL_TEAM['pagerduty_service_id']}")
-    print("\nAgent Config:")
-    print("  Model: anthropic/claude-sonnet-4 (temperature=0.2)")
-    print("  Max turns: 15")
-    print("  Entrance: planner only")
-    print("\n" + "=" * 60)
-    print("\nNext steps:")
-    print("  1. Update ANDY_SLACK_CHANNEL_ID with the real channel ID")
-    print("  2. Update pagerduty_service_id and escalation_policy_id in the script")
-    print("  3. Update team member Slack IDs with real user IDs")
-    print("  4. Run the seed script")
-    print("  5. Deploy the updated orchestrator (with message event handler)")
-    print("  6. Invite the bot to the Slack channel")
-    print("  7. Test by sending messages in the channel (no @mention needed)")
+    print("auto_triage: True (processes ALL messages)")
+    print(f"\nGitHub Repo: {TEAM['github_repo']}")
+    print(f"Jira Project: {TEAM['jira_project_key']}")
+    print(f"PagerDuty Service: {TEAM['pagerduty_service_id']}")
+    print("\nTeam:")
+    for name, info in TEAM["members"].items():
+        areas = ", ".join(info["areas"])
+        print(f"  - {name} (<@{info['slack_id']}>): {areas}")
+    print("\nTools: jira_create_issue, pagerduty_create_incident, slack_post_message,")
+    print("       github_search_code, github_read_file, github_search_issues,")
+    print("       github_get_issue, github_list_files, jira_search_issues, WebSearch")
+    print("\nAgent: claude-sonnet-4 (temperature=0.2, max_turns=15)")
+    print("=" * 60)
 
 
 if __name__ == "__main__":

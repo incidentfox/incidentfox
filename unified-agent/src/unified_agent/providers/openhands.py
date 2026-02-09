@@ -816,12 +816,27 @@ class OpenHandsProvider(LLMProvider):
     })
 
     def _get_registry_tools_schema(self) -> list[dict]:
-        """Get OpenAI-compatible schemas for all registered tools."""
+        """Get OpenAI-compatible schemas for registered tools.
+
+        Filters by allowed_tools if any registry tool names are present.
+        If allowed_tools only contains built-in names (the default),
+        all registry tools are included for backwards compatibility.
+        """
         from ..tools import get_tool_registry
 
+        allowed = set(self.config.allowed_tools)
+        registry = get_tool_registry()
+
+        # Check if allowed_tools explicitly lists any registry tool names.
+        # If so, only include those. Otherwise include all (backwards compat).
+        registry_allowlist = allowed & set(registry.keys()) - self._BUILTIN_TOOL_NAMES
+        filter_registry = bool(registry_allowlist)
+
         schemas = []
-        for name, func in get_tool_registry().items():
+        for name, func in registry.items():
             if name in self._BUILTIN_TOOL_NAMES:
+                continue
+            if filter_registry and name not in registry_allowlist:
                 continue
             if hasattr(func, "_tool_schema") and func._tool_schema:
                 schemas.append(func._tool_schema)
