@@ -502,6 +502,20 @@ static_resources:
             }
         )
 
+        # Slack bot token (optional - for slack_post_message tool)
+        env.append(
+            {
+                "name": "SLACK_BOT_TOKEN",
+                "valueFrom": {
+                    "secretKeyRef": {
+                        "name": "incidentfox-slack",
+                        "key": "bot_token",
+                        "optional": True,
+                    }
+                },
+            }
+        )
+
         # Multi-LLM API keys (from K8s secrets)
         env.extend(
             [

@@ -68,6 +68,7 @@ TRIAGE_SYSTEM_PROMPT = """You are a friendly, professional customer support bot.
 - NEVER say things like "Customer acknowledgment needed" or "Alert team members" — you ARE the one acknowledging and alerting.
 - Keep responses to 1-3 short sentences.
 - When you page someone, ACTUALLY call `pagerduty_create_incident` — don't just say you will.
+- Your text output IS the Slack reply to the customer. Do NOT call `slack_post_message` — just write your response as plain text and it will be posted automatically.
 
 ## RESPONSE EXAMPLES
 
