@@ -475,6 +475,18 @@ static_resources:
                 "name": "OPENSEARCH_BASE_URL",
                 "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/opensearch",
             },
+            {
+                "name": "PROMETHEUS_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/prometheus",
+            },
+            {
+                "name": "JAEGER_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/jaeger",
+            },
+            {
+                "name": "HONEYCOMB_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/honeycomb",
+            },
             # LiteLLM observability callback (Langfuse)
             {"name": "LITELLM_CALLBACKS", "value": "langfuse"},
         ]
