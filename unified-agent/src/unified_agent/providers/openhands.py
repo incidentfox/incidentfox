@@ -808,12 +808,21 @@ class OpenHandsProvider(LLMProvider):
 
         return tools
 
+    # Built-in tool names that have custom execution logic in _execute_tool.
+    # Registry tools with these names are skipped to avoid duplicates.
+    _BUILTIN_TOOL_NAMES = frozenset({
+        "bash", "read_file", "write_file", "edit_file",
+        "glob", "grep", "task", "skill", "web_search", "web_fetch",
+    })
+
     def _get_registry_tools_schema(self) -> list[dict]:
         """Get OpenAI-compatible schemas for all registered tools."""
         from ..tools import get_tool_registry
 
         schemas = []
         for name, func in get_tool_registry().items():
+            if name in self._BUILTIN_TOOL_NAMES:
+                continue
             if hasattr(func, "_tool_schema") and func._tool_schema:
                 schemas.append(func._tool_schema)
         return schemas
