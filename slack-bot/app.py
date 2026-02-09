@@ -5771,16 +5771,24 @@ def register_all_handlers(bolt_app):
     bolt_app.action(re.compile(r"^answer_q\d+_.*"))(handle_checkbox_action)
     bolt_app.action(re.compile(r"^toggle_q\d+_opt\d+_.*"))(handle_toggle_button)
     bolt_app.action(re.compile(r"^submit_answer_.*"))(handle_answer_submit)
-    bolt_app.action(re.compile(r"^configure_integration_.*"))(handle_configure_integration)
+    bolt_app.action(re.compile(r"^configure_integration_.*"))(
+        handle_configure_integration
+    )
     bolt_app.action(re.compile(r"^filter_category_.*"))(handle_filter_category)
-    bolt_app.action(re.compile(r"^home_(edit|add)_integration_.*"))(handle_home_integration_action)
+    bolt_app.action(re.compile(r"^home_(edit|add)_integration_.*"))(
+        handle_home_integration_action
+    )
 
     # View handlers
     bolt_app.view("api_key_submission")(handle_api_key_submission)
     bolt_app.view("integrations_page")(handle_integrations_page_done)
-    bolt_app.view("k8s_saas_add_cluster_submission")(handle_k8s_saas_add_cluster_submission)
+    bolt_app.view("k8s_saas_add_cluster_submission")(
+        handle_k8s_saas_add_cluster_submission
+    )
     bolt_app.view("k8s_saas_clusters_modal")(handle_k8s_saas_clusters_modal_close)
-    bolt_app.view("k8s_saas_cluster_created_modal")(handle_k8s_saas_cluster_created_close)
+    bolt_app.view("k8s_saas_cluster_created_modal")(
+        handle_k8s_saas_cluster_created_close
+    )
     bolt_app.view("advanced_settings_submission")(handle_advanced_settings_submission)
     bolt_app.view("integration_config_submission")(handle_integration_config_submission)
 
@@ -5923,8 +5931,14 @@ if __name__ == "__main__":
 
                 # Save via the app-specific installation store
                 bolt_app_instance = registry.get_app(slug)
-                if bolt_app_instance and hasattr(bolt_app_instance, "_oauth_flow"):
-                    bolt_app_instance._oauth_flow.installation_store.save(installation)
+                if (
+                    bolt_app_instance
+                    and bolt_app_instance._oauth_flow
+                    and bolt_app_instance._oauth_flow.settings
+                ):
+                    bolt_app_instance._oauth_flow.settings.installation_store.save(
+                        installation
+                    )
                 else:
                     # Fallback: use a direct store with slug
                     store = ConfigServiceInstallationStore(

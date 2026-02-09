@@ -107,10 +107,14 @@ class SlackBoltIntegration:
             if slug and signing_secret:
                 self._create_app(slug, signing_secret)
             else:
-                logger.warning(f"Skipping Slack app with missing slug or signing_secret: {app_config}")
+                logger.warning(
+                    f"Skipping Slack app with missing slug or signing_secret: {app_config}"
+                )
 
         if apps:
-            logger.info(f"Loaded {len(self._apps)} Slack app(s): {list(self._apps.keys())}")
+            logger.info(
+                f"Loaded {len(self._apps)} Slack app(s): {list(self._apps.keys())}"
+            )
 
     def _create_app(self, slug: str, signing_secret: str):
         """Create a Bolt AsyncApp for a given slug and register handlers."""
