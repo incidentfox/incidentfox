@@ -3,9 +3,8 @@ namespace: incidentfox
 global:
   imagePullPolicy: IfNotPresent
 
-  # Docker registry authentication for private images
-  imagePullSecrets:
-    - name: incidentfox-registry
+  # Image pull secrets (empty - ECR auth handled via IAM roles)
+  imagePullSecrets: []
 
   # External DB (recommended). Provide via External Secrets -> K8s Secret -> env.
   database:

@@ -24,12 +24,11 @@ global:
   imagePullPolicy: IfNotPresent
 
   # ===================================================================
-  # REQUIRED: Docker Registry Authentication
+  # OPTIONAL: Docker Registry Authentication
   # ===================================================================
-  # Kubernetes secret for pulling private images from Docker Hub
-  # This secret should contain your license key for authentication
-  imagePullSecrets:
-    - name: incidentfox-registry
+  # Image pull secrets (empty by default - ECR auth handled via IAM roles)
+  # Add entries if using a private registry that requires credentials
+  imagePullSecrets: []
 
   # ===================================================================
   # REQUIRED: Database Configuration
