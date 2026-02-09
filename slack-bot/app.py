@@ -2804,6 +2804,9 @@ def handle_message(event, client, context):
                 context_lines.append(
                     f"**Requested by:** {sender_name} (User ID: {user_id})"
                 )
+                context_lines.append(
+                    f"**Channel:** <#{channel_id}> (Channel ID: {channel_id})"
+                )
                 if id_to_name_mapping:
                     context_lines.append("\n**User/Bot ID to Name Mapping:**")
                     for uid, name in id_to_name_mapping.items():

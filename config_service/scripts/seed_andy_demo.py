@@ -20,8 +20,12 @@ Usage:
     cd config_service
     poetry run python scripts/seed_andy_demo.py
 
-Environment variables:
-    ANDY_SLACK_CHANNEL_ID: Slack channel ID (default: C0ADPFB2ADC)
+Channels:
+    External (customer-facing):
+        - C0ADPFB2ADC: Customer X
+        - C0ADT765GJE: Customer Y
+    Internal (engineering hub):
+        - C0ADWSF8LF6: Feature request feed
 """
 
 import sys
@@ -48,6 +52,13 @@ from src.db.session import db_session
 ORG_ID = "incidentfox-demo"
 TEAM_NODE_ID = "andy-demo"
 TEAM_NAME = "Andy Demo"
+
+# Channels
+EXTERNAL_CHANNELS = [
+    {"id": "C0ADPFB2ADC", "name": "#customer-x"},
+    {"id": "C0ADT765GJE", "name": "#customer-y"},
+]
+INTERNAL_CHANNEL_ID = "C0ADWSF8LF6"
 
 # =============================================================================
 # System Prompt: Feature Request Agent
@@ -135,6 +146,26 @@ For every message:
 
 ### LOW (thank-you, FYI, etc.)
 1. Do NOT create a ticket. Brief friendly reply or no reply.
+
+## INTERNAL CHANNEL NOTIFICATION
+
+After handling EVERY feature request, bug report, or urgent issue, you MUST also post a developer-facing summary to the internal engineering channel using `slack_post_message`.
+
+**Internal channel:** `{internal_channel_id}`
+
+The internal message should be structured and developer-facing (not user-facing). Use this format:
+```
+📋 *New {{Feature Request / Bug Report / Urgent Issue}}*
+*From:* <@USER_ID> in <#CHANNEL_ID>
+*Summary:* One-line summary of what they need
+*Jira:* <https://incidentfox.atlassian.net/browse/BTS-XX|BTS-XX>
+*Routed to:* <@TEAM_MEMBER_SLACK_ID>
+*Area:* service-name
+```
+
+For urgent issues, add `🚨` and include the PagerDuty link.
+
+Do NOT post to the internal channel for simple questions or low-priority messages (thank-you, FYI, etc.).
 
 ## ROUTING: WHO TO @MENTION
 
@@ -263,20 +294,19 @@ def _build_team_context() -> str:
 def _build_prompt() -> str:
     """Build the full system prompt with codebase and team context."""
     team_context = _build_team_context()
-    return f"{SYSTEM_PROMPT}\n\n{CODEBASE_CONTEXT}\n\n{team_context}"
+    prompt = SYSTEM_PROMPT.replace("{internal_channel_id}", INTERNAL_CHANNEL_ID)
+    return f"{prompt}\n\n{CODEBASE_CONTEXT}\n\n{team_context}"
 
 
 def main() -> None:
     load_dotenv()
 
-    # Allow overriding Slack config via environment
-    slack_channel_id = os.getenv("ANDY_SLACK_CHANNEL_ID", "C0ADPFB2ADC")
-    slack_channel_name = os.getenv("ANDY_SLACK_CHANNEL_NAME", "#andy-demo")
-
     print("Seeding andy-demo team (Feature Request Agent)...")
     print(f"  Organization: {ORG_ID}")
     print(f"  Team: {TEAM_NODE_ID}")
-    print(f"  Slack channel: {slack_channel_id} ({slack_channel_name})")
+    for ch in EXTERNAL_CHANNELS:
+        print(f"  External channel: {ch['id']} ({ch['name']})")
+    print(f"  Internal channel: {INTERNAL_CHANNEL_ID}")
 
     full_prompt = _build_prompt()
 
@@ -332,9 +362,9 @@ def main() -> None:
         config_json = {
             "team_name": TEAM_NAME,
             "description": "Feature Request Agent - monitors Slack, creates Jira tickets, routes to the right team member",
-            # Routing - this Slack channel routes to this team
+            # Routing - these Slack channels route to this team
             "routing": {
-                "slack_channel_ids": [slack_channel_id],
+                "slack_channel_ids": [ch["id"] for ch in EXTERNAL_CHANNELS],
                 "github_repos": [TEAM["github_repo"]],
                 "pagerduty_service_ids": [TEAM["pagerduty_service_id"]],
                 "services": ["andy-demo"],
@@ -408,19 +438,18 @@ def main() -> None:
             )
         ).scalar_one_or_none()
 
+        destinations = [
+            {"type": "slack", "channel_id": ch["id"], "channel_name": ch["name"]}
+            for ch in EXTERNAL_CHANNELS
+        ]
+
         if output_cfg is None:
             print("  Creating output configuration...")
             s.add(
                 TeamOutputConfig(
                     org_id=ORG_ID,
                     team_node_id=TEAM_NODE_ID,
-                    default_destinations=[
-                        {
-                            "type": "slack",
-                            "channel_id": slack_channel_id,
-                            "channel_name": slack_channel_name,
-                        }
-                    ],
+                    default_destinations=destinations,
                     trigger_overrides={
                         "slack": "reply_in_thread",
                         "api": "use_default",
@@ -429,13 +458,7 @@ def main() -> None:
             )
         else:
             print("  Updating existing output configuration...")
-            output_cfg.default_destinations = [
-                {
-                    "type": "slack",
-                    "channel_id": slack_channel_id,
-                    "channel_name": slack_channel_name,
-                }
-            ]
+            output_cfg.default_destinations = destinations
 
         s.commit()
 
@@ -443,7 +466,10 @@ def main() -> None:
     print("\n" + "=" * 60)
     print("SETUP SUMMARY")
     print("=" * 60)
-    print(f"\nSlack Channel: {slack_channel_id} ({slack_channel_name})")
+    print("\nExternal Channels (customer-facing):")
+    for ch in EXTERNAL_CHANNELS:
+        print(f"  {ch['id']} ({ch['name']})")
+    print(f"\nInternal Channel (engineering hub): {INTERNAL_CHANNEL_ID}")
     print("auto_triage: True (processes ALL messages)")
     print(f"\nGitHub Repo: {TEAM['github_repo']}")
     print(f"Jira Project: {TEAM['jira_project_key']}")
