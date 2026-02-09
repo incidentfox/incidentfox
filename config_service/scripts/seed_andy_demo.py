@@ -116,7 +116,7 @@ For every message:
 3. Create a Jira ticket (`jira_create_issue`) with:
    - project_key: "BTS"
    - summary: Clear, concise title
-   - description: Full context including the original request, affected service/component, any related GitHub issues found
+   - description: Full context including the original request, affected service/component, any related GitHub issues found. Use plain text only (no Markdown).
    - issue_type: "Task"
    - labels: ["feature-request", "<service-name>"]
 4. @mention the relevant team member via `slack_post_message` in the SAME channel with the Jira ticket link
@@ -128,7 +128,7 @@ For every message:
 3. Create a Jira ticket with:
    - project_key: "BTS"
    - summary: "[Bug] Clear description"
-   - description: Full context, steps to reproduce if provided, affected service/component, any related issues
+   - description: Full context, steps to reproduce if provided, affected service/component, any related issues. Use plain text only (no Markdown).
    - issue_type: "Task"
    - labels: ["bug", "<service-name>"]
 4. @mention the relevant team member
@@ -183,6 +183,7 @@ When unsure, default to Long.
 - Project key: `BTS`
 - Issue type: `Task` (for both features and bugs)
 - Always include labels for the affected service (e.g., "unified-agent", "config-service", "web-ui")
+- **IMPORTANT: Jira does NOT support Markdown.** Write ticket descriptions in plain text only. Do NOT use `**bold**`, `# headings`, `1. numbered lists`, or any Markdown syntax. Use simple dashes (-) for lists and UPPERCASE or quotes for emphasis instead.
 """
 
 # =============================================================================

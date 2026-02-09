@@ -2795,6 +2795,15 @@ def handle_message(event, client, context):
                 except Exception as e:
                     logger.warning(f"Failed to get sender name for {user_id}: {e}")
 
+                # Get channel name
+                channel_name = channel_id
+                try:
+                    ch_resp = client.conversations_info(channel=channel_id)
+                    if ch_resp["ok"]:
+                        channel_name = ch_resp["channel"].get("name", channel_id)
+                except Exception as e:
+                    logger.warning(f"Failed to get channel name for {channel_id}: {e}")
+
                 prompt_text = resolved_text.strip()
                 if not prompt_text and not images and not file_attachments:
                     return  # Nothing to process
@@ -2855,10 +2864,10 @@ def handle_message(event, client, context):
                 # Build enriched prompt
                 context_lines = ["\n### Slack Context"]
                 context_lines.append(
-                    f"**Requested by:** {sender_name} (User ID: {user_id})"
+                    f"**Requested by:** {sender_name} (Slack ID: <@{user_id}>)"
                 )
                 context_lines.append(
-                    f"**Channel:** <#{channel_id}> (Channel ID: {channel_id})"
+                    f"**Channel:** #{channel_name} (Slack ref: <#{channel_id}>)"
                 )
 
                 # Get permalink to the original message
@@ -2874,9 +2883,9 @@ def handle_message(event, client, context):
                     logger.warning(f"Failed to get permalink: {e}")
 
                 if id_to_name_mapping:
-                    context_lines.append("\n**User/Bot ID to Name Mapping:**")
+                    context_lines.append("\n**People/bots mentioned in this conversation:**")
                     for uid, name in id_to_name_mapping.items():
-                        context_lines.append(f"- {name}: {uid}")
+                        context_lines.append(f"- {name} (Slack ID: <@{uid}>)")
 
                 enriched_prompt = prompt_text + "\n" + "\n".join(context_lines)
 
