@@ -1857,7 +1857,9 @@ def create_slack_app(
     """Register a new Slack app for multi-app support."""
     existing = session.query(SlackApp).filter(SlackApp.slug == request.slug).first()
     if existing:
-        raise HTTPException(status_code=409, detail=f"Slack app '{request.slug}' already exists")
+        raise HTTPException(
+            status_code=409, detail=f"Slack app '{request.slug}' already exists"
+        )
 
     app = SlackApp(
         slug=request.slug,
