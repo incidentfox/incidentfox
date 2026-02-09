@@ -1050,6 +1050,66 @@ class ConfigServiceClient:
             ) from e
 
 
+    # =========================================================================
+    # Triage Settings
+    # =========================================================================
+
+    def get_triage_settings(self, slack_team_id: str) -> Dict[str, Any]:
+        """Get triage settings (prompt, internal channel, per-channel rules).
+
+        Returns:
+            Dict with triage_prompt, internal_channel_id, channel_rules, etc.
+            Returns empty dict if no triage settings configured.
+        """
+        config = self.get_workspace_config(slack_team_id)
+        if not config:
+            return {}
+        return config.get("triage", {})
+
+    def save_triage_settings(
+        self,
+        slack_team_id: str,
+        triage_prompt: str = None,
+        internal_channel_id: str = None,
+    ) -> None:
+        """Save triage settings.
+
+        Args:
+            slack_team_id: Slack team ID
+            triage_prompt: System prompt for the triage agent
+            internal_channel_id: Slack channel ID for internal summaries
+        """
+        org_id = f"slack-{slack_team_id}"
+        team_node_id = "default"
+
+        triage = {}
+        if triage_prompt is not None:
+            triage["prompt"] = triage_prompt
+        if internal_channel_id is not None:
+            triage["internal_channel_id"] = internal_channel_id
+
+        if not triage:
+            logger.info(f"No triage settings to update for {slack_team_id}")
+            return
+
+        update = {"triage": triage}
+
+        try:
+            self._update_config(org_id, team_node_id, update)
+            logger.info(f"Saved triage settings for workspace {slack_team_id}")
+        except requests.exceptions.RequestException as e:
+            logger.error(
+                f"Failed to save triage settings for {slack_team_id}: "
+                f"status={getattr(e.response, 'status_code', 'N/A')}, "
+                f"error={e}"
+            )
+            raise ConfigServiceError(
+                f"Failed to save triage settings: {e}",
+                status_code=getattr(e.response, "status_code", None),
+                response_text=getattr(e.response, "text", None),
+            ) from e
+
+
 # Global client instance
 _client: Optional[ConfigServiceClient] = None
 

@@ -5719,6 +5719,254 @@ def handle_member_joined_channel(event, client, context):
 
 
 # =============================================================================
+# /setup Slash Command - Triage Configuration
+# =============================================================================
+
+DEFAULT_TRIAGE_PROMPT = """You are a customer support triage agent. You monitor Slack channels where customers submit requests.
+
+For each message, determine its urgency:
+
+**URGENT** (page on-call immediately):
+- Service is down or severely degraded
+- Security incident or data breach
+- SLA breach in progress
+- Customer explicitly says "urgent" or "emergency"
+
+**NORMAL** (notify team, they'll respond next business day):
+- Feature requests
+- Non-blocking bugs
+- General questions
+- Setup/configuration help
+
+When a message is URGENT:
+- Page the on-call engineer via PagerDuty
+- Reply in thread: acknowledge the issue, confirm you've paged someone, and that they should respond shortly
+
+When a message is NORMAL:
+- Reply in thread: acknowledge receipt, let them know the team has been notified and will follow up
+- Offer an "Escalate" button in case they need immediate attention
+"""
+
+
+@app.command("/setup")
+def handle_setup_command(ack, body, client):
+    """Handle /setup slash command - opens triage configuration modal."""
+    ack()
+
+    team_id = body.get("team_id")
+    if not team_id:
+        logger.error("No team_id in /setup command")
+        return
+
+    # Load existing triage settings
+    existing_prompt = ""
+    existing_channel = None
+    try:
+        config_client = get_config_client()
+        triage = config_client.get_triage_settings(team_id)
+        existing_prompt = triage.get("prompt", "")
+        existing_channel = triage.get("internal_channel_id")
+    except Exception as e:
+        logger.warning(f"Failed to load triage settings for /setup: {e}")
+
+    # Build the modal
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": "Triage Agent Setup",
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "Configure how the triage agent handles incoming customer messages. "
+                    "The agent will monitor your support channels, determine urgency, "
+                    "and either page on-call or queue for next business day."
+                ),
+            },
+        },
+        {"type": "divider"},
+        {
+            "type": "input",
+            "block_id": "internal_channel_block",
+            "optional": True,
+            "label": {
+                "type": "plain_text",
+                "text": "Internal Updates Channel",
+            },
+            "hint": {
+                "type": "plain_text",
+                "text": "The bot will post summaries of all customer requests to this channel.",
+            },
+            "element": {
+                "type": "conversations_select",
+                "action_id": "setup_internal_channel",
+                "placeholder": {
+                    "type": "plain_text",
+                    "text": "Select a channel",
+                },
+                **(
+                    {"initial_conversation": existing_channel}
+                    if existing_channel
+                    else {}
+                ),
+                "filter": {
+                    "include": ["public", "private"],
+                    "exclude_bot_users": True,
+                    "exclude_external_shared_channels": True,
+                },
+            },
+        },
+        {"type": "divider"},
+        {
+            "type": "input",
+            "block_id": "triage_prompt_block",
+            "label": {
+                "type": "plain_text",
+                "text": "Triage Prompt",
+            },
+            "hint": {
+                "type": "plain_text",
+                "text": "Instructions for how the agent should classify and respond to customer messages.",
+            },
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "triage_prompt_input",
+                "multiline": True,
+                "placeholder": {
+                    "type": "plain_text",
+                    "text": "Enter triage instructions...",
+                },
+                **(
+                    {"initial_value": existing_prompt}
+                    if existing_prompt
+                    else {"initial_value": DEFAULT_TRIAGE_PROMPT}
+                ),
+            },
+        },
+    ]
+
+    modal = {
+        "type": "modal",
+        "callback_id": "setup_submission",
+        "title": {"type": "plain_text", "text": "Triage Setup"},
+        "submit": {"type": "plain_text", "text": "Save"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "private_metadata": json.dumps({"team_id": team_id}),
+        "blocks": blocks,
+    }
+
+    try:
+        client.views_open(trigger_id=body["trigger_id"], view=modal)
+        logger.info(f"Opened /setup modal for team {team_id}")
+    except Exception as e:
+        logger.error(f"Failed to open /setup modal: {e}", exc_info=True)
+
+
+@app.action("setup_internal_channel")
+def handle_setup_internal_channel_select(ack, body):
+    """Acknowledge the channel select interaction (no-op, value captured on submit)."""
+    ack()
+
+
+@app.view("setup_submission")
+def handle_setup_submission(ack, body, client, view):
+    """Handle triage setup modal submission."""
+    private_metadata = json.loads(view.get("private_metadata", "{}"))
+    team_id = private_metadata.get("team_id")
+    values = view.get("state", {}).get("values", {})
+
+    # Extract triage prompt
+    triage_prompt = (
+        values.get("triage_prompt_block", {})
+        .get("triage_prompt_input", {})
+        .get("value", "")
+    )
+
+    # Extract internal channel from the conversations_select input block
+    internal_channel_id = (
+        values.get("internal_channel_block", {})
+        .get("setup_internal_channel", {})
+        .get("selected_conversation")
+    )
+
+    if not team_id:
+        logger.error("No team_id in setup submission")
+        ack()
+        return
+
+    try:
+        config_client = get_config_client()
+        config_client.save_triage_settings(
+            slack_team_id=team_id,
+            triage_prompt=triage_prompt.strip() if triage_prompt else None,
+            internal_channel_id=internal_channel_id,
+        )
+        logger.info(
+            f"Saved triage settings for team {team_id}: "
+            f"channel={internal_channel_id}, prompt_len={len(triage_prompt or '')}"
+        )
+        ack()
+
+        # Post a confirmation to the user
+        user_id = body.get("user", {}).get("id")
+        if user_id:
+            confirm_parts = [":white_check_mark: *Triage settings saved!*"]
+            if internal_channel_id:
+                confirm_parts.append(
+                    f"\nInternal updates will be posted to <#{internal_channel_id}>."
+                )
+            if triage_prompt:
+                prompt_preview = triage_prompt[:100]
+                if len(triage_prompt) > 100:
+                    prompt_preview += "..."
+                confirm_parts.append(f"\nPrompt: _{prompt_preview}_")
+
+            try:
+                client.chat_postMessage(
+                    channel=user_id,
+                    text="Triage settings saved!",
+                    blocks=[
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": "\n".join(confirm_parts),
+                            },
+                        }
+                    ],
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send setup confirmation DM: {e}")
+
+    except Exception as e:
+        logger.error(f"Failed to save triage settings: {e}", exc_info=True)
+        error_modal = {
+            "response_action": "push",
+            "view": {
+                "type": "modal",
+                "title": {"type": "plain_text", "text": "Save Failed"},
+                "close": {"type": "plain_text", "text": "Try Again"},
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": ":x: *Failed to save triage settings*\n\nPlease try again. If the problem persists, contact support@incidentfox.ai",
+                        },
+                    },
+                ],
+            },
+        }
+        ack(error_modal)
+        return
+
+
+# =============================================================================
 # Multi-App Handler Registration
 # =============================================================================
 
@@ -5766,6 +6014,10 @@ def register_all_handlers(bolt_app):
     bolt_app.action("home_retry_load")(handle_home_retry_load)
     bolt_app.action("home_open_api_key_modal")(handle_home_api_key_modal)
     bolt_app.action("mention_open_setup_wizard")(handle_mention_setup_wizard)
+    bolt_app.action("setup_internal_channel")(handle_setup_internal_channel_select)
+
+    # Command handlers
+    bolt_app.command("/setup")(handle_setup_command)
 
     # Action handlers (regex patterns)
     bolt_app.action(re.compile(r"^answer_q\d+_.*"))(handle_checkbox_action)
@@ -5791,6 +6043,7 @@ def register_all_handlers(bolt_app):
     )
     bolt_app.view("advanced_settings_submission")(handle_advanced_settings_submission)
     bolt_app.view("integration_config_submission")(handle_integration_config_submission)
+    bolt_app.view("setup_submission")(handle_setup_submission)
 
 
 if __name__ == "__main__":
