@@ -229,12 +229,29 @@ TEAM = {
         "Long": {
             "slack_id": "U09V0JHFQ5P",
             "role": "Co-founder / Engineer",
-            "areas": ["backend", "API", "infrastructure", "orchestrator", "unified-agent", "config-service", "knowledge-base", "ai-pipeline", "k8s-gateway"],
+            "areas": [
+                "backend",
+                "API",
+                "infrastructure",
+                "orchestrator",
+                "unified-agent",
+                "config-service",
+                "knowledge-base",
+                "ai-pipeline",
+                "k8s-gateway",
+            ],
         },
         "Jimmy": {
             "slack_id": "U0A02101LU8",
             "role": "Co-founder / Engineer",
-            "areas": ["frontend", "web-ui", "integrations", "database", "slack-bot", "onboarding"],
+            "areas": [
+                "frontend",
+                "web-ui",
+                "integrations",
+                "database",
+                "slack-bot",
+                "onboarding",
+            ],
         },
     },
 }
