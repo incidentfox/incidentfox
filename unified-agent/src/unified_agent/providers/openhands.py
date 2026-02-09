@@ -803,6 +803,44 @@ class OpenHandsProvider(LLMProvider):
                 }
             )
 
+        # PagerDuty create incident - always available (agent decides when to use it)
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": "pagerduty_create_incident",
+                    "description": "Create a PagerDuty incident to page the on-call responder. Use 'high' urgency for phone calls, 'low' for email/push notifications.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "service_id": {
+                                "type": "string",
+                                "description": "PagerDuty service ID to create the incident on",
+                            },
+                            "title": {
+                                "type": "string",
+                                "description": "Incident title (e.g. '[Enterprise] Acme Corp: API outage')",
+                            },
+                            "urgency": {
+                                "type": "string",
+                                "enum": ["high", "low"],
+                                "description": "Urgency level - 'high' (phone call) or 'low' (email/push)",
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "Incident body with details about the issue",
+                            },
+                            "escalation_policy_id": {
+                                "type": "string",
+                                "description": "Optional escalation policy ID override",
+                            },
+                        },
+                        "required": ["service_id", "title"],
+                    },
+                },
+            }
+        )
+
         return tools
 
     async def _execute_tool(
@@ -995,6 +1033,18 @@ class OpenHandsProvider(LLMProvider):
                         yield (text[:50000], True, None)
                 except Exception as e:
                     yield (f"Fetch error: {str(e)}", False, "FetchError")
+
+            elif tool_name == "pagerduty_create_incident":
+                from ..tools.pagerduty import pagerduty_create_incident
+
+                result = pagerduty_create_incident(
+                    service_id=args.get("service_id", ""),
+                    title=args.get("title", ""),
+                    urgency=args.get("urgency", "high"),
+                    description=args.get("description", ""),
+                    escalation_policy_id=args.get("escalation_policy_id", ""),
+                )
+                yield (result, True, None)
 
             else:
                 yield (f"Unknown tool: {tool_name}", False, "UnknownTool")
