@@ -1710,12 +1710,16 @@ def handle_mention(event, say, client, context):
     logger.info(f"Images attached: {len(images)}")
     logger.info(f"File attachments: {len(file_attachments)}")
 
-    if not prompt_text and not images and not file_attachments:
+    if not prompt_text and not images and not file_attachments and not thread_context_text:
         say(
             text="Hey! What would you like me to investigate?",
             thread_ts=thread_ts,
         )
         return
+
+    # If prompt is empty but we have thread context, use a default prompt
+    if not prompt_text and thread_context_text:
+        prompt_text = "Based on the thread conversation above, how can I help?"
 
     # Build enriched prompt with Slack context
     context_lines = ["\n### Slack Context"]
@@ -3043,6 +3047,33 @@ def handle_nudge_invoke(ack, body, client, context, respond):
     sanitized_channel = channel_id.lower()
     thread_id = f"slack-{sanitized_channel}-{sanitized_thread_ts}"
 
+    # Fetch thread context (human messages since bot's last response)
+    thread_context_text = None
+    bot_user_id = context.get("bot_user_id")
+    if not bot_user_id:
+        try:
+            auth_response = client.auth_test()
+            bot_user_id = auth_response.get("user_id")
+        except Exception as e:
+            logger.warning(f"Failed to get bot user ID: {e}")
+            bot_user_id = None
+
+    try:
+        thread_replies = client.conversations_replies(
+            channel=channel_id,
+            ts=thread_ts,
+            limit=50,
+        )
+        thread_context_text = _format_thread_context(
+            thread_replies.get("messages", []),
+            current_message_ts=thread_ts,  # Exclude the parent message trigger
+            bot_user_id=bot_user_id,
+        )
+        if thread_context_text:
+            logger.info(f"Thread context enrichment added for nudge in thread {thread_ts}")
+    except Exception as e:
+        logger.warning(f"Failed to fetch thread context for nudge: {e}")
+
     # Build a simple prompt with context
     context_lines = ["\n### Slack Context"]
     context_lines.append(f"**Requested by:** {sender_name} (User ID: {user_id})")
@@ -3054,6 +3085,10 @@ def handle_nudge_invoke(ack, body, client, context, respond):
     )
 
     enriched_prompt = text + "\n" + "\n".join(context_lines)
+
+    # Prepend thread context if available (human messages since last bot response)
+    if thread_context_text:
+        enriched_prompt = thread_context_text + enriched_prompt
 
     # Post initial "Investigating..." message
     from assets_config import get_asset_url
