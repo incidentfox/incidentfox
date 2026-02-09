@@ -1710,7 +1710,12 @@ def handle_mention(event, say, client, context):
     logger.info(f"Images attached: {len(images)}")
     logger.info(f"File attachments: {len(file_attachments)}")
 
-    if not prompt_text and not images and not file_attachments and not thread_context_text:
+    if (
+        not prompt_text
+        and not images
+        and not file_attachments
+        and not thread_context_text
+    ):
         say(
             text="Hey! What would you like me to investigate?",
             thread_ts=thread_ts,
@@ -3070,7 +3075,9 @@ def handle_nudge_invoke(ack, body, client, context, respond):
             bot_user_id=bot_user_id,
         )
         if thread_context_text:
-            logger.info(f"Thread context enrichment added for nudge in thread {thread_ts}")
+            logger.info(
+                f"Thread context enrichment added for nudge in thread {thread_ts}"
+            )
     except Exception as e:
         logger.warning(f"Failed to fetch thread context for nudge: {e}")
 
