@@ -183,14 +183,12 @@ spec:
                   name: {{ .Values.services.agent.staticTeamToken.secretName }}
                   key: {{ .Values.services.agent.staticTeamToken.secretKey }}
             {{- end }}
-            # LLM API keys (for direct mode, sandbox mode uses credential-resolver)
-            {{- if not .Values.services.agent.sandbox.enabled }}
+            # LLM API keys (always provide for litellm routing fallback)
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.agentOpenAI.secretName }}
                   key: {{ .Values.externalSecrets.contract.agentOpenAI.apiKeyKey }}
-            {{- end }}
             # Anthropic API key (needed for unified-agent with Claude)
             {{- if .Values.externalSecrets.contract.sharedAnthropicKey.enabled }}
             - name: ANTHROPIC_API_KEY

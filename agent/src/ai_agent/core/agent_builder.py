@@ -478,7 +478,7 @@ def build_agent_from_config(
         system_prompt = system_prompt + "\n\n" + prompt_config["suffix"]
 
     # Build model settings using shared helper
-    model_name = model_config.get("name", "gpt-5.2")
+    model_name = model_config.get("name", "anthropic/claude-sonnet-4-5-20250929")
     model_settings = create_model_settings(
         model_name=model_name,
         temperature=model_config.get("temperature", 0.4),

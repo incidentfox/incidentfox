@@ -99,7 +99,7 @@ def summarize_partial_work(
     exception,
     original_query: str,
     agent_name: str = "agent",
-    model: str = "gpt-5.2",
+    model: str = "anthropic/claude-sonnet-4-5-20250929",
 ) -> dict[str, Any]:
     """
     Use an LLM to summarize the partial work from a MaxTurnsExceeded exception.
