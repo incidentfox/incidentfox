@@ -2082,7 +2082,9 @@ def build_integrations_page(
     # Active integrations section with pagination
     if active_integrations:
         total_active = len(active_integrations)
-        total_pages = (total_active + INTEGRATIONS_PER_PAGE - 1) // INTEGRATIONS_PER_PAGE
+        total_pages = (
+            total_active + INTEGRATIONS_PER_PAGE - 1
+        ) // INTEGRATIONS_PER_PAGE
         page = min(page, total_pages - 1)  # Clamp to valid range
 
         start_idx = page * INTEGRATIONS_PER_PAGE
@@ -2249,7 +2251,11 @@ def build_integrations_page(
                 blocks.append({"type": "actions", "elements": pagination_elements})
 
     # Coming soon integrations section (only on last page of active integrations)
-    total_pages = (len(active_integrations) + INTEGRATIONS_PER_PAGE - 1) // INTEGRATIONS_PER_PAGE if active_integrations else 1
+    total_pages = (
+        (len(active_integrations) + INTEGRATIONS_PER_PAGE - 1) // INTEGRATIONS_PER_PAGE
+        if active_integrations
+        else 1
+    )
     is_last_page = page >= total_pages - 1
     if coming_soon_integrations and is_last_page:
         blocks.append({"type": "divider"})
