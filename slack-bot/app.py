@@ -5063,6 +5063,7 @@ def handle_integration_config_submission(ack, body, client, view):
     team_id = private_metadata.get("team_id")
     integration_id = private_metadata.get("integration_id")
     field_names = private_metadata.get("field_names", [])
+    secret_fields = set(private_metadata.get("secret_fields", []))
 
     values = view.get("state", {}).get("values", {})
 
@@ -5091,6 +5092,16 @@ def handle_integration_config_submission(ack, body, client, view):
             val = field_value.get("value")
             if val:
                 val = val.strip()
+
+                # Secret fields: if value is all asterisks, user didn't change it
+                # Preserve the existing value instead of saving the redacted mask
+                if (
+                    field_id in secret_fields
+                    and val == "*" * len(val)
+                    and field_id in existing_config
+                ):
+                    config[field_id] = existing_config[field_id]
+                    continue
 
                 # Special handling for Coralogix domain field
                 if integration_id == "coralogix" and field_id == "domain":

@@ -2799,8 +2799,9 @@ def build_integration_config_modal(
             )
         blocks.append({"type": "divider"})
 
-    # Track field names for submission handler
+    # Track field names and secret field IDs for submission handler
     field_names = []
+    secret_fields = []
 
     # Generate form fields from schema
     fields = schema.get("fields", [])
@@ -2827,28 +2828,36 @@ def build_integration_config_modal(
         make_optional = field_has_value or not field_required
 
         if field_type == "secret":
-            # Secret fields: plain text input, don't pre-fill
-            # Always optional when editing (field_has_value) to avoid forcing re-entry
+            # Secret fields: show redacted value if configured, otherwise empty
+            secret_fields.append(field_id)
             hint_text = field_hint
-            if field_has_value:
+            existing_value = existing_config.get(field_id)
+            if field_has_value and existing_value:
+                redacted = "*" * len(str(existing_value))
                 hint_text = (
                     f"{field_hint} (already configured - leave blank to keep existing)"
                     if field_hint
                     else "Already configured - leave blank to keep existing value"
                 )
+            else:
+                redacted = None
+
+            element = {
+                "type": "plain_text_input",
+                "action_id": f"input_{field_id}",
+                "placeholder": {
+                    "type": "plain_text",
+                    "text": field_placeholder or "Enter value...",
+                },
+            }
+            if redacted:
+                element["initial_value"] = redacted
 
             input_block = {
                 "type": "input",
                 "block_id": f"field_{field_id}",
                 "optional": make_optional,
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": f"input_{field_id}",
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": field_placeholder or "Enter value...",
-                    },
-                },
+                "element": element,
                 "label": {"type": "plain_text", "text": field_name},
             }
             if hint_text:
@@ -3023,6 +3032,7 @@ def build_integration_config_modal(
             "team_id": team_id,
             "integration_id": int_id,
             "field_names": all_field_names,
+            "secret_fields": secret_fields,
             "category_filter": category_filter,
             "entry_point": entry_point,
         }
