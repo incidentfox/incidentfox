@@ -1987,11 +1987,15 @@ def build_help_message() -> list:
 # =============================================================================
 
 
+INTEGRATIONS_PER_PAGE = 10
+
+
 def build_integrations_page(
     team_id: str,
     category_filter: str = "all",
     configured: Optional[Dict] = None,
     trial_info: Optional[Dict] = None,
+    page: int = 0,
 ) -> Dict[str, Any]:
     """
     Build the integrations page with category filters and integration cards.
@@ -2001,6 +2005,7 @@ def build_integrations_page(
         category_filter: Category to filter by (default: "all")
         configured: Dict of already configured integrations {id: config}
         trial_info: Trial status info
+        page: Page number for pagination (0-indexed)
 
     Returns:
         Slack modal view object
@@ -2074,17 +2079,41 @@ def build_integrations_page(
         i for i in integrations if i.get("status") == "coming_soon"
     ]
 
-    # Active integrations section
+    # Active integrations section with pagination
     if active_integrations:
-        blocks.append(
-            {
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": "*Available Now*"},
-            }
-        )
+        total_active = len(active_integrations)
+        total_pages = (total_active + INTEGRATIONS_PER_PAGE - 1) // INTEGRATIONS_PER_PAGE
+        page = min(page, total_pages - 1)  # Clamp to valid range
 
-        # Create integration cards
-        for idx, integration in enumerate(active_integrations):
+        start_idx = page * INTEGRATIONS_PER_PAGE
+        end_idx = min(start_idx + INTEGRATIONS_PER_PAGE, total_active)
+        page_integrations = active_integrations[start_idx:end_idx]
+
+        if total_pages > 1:
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*Available Now* — Page {page + 1}/{total_pages}",
+                    },
+                }
+            )
+        else:
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "*Available Now*"},
+                }
+            )
+
+        # Get done.png URL for status indicator
+        from assets_config import get_asset_url
+
+        done_url = get_asset_url("done")
+
+        # Create integration cards with logos
+        for idx, integration in enumerate(page_integrations):
             int_id = integration["id"]
             name = integration["name"]
             icon = integration.get("icon_fallback", ":gear:")
@@ -2094,47 +2123,135 @@ def build_integrations_page(
             is_enabled = int_config.get("enabled", True) if is_configured else False
             logo_url = get_integration_logo_url(int_id)
 
-            # Build status prefix for section text
-            status_prefix = ""
-            if is_configured and is_enabled:
-                status_prefix = ":white_check_mark: Connected — "
+            # For configured integrations, show status with done.png image in context block
+            if is_configured and is_enabled and done_url:
+                blocks.append(
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "image",
+                                "image_url": done_url,
+                                "alt_text": "connected",
+                            },
+                            {
+                                "type": "mrkdwn",
+                                "text": "*Connected*",
+                            },
+                        ],
+                    }
+                )
             elif is_configured and not is_enabled:
-                status_prefix = ":white_circle: Disabled — "
+                blocks.append(
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": ":white_circle: *Disabled*",
+                            },
+                        ],
+                    }
+                )
 
-            # Build compact section with button as accessory to stay within
-            # Slack's 100-block modal limit
-            section_text = f"{status_prefix}*{name}*\n{description}"
-            if not logo_url:
-                section_text = f"{status_prefix}{icon} *{name}*\n{description}"
-
-            button = {
-                "type": "button",
-                "action_id": f"configure_integration_{int_id}",
-                "text": {
-                    "type": "plain_text",
-                    "text": "Configure" if not is_configured else "Edit",
-                    "emoji": True,
-                },
-            }
-            if not is_configured:
-                button["style"] = "primary"
-
+            # Build section with logo image as accessory if available
             section_block = {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": section_text,
+                    "text": f"*{name}*\n{description}",
                 },
-                "accessory": button,
             }
-            blocks.append(section_block)
+
+            # Use logo image if available, otherwise use button as accessory
+            if logo_url:
+                # Add image accessory
+                section_block["accessory"] = {
+                    "type": "image",
+                    "image_url": logo_url,
+                    "alt_text": name,
+                }
+                blocks.append(section_block)
+                # Add button in separate actions block
+                blocks.append(
+                    {
+                        "type": "actions",
+                        "elements": [
+                            {
+                                "type": "button",
+                                "action_id": f"configure_integration_{int_id}",
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": (
+                                        "Configure" if not is_configured else "Edit"
+                                    ),
+                                    "emoji": True,
+                                },
+                                "style": "primary" if not is_configured else None,
+                            }
+                        ],
+                    }
+                )
+                # Remove None style from button
+                if blocks[-1]["elements"][0].get("style") is None:
+                    del blocks[-1]["elements"][0]["style"]
+            else:
+                # Fallback: use emoji icon and button accessory
+                section_block["text"]["text"] = f"{icon} *{name}*\n{description}"
+                section_block["accessory"] = {
+                    "type": "button",
+                    "action_id": f"configure_integration_{int_id}",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "Configure" if not is_configured else "Edit",
+                        "emoji": True,
+                    },
+                    "style": "primary" if not is_configured else None,
+                }
+                blocks.append(section_block)
+                # Remove None style
+                if blocks[-1]["accessory"].get("style") is None:
+                    del blocks[-1]["accessory"]["style"]
 
             # Add divider between integrations (not after the last one)
-            if idx < len(active_integrations) - 1:
+            if idx < len(page_integrations) - 1:
                 blocks.append({"type": "divider"})
 
-    # Coming soon integrations section
-    if coming_soon_integrations:
+        # Pagination buttons
+        if total_pages > 1:
+            pagination_elements = []
+            if page > 0:
+                pagination_elements.append(
+                    {
+                        "type": "button",
+                        "action_id": "integrations_prev_page",
+                        "text": {
+                            "type": "plain_text",
+                            "text": ":arrow_left: Previous",
+                            "emoji": True,
+                        },
+                    }
+                )
+            if page < total_pages - 1:
+                pagination_elements.append(
+                    {
+                        "type": "button",
+                        "action_id": "integrations_next_page",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Next :arrow_right:",
+                            "emoji": True,
+                        },
+                    }
+                )
+            if pagination_elements:
+                blocks.append({"type": "divider"})
+                blocks.append({"type": "actions", "elements": pagination_elements})
+
+    # Coming soon integrations section (only on last page of active integrations)
+    total_pages = (len(active_integrations) + INTEGRATIONS_PER_PAGE - 1) // INTEGRATIONS_PER_PAGE if active_integrations else 1
+    is_last_page = page >= total_pages - 1
+    if coming_soon_integrations and is_last_page:
         blocks.append({"type": "divider"})
         blocks.append(
             {
@@ -2245,6 +2362,7 @@ def build_integrations_page(
         {
             "team_id": team_id,
             "category_filter": category_filter,
+            "page": page,
         }
     )
 
