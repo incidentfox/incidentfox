@@ -32,6 +32,10 @@ DOMAIN_TO_INTEGRATION: dict[str, str] = {
     # New Relic
     "api.newrelic.com": "newrelic",
     "api.eu.newrelic.com": "newrelic",
+    # Blameless
+    "api.blameless.io": "blameless",
+    # FireHydrant
+    "api.firehydrant.io": "firehydrant",
 }
 
 # Path prefixes for proxy mode (when host is envoy:8001, localhost:8001, etc.)

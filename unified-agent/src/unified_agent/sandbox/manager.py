@@ -487,6 +487,18 @@ static_resources:
                 "name": "HONEYCOMB_BASE_URL",
                 "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/honeycomb",
             },
+            {
+                "name": "CLICKUP_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/clickup",
+            },
+            {
+                "name": "BLAMELESS_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/blameless",
+            },
+            {
+                "name": "FIREHYDRANT_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/firehydrant",
+            },
             # LiteLLM observability callback (Langfuse)
             {"name": "LITELLM_CALLBACKS", "value": "langfuse"},
         ]

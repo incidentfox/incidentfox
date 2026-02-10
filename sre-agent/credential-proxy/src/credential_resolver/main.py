@@ -151,6 +151,13 @@ def load_env_credentials() -> dict[str, dict]:
             "username": os.getenv("OPENSEARCH_USERNAME"),
             "password": os.getenv("OPENSEARCH_PASSWORD"),
         },
+        "blameless": {
+            "api_key": os.getenv("BLAMELESS_API_KEY"),
+            "domain": os.getenv("BLAMELESS_URL"),
+        },
+        "firehydrant": {
+            "api_key": os.getenv("FIREHYDRANT_API_KEY"),
+        },
     }
 
 
@@ -273,6 +280,11 @@ async def list_integrations(request: Request):
         "sentry",
         "pagerduty",
         "gitlab",
+        "jira",
+        "newrelic",
+        "opensearch",
+        "blameless",
+        "firehydrant",
     ]
 
     available = []
@@ -341,6 +353,26 @@ def is_integration_configured(integration_id: str, creds: dict | None) -> bool:
 
     # GitLab: api_key required (domain optional, defaults to gitlab.com)
     if integration_id == "gitlab":
+        return bool(creds.get("api_key"))
+
+    # Jira: domain + email + api_key required (Basic auth)
+    if integration_id == "jira":
+        return bool(creds.get("domain") and creds.get("email") and creds.get("api_key"))
+
+    # New Relic: api_key required (account_id optional)
+    if integration_id == "newrelic":
+        return bool(creds.get("api_key"))
+
+    # OpenSearch: domain required (auth optional, some clusters are open)
+    if integration_id == "opensearch":
+        return bool(creds.get("domain"))
+
+    # Blameless: api_key required (SaaS at api.blameless.io)
+    if integration_id == "blameless":
+        return bool(creds.get("api_key"))
+
+    # FireHydrant: api_key required (SaaS at api.firehydrant.io)
+    if integration_id == "firehydrant":
         return bool(creds.get("api_key"))
 
     # Default: api_key required (coralogix, incident_io, etc.)
@@ -1320,6 +1352,324 @@ async def gitlab_proxy(path: str, request: Request):
     "/check", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 )
 @app.api_route(
+    "/jira/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def jira_proxy(path: str, request: Request):
+    """Reverse proxy for Jira API requests.
+
+    Jira Cloud uses customer-specific URLs (e.g., mycompany.atlassian.net).
+    Routes requests to the customer's Jira REST API v3.
+    """
+    import httpx
+
+    logger.info(f"Jira proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get Jira credentials
+    creds = await get_credentials(tenant_id, team_id, "jira")
+    if not creds or not creds.get("domain") or not creds.get("api_key"):
+        logger.error(f"Jira not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Jira integration not configured",
+        )
+
+    # Build Jira API URL from domain
+    import re
+
+    domain = creds.get("domain", "")
+    match = re.match(r"(https?://[^/]+)", domain)
+    if match:
+        jira_url = match.group(1)
+    else:
+        if not domain.startswith(("http://", "https://")):
+            domain = f"https://{domain}"
+        jira_url = domain.rstrip("/")
+
+    target_url = f"{jira_url}/rest/api/3/{path}"
+    logger.info(f"Jira proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("jira", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"Jira request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="Jira request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"Jira request error: {e}")
+        raise HTTPException(status_code=502, detail=f"Jira request failed: {e}")
+
+
+@app.api_route(
+    "/newrelic/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def newrelic_proxy(path: str, request: Request):
+    """Reverse proxy for New Relic API requests.
+
+    New Relic is SaaS at api.newrelic.com (US) or api.eu.newrelic.com (EU).
+    """
+    import httpx
+
+    logger.info(f"New Relic proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get New Relic credentials
+    creds = await get_credentials(tenant_id, team_id, "newrelic")
+    if not creds or not creds.get("api_key"):
+        logger.error(f"New Relic not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="New Relic integration not configured",
+        )
+
+    # Build New Relic API URL (default to US region)
+    domain = creds.get("domain", "https://api.newrelic.com")
+    if not domain.startswith(("http://", "https://")):
+        domain = f"https://{domain}"
+    target_url = f"{domain.rstrip('/')}/{path}"
+    logger.info(f"New Relic proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("newrelic", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"New Relic request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="New Relic request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"New Relic request error: {e}")
+        raise HTTPException(status_code=502, detail=f"New Relic request failed: {e}")
+
+
+@app.api_route(
+    "/opensearch/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def opensearch_proxy(path: str, request: Request):
+    """Reverse proxy for OpenSearch API requests.
+
+    OpenSearch uses customer-specific URLs with Basic auth (username:password).
+    """
+    return await generic_proxy("opensearch", path, request, require_api_key=False)
+
+
+@app.api_route(
+    "/blameless/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def blameless_proxy(path: str, request: Request):
+    """Reverse proxy for Blameless API requests.
+
+    Blameless is SaaS at api.blameless.io.
+    """
+    import httpx
+
+    logger.info(f"Blameless proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get Blameless credentials
+    creds = await get_credentials(tenant_id, team_id, "blameless")
+    if not creds or not creds.get("api_key"):
+        logger.error(f"Blameless not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Blameless integration not configured",
+        )
+
+    # Build Blameless API URL (default to api.blameless.io)
+    domain = creds.get("domain", "https://api.blameless.io")
+    if not domain.startswith(("http://", "https://")):
+        domain = f"https://{domain}"
+    target_url = f"{domain.rstrip('/')}/{path}"
+    logger.info(f"Blameless proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("blameless", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"Blameless request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="Blameless request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"Blameless request error: {e}")
+        raise HTTPException(status_code=502, detail=f"Blameless request failed: {e}")
+
+
+@app.api_route(
+    "/firehydrant/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def firehydrant_proxy(path: str, request: Request):
+    """Reverse proxy for FireHydrant API requests.
+
+    FireHydrant is SaaS at api.firehydrant.io.
+    """
+    import httpx
+
+    logger.info(f"FireHydrant proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get FireHydrant credentials
+    creds = await get_credentials(tenant_id, team_id, "firehydrant")
+    if not creds or not creds.get("api_key"):
+        logger.error(f"FireHydrant not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="FireHydrant integration not configured",
+        )
+
+    # Build FireHydrant API URL (always api.firehydrant.io)
+    target_url = f"https://api.firehydrant.io/{path}"
+    logger.info(f"FireHydrant proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("firehydrant", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"FireHydrant request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="FireHydrant request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"FireHydrant request error: {e}")
+        raise HTTPException(status_code=502, detail=f"FireHydrant request failed: {e}")
+
+
+@app.api_route(
     "/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 )
 async def ext_authz_check(request: Request, path: str = ""):
@@ -1561,6 +1911,43 @@ def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
         # GitLab uses PRIVATE-TOKEN header
         api_key = creds.get("api_key", "")
         return {"PRIVATE-TOKEN": api_key}
+
+    elif integration_id == "jira":
+        # Jira Cloud uses Basic auth (email:api_token base64 encoded)
+        email = creds.get("email", "")
+        api_key = creds.get("api_key", "")
+        if email and api_key:
+            auth_string = f"{email}:{api_key}"
+            encoded = base64.b64encode(auth_string.encode()).decode()
+            return {"Authorization": f"Basic {encoded}"}
+        logger.warning("Jira credentials incomplete for Basic auth")
+        return {}
+
+    elif integration_id == "newrelic":
+        # New Relic uses Api-Key header
+        api_key = creds.get("api_key", "")
+        return {"Api-Key": api_key}
+
+    elif integration_id == "opensearch":
+        # OpenSearch uses Basic auth (username:password)
+        username = creds.get("username", "")
+        password = creds.get("password", "")
+        if username and password:
+            auth_string = f"{username}:{password}"
+            encoded = base64.b64encode(auth_string.encode()).decode()
+            return {"Authorization": f"Basic {encoded}"}
+        # No auth (open cluster)
+        return {}
+
+    elif integration_id == "blameless":
+        # Blameless uses Bearer token
+        api_key = creds.get("api_key", "")
+        return {"Authorization": f"Bearer {api_key}"}
+
+    elif integration_id == "firehydrant":
+        # FireHydrant uses Bearer token
+        api_key = creds.get("api_key", "")
+        return {"Authorization": f"Bearer {api_key}"}
 
     # Default: Bearer token
     api_key = creds.get("api_key", "")
