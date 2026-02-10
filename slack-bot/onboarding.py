@@ -2083,12 +2083,7 @@ def build_integrations_page(
             }
         )
 
-        # Get done.png URL for status indicator
-        from assets_config import get_asset_url
-
-        done_url = get_asset_url("done")
-
-        # Create integration cards with logos
+        # Create integration cards
         for idx, integration in enumerate(active_integrations):
             int_id = integration["id"]
             name = integration["name"]
@@ -2099,95 +2094,40 @@ def build_integrations_page(
             is_enabled = int_config.get("enabled", True) if is_configured else False
             logo_url = get_integration_logo_url(int_id)
 
-            # For configured integrations, show status with done.png image in context block
-            if is_configured and is_enabled and done_url:
-                blocks.append(
-                    {
-                        "type": "context",
-                        "elements": [
-                            {
-                                "type": "image",
-                                "image_url": done_url,
-                                "alt_text": "connected",
-                            },
-                            {
-                                "type": "mrkdwn",
-                                "text": "*Connected*",
-                            },
-                        ],
-                    }
-                )
+            # Build status prefix for section text
+            status_prefix = ""
+            if is_configured and is_enabled:
+                status_prefix = ":white_check_mark: Connected — "
             elif is_configured and not is_enabled:
-                blocks.append(
-                    {
-                        "type": "context",
-                        "elements": [
-                            {
-                                "type": "mrkdwn",
-                                "text": ":white_circle: *Disabled*",
-                            },
-                        ],
-                    }
-                )
+                status_prefix = ":white_circle: Disabled — "
 
-            # Build section with logo image as accessory if available
+            # Build compact section with button as accessory to stay within
+            # Slack's 100-block modal limit
+            section_text = f"{status_prefix}*{name}*\n{description}"
+            if not logo_url:
+                section_text = f"{status_prefix}{icon} *{name}*\n{description}"
+
+            button = {
+                "type": "button",
+                "action_id": f"configure_integration_{int_id}",
+                "text": {
+                    "type": "plain_text",
+                    "text": "Configure" if not is_configured else "Edit",
+                    "emoji": True,
+                },
+            }
+            if not is_configured:
+                button["style"] = "primary"
+
             section_block = {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*{name}*\n{description}",
+                    "text": section_text,
                 },
+                "accessory": button,
             }
-
-            # Use logo image if available, otherwise use button as accessory
-            if logo_url:
-                # Add image accessory
-                section_block["accessory"] = {
-                    "type": "image",
-                    "image_url": logo_url,
-                    "alt_text": name,
-                }
-                blocks.append(section_block)
-                # Add button in separate actions block
-                blocks.append(
-                    {
-                        "type": "actions",
-                        "elements": [
-                            {
-                                "type": "button",
-                                "action_id": f"configure_integration_{int_id}",
-                                "text": {
-                                    "type": "plain_text",
-                                    "text": (
-                                        "Configure" if not is_configured else "Edit"
-                                    ),
-                                    "emoji": True,
-                                },
-                                "style": "primary" if not is_configured else None,
-                            }
-                        ],
-                    }
-                )
-                # Remove None style from button
-                if blocks[-1]["elements"][0].get("style") is None:
-                    del blocks[-1]["elements"][0]["style"]
-            else:
-                # Fallback: use emoji icon and button accessory
-                section_block["text"]["text"] = f"{icon} *{name}*\n{description}"
-                section_block["accessory"] = {
-                    "type": "button",
-                    "action_id": f"configure_integration_{int_id}",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "Configure" if not is_configured else "Edit",
-                        "emoji": True,
-                    },
-                    "style": "primary" if not is_configured else None,
-                }
-                blocks.append(section_block)
-                # Remove None style
-                if blocks[-1]["accessory"].get("style") is None:
-                    del blocks[-1]["accessory"]["style"]
+            blocks.append(section_block)
 
             # Add divider between integrations (not after the last one)
             if idx < len(active_integrations) - 1:
