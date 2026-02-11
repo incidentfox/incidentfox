@@ -125,12 +125,16 @@ def set_flag_variant(flag_key: str, variant: str, dry_run: bool = False) -> dict
     data = get_flags_json()
     flags = data.get("flags", {})
 
+    if not flags:
+        raise ValueError(f"No flags found in ConfigMap '{config['configmap']}'")
+
     if flag_key not in flags:
         available = ", ".join(sorted(flags.keys()))
         raise ValueError(f"Unknown flag '{flag_key}'. Available: {available}")
 
     flag = flags[flag_key]
-    available_variants = list(flag.get("variants", {}).keys())
+    variants = flag.get("variants", {})
+    available_variants = list(variants.keys())
 
     if variant not in available_variants:
         raise ValueError(
@@ -144,8 +148,8 @@ def set_flag_variant(flag_key: str, variant: str, dry_run: bool = False) -> dict
         "flag": flag_key,
         "old_variant": old_variant,
         "new_variant": variant,
-        "old_value": flag["variants"].get(old_variant),
-        "new_value": flag["variants"].get(variant),
+        "old_value": variants.get(old_variant),
+        "new_value": variants.get(variant),
         "dry_run": dry_run,
     }
 
@@ -156,28 +160,19 @@ def set_flag_variant(flag_key: str, variant: str, dry_run: bool = False) -> dict
     flags[flag_key]["defaultVariant"] = variant
     updated_json = json.dumps(data, indent=2)
 
-    # Patch the ConfigMap using kubectl create --dry-run + apply pattern
-    # This avoids issues with special characters in JSON
-    _run_kubectl(
-        [
-            "create", "configmap", config["configmap"],
-            "-n", config["namespace"],
-            f"--from-literal={config['key']}={updated_json}",
-            "--dry-run=client", "-o", "yaml",
-        ]
-    )
-
-    # Actually apply the update via kubectl patch
+    # Patch the ConfigMap via stdin to handle large JSON and special characters safely
     patch = json.dumps({
         "data": {
             config["key"]: updated_json
         }
     })
-    _run_kubectl([
-        "patch", "configmap", config["configmap"],
-        "-n", config["namespace"],
-        "--type=merge",
-        f"-p={patch}",
-    ])
+    _run_kubectl(
+        [
+            "patch", "configmap", config["configmap"],
+            "-n", config["namespace"],
+            "--type=merge",
+            "-p", patch,
+        ]
+    )
 
     return result
