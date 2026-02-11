@@ -62,19 +62,24 @@ def get_flags_json() -> dict[str, Any]:
         Parsed flag configuration dict with 'flags' key
     """
     config = get_config()
+    # Use -o json and extract in Python to avoid jsonpath issues with dots in key names
     raw = _run_kubectl([
         "get", "configmap", config["configmap"],
         "-n", config["namespace"],
-        "-o", f"jsonpath={{.data['{config['key']}']}}"
+        "-o", "json",
     ])
 
-    if not raw.strip():
+    cm = json.loads(raw)
+    data = cm.get("data", {})
+    flag_json_str = data.get(config["key"])
+
+    if not flag_json_str:
         raise RuntimeError(
             f"ConfigMap {config['configmap']} in namespace {config['namespace']} "
             f"has no data at key '{config['key']}'"
         )
 
-    return json.loads(raw)
+    return json.loads(flag_json_str)
 
 
 def get_all_flags() -> dict[str, dict[str, Any]]:
