@@ -2346,6 +2346,35 @@ BUILT_IN_TOOLS_METADATA = [
         "category": "observability",
         "required_integrations": [],
     },
+    # Feature flag management (flagd / OpenFeature)
+    {
+        "id": "flagd_list_flags",
+        "name": "List Feature Flags",
+        "description": "List all feature flags and their current values from flagd ConfigMap",
+        "category": "runtime-config",
+        "required_integrations": ["kubernetes"],
+    },
+    {
+        "id": "flagd_get_flag",
+        "name": "Get Feature Flag",
+        "description": "Get a specific feature flag's configuration, current variant, and available variants",
+        "category": "runtime-config",
+        "required_integrations": ["kubernetes"],
+    },
+    {
+        "id": "flagd_set_flag",
+        "name": "Set Feature Flag",
+        "description": "Set a feature flag's default variant (patches ConfigMap, triggers flagd hot-reload). Supports dry-run.",
+        "category": "runtime-config",
+        "required_integrations": ["kubernetes"],
+    },
+    {
+        "id": "flagd_list_scenarios",
+        "name": "List Incident Scenarios",
+        "description": "List available incident scenarios with their flagd flags, current status, affected services, and remediation steps",
+        "category": "runtime-config",
+        "required_integrations": ["kubernetes"],
+    },
 ]
 
 

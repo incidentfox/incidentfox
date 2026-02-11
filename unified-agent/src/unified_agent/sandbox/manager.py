@@ -501,6 +501,9 @@ static_resources:
             },
             # LiteLLM observability callback (Langfuse)
             {"name": "LITELLM_CALLBACKS", "value": "langfuse"},
+            # flagd runtime config (for OTel Demo incident scenarios)
+            {"name": "FLAGD_NAMESPACE", "value": os.getenv("FLAGD_NAMESPACE", "otel-demo")},
+            {"name": "FLAGD_CONFIGMAP", "value": os.getenv("FLAGD_CONFIGMAP", "flagd-config")},
         ]
 
         # Config-driven agents: forward Config Service URL and TEAM_TOKEN
