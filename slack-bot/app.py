@@ -5318,125 +5318,6 @@ def handle_k8s_saas_cluster_created_close(ack, body, client, view):
     logger.info(f"Closed K8s cluster created modal for team {team_id}")
 
 
-@app.action("open_advanced_settings")
-def handle_open_advanced_settings(ack, body, client):
-    """Open Advanced Settings modal (BYOK, HTTP proxy)."""
-    ack()
-    logger.info("open_advanced_settings action triggered")
-
-    team_id = body.get("team", {}).get("id")
-    if not team_id:
-        logger.error("No team_id in open_advanced_settings")
-        return
-
-    try:
-        # Check if user already has an API key configured
-        config_client = get_config_client()
-        logger.info(f"Fetching anthropic config for team {team_id}")
-        anthropic_config = config_client.get_integration_config(team_id, "anthropic")
-        existing_api_key = bool(anthropic_config and anthropic_config.get("api_key"))
-        existing_endpoint = (
-            anthropic_config.get("api_endpoint") if anthropic_config else None
-        )
-        logger.info(
-            f"Building advanced settings modal: existing_api_key={existing_api_key}, existing_endpoint={existing_endpoint}"
-        )
-
-        onboarding = get_onboarding_modules()
-        modal = onboarding.build_advanced_settings_modal(
-            team_id=team_id,
-            existing_api_key=existing_api_key,
-            existing_endpoint=existing_endpoint,
-        )
-
-        # Use views_push from modal, views_open from Home tab or messages
-        view_type = body.get("view", {}).get("type")
-        if view_type == "modal":
-            logger.info("Pushing advanced settings modal (from modal)...")
-            result = client.views_push(trigger_id=body["trigger_id"], view=modal)
-        else:
-            logger.info("Opening advanced settings modal (from Home tab/message)...")
-            result = client.views_open(trigger_id=body["trigger_id"], view=modal)
-        logger.info(f"views result: ok={result.get('ok')}")
-        logger.info(f"Opened Advanced Settings modal for team {team_id}")
-
-    except Exception as e:
-        logger.error(f"Failed to open Advanced Settings modal: {e}", exc_info=True)
-
-
-@app.view("advanced_settings_submission")
-def handle_advanced_settings_submission(ack, body, client, view):
-    """Handle Advanced Settings form submission."""
-    import json
-
-    private_metadata = json.loads(view.get("private_metadata", "{}"))
-    team_id = private_metadata.get("team_id")
-    values = view.get("state", {}).get("values", {})
-
-    # Get API key value
-    api_key = values.get("api_key_block", {}).get("api_key_input", {}).get("value", "")
-    if api_key:
-        api_key = api_key.strip()
-
-    # Get API endpoint value
-    api_endpoint = (
-        values.get("api_endpoint_block", {})
-        .get("api_endpoint_input", {})
-        .get("value", "")
-    )
-    if api_endpoint:
-        api_endpoint = api_endpoint.strip()
-
-    # Save if any values provided
-    if team_id and (api_key or api_endpoint):
-        try:
-            config_client = get_config_client()
-            config_client.save_api_key(
-                slack_team_id=team_id,
-                api_key=api_key if api_key else None,
-                api_endpoint=api_endpoint if api_endpoint else None,
-            )
-            logger.info(f"Saved advanced settings for team {team_id}")
-        except Exception as e:
-            logger.error(f"Failed to save advanced settings: {e}", exc_info=True)
-            # Extract error details
-            error_detail = str(e)
-            status_code = getattr(e, "status_code", None)
-            if status_code:
-                error_detail = f"HTTP {status_code}"
-
-            # Show error in a push modal
-            error_modal = {
-                "type": "modal",
-                "title": {"type": "plain_text", "text": "Save Failed"},
-                "close": {"type": "plain_text", "text": "Try Again"},
-                "blocks": [
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": ":x: *Failed to save settings*\n\nPlease try again. If the problem persists, contact support@incidentfox.ai",
-                        },
-                    },
-                    {
-                        "type": "context",
-                        "elements": [
-                            {
-                                "type": "mrkdwn",
-                                "text": f"Error: {error_detail}",
-                            }
-                        ],
-                    },
-                ],
-            }
-            ack(response_action="push", view=error_modal)
-            return
-
-    # Close the modal (go back to integrations page)
-    ack()
-    logger.info(f"Advanced settings submission completed for team {team_id}")
-
-
 # =============================================================================
 # AI MODEL SELECTION HANDLERS
 # =============================================================================
@@ -6686,7 +6567,6 @@ def register_all_handlers(bolt_app):
     bolt_app.action("dismiss_welcome")(handle_dismiss_welcome)
     bolt_app.action("k8s_saas_add_cluster")(handle_k8s_saas_add_cluster)
     bolt_app.action("k8s_saas_remove_cluster")(handle_k8s_saas_remove_cluster)
-    bolt_app.action("open_advanced_settings")(handle_open_advanced_settings)
     bolt_app.action("home_retry_load")(handle_home_retry_load)
     bolt_app.action("home_book_demo")(handle_home_book_demo)
     bolt_app.action("home_open_api_key_modal")(handle_home_api_key_modal)
@@ -6721,7 +6601,6 @@ def register_all_handlers(bolt_app):
     bolt_app.view("k8s_saas_cluster_created_modal")(
         handle_k8s_saas_cluster_created_close
     )
-    bolt_app.view("advanced_settings_submission")(handle_advanced_settings_submission)
     bolt_app.view("integration_config_submission")(handle_integration_config_submission)
     bolt_app.view("ai_model_config_submission")(handle_ai_model_config_submission)
 

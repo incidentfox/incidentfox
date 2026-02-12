@@ -75,6 +75,8 @@ def get_provider_for_credentials(model: str) -> str:
         return "anthropic"
     if m.startswith(("openai/", "gpt-", "o1-", "o3-")):
         return "openai"
+    if m.startswith("cloudflare_ai/"):
+        return "cloudflare_ai"
     if m.startswith("gemini/"):
         return "gemini"
     if m.startswith("azure_ai/"):
@@ -440,6 +442,30 @@ async def _forward_to_provider(
         litellm_kwargs["api_base"] = "https://models.arcee.ai/v1"
         model_name = model.split("/", 1)[1] if "/" in model else model
         litellm_kwargs["model"] = f"openai/{model_name}"
+    elif provider == "cloudflare_ai":
+        # Cloudflare AI Gateway — OpenAI-compatible endpoint with special auth header
+        # Model format: cloudflare_ai/<provider>/<model> e.g. cloudflare_ai/openai/gpt-4o
+        api_base = (creds or {}).get("api_base", "")
+        if api_base:
+            if not api_base.rstrip("/").endswith("/compat"):
+                api_base = api_base.rstrip("/") + "/compat"
+            litellm_kwargs["api_base"] = api_base
+        # Strip "cloudflare_ai/" prefix — remaining is the provider/model for CF
+        model_name = model.split("/", 1)[1] if "/" in model else model
+        litellm_kwargs["model"] = f"openai/{model_name}"
+        # CF auth: cf-aig-authorization header for gateway auth
+        cf_token = (creds or {}).get("api_key", "")
+        extra_headers = {}
+        if cf_token:
+            extra_headers["cf-aig-authorization"] = f"Bearer {cf_token}"
+        # Provider API key for pass-through mode (optional)
+        provider_key = (creds or {}).get("provider_api_key", "")
+        if provider_key:
+            litellm_kwargs["api_key"] = provider_key
+        else:
+            litellm_kwargs["api_key"] = cf_token
+        if extra_headers:
+            litellm_kwargs["extra_headers"] = extra_headers
 
     try:
         if is_streaming:
