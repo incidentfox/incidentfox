@@ -91,6 +91,13 @@ LLM_PROVIDERS = [
     ("arcee", "Arcee AI", "arcee/virtuoso-large", "Trinity, Maestro, Virtuoso"),
     # --- Self-hosted ---
     ("ollama", "Ollama (Local)", "ollama/llama3", "Local models"),
+    # --- Custom ---
+    (
+        "custom_endpoint",
+        "Custom Endpoint",
+        "custom_endpoint/my-model",
+        "Any OpenAI-compatible endpoint",
+    ),
 ]
 
 # Additional model-prefix → provider aliases for models that don't use
@@ -719,9 +726,9 @@ INTEGRATIONS: List[Dict[str, Any]] = [
                 "id": "api_key",
                 "name": "API Key",
                 "type": "secret",
-                "required": True,
+                "required": False,
                 "placeholder": "sk-ant-...",
-                "hint": "Your Anthropic API key",
+                "hint": "Your Anthropic API key. Leave blank to use IncidentFox default.",
             },
         ],
     },
@@ -1045,6 +1052,55 @@ INTEGRATIONS: List[Dict[str, Any]] = [
                 "required": True,
                 "placeholder": "http://localhost:11434",
                 "hint": "URL of your Ollama server",
+            },
+        ],
+    },
+    {
+        "id": "custom_endpoint",
+        "name": "Custom Endpoint",
+        "category": "llm",
+        "status": "active",
+        "icon": ":link:",
+        "icon_fallback": ":link:",
+        "description": "Connect to any OpenAI Chat Completions-compatible endpoint.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Enter the base URL of your OpenAI-compatible endpoint\n"
+            "2. Enter the model name your endpoint expects\n"
+            "3. Configure authentication (API key and/or custom headers)"
+        ),
+        "fields": [
+            {
+                "id": "api_base",
+                "name": "Endpoint URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "https://your-gateway.example.com/v1",
+                "hint": "Base URL of your OpenAI-compatible endpoint",
+            },
+            {
+                "id": "api_key",
+                "name": "API Key (optional)",
+                "type": "secret",
+                "required": False,
+                "placeholder": "sk-...",
+                "hint": "Sent as Authorization: Bearer {key}. Leave blank if not needed.",
+            },
+            {
+                "id": "custom_header_name",
+                "name": "Custom Header Name (optional)",
+                "type": "string",
+                "required": False,
+                "placeholder": "e.g. cf-aig-authorization, X-Api-Key",
+                "hint": "Name of an additional auth header",
+            },
+            {
+                "id": "custom_header_value",
+                "name": "Custom Header Value (optional)",
+                "type": "secret",
+                "required": False,
+                "placeholder": "e.g. Bearer your-token",
+                "hint": "Value for the custom header above",
             },
         ],
     },
@@ -2244,6 +2300,14 @@ def validate_provider_api_key(
             return False, "Cloudflare API Token is required."
         return True, ""
 
+    if provider_id == "custom_endpoint":
+        api_base = config.get("api_base", "")
+        if not api_base:
+            return False, "Endpoint URL is required."
+        if not api_base.startswith(("http://", "https://")):
+            return False, "Endpoint URL must start with http:// or https://"
+        return True, ""
+
     # --- Anthropic: optional key (uses IncidentFox default) ---
     if provider_id == "anthropic" and not api_key:
         return True, ""
@@ -3361,6 +3425,7 @@ def build_ai_model_modal(
                 "vertex_ai",
                 "ollama",
                 "cloudflare_ai",
+                "custom_endpoint",
                 "openrouter",
                 "groq",
                 "together_ai",
