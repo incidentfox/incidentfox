@@ -20,10 +20,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 sys.path.insert(0, "/app")
+from config import TeamConfig, load_team_config
 from events import StreamEvent, error_event
 
 from agent import InteractiveAgentSession, OpenHandsAgentSession, create_agent_session
-from config import TeamConfig, load_team_config
 
 app = FastAPI(
     title="IncidentFox Sandbox Runtime",
