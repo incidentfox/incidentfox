@@ -346,8 +346,24 @@ class InteractiveAgentSession:
     Each sandbox maintains one session per thread_id.
     """
 
-    def __init__(self, thread_id: str):
+    # Default tools when no team config overrides
+    DEFAULT_TOOLS = [
+        "Skill",
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Glob",
+        "Grep",
+        "WebSearch",
+        "WebFetch",
+        "AskUserQuestion",
+        "Task",
+    ]
+
+    def __init__(self, thread_id: str, team_config=None):
         self.thread_id = thread_id
+        self.team_config = team_config
 
         self.client: ClaudeSDKClient | None = None
         self.is_running: bool = False
@@ -581,26 +597,59 @@ Do NOT dump full kubectl output. Synthesize findings.""",
 
             cwd = thread_workspace
 
+        # --- Dynamic config from team config service ---
+        root_config = None
+        if self.team_config:
+            from config import get_root_agent_config
+
+            root_config = get_root_agent_config(self.team_config)
+
+            # Write root agent's system prompt as CLAUDE.md (project instructions)
+            if root_config and root_config.prompt.system:
+                claude_md_path = os.path.join(cwd, "CLAUDE.md")
+                with open(claude_md_path, "w") as f:
+                    f.write(root_config.prompt.system)
+                print(
+                    f"📝 [AGENT] Wrote CLAUDE.md ({len(root_config.prompt.system)} chars) "
+                    f"from root agent '{root_config.name}'"
+                )
+
+            # Merge subagents from config (non-root agents become subagents)
+            root_name = root_config.name if root_config else None
+            for name, agent_cfg in self.team_config.agents.items():
+                if name == root_name or not agent_cfg.enabled:
+                    continue
+                if agent_cfg.prompt.system:
+                    subagents[name] = AgentDefinition(
+                        description=agent_cfg.prompt.prefix or f"{name} specialist",
+                        prompt=agent_cfg.prompt.system,
+                        tools=(
+                            agent_cfg.tools.enabled
+                            if agent_cfg.tools.enabled != ["*"]
+                            else None
+                        ),
+                    )
+            print(
+                f"🤖 [AGENT] Registered {len(subagents)} subagents: "
+                f"{', '.join(subagents.keys())}"
+            )
+
+        # Resolve allowed tools from config or defaults
+        allowed_tools = self.DEFAULT_TOOLS
+        if root_config:
+            tc = root_config.tools
+            if "*" in tc.enabled:
+                allowed_tools = [t for t in self.DEFAULT_TOOLS if t not in tc.disabled]
+            else:
+                allowed_tools = tc.enabled
+
         self.options = ClaudeAgentOptions(
             cwd=cwd,
-            # Core tools for file operations and script execution
-            allowed_tools=[
-                "Skill",
-                "Read",
-                "Write",
-                "Edit",
-                "Bash",
-                "Glob",
-                "Grep",
-                "WebSearch",
-                "WebFetch",
-                "AskUserQuestion",
-                "Task",
-            ],
+            allowed_tools=allowed_tools,
             permission_mode="acceptEdits",
             can_use_tool=can_use_tool_handler,
             include_partial_messages=True,  # Needed to get parent_tool_use_id for subagent tracking
-            # Enable skill loading from .claude/ directories
+            # Enable skill loading from .claude/ directories + CLAUDE.md
             setting_sources=["user", "project"],
             # Register specialized subagents for context isolation
             agents=subagents,
@@ -947,8 +996,9 @@ class OpenHandsAgentSession:
     Set LLM_MODEL environment variable to change the model.
     """
 
-    def __init__(self, thread_id: str):
+    def __init__(self, thread_id: str, team_config=None):
         self.thread_id = thread_id
+        self.team_config = team_config
         self.is_running: bool = False
         self._was_interrupted: bool = False
         self._provider = None
@@ -1118,7 +1168,7 @@ Do NOT dump full kubectl output. Synthesize findings.""",
             await self._provider.provide_answer(answers)
 
 
-def create_agent_session(thread_id: str):
+def create_agent_session(thread_id: str, team_config=None):
     """
     Factory function to create the appropriate agent session.
 
@@ -1127,6 +1177,7 @@ def create_agent_session(thread_id: str):
 
     Args:
         thread_id: Unique identifier for the session
+        team_config: Optional TeamConfig from config_service
 
     Returns:
         Either InteractiveAgentSession or OpenHandsAgentSession
@@ -1137,7 +1188,7 @@ def create_agent_session(thread_id: str):
         print(
             f"🔄 [AGENT] Using OpenHands provider (LLM_MODEL={os.getenv('LLM_MODEL', 'default')})"
         )
-        return OpenHandsAgentSession(thread_id)
+        return OpenHandsAgentSession(thread_id, team_config)
     else:
         print("🔄 [AGENT] Using Claude provider")
-        return InteractiveAgentSession(thread_id)
+        return InteractiveAgentSession(thread_id, team_config)

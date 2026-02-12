@@ -23,6 +23,7 @@ sys.path.insert(0, "/app")
 from events import StreamEvent, error_event
 
 from agent import InteractiveAgentSession, OpenHandsAgentSession, create_agent_session
+from config import TeamConfig, load_team_config
 
 app = FastAPI(
     title="IncidentFox Sandbox Runtime",
@@ -33,6 +34,10 @@ app = FastAPI(
 # Global session manager: thread_id -> Agent session (InteractiveAgentSession or OpenHandsAgentSession)
 _sessions: Dict[str, InteractiveAgentSession | OpenHandsAgentSession] = {}
 _session_lock = asyncio.Lock()
+
+# Team config cache (one load per sandbox lifetime)
+_team_config: TeamConfig | None = None
+_team_config_loaded = False
 
 
 class ImageData(BaseModel):
@@ -180,6 +185,7 @@ async def get_or_create_session(
     """
     Get existing session or create new one for thread_id.
 
+    Loads team config from config_service on first call (cached for sandbox lifetime).
     Uses create_agent_session() factory function which respects LLM_PROVIDER env var:
     - LLM_PROVIDER=claude (default): Uses Claude Agent SDK
     - LLM_PROVIDER=openhands: Uses OpenHands SDK for multi-LLM support
@@ -190,10 +196,20 @@ async def get_or_create_session(
     Returns:
         Agent session instance (InteractiveAgentSession or OpenHandsAgentSession)
     """
+    global _team_config, _team_config_loaded
     async with _session_lock:
         if thread_id not in _sessions:
+            # Load team config once per sandbox lifetime
+            if not _team_config_loaded:
+                _team_config = load_team_config()
+                _team_config_loaded = True
+                print(
+                    f"📋 [SANDBOX] Loaded team config: "
+                    f"{len(_team_config.agents)} agents, "
+                    f"{len(_team_config.business_context)} chars business context"
+                )
             # Create new session using factory
-            session = create_agent_session(thread_id)
+            session = create_agent_session(thread_id, _team_config)
             await session.start()
             _sessions[thread_id] = session
         return _sessions[thread_id]
