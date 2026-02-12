@@ -1940,7 +1940,13 @@ class UltimateRAGServer:
             children = getattr(node, "children", set()) or set()
             source_url = None
             if hasattr(node, "metadata") and node.metadata:
-                source_url = node.metadata.get("source_url")
+                meta = node.metadata
+                if isinstance(meta, dict):
+                    source_url = meta.get("source_url")
+                elif hasattr(meta, "source") and meta.source:
+                    source_url = getattr(meta.source, "source_url", None)
+                elif hasattr(meta, "source_url"):
+                    source_url = meta.source_url
 
             return V1GraphNode(
                 id=str(node_id),
@@ -2095,7 +2101,13 @@ class UltimateRAGServer:
             children = getattr(node, "children", set()) or set()
             source_url = None
             if hasattr(node, "metadata") and node.metadata:
-                source_url = node.metadata.get("source_url")
+                meta = node.metadata
+                if isinstance(meta, dict):
+                    source_url = meta.get("source_url")
+                elif hasattr(meta, "source") and meta.source:
+                    source_url = getattr(meta.source, "source_url", None)
+                elif hasattr(meta, "source_url"):
+                    source_url = meta.source_url
 
             return V1NodeTextResponse(
                 node_id=node_id,
@@ -2132,7 +2144,13 @@ class UltimateRAGServer:
                     layer = getattr(node, "layer", 0)
                     source_url = None
                     if hasattr(node, "metadata") and node.metadata:
-                        source_url = node.metadata.get("source_url")
+                        meta = node.metadata
+                if isinstance(meta, dict):
+                    source_url = meta.get("source_url")
+                elif hasattr(meta, "source") and meta.source:
+                    source_url = getattr(meta.source, "source_url", None)
+                elif hasattr(meta, "source_url"):
+                    source_url = meta.source_url
 
                     results.append(
                         V1SearchNodesResult(
