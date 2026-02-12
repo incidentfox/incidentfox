@@ -67,6 +67,7 @@ COPY server.py .
 COPY sandbox_manager.py .
 COPY events.py .
 COPY auth.py .
+COPY config.py .
 COPY pyproject.toml .
 COPY uv.lock .
 COPY providers/ ./providers/
