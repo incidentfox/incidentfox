@@ -46,7 +46,7 @@ def main():
     print(f"  Current variant: {default}")
     print(f"  Current value:   {current_value}")
     print(f"  State:           {state}")
-    print(f"\n  Available variants:")
+    print("\n  Available variants:")
     for name, value in variants.items():
         marker = " <-- current" if name == default else ""
         print(f"    {name}: {value}{marker}")

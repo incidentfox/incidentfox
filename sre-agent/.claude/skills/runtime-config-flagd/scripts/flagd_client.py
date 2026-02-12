@@ -63,11 +63,17 @@ def get_flags_json() -> dict[str, Any]:
     """
     config = get_config()
     # Use -o json and extract in Python to avoid jsonpath issues with dots in key names
-    raw = _run_kubectl([
-        "get", "configmap", config["configmap"],
-        "-n", config["namespace"],
-        "-o", "json",
-    ])
+    raw = _run_kubectl(
+        [
+            "get",
+            "configmap",
+            config["configmap"],
+            "-n",
+            config["namespace"],
+            "-o",
+            "json",
+        ]
+    )
 
     cm = json.loads(raw)
     data = cm.get("data", {})
@@ -105,7 +111,9 @@ def get_flag(flag_key: str) -> dict[str, Any] | None:
     return flags.get(flag_key)
 
 
-def set_flag_variant(flag_key: str, variant: str, dry_run: bool = False) -> dict[str, Any]:
+def set_flag_variant(
+    flag_key: str, variant: str, dry_run: bool = False
+) -> dict[str, Any]:
     """Set a flag's default variant.
 
     This patches the ConfigMap which triggers flagd's hot-reload.
@@ -161,17 +169,17 @@ def set_flag_variant(flag_key: str, variant: str, dry_run: bool = False) -> dict
     updated_json = json.dumps(data, indent=2)
 
     # Patch the ConfigMap via stdin to handle large JSON and special characters safely
-    patch = json.dumps({
-        "data": {
-            config["key"]: updated_json
-        }
-    })
+    patch = json.dumps({"data": {config["key"]: updated_json}})
     _run_kubectl(
         [
-            "patch", "configmap", config["configmap"],
-            "-n", config["namespace"],
+            "patch",
+            "configmap",
+            config["configmap"],
+            "-n",
+            config["namespace"],
             "--type=merge",
-            "-p", patch,
+            "-p",
+            patch,
         ]
     )
 

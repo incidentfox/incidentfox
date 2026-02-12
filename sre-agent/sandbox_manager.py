@@ -608,11 +608,15 @@ static_resources:
                                     # flagd runtime config (for OTel Demo incident scenarios)
                                     {
                                         "name": "FLAGD_NAMESPACE",
-                                        "value": os.getenv("FLAGD_NAMESPACE", "otel-demo"),
+                                        "value": os.getenv(
+                                            "FLAGD_NAMESPACE", "otel-demo"
+                                        ),
                                     },
                                     {
                                         "name": "FLAGD_CONFIGMAP",
-                                        "value": os.getenv("FLAGD_CONFIGMAP", "flagd-config"),
+                                        "value": os.getenv(
+                                            "FLAGD_CONFIGMAP", "flagd-config"
+                                        ),
                                     },
                                     # Configured integrations (non-sensitive metadata)
                                     # JSON list of {id, url?, domain?, region?} for each integration

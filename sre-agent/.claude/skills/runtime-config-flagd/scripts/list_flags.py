@@ -36,7 +36,8 @@ INCIDENT_FLAGS = {
 def main():
     parser = argparse.ArgumentParser(description="List all feature flags")
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Show full variant details",
     )

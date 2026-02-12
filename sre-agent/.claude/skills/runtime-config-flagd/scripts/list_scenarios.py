@@ -87,7 +87,7 @@ SCENARIOS = {
         "service": "recommendation (Python)",
         "effect": "Cache misses increase, all requests hit backend",
         "detection": "Increased latency on recommendation service, cache miss rate",
-        "promql": 'rate(recommendation_cache_miss_total[5m])',
+        "promql": "rate(recommendation_cache_miss_total[5m])",
         "remediation": "Set flag to 'off'",
     },
     "productCatalogFailure": {
@@ -111,7 +111,7 @@ SCENARIOS = {
         "service": "All services (via load generator)",
         "effect": "Massive request flood across all services",
         "detection": "Request rate spike across all services",
-        "promql": 'sum(rate(http_server_request_duration_seconds_count[1m]))',
+        "promql": "sum(rate(http_server_request_duration_seconds_count[1m]))",
         "remediation": "Set flag to 'off'",
     },
     "llmInaccurateResponse": {
@@ -197,7 +197,9 @@ def main():
     for entry in results:
         status = "ACTIVE" if entry["active"] else "inactive"
         print(f"\n  [{status:>8}] {entry['name']}")
-        print(f"            Flag: {entry['flag']} = {entry['current_variant']} ({entry['current_value']})")
+        print(
+            f"            Flag: {entry['flag']} = {entry['current_variant']} ({entry['current_value']})"
+        )
         print(f"            Service: {entry['service']}")
         print(f"            Effect: {entry['effect']}")
         if entry["active"]:

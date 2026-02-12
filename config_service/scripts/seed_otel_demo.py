@@ -54,7 +54,16 @@ SERVICES = {
         "language": "TypeScript/Next.js",
         "type": "web-ui",
         "port": 8080,
-        "dependencies": ["product-catalog", "cart", "checkout", "recommendation", "ad", "currency", "image-provider", "product-reviews"],
+        "dependencies": [
+            "product-catalog",
+            "cart",
+            "checkout",
+            "recommendation",
+            "ad",
+            "currency",
+            "image-provider",
+            "product-reviews",
+        ],
         "description": "Main web storefront. Renders product pages, cart, and checkout.",
     },
     "frontend-proxy": {
@@ -68,7 +77,15 @@ SERVICES = {
         "language": "Go",
         "type": "backend",
         "port": 8080,
-        "dependencies": ["cart", "payment", "shipping", "currency", "email", "product-catalog", "kafka"],
+        "dependencies": [
+            "cart",
+            "payment",
+            "shipping",
+            "currency",
+            "email",
+            "product-catalog",
+            "kafka",
+        ],
         "description": "Orchestrates the checkout flow: validates cart, charges payment, ships order, sends confirmation email, publishes to Kafka.",
     },
     "payment": {
@@ -289,7 +306,15 @@ INCIDENT_SCENARIOS = {
         "name": "Service Failure (Payment)",
         "service": "payment",
         "effect": "Configurable % of payment requests return HTTP 500 errors",
-        "variants": {"off": 0, "10%": 0.1, "25%": 0.25, "50%": 0.5, "75%": 0.75, "90%": 0.95, "100%": 1},
+        "variants": {
+            "off": 0,
+            "10%": 0.1,
+            "25%": 0.25,
+            "50%": 0.5,
+            "75%": 0.75,
+            "90%": 0.95,
+            "100%": 1,
+        },
         "default_active": "50%",
         "detection_promql": 'rate(http_server_request_duration_seconds_count{service_name="payment",http_response_status_code=~"5.."}[5m])',
         "detection_logs": "Search for 'payment' service errors in Coralogix",
@@ -344,7 +369,14 @@ INCIDENT_SCENARIOS = {
         "name": "Memory Leak (Email Service)",
         "service": "email",
         "effect": "Gradual memory growth, eventual OOM kill and pod restart",
-        "variants": {"off": 0, "1x": 1, "10x": 10, "100x": 100, "1000x": 1000, "10000x": 10000},
+        "variants": {
+            "off": 0,
+            "1x": 1,
+            "10x": 10,
+            "100x": 100,
+            "1000x": 1000,
+            "10000x": 10000,
+        },
         "default_active": "100x",
         "detection_promql": 'process_resident_memory_bytes{service_name="email"}',
         "detection_logs": "Check for OOMKilled events in K8s, rising memory in metrics",
@@ -379,7 +411,7 @@ INCIDENT_SCENARIOS = {
         "effect": "Cache misses increase, all requests bypass cache and hit backend",
         "variants": {"on": True, "off": False},
         "default_active": "on",
-        "detection_promql": 'rate(recommendation_cache_miss_total[5m])',
+        "detection_promql": "rate(recommendation_cache_miss_total[5m])",
         "detection_logs": "Check recommendation service for cache miss patterns",
         "blast_radius": "Recommendation service latency increases, product-catalog gets more load",
         "remediation": "Set recommendationCacheFailure flag to 'off'",
@@ -412,7 +444,7 @@ INCIDENT_SCENARIOS = {
         "effect": "Massive request flood across all services",
         "variants": {"off": 0, "on": 100},
         "default_active": "on",
-        "detection_promql": 'sum(rate(http_server_request_duration_seconds_count[1m]))',
+        "detection_promql": "sum(rate(http_server_request_duration_seconds_count[1m]))",
         "detection_logs": "Check all services for elevated request rates",
         "blast_radius": "All services may degrade under load",
         "remediation": "Set loadGeneratorFloodHomepage flag to 'off'",
@@ -505,12 +537,20 @@ def _build_business_context() -> str:
 
     # Incident scenarios
     lines.append("\n## Incident Scenarios (flagd Feature Flags)\n")
-    lines.append("All incidents are controlled by flagd feature flags. To remediate, set the flag to 'off'.\n")
+    lines.append(
+        "All incidents are controlled by flagd feature flags. To remediate, set the flag to 'off'.\n"
+    )
     lines.append("| Flag | Scenario | Service | Detection (PromQL) |")
     lines.append("|------|----------|---------|-------------------|")
     for flag, scenario in INCIDENT_SCENARIOS.items():
-        promql = scenario["detection_promql"][:60] + "..." if len(scenario["detection_promql"]) > 60 else scenario["detection_promql"]
-        lines.append(f"| `{flag}` | {scenario['name']} | {scenario['service']} | `{promql}` |")
+        promql = (
+            scenario["detection_promql"][:60] + "..."
+            if len(scenario["detection_promql"]) > 60
+            else scenario["detection_promql"]
+        )
+        lines.append(
+            f"| `{flag}` | {scenario['name']} | {scenario['service']} | `{promql}` |"
+        )
 
     # Observability endpoints
     lines.append("\n## Observability Endpoints\n")
@@ -734,13 +774,17 @@ def main() -> None:
     print("=" * 70)
     print(f"\nSlack Channel: {slack_channel_id} ({slack_channel_name})")
     print(f"\nServices: {len(SERVICES)} total")
-    app_services = [k for k, v in SERVICES.items() if v["type"] not in ("observability", "infrastructure")]
+    app_services = [
+        k
+        for k, v in SERVICES.items()
+        if v["type"] not in ("observability", "infrastructure")
+    ]
     print(f"  Application services: {len(app_services)}")
     print(f"  Infrastructure: {len(SERVICES) - len(app_services)}")
     print(f"\nIncident Scenarios: {len(INCIDENT_SCENARIOS)}")
     for flag, scenario in INCIDENT_SCENARIOS.items():
         print(f"  - {flag}: {scenario['name']} ({scenario['service']})")
-    print(f"\nObservability:")
+    print("\nObservability:")
     for name, info in OBSERVABILITY.items():
         print(f"  - {name}: {info.get('url', info.get('repo', ''))}")
     print("\n" + "=" * 70)

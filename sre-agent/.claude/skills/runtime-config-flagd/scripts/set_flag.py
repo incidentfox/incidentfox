@@ -23,9 +23,7 @@ from flagd_client import set_flag_variant
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Set a feature flag's default variant"
-    )
+    parser = argparse.ArgumentParser(description="Set a feature flag's default variant")
     parser.add_argument("flag_key", help="Flag key (e.g., paymentFailure)")
     parser.add_argument("variant", help="Variant to set (e.g., off, on, 50%%)")
     parser.add_argument(
@@ -54,10 +52,10 @@ def main():
     print(f"  Previous:  {result['old_variant']} (value: {result['old_value']})")
     print(f"  New:       {result['new_variant']} (value: {result['new_value']})")
     if result["dry_run"]:
-        print(f"\n  This is a dry run. No changes were made.")
-        print(f"  Run without --dry-run to apply.")
+        print("\n  This is a dry run. No changes were made.")
+        print("  Run without --dry-run to apply.")
     else:
-        print(f"\n  ConfigMap updated. flagd will hot-reload within seconds.")
+        print("\n  ConfigMap updated. flagd will hot-reload within seconds.")
     print("=" * 60)
 
 
