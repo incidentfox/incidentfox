@@ -369,8 +369,7 @@ async def _forward_to_provider(
     tools = openai_body.get("tools", [])
     if len(tools) > MAX_TOOLS:
         logger.warning(
-            f"Truncating tools from {len(tools)} to {MAX_TOOLS} "
-            f"(provider limit)"
+            f"Truncating tools from {len(tools)} to {MAX_TOOLS} " f"(provider limit)"
         )
         openai_body["tools"] = tools[:MAX_TOOLS]
 
@@ -402,7 +401,9 @@ async def _forward_to_provider(
         if role == "assistant" and m.get("tool_calls"):
             tc_ids = [tc["id"] for tc in m["tool_calls"]]
             tc_names = [tc["function"]["name"] for tc in m["tool_calls"]]
-            logger.info(f"  msg[{i}] assistant tool_calls: {list(zip(tc_names, tc_ids))}")
+            logger.info(
+                f"  msg[{i}] assistant tool_calls: {list(zip(tc_names, tc_ids))}"
+            )
         elif role == "tool":
             logger.info(f"  msg[{i}] tool result: call_id={m.get('tool_call_id')}")
         else:
@@ -433,11 +434,13 @@ async def _forward_to_provider(
             if m.get("role") == "assistant" and m.get("tool_calls"):
                 for tc in m["tool_calls"]:
                     if tc["id"] in unresolved:
-                        patched.append({
-                            "role": "tool",
-                            "tool_call_id": tc["id"],
-                            "content": "(no result)",
-                        })
+                        patched.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc["id"],
+                                "content": "(no result)",
+                            }
+                        )
         openai_body["messages"] = patched
 
     # 3. Build litellm kwargs

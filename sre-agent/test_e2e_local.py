@@ -173,7 +173,9 @@ async def main():
 
             # Check total timeout
             if elapsed > TOTAL_TIMEOUT:
-                print(f"\n  TIMEOUT: Total timeout ({TOTAL_TIMEOUT}s) exceeded after {message_count} events")
+                print(
+                    f"\n  TIMEOUT: Total timeout ({TOTAL_TIMEOUT}s) exceeded after {message_count} events"
+                )
                 break
 
             if msg_type == "AssistantMessage":
@@ -190,11 +192,17 @@ async def main():
                         elif hasattr(block, "name"):
                             tool_count += 1
                             inp = json.dumps(getattr(block, "input", {}))[:100]
-                            print(f"  [{elapsed:.0f}s] [TOOL_USE] {block.name}({inp}...)")
+                            print(
+                                f"  [{elapsed:.0f}s] [TOOL_USE] {block.name}({inp}...)"
+                            )
                 else:
                     print(f"  [{elapsed:.0f}s] [ASSISTANT] {str(content)[:300]}")
             elif msg_type == "ResultMessage":
-                text = getattr(message, "text", "") or getattr(message, "content", "") or ""
+                text = (
+                    getattr(message, "text", "")
+                    or getattr(message, "content", "")
+                    or ""
+                )
                 print(f"\n  [{elapsed:.0f}s] [RESULT] {str(text)[:500]}")
             elif msg_type == "SystemMessage":
                 subtype = getattr(message, "subtype", "")
