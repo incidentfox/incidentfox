@@ -90,7 +90,9 @@ class ClaimRequest(BaseModel):
     thread_id: str
     tenant_id: str
     team_id: str
-    team_token: Optional[str] = None  # Config service token (for dynamic config loading)
+    team_token: Optional[str] = (
+        None  # Config service token (for dynamic config loading)
+    )
 
 
 class ExecuteResponse(BaseModel):
