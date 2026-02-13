@@ -413,17 +413,8 @@ class TeamsIntegration:
                     team_token=team_token,
                     agent_name=entrance_agent_name,
                     message=text,
-                    context={
-                        "user_id": user_id,
-                        "session_id": session_id,
-                        "metadata": {
-                            "teams": {
-                                "channel_id": channel_id,
-                                "conversation_id": conversation_id[:100],
-                            },
-                            "trigger": "teams",
-                        },
-                    },
+                    tenant_id=org_id,
+                    team_id=team_node_id,
                     timeout=int(
                         os.getenv("ORCHESTRATOR_TEAMS_AGENT_TIMEOUT_SECONDS", "300")
                     ),

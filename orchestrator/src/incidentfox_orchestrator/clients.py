@@ -540,6 +540,8 @@ class AgentApiClient:
             dict[str, Any]
         ] = None,  # DEPRECATED: use output_destinations
         trigger_source: Optional[str] = None,  # Source that triggered this run
+        tenant_id: Optional[str] = None,  # Org ID for credential lookup
+        team_id: Optional[str] = None,  # Team node ID for credential lookup
     ) -> dict[str, Any]:
         """Call the agent service's /investigate endpoint and consume the SSE stream."""
         base = agent_base_url.rstrip("/") if agent_base_url else self.base_url
@@ -554,13 +556,10 @@ class AgentApiClient:
         if correlation_id:
             payload["thread_id"] = correlation_id
 
-        # Derive tenant/team from context if available
-        if context and isinstance(context.get("metadata"), dict):
-            meta = context["metadata"]
-            if "tenant_id" in meta:
-                payload["tenant_id"] = meta["tenant_id"]
-            if "team_id" in meta:
-                payload["team_id"] = meta["team_id"]
+        if tenant_id:
+            payload["tenant_id"] = tenant_id
+        if team_id:
+            payload["team_id"] = team_id
 
         # HTTP timeout should be >= agent timeout
         request_timeout = 30.0
