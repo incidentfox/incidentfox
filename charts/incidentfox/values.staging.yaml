@@ -234,7 +234,7 @@ services:
     hpa:
       enabled: true
       minReplicas: 2
-      maxReplicas: 4
+      maxReplicas: 6
       targetCPUUtilizationPercentage: 50
       behavior:
         scaleUp:
