@@ -432,12 +432,18 @@ class TeamsIntegration:
                 )
             )
 
-            # Send agent result back to Teams conversation
+            # Send agent result back to Teams conversation as a reply
+            # to the "working on it" message (shows as quoted reply in Teams)
             result_text = result.get("result", "")
             if result_text:
 
                 async def _send_result(turn_context: TurnContext):
-                    await turn_context.send_activity(result_text)
+                    reply = Activity(
+                        type=ActivityTypes.message,
+                        text=result_text,
+                        reply_to_id=initial_message_id,
+                    )
+                    await turn_context.send_activity(reply)
 
                 await self.adapter.continue_conversation(
                     conversation_ref,
