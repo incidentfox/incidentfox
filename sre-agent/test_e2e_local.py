@@ -106,16 +106,7 @@ async def main():
     print("=" * 60)
 
     allowed_tools = [
-        "Skill",
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Glob",
-        "Grep",
-        "WebSearch",
-        "WebFetch",
-        "Task",
+        "Bash", "Read", "Glob", "Grep",
     ]
 
     # Use cwd with .claude/skills
@@ -127,7 +118,7 @@ async def main():
         permission_mode="acceptEdits",
         include_partial_messages=True,
         setting_sources=["user", "project"],
-        agents=subagents,
+        # agents=subagents,  # Disabled: OpenAI max 128 tools
         system_prompt={
             "type": "preset",
             "preset": "claude_code",
@@ -144,7 +135,7 @@ async def main():
     print("Step 6: Running query")
     print("=" * 60)
 
-    prompt = "Are there any active incident scenarios right now? Use the runtime-config-flagd skill to check."
+    prompt = "could you check some telemetry of our system"
 
     print(f"  Prompt: {prompt}")
     print("  Streaming...\n")

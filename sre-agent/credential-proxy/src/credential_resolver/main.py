@@ -1838,8 +1838,18 @@ async def ext_authz_check(request: Request, path: str = ""):
     # 3. Get credentials and validate based on integration type
     creds = await get_credentials(tenant_id, team_id, integration_id)
 
+    # Check LLM_MODEL — if set to a non-Claude model and integration is "anthropic",
+    # skip the anthropic credential check. The LLM proxy will handle provider-specific
+    # credentials (e.g., OPENAI_API_KEY) independently.
+    llm_model = os.getenv("LLM_MODEL", "")
+    llm_bypass = (
+        integration_id == "anthropic"
+        and llm_model
+        and not llm_model.lower().startswith(("claude", "anthropic/"))
+    )
+
     # Check if credentials are configured (uses shared logic)
-    if not is_integration_configured(integration_id, creds):
+    if not llm_bypass and not is_integration_configured(integration_id, creds):
         logger.error(
             f"No credentials found for {integration_id} "
             f"(tenant={tenant_id}, team={team_id})"
@@ -1851,14 +1861,21 @@ async def ext_authz_check(request: Request, path: str = ""):
 
     # 4. Build auth headers and return them as HTTP response headers
     # Envoy's ext_authz will forward these based on allowed_upstream_headers config
-    headers_to_add = build_auth_headers(integration_id, creds)
+    if llm_bypass:
+        # Non-Claude LLM: skip anthropic auth headers, LLM proxy handles credentials
+        headers_to_add = {}
+        logger.info(
+            f"LLM bypass: skipping {integration_id} credentials "
+            f"(LLM_MODEL={llm_model})"
+        )
+    else:
+        headers_to_add = build_auth_headers(integration_id, creds)
 
     # 5. Add tenant context headers (needed by LLM proxy and other internal services)
     headers_to_add["x-tenant-id"] = tenant_id
     headers_to_add["x-team-id"] = team_id
 
     # 6. Add LLM model override if configured
-    llm_model = os.getenv("LLM_MODEL", "")
     if llm_model:
         headers_to_add["x-llm-model"] = llm_model
 
