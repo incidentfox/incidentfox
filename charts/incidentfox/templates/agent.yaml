@@ -173,6 +173,10 @@ spec:
               value: {{ .Values.services.agent.warmPool.poolName | quote }}
             - name: WARMPOOL_NAMESPACE
               value: {{ .Values.services.agent.sandbox.namespace | default .Values.namespace | quote }}
+            {{- if .Values.services.agent.warmPool.autoscaler.enabled }}
+            - name: WARMPOOL_BUFFER
+              value: {{ .Values.services.agent.warmPool.autoscaler.buffer | default 3 | quote }}
+            {{- end }}
             {{- end }}
             # =================================================================
             # Tracing configuration (Langfuse / OTEL)

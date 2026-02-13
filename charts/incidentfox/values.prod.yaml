@@ -221,6 +221,11 @@ services:
     warmPool:
       enabled: true
       replicas: 3
+      autoscaler:
+        enabled: true
+        minReplicas: 3
+        maxReplicas: 10
+        buffer: 3
     startupProbe:
       enabled: true
       path: "/health"

@@ -274,6 +274,24 @@ async def warmpool_status():
         }
 
 
+@app.get("/metrics/sandbox-demand")
+async def sandbox_demand_metric():
+    """Returns desired warm pool size for KEDA autoscaler.
+
+    KEDA polls this endpoint and scales SandboxWarmPool replicas to match
+    the returned value. The value = active_claims + buffer, ensuring enough
+    standby pods are always available.
+    """
+    active_claims = sandbox_manager.count_active_claims()
+    try:
+        buffer = int(os.getenv("WARMPOOL_BUFFER", "3"))
+        if buffer < 0:
+            buffer = 3
+    except ValueError:
+        buffer = 3
+    return {"value": active_claims + buffer}
+
+
 @app.get("/proxy/files/{token}")
 async def proxy_file_download(token: str):
     """

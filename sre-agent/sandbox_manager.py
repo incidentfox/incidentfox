@@ -1138,6 +1138,23 @@ static_resources:
 
     # ==================== Warm Pool Methods ====================
 
+    def count_active_claims(self) -> int:
+        """Count active SandboxClaims in the template namespace."""
+        template_namespace = os.getenv(
+            "WARMPOOL_TEMPLATE_NAMESPACE", "incidentfox-prod"
+        )
+        try:
+            claims = self.custom_api.list_namespaced_custom_object(
+                group="extensions.agents.x-k8s.io",
+                version="v1alpha1",
+                namespace=template_namespace,
+                plural="sandboxclaims",
+            )
+            return len(claims.get("items", []))
+        except Exception as e:
+            print(f"⚠️ Failed to count active claims: {e}")
+            return 0
+
     def create_sandbox_claim(
         self,
         thread_id: str,

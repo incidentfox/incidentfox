@@ -282,7 +282,15 @@ services:
         limits:
           cpu: "200m"
           memory: "128Mi"
-      # Auto-scaling: planned for KEDA-based implementation (follow-up PR)
+      # KEDA-based autoscaler: dynamically scales warm pool based on active demand
+      # Requires KEDA installed: helm install keda kedacore/keda -n keda --create-namespace
+      autoscaler:
+        enabled: false
+        minReplicas: 3
+        maxReplicas: 10
+        pollingInterval: 15    # seconds between metric polls
+        cooldownPeriod: 300    # seconds before scaling down after last trigger
+        buffer: 3              # standby pods to maintain above active claims
     # Tracing configuration (supports multiple backends via OTEL)
     tracing:
       enabled: false
