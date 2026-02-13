@@ -27,8 +27,17 @@ def get_config() -> dict[str, str]:
     }
 
 
+_SA_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+_SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
+
 def _run_kubectl(args: list[str], input_data: str | None = None) -> str:
     """Run a kubectl command and return stdout.
+
+    When running in-cluster (SA token mounted), uses explicit SA token auth
+    instead of the kubeconfig. The kubeconfig uses AWS IAM auth which maps to
+    the node identity and lacks cross-namespace permissions, while the pod's
+    ServiceAccount has proper RBAC.
 
     Args:
         args: kubectl arguments (without 'kubectl' prefix)
@@ -40,7 +49,17 @@ def _run_kubectl(args: list[str], input_data: str | None = None) -> str:
     Raises:
         RuntimeError: If kubectl fails
     """
-    cmd = ["kubectl"] + args
+    cmd = ["kubectl"]
+    if os.path.exists(_SA_TOKEN_PATH):
+        # In-cluster: use SA token auth explicitly (bypasses kubeconfig)
+        with open(_SA_TOKEN_PATH) as f:
+            token = f.read().strip()
+        cmd += [
+            "--server=https://kubernetes.default.svc",
+            f"--certificate-authority={_SA_CA_PATH}",
+            f"--token={token}",
+        ]
+    cmd += args
     result = subprocess.run(
         cmd,
         capture_output=True,
