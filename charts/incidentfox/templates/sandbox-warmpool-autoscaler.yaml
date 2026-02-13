@@ -91,7 +91,7 @@ spec:
 
                   POOL_NAME="{{ .Values.services.agent.warmPool.poolName }}"
                   NAMESPACE="{{ .Values.namespace }}"
-                  METRICS_URL="http://{{ .Release.Name }}-agent.{{ .Values.namespace }}.svc.cluster.local:{{ .Values.services.agent.servicePort }}/metrics/sandbox-demand"
+                  METRICS_URL="http://incidentfox-agent.{{ .Values.namespace }}.svc.cluster.local:{{ .Values.services.agent.servicePort }}/metrics/sandbox-demand"
                   MIN_REPLICAS={{ .Values.services.agent.warmPool.autoscaler.minReplicas }}
                   MAX_REPLICAS={{ .Values.services.agent.warmPool.autoscaler.maxReplicas }}
 

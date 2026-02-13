@@ -324,6 +324,9 @@ async def sandbox_demand_metric():
     The autoscaler CronJob polls this endpoint every minute and patches
     SandboxWarmPool replicas to match the returned value.
     Value = active_claims + buffer, clamped to [min, max] by the CronJob.
+
+    Security: Internal-only (ClusterIP Service, not exposed via ingress).
+    No auth required — same trust boundary as K8s health probes.
     """
     active_claims = sandbox_manager.count_active_claims()
     try:
@@ -626,7 +629,10 @@ async def _investigate_inner(request: InvestigateRequest):
         is_new = False
 
         # Reset idle timeout — extend sandbox lifetime on activity
-        ttl_minutes = int(os.getenv("SANDBOX_TTL_MINUTES", "120"))
+        try:
+            ttl_minutes = int(os.getenv("SANDBOX_TTL_MINUTES", "120"))
+        except (ValueError, TypeError):
+            ttl_minutes = 120
         sandbox_manager.reset_sandbox_ttl(thread_id, ttl_hours=ttl_minutes / 60)
 
     # Convert images to dict format if provided
