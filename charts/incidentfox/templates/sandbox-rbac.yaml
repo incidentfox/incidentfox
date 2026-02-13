@@ -125,7 +125,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ---
 # Sandbox Pod ServiceAccount - Used by sandbox pods for in-cluster K8s API access
-# Gives sandbox pods read-only access to cluster resources for investigation.
+# Gives sandbox pods read + gated-write access to cluster resources.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -137,7 +137,7 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 ---
-# Read-only ClusterRole for sandbox pods to investigate cluster resources
+# ClusterRole for sandbox pods: read for investigation, gated write for remediation
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -148,18 +148,25 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 rules:
-  # Core resources for investigation
+  # Pods: read + delete (delete for restart_pod.py, gated by approval)
   - apiGroups: [""]
-    resources: ["pods", "pods/log", "events", "namespaces", "nodes", "services"]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log", "events", "namespaces", "nodes", "services"]
     verbs: ["get", "list", "watch"]
   # ConfigMaps: read + patch (patch needed for flagd feature flag remediation)
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list", "watch", "patch"]
-  # Workload resources
+  # Workload resources: +patch,update for scale/rollback (gated by approval)
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  # Deployment scale subresource
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "patch", "update"]
   # Batch resources
   - apiGroups: ["batch"]
     resources: ["jobs", "cronjobs"]

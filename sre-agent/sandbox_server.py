@@ -83,6 +83,14 @@ class AnswerRequest(BaseModel):
     answers: dict
 
 
+class ApprovalRequest(BaseModel):
+    """Request to approve/reject a gated action."""
+
+    thread_id: str
+    approved: bool
+    comment: str = ""
+
+
 class ClaimRequest(BaseModel):
     """Request to claim a warm sandbox by injecting JWT."""
 
@@ -588,6 +596,27 @@ async def answer_question(request: AnswerRequest):
         return {"status": "ok", "thread_id": thread_id}
     except Exception as e:
         raise HTTPException(400, f"Failed to provide answer: {str(e)}")
+
+
+@app.post("/approve")
+async def approve_action(request: ApprovalRequest):
+    """
+    Receive approval/rejection for a gated action from main server.
+    Wakes up the waiting can_use_tool callback in the agent session.
+    """
+    thread_id = request.thread_id
+
+    async with _session_lock:
+        if thread_id not in _sessions:
+            raise HTTPException(404, f"No active session for {thread_id}")
+
+        session = _sessions[thread_id]
+
+    try:
+        await session.provide_approval(request.approved, request.comment)
+        return {"status": "ok", "thread_id": thread_id, "approved": request.approved}
+    except Exception as e:
+        raise HTTPException(400, f"Failed to process approval: {str(e)}")
 
 
 @app.post("/cleanup")

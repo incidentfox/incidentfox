@@ -36,6 +36,8 @@ from typing import AsyncIterator, Optional, Union
 from dotenv import load_dotenv
 from events import (
     StreamEvent,
+    approval_event,
+    approval_timeout_event,
     error_event,
     result_event,
     thought_event,
@@ -67,6 +69,43 @@ MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024  # 1 GB
 
 # Max number of files to share per message (Slack best practice)
 MAX_FILES_PER_MESSAGE = 10
+
+# Remediation scripts that require human approval when run without --dry-run
+_GATED_SCRIPTS = [
+    "restart_pod.py",
+    "scale_deployment.py",
+    "rollback_deployment.py",
+]
+
+
+def _is_gated_command(command: str) -> tuple[bool, str]:
+    """Check if a Bash command requires human approval.
+
+    Returns (True, description) if the command matches a gated pattern,
+    (False, "") otherwise. Dry-run commands are always auto-approved.
+    """
+    if not command:
+        return False, ""
+
+    # Dry-runs are always safe
+    if "--dry-run" in command or "--dry_run" in command:
+        return False, ""
+
+    # Check remediation scripts
+    for script in _GATED_SCRIPTS:
+        if script in command:
+            if script == "restart_pod.py":
+                return True, "Restart a Kubernetes pod (will delete and recreate)"
+            elif script == "scale_deployment.py":
+                return True, "Scale a Kubernetes deployment replica count"
+            elif script == "rollback_deployment.py":
+                return True, "Rollback a Kubernetes deployment to a previous revision"
+
+    # Check set_flag.py setting flags to non-off values (injecting failures)
+    if "set_flag.py" in command and " off" not in command:
+        return True, "Set a feature flag to inject a failure scenario"
+
+    return False, ""
 
 
 def _extract_images_from_text(text: str) -> tuple[str, list]:
@@ -476,6 +515,76 @@ class InteractiveAgentSession:
                         message="User did not respond. Continue without this information."
                     )
 
+            # Check for gated commands (remediation scripts without --dry-run)
+            if tool_name == "Bash":
+                import asyncio
+                import logging
+                import uuid
+
+                from claude_agent_sdk.types import (
+                    PermissionResultAllow,
+                    PermissionResultDeny,
+                )
+
+                command = input_data.get("command", "")
+                is_gated, description = _is_gated_command(command)
+                if is_gated:
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"[Approval] Gated command detected: {description}")
+
+                    event = asyncio.Event()
+                    self._pending_approval_event = event
+                    self._pending_approval_result = None
+                    request_id = str(uuid.uuid4())
+                    self._pending_approval_request_id = request_id
+
+                    logger.info(
+                        f"[Approval] Waiting up to 300s for approval (request_id={request_id})"
+                    )
+
+                    try:
+                        await asyncio.wait_for(event.wait(), timeout=300.0)
+                        result = self._pending_approval_result
+
+                        # Cleanup
+                        if hasattr(self, "_pending_approval_event"):
+                            delattr(self, "_pending_approval_event")
+                        if hasattr(self, "_pending_approval_result"):
+                            delattr(self, "_pending_approval_result")
+                        if hasattr(self, "_pending_approval_request_id"):
+                            delattr(self, "_pending_approval_request_id")
+
+                        if result and result.get("approved"):
+                            logger.info(
+                                f"[Approval] Approved: {result.get('comment', '')}"
+                            )
+                            return PermissionResultAllow(updated_input=input_data)
+                        else:
+                            comment = result.get("comment", "") if result else ""
+                            logger.info(f"[Approval] Rejected: {comment}")
+                            return PermissionResultDeny(
+                                message=f"Action rejected by user. {comment}"
+                            )
+                    except asyncio.TimeoutError:
+                        logger.warning("[Approval] Timeout after 300s")
+
+                        if hasattr(self, "_pending_events"):
+                            self._pending_events.append(
+                                approval_timeout_event(self.thread_id)
+                            )
+
+                        # Cleanup
+                        if hasattr(self, "_pending_approval_event"):
+                            delattr(self, "_pending_approval_event")
+                        if hasattr(self, "_pending_approval_result"):
+                            delattr(self, "_pending_approval_result")
+                        if hasattr(self, "_pending_approval_request_id"):
+                            delattr(self, "_pending_approval_request_id")
+
+                        return PermissionResultDeny(
+                            message="Approval timed out (5 minutes). Please explicitly approve and re-request the action."
+                        )
+
             # Auto-approve other tools
             from claude_agent_sdk.types import PermissionResultAllow
 
@@ -758,6 +867,28 @@ class InteractiveAgentSession:
 
                                         questions = tool_input.get("questions", [])
                                         yield question_event(self.thread_id, questions)
+
+                                    # If gated command, emit approval event
+                                    if block.name == "Bash":
+                                        command = tool_input.get("command", "")
+                                        is_gated, description = _is_gated_command(
+                                            command
+                                        )
+                                        if is_gated:
+                                            import uuid
+
+                                            req_id = getattr(
+                                                self,
+                                                "_pending_approval_request_id",
+                                                str(uuid.uuid4()),
+                                            )
+                                            yield approval_event(
+                                                self.thread_id,
+                                                "Bash",
+                                                tool_input,
+                                                req_id,
+                                                description,
+                                            )
                         elif isinstance(message, ResultMessage):
                             # Emit any remaining pending tool_end events
                             while self._pending_tool_ends:
@@ -900,6 +1031,18 @@ class InteractiveAgentSession:
         ):
             self._pending_answer = answers
             self._pending_answer_event.set()
+
+    async def provide_approval(self, approved: bool, comment: str = "") -> None:
+        """Provide approval/rejection for a pending gated action."""
+        if (
+            hasattr(self, "_pending_approval_event")
+            and self._pending_approval_event is not None
+        ):
+            self._pending_approval_result = {
+                "approved": approved,
+                "comment": comment,
+            }
+            self._pending_approval_event.set()
 
 
 class OpenHandsAgentSession:
@@ -1094,6 +1237,11 @@ Do NOT dump full kubectl output. Synthesize findings.""",
         """Provide answer to pending question."""
         if self._provider is not None:
             await self._provider.provide_answer(answers)
+
+    async def provide_approval(self, approved: bool, comment: str = "") -> None:
+        """Provide approval/rejection for a pending gated action."""
+        if self._provider is not None:
+            await self._provider.provide_approval(approved, comment)
 
 
 def create_agent_session(thread_id: str, team_config=None):

@@ -4,6 +4,7 @@ Slack event and interaction handlers using Bolt SDK.
 Handlers for:
 - app_mention: Bot @mentions trigger agent runs
 - feedback_positive/feedback_negative: User feedback on agent responses
+- remediation_approve/remediation_reject: Human approval gate for write operations
 
 Features:
 - Bot mention stripping: Removes <@BOT_ID> from message text
@@ -249,6 +250,97 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                 destinations=[d.get("type") for d in output_destinations],
             )
 
+            # Build approval event callback for remediation gating
+            slack_bot_token = os.getenv("SLACK_BOT_TOKEN", "")
+            agent_url_for_approval = dedicated_agent_url or agent_api.base_url
+
+            def _handle_approval_event(event: dict) -> None:
+                """Post Slack approval buttons when agent needs human approval."""
+                event_type = event.get("type", "")
+                if event_type != "approval":
+                    return
+
+                import requests as sync_requests
+
+                data = event.get("data", {})
+                description = data.get("description", "Unknown action")
+                request_id = data.get("request_id", "")
+                command = data.get("input", {}).get("command", "")
+                thread_id_val = event.get("thread_id", "")
+
+                _log(
+                    "slack_approval_requested",
+                    correlation_id=correlation_id,
+                    description=description,
+                    request_id=request_id,
+                )
+
+                button_value = json.dumps(
+                    {
+                        "thread_id": thread_id_val,
+                        "request_id": request_id,
+                        "agent_url": agent_url_for_approval,
+                    }
+                )
+
+                blocks = [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": (
+                                f":warning: *Approval Required*\n"
+                                f"{description}\n"
+                                f"```{command[:500]}```"
+                            ),
+                        },
+                    },
+                    {
+                        "type": "actions",
+                        "elements": [
+                            {
+                                "type": "button",
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": "Approve",
+                                },
+                                "style": "primary",
+                                "action_id": "remediation_approve",
+                                "value": button_value,
+                            },
+                            {
+                                "type": "button",
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": "Reject",
+                                },
+                                "style": "danger",
+                                "action_id": "remediation_reject",
+                                "value": button_value,
+                            },
+                        ],
+                    },
+                ]
+
+                try:
+                    sync_requests.post(
+                        "https://slack.com/api/chat.postMessage",
+                        headers={"Authorization": f"Bearer {slack_bot_token}"},
+                        json={
+                            "channel": channel_id,
+                            "thread_ts": thread_ts,
+                            "blocks": blocks,
+                            "text": f"Approval Required: {description}",
+                        },
+                        timeout=10,
+                    )
+                except Exception as e:
+                    _log(
+                        "slack_approval_post_failed",
+                        correlation_id=correlation_id,
+                        error=str(e),
+                    )
+
             # CRITICAL: Run agent in thread pool to avoid blocking the event loop.
             # agent_api.run_agent() uses sync httpx and can take several minutes.
             result = await asyncio.to_thread(
@@ -279,6 +371,7 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                     agent_base_url=dedicated_agent_url,
                     output_destinations=output_destinations,
                     trigger_source="slack",
+                    event_callback=_handle_approval_event,
                 )
             )
 
@@ -313,6 +406,96 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
         """Handle negative feedback button click."""
         await ack()
         await _handle_feedback(body, respond, "negative", integration)
+
+    @app.action("remediation_approve")
+    async def handle_remediation_approve(ack, body, respond):
+        """Handle remediation approval button click."""
+        await ack()
+        action = (body.get("actions") or [{}])[0]
+        user_id = body.get("user", {}).get("id", "unknown")
+
+        try:
+            value = json.loads(action.get("value", "{}"))
+        except (json.JSONDecodeError, ValueError):
+            await respond(text="Failed to parse approval data.", replace_original=False)
+            return
+
+        thread_id = value.get("thread_id", "")
+        agent_url = value.get("agent_url")
+
+        _log(
+            "slack_remediation_approved",
+            thread_id=thread_id,
+            user_id=user_id,
+        )
+
+        try:
+            await asyncio.to_thread(
+                partial(
+                    integration.agent_api.send_approval,
+                    thread_id=thread_id,
+                    approved=True,
+                    comment=f"Approved by <@{user_id}>",
+                    agent_base_url=agent_url,
+                )
+            )
+            await respond(
+                text=f":white_check_mark: Action approved by <@{user_id}>.",
+                replace_original=False,
+            )
+        except Exception as e:
+            _log(
+                "slack_remediation_approve_failed",
+                thread_id=thread_id,
+                error=str(e),
+            )
+            await respond(text=f"Failed to send approval: {e}", replace_original=False)
+
+    @app.action("remediation_reject")
+    async def handle_remediation_reject(ack, body, respond):
+        """Handle remediation rejection button click."""
+        await ack()
+        action = (body.get("actions") or [{}])[0]
+        user_id = body.get("user", {}).get("id", "unknown")
+
+        try:
+            value = json.loads(action.get("value", "{}"))
+        except (json.JSONDecodeError, ValueError):
+            await respond(
+                text="Failed to parse rejection data.", replace_original=False
+            )
+            return
+
+        thread_id = value.get("thread_id", "")
+        agent_url = value.get("agent_url")
+
+        _log(
+            "slack_remediation_rejected",
+            thread_id=thread_id,
+            user_id=user_id,
+        )
+
+        try:
+            await asyncio.to_thread(
+                partial(
+                    integration.agent_api.send_approval,
+                    thread_id=thread_id,
+                    approved=False,
+                    comment=f"Rejected by <@{user_id}>",
+                    agent_base_url=agent_url,
+                )
+            )
+            await respond(
+                text=f":x: Action rejected by <@{user_id}>.",
+                replace_original=False,
+            )
+        except Exception as e:
+            _log(
+                "slack_remediation_reject_failed",
+                thread_id=thread_id,
+                error=str(e),
+            )
+            await respond(text=f"Failed to send rejection: {e}", replace_original=False)
 
     @app.action(re.compile(r"^view_"))
     async def handle_view_phase(ack, body, client):
