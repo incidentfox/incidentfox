@@ -565,7 +565,13 @@ class InteractiveAgentSession:
             hooks={"PostToolUse": [HookMatcher(hooks=[capture_tool_output])]},
         )
         if system_prompt:
-            options_kwargs["system_prompt"] = system_prompt
+            # Method 3: Append custom prompt to claude_code preset
+            # Preserves built-in tool instructions, safety, and env context
+            options_kwargs["system_prompt"] = {
+                "type": "preset",
+                "preset": "claude_code",
+                "append": system_prompt,
+            }
 
         self.options = ClaudeAgentOptions(**options_kwargs)
 
