@@ -282,8 +282,8 @@ services:
         limits:
           cpu: "200m"
           memory: "128Mi"
-      # KEDA-based autoscaler: dynamically scales warm pool based on active demand
-      # Requires KEDA installed: helm install keda kedacore/keda -n keda --create-namespace
+      # CronJob autoscaler: dynamically scales warm pool based on active demand
+      # Polls /metrics/sandbox-demand endpoint and patches warm pool replicas
       autoscaler:
         enabled: false
         minReplicas: 3

@@ -319,11 +319,11 @@ async def warmpool_status():
 
 @app.get("/metrics/sandbox-demand")
 async def sandbox_demand_metric():
-    """Returns desired warm pool size for KEDA autoscaler.
+    """Returns desired warm pool size for the CronJob autoscaler.
 
-    KEDA polls this endpoint and scales SandboxWarmPool replicas to match
-    the returned value. The value = active_claims + buffer, ensuring enough
-    standby pods are always available.
+    The autoscaler CronJob polls this endpoint every minute and patches
+    SandboxWarmPool replicas to match the returned value.
+    Value = active_claims + buffer, clamped to [min, max] by the CronJob.
     """
     active_claims = sandbox_manager.count_active_claims()
     try:
