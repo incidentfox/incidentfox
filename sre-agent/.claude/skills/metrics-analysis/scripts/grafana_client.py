@@ -119,12 +119,18 @@ def get_grafana_headers() -> dict[str, str]:
     sandbox_jwt = os.getenv("SANDBOX_JWT")
     if sandbox_jwt:
         headers["X-Sandbox-JWT"] = sandbox_jwt
-        print(f"[grafana-auth] Using sandbox JWT (len={len(sandbox_jwt)})", file=sys.stderr)
+        print(
+            f"[grafana-auth] Using sandbox JWT (len={len(sandbox_jwt)})",
+            file=sys.stderr,
+        )
     else:
         # Fallback to tenant headers (for local dev without JWT)
         headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
         headers["X-Team-Id"] = config.get("team_id") or "local"
-        print("[grafana-auth] WARNING: No SANDBOX_JWT env var, using tenant headers (will 401 in strict JWT mode)", file=sys.stderr)
+        print(
+            "[grafana-auth] WARNING: No SANDBOX_JWT env var, using tenant headers (will 401 in strict JWT mode)",
+            file=sys.stderr,
+        )
 
     return headers
 
