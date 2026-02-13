@@ -427,7 +427,6 @@ def verify_firehydrant_signature(
         raise SignatureVerificationError("bad_signature", "firehydrant")
 
 
-
 def verify_google_chat_bearer_token(
     *,
     authorization: Optional[str],
