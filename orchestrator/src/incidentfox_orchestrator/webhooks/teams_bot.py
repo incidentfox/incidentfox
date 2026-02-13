@@ -259,8 +259,9 @@ class TeamsIntegration:
                 _log(
                     "teams_no_routing",
                     correlation_id=correlation_id,
+                    routing_id=routing_id,
                     channel_id=channel_id,
-                    conversation_id=conversation_id[:50],
+                    conversation_id=conversation_id,
                     tried=routing.get("tried", []),
                 )
                 return
@@ -405,7 +406,7 @@ class TeamsIntegration:
                 destinations=[d.get("type") for d in output_destinations],
             )
 
-            # Run agent in thread pool
+            # Run agent in thread pool — calls /investigate and streams SSE
             result = await asyncio.to_thread(
                 partial(
                     agent_api.run_agent,
@@ -426,15 +427,29 @@ class TeamsIntegration:
                     timeout=int(
                         os.getenv("ORCHESTRATOR_TEAMS_AGENT_TIMEOUT_SECONDS", "300")
                     ),
-                    max_turns=int(
-                        os.getenv("ORCHESTRATOR_TEAMS_AGENT_MAX_TURNS", "50")
-                    ),
                     correlation_id=correlation_id,
                     agent_base_url=dedicated_agent_url,
-                    output_destinations=output_destinations,
-                    trigger_source="teams",
                 )
             )
+
+            # Send agent result back to Teams conversation as a reply
+            # to the "working on it" message (shows as quoted reply in Teams)
+            result_text = result.get("result", "")
+            if result_text:
+
+                async def _send_result(turn_context: TurnContext):
+                    reply = Activity(
+                        type=ActivityTypes.message,
+                        text=result_text,
+                        reply_to_id=initial_message_id,
+                    )
+                    await turn_context.send_activity(reply)
+
+                await self.adapter.continue_conversation(
+                    conversation_ref,
+                    _send_result,
+                    self.app_id,
+                )
 
             _log(
                 "teams_message_completed",

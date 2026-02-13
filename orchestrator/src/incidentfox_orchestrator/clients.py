@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import time
 from typing import Any, Dict, List, Optional
 
@@ -540,39 +541,67 @@ class AgentApiClient:
         ] = None,  # DEPRECATED: use output_destinations
         trigger_source: Optional[str] = None,  # Source that triggered this run
     ) -> dict[str, Any]:
+        """Call the agent service's /investigate endpoint and consume the SSE stream."""
         base = agent_base_url.rstrip("/") if agent_base_url else self.base_url
-        url = f"{base}/agents/{agent_name}/run"
-        headers = {"X-IncidentFox-Team-Token": team_token}
+        url = f"{base}/investigate"
+
+        # Build payload matching InvestigateRequest schema
+        payload: dict[str, Any] = {
+            "prompt": message,
+            "team_token": team_token,
+        }
+        # Use correlation_id as thread_id for traceability
         if correlation_id:
-            headers["X-Correlation-ID"] = correlation_id
-        payload: dict[str, Any] = {"message": message}
-        if context is not None:
-            payload["context"] = context
-        if timeout is not None:
-            payload["timeout"] = timeout
-        if max_turns is not None:
-            payload["max_turns"] = max_turns
-        if output_destinations is not None:
-            payload["output_destinations"] = output_destinations
-        elif slack_context is not None:
-            # DEPRECATED: backwards compatibility
-            payload["slack_context"] = slack_context
-        if trigger_source is not None:
-            payload["trigger_source"] = trigger_source
-        if self._http is not None:
-            r = self._http.post(url, headers=headers, json=payload)
-        else:
-            # HTTP timeout should be >= agent timeout. Add a small buffer for network overhead.
+            payload["thread_id"] = correlation_id
+
+        # Derive tenant/team from context if available
+        if context and isinstance(context.get("metadata"), dict):
+            meta = context["metadata"]
+            if "tenant_id" in meta:
+                payload["tenant_id"] = meta["tenant_id"]
+            if "team_id" in meta:
+                payload["team_id"] = meta["team_id"]
+
+        # HTTP timeout should be >= agent timeout
+        request_timeout = 30.0
+        try:
+            if timeout is not None:
+                request_timeout = max(30.0, float(timeout) + 10.0)
+        except Exception:
             request_timeout = 30.0
-            try:
-                if timeout is not None:
-                    request_timeout = max(30.0, float(timeout) + 10.0)
-            except Exception:
-                request_timeout = 30.0
-            with httpx.Client(timeout=request_timeout) as c:
-                r = c.post(url, headers=headers, json=payload)
-        r.raise_for_status()
-        return dict(r.json())
+
+        # Stream the SSE response and collect the final result
+        result_text = ""
+        result_success = False
+        thread_id = correlation_id or ""
+
+        with httpx.Client(timeout=request_timeout) as c:
+            with c.stream("POST", url, json=payload) as r:
+                r.raise_for_status()
+                # Extract thread_id from response header if available
+                thread_id = r.headers.get("X-Thread-ID", thread_id)
+                for line in r.iter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    try:
+                        event = json.loads(line[6:])
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+                    event_type = event.get("type", "")
+                    if event_type == "result":
+                        result_text = event.get("data", {}).get("text", "")
+                        result_success = event.get("data", {}).get("success", False)
+                    elif event_type == "error":
+                        error_msg = event.get("data", {}).get(
+                            "message", "Unknown error"
+                        )
+                        raise RuntimeError(f"Agent error: {error_msg}")
+
+        return {
+            "thread_id": thread_id,
+            "result": result_text,
+            "success": result_success,
+        }
 
 
 class AuditApiClient:

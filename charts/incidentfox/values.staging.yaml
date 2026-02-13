@@ -263,7 +263,7 @@ services:
       - name: K8S_GATEWAY_URL
         value: "http://incidentfox-k8s-gateway.incidentfox.svc.cluster.local:8085"
       - name: SANDBOX_TTL_MINUTES
-        value: "5"
+        value: "15"
     # Enable tracing in staging for debugging
     tracing:
       enabled: true

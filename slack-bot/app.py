@@ -2198,6 +2198,10 @@ def _handle_mention_impl(event, say, client, context):
         save_investigation_snapshot(state)
         logger.info("📸 Snapshot save attempted")
 
+    except requests.exceptions.ChunkedEncodingError:
+        logger.warning("Investigation stream interrupted (server may be restarting)")
+        state.error = "Investigation was interrupted (service may be restarting). Please try again."
+        update_slack_message(client, state, team_id, final=True)
     except requests.exceptions.ConnectionError:
         state.error = "Could not connect to investigation service. Is it running?"
         update_slack_message(client, state, team_id, final=True)
@@ -2502,6 +2506,12 @@ def _run_auto_listen_investigation(event, client, context):
         update_slack_message(client, state, team_id, final=True)
         save_investigation_snapshot(state)
 
+    except requests.exceptions.ChunkedEncodingError:
+        logger.warning(
+            "Auto-listen investigation stream interrupted (server may be restarting)"
+        )
+        state.error = "Investigation was interrupted (service may be restarting). Please try again."
+        update_slack_message(client, state, team_id, final=True)
     except requests.exceptions.ConnectionError:
         state.error = "Could not connect to investigation service. Is it running?"
         update_slack_message(client, state, team_id, final=True)
@@ -2907,6 +2917,12 @@ Use all available tools to gather context about this issue."""
         save_investigation_snapshot(state)
         logger.info("📸 Snapshot save attempted")
 
+    except requests.exceptions.ChunkedEncodingError:
+        logger.warning(
+            "Auto-investigation stream interrupted (server may be restarting)"
+        )
+        state.error = "Investigation was interrupted (service may be restarting). Please try again."
+        update_slack_message(client, state, team_id, final=True)
     except requests.exceptions.Timeout:
         logger.error("Request to sre-agent timed out")
         state.error = "Investigation timed out after 5 minutes"
@@ -3347,6 +3363,12 @@ def handle_message(event, client, context):
             # Save snapshot
             save_investigation_snapshot(state)
 
+        except requests.exceptions.ChunkedEncodingError:
+            logger.warning(
+                "DM investigation stream interrupted (server may be restarting)"
+            )
+            state.error = "Investigation was interrupted (service may be restarting). Please try again."
+            update_slack_message(client, state, team_id, final=True)
         except requests.exceptions.ConnectionError:
             state.error = "Could not connect to investigation service. Is it running?"
             update_slack_message(client, state, team_id, final=True)
@@ -3758,6 +3780,12 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
         save_investigation_snapshot(state)
         logger.info("📸 Snapshot save attempted")
 
+    except requests.exceptions.ChunkedEncodingError:
+        logger.warning(
+            "Coralogix investigation stream interrupted (server may be restarting)"
+        )
+        state.error = "Investigation was interrupted (service may be restarting). Please try again."
+        update_slack_message(client, state, team_id, final=True)
     except requests.exceptions.Timeout:
         logger.error("Request to sre-agent timed out")
         state.error = "Investigation timed out after 5 minutes"

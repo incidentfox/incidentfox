@@ -42,6 +42,9 @@ ultimate_rag/**/.cache/
 
 eval_results_*.json
 
+# Cached test data (regenerated on demand)
+local/data/
+
 # Mac OS artifacts
 .DS_Store
 **/.DS_Store
