@@ -105,7 +105,6 @@ KNOWLEDGE_ITEMS = [
         "confidence": 0.95,
         "related_entities": ["postgresql"],
     },
-
     # ── Factual (service specs) ─────────────────────────────────
     {
         "id": "K09",
@@ -121,7 +120,12 @@ KNOWLEDGE_ITEMS = [
         "knowledge_type": "factual",
         "source": "service-catalog",
         "confidence": 0.95,
-        "related_entities": ["redis-cache", "auth-service", "cart-service", "rate-limiter"],
+        "related_entities": [
+            "redis-cache",
+            "auth-service",
+            "cart-service",
+            "rate-limiter",
+        ],
     },
     {
         "id": "K11",
@@ -139,7 +143,6 @@ KNOWLEDGE_ITEMS = [
         "confidence": 0.96,
         "related_entities": ["elasticsearch"],
     },
-
     # ── Messy / realistic incident notes ────────────────────────
     {
         "id": "K13",
@@ -181,7 +184,6 @@ KNOWLEDGE_ITEMS = [
         "confidence": 0.90,
         "related_entities": ["order-processing", "postgresql", "rds"],
     },
-
     # ── Deliberate contradictions ───────────────────────────────
     {
         "id": "K18",
@@ -210,7 +212,6 @@ KNOWLEDGE_ITEMS = [
         "related_entities": ["elasticsearch", "search-service"],
         "_note": "CONTRADICTS K06 which suggests setting to 1s",
     },
-
     # ── Relational (dependencies) ───────────────────────────────
     {
         "id": "K21",
@@ -218,7 +219,14 @@ KNOWLEDGE_ITEMS = [
         "knowledge_type": "relational",
         "source": "architecture/dependencies",
         "confidence": 0.97,
-        "related_entities": ["payment-service", "postgresql", "pgbouncer", "redis-cache", "kafka", "vault"],
+        "related_entities": [
+            "payment-service",
+            "postgresql",
+            "pgbouncer",
+            "redis-cache",
+            "kafka",
+            "vault",
+        ],
     },
     {
         "id": "K22",
@@ -226,7 +234,13 @@ KNOWLEDGE_ITEMS = [
         "knowledge_type": "relational",
         "source": "architecture/dependencies",
         "confidence": 0.94,
-        "related_entities": ["auth-service", "redis-auth", "postgresql", "ldap-proxy", "vault"],
+        "related_entities": [
+            "auth-service",
+            "redis-auth",
+            "postgresql",
+            "ldap-proxy",
+            "vault",
+        ],
     },
     {
         "id": "K23",
@@ -234,7 +248,13 @@ KNOWLEDGE_ITEMS = [
         "knowledge_type": "relational",
         "source": "architecture/dependencies",
         "confidence": 0.93,
-        "related_entities": ["order-processing", "kafka", "payment-service", "inventory-service", "notification-service"],
+        "related_entities": [
+            "order-processing",
+            "kafka",
+            "payment-service",
+            "inventory-service",
+            "notification-service",
+        ],
     },
     {
         "id": "K24",
@@ -242,9 +262,14 @@ KNOWLEDGE_ITEMS = [
         "knowledge_type": "relational",
         "source": "architecture/blast-radius",
         "confidence": 0.96,
-        "related_entities": ["postgresql", "payment-service", "auth-service", "order-processing", "reporting-service"],
+        "related_entities": [
+            "postgresql",
+            "payment-service",
+            "auth-service",
+            "order-processing",
+            "reporting-service",
+        ],
     },
-
     # ── Temporal (changing knowledge) ───────────────────────────
     {
         "id": "K25",
@@ -278,7 +303,6 @@ KNOWLEDGE_ITEMS = [
         "confidence": 0.93,
         "related_entities": ["kubernetes"],
     },
-
     # ── Policy / compliance ─────────────────────────────────────
     {
         "id": "K29",
@@ -312,7 +336,6 @@ KNOWLEDGE_ITEMS = [
         "confidence": 0.94,
         "related_entities": ["vault", "notification-service"],
     },
-
     # ── Social / team knowledge ─────────────────────────────────
     {
         "id": "K33",
@@ -338,7 +361,6 @@ KNOWLEDGE_ITEMS = [
         "confidence": 0.87,
         "related_entities": ["postgresql", "redis-cache", "redis-auth"],
     },
-
     # ── More messy / realistic entries ──────────────────────────
     {
         "id": "K36",
@@ -372,7 +394,6 @@ KNOWLEDGE_ITEMS = [
         "confidence": 0.88,
         "related_entities": ["kafka", "datadog", "audit-log"],
     },
-
     # ── Edge cases and nuanced knowledge ────────────────────────
     {
         "id": "K40",
@@ -414,7 +435,6 @@ KNOWLEDGE_ITEMS = [
         "confidence": 0.91,
         "related_entities": ["istio", "cert-manager", "redis-auth"],
     },
-
     # ── More contradictions and updates ─────────────────────────
     {
         "id": "K45",
@@ -434,7 +454,6 @@ KNOWLEDGE_ITEMS = [
         "related_entities": ["order-processing", "kafka", "msk"],
         "_note": "Updates K04 which references old group name",
     },
-
     # ── Cross-cutting concerns ──────────────────────────────────
     {
         "id": "K47",
@@ -525,7 +544,6 @@ HARD_QUERIES = [
         "expect_keywords": ["rollout", "rollback", "argocd"],
         "description": "Vague complaint, should surface deployment/rollback knowledge",
     },
-
     # ── Cross-entity reasoning ──────────────────────────────────
     {
         "id": "Q05",
@@ -545,7 +563,6 @@ HARD_QUERIES = [
         "expect_keywords": ["postgresql", "pgbouncer", "redis", "kafka", "vault"],
         "description": "Full dependency chain, should find K21",
     },
-
     # ── Contradiction-aware queries ─────────────────────────────
     {
         "id": "Q08",
@@ -565,7 +582,6 @@ HARD_QUERIES = [
         "expect_keywords": ["health", "port"],
         "description": "Should surface K09 AND K45 (contradicting 8080 vs 3000)",
     },
-
     # ── Temporal reasoning ──────────────────────────────────────
     {
         "id": "Q11",
@@ -579,7 +595,6 @@ HARD_QUERIES = [
         "expect_keywords": ["kafka", "consumer", "lag"],
         "description": "Should surface both K04 and K46 (updated group name)",
     },
-
     # ── Compliance / policy queries ─────────────────────────────
     {
         "id": "Q13",
@@ -593,7 +608,6 @@ HARD_QUERIES = [
         "expect_keywords": ["gdpr", "30 days", "deletion"],
         "description": "GDPR query, should find K30",
     },
-
     # ── Who to contact ──────────────────────────────────────────
     {
         "id": "Q15",
@@ -607,7 +621,6 @@ HARD_QUERIES = [
         "expect_keywords": ["mfa", "vpn", "bastion", "pagerduty"],
         "description": "Should find K31 (access policy) and correction C01",
     },
-
     # ── Paraphrased / indirect queries ──────────────────────────
     {
         "id": "Q17",
@@ -621,7 +634,6 @@ HARD_QUERIES = [
         "expect_keywords": ["vault", "90 days", "rotation"],
         "description": "Should find K32 (secrets policy)",
     },
-
     # ── Harder: multi-hop reasoning ─────────────────────────────
     {
         "id": "Q19",
@@ -674,7 +686,9 @@ class StressTestRunner:
         errors = 0
         t0 = time.time()
         for item in KNOWLEDGE_ITEMS:
-            payload = {k: v for k, v in item.items() if not k.startswith("_") and k != "id"}
+            payload = {
+                k: v for k, v in item.items() if not k.startswith("_") and k != "id"
+            }
             r = self.client.post("/api/v1/teach", json=payload)
             if r.status_code == 200:
                 data = r.json()
@@ -691,10 +705,15 @@ class StressTestRunner:
                     created += 1  # merged etc
             else:
                 errors += 1
-                self.teach_results[item["id"]] = {"status": "error", "code": r.status_code}
+                self.teach_results[item["id"]] = {
+                    "status": "error",
+                    "code": r.status_code,
+                }
         teach_time = time.time() - t0
         print(f"  Created: {created} | Duplicates: {duplicates} | Errors: {errors}")
-        print(f"  Time: {teach_time:.1f}s ({teach_time/len(KNOWLEDGE_ITEMS)*1000:.0f}ms avg)")
+        print(
+            f"  Time: {teach_time:.1f}s ({teach_time/len(KNOWLEDGE_ITEMS)*1000:.0f}ms avg)"
+        )
 
         # 3. Teach corrections
         print(f"\n[Phase 3] Teaching {len(CORRECTIONS)} corrections...")
@@ -707,7 +726,11 @@ class StressTestRunner:
                     "correct_answer": corr["correct_answer"],
                 },
             )
-            status = r.json().get("status", "?") if r.status_code == 200 else f"err:{r.status_code}"
+            status = (
+                r.json().get("status", "?")
+                if r.status_code == 200
+                else f"err:{r.status_code}"
+            )
             print(f"  {corr['id']}: {status}")
 
         # 4. Run maintenance to detect contradictions
@@ -715,8 +738,10 @@ class StressTestRunner:
         r = self.client.post("/maintenance/run")
         if r.status_code == 200:
             data = r.json()
-            print(f"  Cycle #{data.get('cycle', '?')}: stale={data.get('stale_detected', 0)}, "
-                  f"gaps={data.get('gaps_detected', 0)}, contradictions={data.get('contradictions_detected', 0)}")
+            print(
+                f"  Cycle #{data.get('cycle', '?')}: stale={data.get('stale_detected', 0)}, "
+                f"gaps={data.get('gaps_detected', 0)}, contradictions={data.get('contradictions_detected', 0)}"
+            )
 
         # 5. Maintenance report
         print("\n[Phase 5] Maintenance report...")
@@ -758,7 +783,11 @@ class StressTestRunner:
                 else:
                     missing_keywords.append(kw)
 
-            hit_ratio = len(found_keywords) / len(q["expect_keywords"]) if q["expect_keywords"] else 0
+            hit_ratio = (
+                len(found_keywords) / len(q["expect_keywords"])
+                if q["expect_keywords"]
+                else 0
+            )
 
             if hit_ratio >= 0.5:
                 label = PASS
@@ -781,29 +810,44 @@ class StressTestRunner:
 
             print(f"\n  {q['id']}: [{label}] {q['description']}")
             print(f"      Query: \"{q['query']}\"")
-            print(f"      Results: {len(results)} | Strategies: {', '.join(strategies)} | Time: {query_time*1000:.0f}ms")
+            print(
+                f"      Results: {len(results)} | Strategies: {', '.join(strategies)} | Time: {query_time*1000:.0f}ms"
+            )
             print(f"      Keywords found: {found_keywords}")
             if missing_keywords:
                 print(f"      Keywords missing: {missing_keywords}")
             if results:
                 top = results[0]
                 text_preview = top.get("text", "")[:100]
-                print(f"      Top result (score={top.get('score', '?')}): {text_preview}...")
+                print(
+                    f"      Top result (score={top.get('score', '?')}): {text_preview}..."
+                )
 
         # 7. Summary
         print("\n" + "=" * 70)
         print("STRESS TEST SUMMARY")
         print("=" * 70)
-        print(f"\n  Knowledge taught: {created + duplicates}/{len(KNOWLEDGE_ITEMS)} ({created} new, {duplicates} dup)")
+        print(
+            f"\n  Knowledge taught: {created + duplicates}/{len(KNOWLEDGE_ITEMS)} ({created} new, {duplicates} dup)"
+        )
         print(f"  Corrections taught: {len(CORRECTIONS)}")
         print(f"\n  Query results ({len(HARD_QUERIES)} total):")
         print(f"    [{PASS}] Pass (≥50% keywords found): {total_pass}")
         print(f"    [{WARN}] Partial (<50% keywords):     {total_partial}")
         print(f"    [{FAIL}] Fail (0 keywords found):     {total_fail}")
-        print(f"    Hit rate: {total_pass}/{len(HARD_QUERIES)} = {total_pass/len(HARD_QUERIES)*100:.0f}%")
-        print(f"    Partial+Pass rate: {total_pass+total_partial}/{len(HARD_QUERIES)} = {(total_pass+total_partial)/len(HARD_QUERIES)*100:.0f}%")
+        print(
+            f"    Hit rate: {total_pass}/{len(HARD_QUERIES)} = {total_pass/len(HARD_QUERIES)*100:.0f}%"
+        )
+        print(
+            f"    Partial+Pass rate: {total_pass+total_partial}/{len(HARD_QUERIES)} = {(total_pass+total_partial)/len(HARD_QUERIES)*100:.0f}%"
+        )
 
-        avg_time = sum(r.get("time_ms", 0) for r in self.query_results.values()) / len(self.query_results) if self.query_results else 0
+        avg_time = (
+            sum(r.get("time_ms", 0) for r in self.query_results.values())
+            / len(self.query_results)
+            if self.query_results
+            else 0
+        )
         print(f"    Avg query time: {avg_time:.0f}ms")
         print("=" * 70)
 
