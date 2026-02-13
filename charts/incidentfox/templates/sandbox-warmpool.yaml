@@ -302,6 +302,22 @@ spec:
         # Coralogix SDK: route API requests through Envoy proxy
         - name: CORALOGIX_BASE_URL
           value: "http://localhost:8001"
+        # Integration URLs: route through credential-resolver's reverse proxy
+        # These are static (same service for all tenants) - JWT handles per-tenant auth
+        - name: CONFLUENCE_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/confluence"
+        - name: GRAFANA_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/grafana"
+        - name: ELASTICSEARCH_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/elasticsearch"
+        - name: PROMETHEUS_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/prometheus"
+        - name: JAEGER_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/jaeger"
+        - name: GITHUB_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/github"
+        - name: DATADOG_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/datadog"
         # Laminar tracing (platform observability)
         - name: LMNR_PROJECT_API_KEY
           valueFrom:

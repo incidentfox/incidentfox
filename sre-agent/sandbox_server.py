@@ -160,6 +160,10 @@ async def claim_sandbox(request: ClaimRequest):
     os.environ["THREAD_ID"] = request.thread_id
     os.environ["INCIDENTFOX_TENANT_ID"] = request.tenant_id
     os.environ["INCIDENTFOX_TEAM_ID"] = request.team_id
+    # Set SANDBOX_JWT env var so scripts can use it for credential-resolver auth
+    # (Envoy Lua filter reads from file, but scripts that call credential-resolver
+    # directly need the JWT as an env var for their X-Sandbox-JWT header)
+    os.environ["SANDBOX_JWT"] = request.jwt_token
 
     print(
         f"🔑 [CLAIM] Sandbox claimed for thread {request.thread_id} "

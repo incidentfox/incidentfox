@@ -26,10 +26,10 @@ def get_k8s_client():
     kubeconfig = Path.home() / ".kube" / "config"
     in_cluster = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
 
-    if kubeconfig.exists():
-        k8s_config.load_kube_config()
-    elif in_cluster.exists():
+    if in_cluster.exists():
         k8s_config.load_incluster_config()
+    elif kubeconfig.exists():
+        k8s_config.load_kube_config()
     else:
         print(
             "Error: Kubernetes not configured. Ensure ~/.kube/config exists.",
