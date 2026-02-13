@@ -6343,21 +6343,91 @@ def handle_home_integration_action(ack, body, client):
             configured = config_client.get_configured_integrations(team_id)
             existing_config = configured.get(integration_id, {})
 
-        # Use onboarding.get_integration_by_id() directly - no need for config-service schemas
-        modal = onboarding.build_integration_config_modal(
-            team_id=team_id,
-            integration_id=integration_id,
-            existing_config=existing_config,
-            entry_point="home",
-        )
+        # Check for custom flow integrations (e.g., kubernetes_saas)
+        integration_def = onboarding.get_integration_by_id(integration_id)
+        custom_flow = integration_def.get("custom_flow") if integration_def else None
 
-        client.views_open(trigger_id=body["trigger_id"], view=modal)
+        if custom_flow == "k8s_saas":
+            clusters = config_client.list_k8s_clusters(team_id)
+            modal = onboarding.build_k8s_saas_clusters_modal(
+                team_id=team_id,
+                clusters=clusters,
+                entry_point="home",
+            )
+        else:
+            # Special handling for GitHub App integration
+            if integration_id == "github" and action_type == "edit":
+                github_installation = config_client.get_linked_github_installation(
+                    team_id
+                )
+                if github_installation:
+                    if existing_config is None:
+                        existing_config = {}
+                    existing_config["github_org"] = github_installation.get(
+                        "account_login", ""
+                    )
+                    existing_config["_github_linked"] = True
+                    existing_config["_github_installation"] = github_installation
+
+            modal = onboarding.build_integration_config_modal(
+                team_id=team_id,
+                integration_id=integration_id,
+                existing_config=existing_config,
+                entry_point="home",
+            )
+
+        try:
+            client.views_open(trigger_id=body["trigger_id"], view=modal)
+        except Exception as views_err:
+            # Modal open failed — most likely due to the video block requiring
+            # the video_url domain to be registered as a Slack media domain.
+            # Retry without the video block.
+            logger.warning(
+                f"views_open failed for {integration_id}, retrying without video: {views_err}"
+            )
+            if custom_flow != "k8s_saas":
+                modal = onboarding.build_integration_config_modal(
+                    team_id=team_id,
+                    integration_id=integration_id,
+                    existing_config=existing_config,
+                    entry_point="home",
+                    include_video=False,
+                )
+                client.views_open(trigger_id=body["trigger_id"], view=modal)
+            else:
+                raise
+
         logger.info(f"Opened {action_type} modal for {integration_id} from Home Tab")
 
     except Exception as e:
         logger.error(
             f"Failed to open integration modal from Home Tab: {e}", exc_info=True
         )
+        # Show error modal so the user knows something went wrong
+        try:
+            client.views_open(
+                trigger_id=body["trigger_id"],
+                view={
+                    "type": "modal",
+                    "title": {"type": "plain_text", "text": "Error"},
+                    "close": {"type": "plain_text", "text": "Close"},
+                    "blocks": [
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": (
+                                    ":warning: *Could not open settings*\n\n"
+                                    "Something went wrong opening the configuration for "
+                                    f"*{integration_id}*. Please try again."
+                                ),
+                            },
+                        }
+                    ],
+                },
+            )
+        except Exception:
+            pass
 
 
 @app.action("home_book_demo")

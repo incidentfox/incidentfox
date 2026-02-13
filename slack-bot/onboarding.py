@@ -3724,6 +3724,7 @@ def build_integration_config_modal(
     integration_id: str = None,
     category_filter: str = "all",
     entry_point: str = "integrations",
+    include_video: bool = True,
 ) -> Dict[str, Any]:
     """
     Build integration configuration modal with video tutorial, instructions, and form fields.
@@ -3737,6 +3738,7 @@ def build_integration_config_modal(
         schema: Integration schema with fields definition (optional if integration_id provided)
         existing_config: Existing config values to pre-fill
         integration_id: Integration ID to look up from INTEGRATIONS
+        include_video: Whether to include the video tutorial block
 
     Returns:
         Slack modal view object
@@ -3877,7 +3879,7 @@ def build_integration_config_modal(
 
     # Video tutorial section (using Slack's video block for embedded player)
     video_config = schema.get("video")
-    if video_config:
+    if video_config and include_video:
         blocks.append(
             {
                 "type": "video",
