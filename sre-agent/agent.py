@@ -987,6 +987,15 @@ class OpenHandsAgentSession:
     """
     Agent session using OpenHands SDK for multi-LLM support.
 
+    DEPRECATED: This class is currently unused in production. The credential proxy
+    handles multi-LLM translation for InteractiveAgentSession (the default path),
+    making this path redundant. LLM_PROVIDER defaults to "claude" and the
+    incidentfox-secrets K8s secret (which would set it to "openhands") does not exist.
+
+    Consider removing this class and the providers/ directory in a future cleanup.
+    See InteractiveAgentSession + credential-proxy for the active multi-LLM path.
+
+    Original description:
     This class provides the same interface as InteractiveAgentSession but
     uses OpenHands SDK internally, enabling support for multiple LLM providers:
     - anthropic/claude-sonnet-4-20250514 (default)
