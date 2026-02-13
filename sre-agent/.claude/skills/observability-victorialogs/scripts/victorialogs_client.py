@@ -415,9 +415,7 @@ def normalize_message(msg: str) -> str:
         msg,
     )
     # Remove IPs
-    normalized = re.sub(
-        r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "<IP>", normalized
-    )
+    normalized = re.sub(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "<IP>", normalized)
     # Remove numbers (but keep common status codes context)
     normalized = re.sub(r"\b\d+\b", "<N>", normalized)
     # Truncate for grouping

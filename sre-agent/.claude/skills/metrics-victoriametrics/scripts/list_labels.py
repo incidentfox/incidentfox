@@ -70,11 +70,7 @@ def main():
             labels = get_labels()
 
             if args.json:
-                print(
-                    json.dumps(
-                        {"labels": labels, "count": len(labels)}, indent=2
-                    )
-                )
+                print(json.dumps({"labels": labels, "count": len(labels)}, indent=2))
             else:
                 print(f"Available labels ({len(labels)}):")
                 print()

@@ -51,9 +51,7 @@ def main():
             series_count = int(float(count_data[0].get("value", [0, "0"])[1]))
 
         # 2. Top metric names by series count
-        top_metrics_result = query_instant(
-            f"topk(10, count by (__name__)({selector}))"
-        )
+        top_metrics_result = query_instant(f"topk(10, count by (__name__)({selector}))")
         top_metrics = []
         for item in top_metrics_result.get("data", {}).get("result", []):
             name = item.get("metric", {}).get("__name__", "unknown")
@@ -61,9 +59,7 @@ def main():
             top_metrics.append({"name": name, "series_count": count})
 
         # 3. Top jobs
-        top_jobs_result = query_instant(
-            f"topk(5, count by (job)({selector}))"
-        )
+        top_jobs_result = query_instant(f"topk(5, count by (job)({selector}))")
         top_jobs = []
         for item in top_jobs_result.get("data", {}).get("result", []):
             job = item.get("metric", {}).get("job", "unknown")

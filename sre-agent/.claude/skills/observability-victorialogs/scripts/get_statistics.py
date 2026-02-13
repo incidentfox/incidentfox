@@ -118,7 +118,9 @@ def main():
         # Calculate rates
         error_rate = round(error_count / total_count * 100, 2) if total_count > 0 else 0
         warn_rate = round(warn_count / total_count * 100, 2) if total_count > 0 else 0
-        logs_per_minute = round(total_count / args.time_range, 2) if total_count > 0 else 0
+        logs_per_minute = (
+            round(total_count / args.time_range, 2) if total_count > 0 else 0
+        )
 
         # Build recommendation
         if total_count == 0:
@@ -126,11 +128,15 @@ def main():
         elif error_rate > 10:
             recommendation = f"HIGH error rate ({error_rate}%). Investigate top error patterns immediately."
         elif error_rate > 5:
-            recommendation = f"Elevated error rate ({error_rate}%). Review error patterns."
+            recommendation = (
+                f"Elevated error rate ({error_rate}%). Review error patterns."
+            )
         elif total_count > 100000:
             recommendation = f"High volume ({total_count:,} logs). Use stream filters to narrow down."
         else:
-            recommendation = f"Normal volume ({total_count:,} logs). Error rate: {error_rate}%"
+            recommendation = (
+                f"Normal volume ({total_count:,} logs). Error rate: {error_rate}%"
+            )
 
         result = {
             "query": base_query,

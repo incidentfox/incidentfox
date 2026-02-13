@@ -151,9 +151,7 @@ def query_range(
         return response.json()
 
 
-def get_labels(
-    start: datetime | None = None, end: datetime | None = None
-) -> list[str]:
+def get_labels(start: datetime | None = None, end: datetime | None = None) -> list[str]:
     """Get all label names.
 
     Args:

@@ -100,9 +100,7 @@ def main():
         # Determine time range
         if args.strategy == "around_time" and args.timestamp:
             try:
-                target = datetime.fromisoformat(
-                    args.timestamp.replace("Z", "+00:00")
-                )
+                target = datetime.fromisoformat(args.timestamp.replace("Z", "+00:00"))
             except ValueError as e:
                 print(f"Error parsing timestamp: {e}", file=sys.stderr)
                 sys.exit(1)
