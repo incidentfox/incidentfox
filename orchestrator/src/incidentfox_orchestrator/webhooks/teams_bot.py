@@ -259,8 +259,9 @@ class TeamsIntegration:
                 _log(
                     "teams_no_routing",
                     correlation_id=correlation_id,
+                    routing_id=routing_id,
                     channel_id=channel_id,
-                    conversation_id=conversation_id[:50],
+                    conversation_id=conversation_id,
                     tried=routing.get("tried", []),
                 )
                 return
