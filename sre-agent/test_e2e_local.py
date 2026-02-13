@@ -14,10 +14,17 @@ Usage:
 import asyncio
 import json
 import os
+import signal
 import sys
+import time
 
 # ── Step 0: Setup ───────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(__file__))
+
+# Ensure venv's python is on PATH so skill scripts (`python ...`) work
+venv_bin = os.path.join(os.path.dirname(__file__), ".venv", "bin")
+if os.path.isdir(venv_bin):
+    os.environ["PATH"] = venv_bin + ":" + os.environ.get("PATH", "")
 
 CONFIG_SERVICE_URL = os.environ.get("CONFIG_SERVICE_URL", "http://localhost:18082")
 ADMIN_TOKEN = os.environ.get(
@@ -110,6 +117,7 @@ async def main():
         "Read",
         "Glob",
         "Grep",
+        "Skill",
     ]
 
     # Use cwd with .claude/skills
@@ -138,53 +146,87 @@ async def main():
     print("Step 6: Running query")
     print("=" * 60)
 
-    prompt = "could you check some telemetry of our system"
+    prompt = "Use the metrics-analysis skill to check Grafana dashboards and query some Prometheus metrics for our otel-demo services. List available dashboards and check error rates."
+
+    # Timeouts
+    TOTAL_TIMEOUT = int(os.environ.get("E2E_TIMEOUT", "180"))  # 3 min total
+    IDLE_TIMEOUT = int(os.environ.get("E2E_IDLE_TIMEOUT", "60"))  # 60s no activity
 
     print(f"  Prompt: {prompt}")
+    print(f"  Timeout: {TOTAL_TIMEOUT}s total, {IDLE_TIMEOUT}s idle")
     print("  Streaming...\n")
 
     message_count = 0
     assistant_count = 0
     tool_count = 0
-    async for message in claude_query(prompt=prompt, options=options):
-        message_count += 1
-        msg_type = type(message).__name__
+    start_time = time.monotonic()
+    last_activity = start_time
 
-        if msg_type == "AssistantMessage":
-            assistant_count += 1
-            content = getattr(message, "content", None) or getattr(
-                message, "message", {}
-            )
-            if hasattr(content, "content"):
-                content = content.content
-            if isinstance(content, list):
-                for block in content:
-                    if hasattr(block, "text") and block.text:
-                        print(f"  [ASSISTANT] {block.text[:500]}")
-                    elif hasattr(block, "name"):
-                        tool_count += 1
-                        inp = json.dumps(getattr(block, "input", {}))[:100]
-                        print(f"  [TOOL_USE] {block.name}({inp}...)")
+    try:
+        async for message in claude_query(prompt=prompt, options=options):
+            now = time.monotonic()
+            elapsed = now - start_time
+            idle = now - last_activity
+            last_activity = now
+            message_count += 1
+            msg_type = type(message).__name__
+
+            # Check total timeout
+            if elapsed > TOTAL_TIMEOUT:
+                print(f"\n  TIMEOUT: Total timeout ({TOTAL_TIMEOUT}s) exceeded after {message_count} events")
+                break
+
+            if msg_type == "AssistantMessage":
+                assistant_count += 1
+                content = getattr(message, "content", None) or getattr(
+                    message, "message", {}
+                )
+                if hasattr(content, "content"):
+                    content = content.content
+                if isinstance(content, list):
+                    for block in content:
+                        if hasattr(block, "text") and block.text:
+                            print(f"  [{elapsed:.0f}s] [ASSISTANT] {block.text[:500]}")
+                        elif hasattr(block, "name"):
+                            tool_count += 1
+                            inp = json.dumps(getattr(block, "input", {}))[:100]
+                            print(f"  [{elapsed:.0f}s] [TOOL_USE] {block.name}({inp}...)")
+                else:
+                    print(f"  [{elapsed:.0f}s] [ASSISTANT] {str(content)[:300]}")
+            elif msg_type == "ResultMessage":
+                text = getattr(message, "text", "") or getattr(message, "content", "") or ""
+                print(f"\n  [{elapsed:.0f}s] [RESULT] {str(text)[:500]}")
+            elif msg_type == "SystemMessage":
+                subtype = getattr(message, "subtype", "")
+                print(f"  [{elapsed:.0f}s] [SYSTEM:{subtype}]")
+            elif msg_type == "StreamEvent":
+                pass  # Skip stream events (too noisy)
             else:
-                print(f"  [ASSISTANT] {str(content)[:300]}")
-        elif msg_type == "ResultMessage":
-            text = getattr(message, "text", "") or getattr(message, "content", "") or ""
-            print(f"\n  [RESULT] {str(text)[:500]}")
-        elif msg_type == "SystemMessage":
-            subtype = getattr(message, "subtype", "")
-            print(f"  [SYSTEM:{subtype}]")
-        elif msg_type == "StreamEvent":
-            pass  # Skip stream events (too noisy)
-        else:
-            pass  # Skip unknown types
+                pass  # Skip unknown types
 
+    except asyncio.CancelledError:
+        print("\n  Query cancelled.")
+    except Exception as e:
+        print(f"\n  ERROR: {type(e).__name__}: {e}")
+
+    total_elapsed = time.monotonic() - start_time
     print(f"\n  Total events: {message_count}")
     print(f"  Assistant turns: {assistant_count}")
     print(f"  Tool uses: {tool_count}")
+    print(f"  Wall time: {total_elapsed:.1f}s")
     print("\n" + "=" * 60)
     print("E2E test complete!")
     print("=" * 60)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    hard_timeout = int(os.environ.get("E2E_TIMEOUT", "180")) + 30  # grace period
+
+    async def run_with_timeout():
+        try:
+            await asyncio.wait_for(main(), timeout=hard_timeout)
+        except asyncio.TimeoutError:
+            print(f"\n  HARD TIMEOUT: Process killed after {hard_timeout}s")
+            sys.exit(1)
+
+    asyncio.run(run_with_timeout())

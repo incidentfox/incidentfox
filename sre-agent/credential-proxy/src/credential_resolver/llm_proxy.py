@@ -364,11 +364,81 @@ async def _forward_to_provider(
     openai_body = anthropic_to_openai_request(body)
     openai_body["model"] = model  # LiteLLM uses this to route
 
+    # OpenAI enforces max 128 tools — truncate if needed
+    MAX_TOOLS = 128
+    tools = openai_body.get("tools", [])
+    if len(tools) > MAX_TOOLS:
+        logger.warning(
+            f"Truncating tools from {len(tools)} to {MAX_TOOLS} "
+            f"(provider limit)"
+        )
+        openai_body["tools"] = tools[:MAX_TOOLS]
+
+    # Cap max_tokens to provider limits (Claude SDK defaults to 32000,
+    # but GPT-4o only supports 16384 completion tokens)
+    PROVIDER_MAX_TOKENS = {
+        "openai": 16384,
+        "deepseek": 8192,
+        "mistral": 8192,
+    }
+    max_tokens = openai_body.get("max_tokens")
+    provider_cap = PROVIDER_MAX_TOKENS.get(provider)
+    if max_tokens and provider_cap and max_tokens > provider_cap:
+        logger.warning(
+            f"Capping max_tokens from {max_tokens} to {provider_cap} "
+            f"(provider={provider})"
+        )
+        openai_body["max_tokens"] = provider_cap
+
     logger.info(
         f"LLM proxy: translated request for model={model}, "
         f"messages={len(openai_body.get('messages', []))}, "
         f"tools={len(openai_body.get('tools', []))}"
     )
+
+    # Debug: dump message structure for diagnosing tool_call_id issues
+    for i, m in enumerate(openai_body.get("messages", [])):
+        role = m.get("role", "?")
+        if role == "assistant" and m.get("tool_calls"):
+            tc_ids = [tc["id"] for tc in m["tool_calls"]]
+            tc_names = [tc["function"]["name"] for tc in m["tool_calls"]]
+            logger.info(f"  msg[{i}] assistant tool_calls: {list(zip(tc_names, tc_ids))}")
+        elif role == "tool":
+            logger.info(f"  msg[{i}] tool result: call_id={m.get('tool_call_id')}")
+        else:
+            content_preview = str(m.get("content", ""))[:80]
+            logger.info(f"  msg[{i}] {role}: {content_preview}")
+
+    # Validate and fix tool_call_id consistency
+    # Collect ALL pending call IDs and resolve them in order
+    pending_tool_call_ids: set[str] = set()
+    resolved_tool_call_ids: set[str] = set()
+    for m in openai_body.get("messages", []):
+        if m.get("role") == "assistant" and m.get("tool_calls"):
+            for tc in m["tool_calls"]:
+                pending_tool_call_ids.add(tc["id"])
+        if m.get("role") == "tool":
+            resolved_tool_call_ids.add(m.get("tool_call_id", ""))
+    unresolved = pending_tool_call_ids - resolved_tool_call_ids
+    if unresolved:
+        logger.warning(
+            f"Unresolved tool_call_ids ({len(unresolved)}): {unresolved} — "
+            f"patching with empty tool results"
+        )
+        # Insert synthetic tool results right after their assistant message
+        msgs = openai_body["messages"]
+        patched: list[dict] = []
+        for m in msgs:
+            patched.append(m)
+            if m.get("role") == "assistant" and m.get("tool_calls"):
+                for tc in m["tool_calls"]:
+                    if tc["id"] in unresolved:
+                        patched.append({
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": "(no result)",
+                        })
+        openai_body["messages"] = patched
 
     # 3. Build litellm kwargs
     litellm_kwargs: dict = {

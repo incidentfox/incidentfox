@@ -160,6 +160,32 @@ def _convert_message(msg: dict) -> list[dict]:
             for tu in tool_uses
         ]
         out.append(openai_msg)
+    elif role == "user" and tool_results:
+        # User message with tool_results (and possibly text).
+        # OpenAI requires tool results IMMEDIATELY after assistant tool_calls,
+        # so emit tool results FIRST, then any text as a separate user message.
+        for tr in tool_results:
+            tool_content = tr.get("content", "")
+            if isinstance(tool_content, list):
+                tool_content = "\n".join(
+                    block.get("text", "")
+                    for block in tool_content
+                    if block.get("type") == "text"
+                )
+            out.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tr.get("tool_use_id", ""),
+                    "content": str(tool_content) if tool_content else "",
+                }
+            )
+        # Emit text AFTER tool results
+        if text_parts:
+            if len(text_parts) == 1 and text_parts[0].get("type") == "text":
+                out.append({"role": role, "content": text_parts[0]["text"]})
+            else:
+                out.append({"role": role, "content": text_parts})
+        return out if out else [{"role": role, "content": ""}]
     else:
         # Text/image content without tool_use
         if text_parts:
@@ -189,6 +215,7 @@ def _convert_message(msg: dict) -> list[dict]:
             )
 
     # Tool results — each becomes a separate "tool" role message
+    # (only reached for non-user messages, user messages handled above)
     for tr in tool_results:
         tool_content = tr.get("content", "")
         if isinstance(tool_content, list):
