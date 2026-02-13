@@ -435,6 +435,7 @@ class TeamsIntegration:
             # Send agent result back to Teams conversation
             result_text = result.get("result", "")
             if result_text:
+
                 async def _send_result(turn_context: TurnContext):
                     await turn_context.send_activity(result_text)
 

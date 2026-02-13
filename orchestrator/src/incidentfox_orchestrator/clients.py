@@ -592,7 +592,9 @@ class AgentApiClient:
                         result_text = event.get("data", {}).get("text", "")
                         result_success = event.get("data", {}).get("success", False)
                     elif event_type == "error":
-                        error_msg = event.get("data", {}).get("message", "Unknown error")
+                        error_msg = event.get("data", {}).get(
+                            "message", "Unknown error"
+                        )
                         raise RuntimeError(f"Agent error: {error_msg}")
 
         return {
