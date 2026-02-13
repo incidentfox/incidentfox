@@ -106,7 +106,10 @@ async def main():
     print("=" * 60)
 
     allowed_tools = [
-        "Bash", "Read", "Glob", "Grep",
+        "Bash",
+        "Read",
+        "Glob",
+        "Grep",
     ]
 
     # Use cwd with .claude/skills
