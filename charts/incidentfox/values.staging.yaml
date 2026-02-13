@@ -234,7 +234,7 @@ services:
     hpa:
       enabled: true
       minReplicas: 2
-      maxReplicas: 6
+      maxReplicas: 4
       targetCPUUtilizationPercentage: 50
       behavior:
         scaleUp:
@@ -280,11 +280,11 @@ services:
   sandboxRouter:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/sandbox-router:latest"
-    replicas: 2
+    replicas: 1
     hpa:
       enabled: true
-      minReplicas: 2
-      maxReplicas: 10
+      minReplicas: 1
+      maxReplicas: 4
       targetCPUUtilizationPercentage: 70
 
   # Sandbox Cleanup for expired sandbox garbage collection
@@ -297,7 +297,7 @@ services:
   credentialResolver:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:latest"
-    replicas: 2
+    replicas: 1
     credentialSource: config_service
     jwtMode: strict
     sharedAnthropicKey:
@@ -345,5 +345,5 @@ services:
   k8sGateway:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:latest"
-    replicas: 2
+    replicas: 1
     logLevel: "INFO"
