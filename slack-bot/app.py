@@ -2507,7 +2507,9 @@ def _run_auto_listen_investigation(event, client, context):
         save_investigation_snapshot(state)
 
     except requests.exceptions.ChunkedEncodingError:
-        logger.warning("Auto-listen investigation stream interrupted (server may be restarting)")
+        logger.warning(
+            "Auto-listen investigation stream interrupted (server may be restarting)"
+        )
         state.error = "Investigation was interrupted (service may be restarting). Please try again."
         update_slack_message(client, state, team_id, final=True)
     except requests.exceptions.ConnectionError:
@@ -2916,7 +2918,9 @@ Use all available tools to gather context about this issue."""
         logger.info("📸 Snapshot save attempted")
 
     except requests.exceptions.ChunkedEncodingError:
-        logger.warning("Auto-investigation stream interrupted (server may be restarting)")
+        logger.warning(
+            "Auto-investigation stream interrupted (server may be restarting)"
+        )
         state.error = "Investigation was interrupted (service may be restarting). Please try again."
         update_slack_message(client, state, team_id, final=True)
     except requests.exceptions.Timeout:
@@ -3360,7 +3364,9 @@ def handle_message(event, client, context):
             save_investigation_snapshot(state)
 
         except requests.exceptions.ChunkedEncodingError:
-            logger.warning("DM investigation stream interrupted (server may be restarting)")
+            logger.warning(
+                "DM investigation stream interrupted (server may be restarting)"
+            )
             state.error = "Investigation was interrupted (service may be restarting). Please try again."
             update_slack_message(client, state, team_id, final=True)
         except requests.exceptions.ConnectionError:
@@ -3775,7 +3781,9 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
         logger.info("📸 Snapshot save attempted")
 
     except requests.exceptions.ChunkedEncodingError:
-        logger.warning("Coralogix investigation stream interrupted (server may be restarting)")
+        logger.warning(
+            "Coralogix investigation stream interrupted (server may be restarting)"
+        )
         state.error = "Investigation was interrupted (service may be restarting). Please try again."
         update_slack_message(client, state, team_id, final=True)
     except requests.exceptions.Timeout:
