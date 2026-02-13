@@ -8,7 +8,6 @@
 #
 # Dependencies installed:
 #   1. agent-sandbox CRDs + controller (Sandbox, SandboxTemplate, SandboxClaim, SandboxWarmPool)
-#   2. KEDA (Kubernetes Event-Driven Autoscaler) for warm pool autoscaling
 
 set -e
 
@@ -18,7 +17,7 @@ echo ""
 
 # ---------- agent-sandbox ----------
 AGENT_SANDBOX_VERSION="${AGENT_SANDBOX_VERSION:-v0.1.1}"
-echo "1/2  agent-sandbox ${AGENT_SANDBOX_VERSION}"
+echo "1/1  agent-sandbox ${AGENT_SANDBOX_VERSION}"
 
 if kubectl get crd sandboxes.agents.x-k8s.io &> /dev/null; then
     echo "     Already installed, applying updates..."
@@ -33,32 +32,6 @@ echo "     Waiting for controller..."
 kubectl wait --for=condition=ready --timeout=120s \
     pod -l app=agent-sandbox-controller \
     -n agent-sandbox-system 2>/dev/null || echo "     Controller starting (may take a minute)..."
-echo "     Done"
-echo ""
-
-# ---------- KEDA ----------
-KEDA_VERSION="${KEDA_VERSION:-2.16.1}"
-echo "2/2  KEDA v${KEDA_VERSION}"
-
-if ! helm repo list 2>/dev/null | grep -q kedacore; then
-    helm repo add kedacore https://kedacore.github.io/charts
-fi
-helm repo update kedacore > /dev/null 2>&1
-
-if kubectl get namespace keda &> /dev/null; then
-    echo "     Already installed, upgrading..."
-    helm upgrade keda kedacore/keda \
-        --namespace keda \
-        --version "${KEDA_VERSION}" \
-        --wait
-else
-    echo "     Installing..."
-    helm install keda kedacore/keda \
-        --namespace keda \
-        --create-namespace \
-        --version "${KEDA_VERSION}" \
-        --wait
-fi
 echo "     Done"
 echo ""
 

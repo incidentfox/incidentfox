@@ -231,6 +231,24 @@ services:
         minReplicas: 3
         maxReplicas: 10
         buffer: 3
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 50
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0    # React to bursts immediately
+          policies:
+            - type: Pods
+              value: 4                     # Add up to 4 pods at once
+              periodSeconds: 30
+        scaleDown:
+          stabilizationWindowSeconds: 300  # Wait 5 min before scaling down
+          policies:
+            - type: Pods
+              value: 1                     # Remove 1 pod at a time
+              periodSeconds: 60
     startupProbe:
       enabled: true
       path: "/health"

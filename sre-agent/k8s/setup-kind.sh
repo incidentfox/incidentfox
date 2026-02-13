@@ -54,18 +54,6 @@ kubectl wait --for=condition=ready --timeout=120s \
     pod -l app=agent-sandbox-controller \
     -n agent-sandbox-system 2>/dev/null || echo "  Controller starting (may take a minute)..."
 
-# Install KEDA (for warm pool autoscaling)
-echo "📦 Installing KEDA..."
-if ! helm repo list 2>/dev/null | grep -q kedacore; then
-    helm repo add kedacore https://kedacore.github.io/charts
-    helm repo update
-fi
-if ! kubectl get namespace keda &> /dev/null; then
-    helm install keda kedacore/keda --namespace keda --create-namespace --wait
-else
-    echo "✅ KEDA already installed"
-fi
-
 echo "✅ Kind cluster ready!"
 echo ""
 echo "Next steps:"

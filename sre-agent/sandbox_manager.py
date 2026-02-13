@@ -1379,6 +1379,18 @@ static_resources:
                 )
                 return True
             except requests.RequestException as e:
+                # 409 Conflict means JWT was already injected (previous timed-out
+                # attempt actually succeeded). Treat as success.
+                if (
+                    isinstance(e, requests.exceptions.HTTPError)
+                    and e.response is not None
+                    and e.response.status_code == 409
+                ):
+                    print(
+                        f"✅ JWT already injected into sandbox {sandbox_name} (409 Conflict = success)"
+                    )
+                    return True
+
                 if attempt < 4:
                     delay = min(1.0 * (2**attempt), 4.0)
                     print(

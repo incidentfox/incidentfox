@@ -15,13 +15,17 @@ File Proxy Pattern:
 - This keeps credentials out of the sandbox (security best practice)
 """
 
+import asyncio
 import logging
 import os
 import secrets
+import threading
 import time
 import uuid
 from asyncio import Event
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Dict, List, Optional
 
 import httpx
@@ -49,6 +53,11 @@ image = os.getenv("SANDBOX_IMAGE", "incidentfox-agent:latest")
 namespace = os.getenv("SANDBOX_NAMESPACE", "default")
 sandbox_manager = SandboxManager(namespace=namespace, image=image)
 print(f"✅ SandboxManager initialized (namespace={namespace}, image={image})")
+
+# Concurrency limit for investigations — prevents pod OOM under burst load.
+# Requests beyond this limit wait (backpressure) instead of all crashing.
+MAX_CONCURRENT_INVESTIGATIONS = int(os.getenv("MAX_CONCURRENT_INVESTIGATIONS", "8"))
+_investigation_semaphore = asyncio.Semaphore(MAX_CONCURRENT_INVESTIGATIONS)
 
 # File proxy: token -> download info mapping
 # Tokens expire after 1 hour to prevent stale downloads
@@ -118,10 +127,44 @@ def get_or_create_session_jwt(
     return jwt_token, jwt_expiry
 
 
+def start_liveness_server(port: int = 8081):
+    """Start a dedicated liveness health server on a separate thread.
+
+    This is isolated from the main FastAPI event loop so it always responds,
+    even when the main server is under heavy load. Kubernetes liveness probe
+    should target this port. Readiness probe should target the main server
+    (port 8000) since readiness reflects actual ability to serve traffic.
+    """
+
+    class LivenessHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, format, *args):
+            pass  # Suppress access logs — this fires every 10s
+
+    server = HTTPServer(("0.0.0.0", port), LivenessHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"✅ Liveness health server started on port {port}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start dedicated liveness health server on startup."""
+    health_port = int(os.getenv("HEALTH_SERVER_PORT", "8081"))
+    start_liveness_server(health_port)
+    yield
+
+
 app = FastAPI(
     title="IncidentFox Investigation Server",
     description="AI SRE agent for incident investigation",
     version="0.2.0",
+    lifespan=lifespan,
 )
 
 
@@ -471,10 +514,21 @@ async def investigate(request: InvestigateRequest):
     - If no thread_id: new sandbox, new investigation
 
     Each sandbox provides isolated filesystem for Claude Code tools.
+
+    Concurrency: Limited by _investigation_semaphore. Requests beyond the limit
+    wait (backpressure) instead of overloading the pod and crashing.
     """
     print(
         f"🔵 [INVESTIGATE] Request received: thread_id={request.thread_id}, prompt={request.prompt[:50]}..."
     )
+
+    # Acquire semaphore — excess requests wait here instead of crashing the pod
+    async with _investigation_semaphore:
+        return await _investigate_inner(request)
+
+
+async def _investigate_inner(request: InvestigateRequest):
+    """Inner investigation logic, called under semaphore."""
 
     # Note: ANTHROPIC_API_KEY check removed - in multi-tenant mode, credentials
     # flow through credential-resolver → sandbox via Envoy sidecar.
@@ -516,7 +570,10 @@ async def investigate(request: InvestigateRequest):
             if use_warm_pool:
                 # Use warm pool for instant provisioning (<2 seconds)
                 # Falls back to direct creation if warm pool unavailable
-                sandbox_info = sandbox_manager.create_sandbox_from_pool(
+                # Run in thread pool to avoid blocking the event loop
+                # (sandbox_manager uses requests + time.sleep internally)
+                sandbox_info = await asyncio.to_thread(
+                    sandbox_manager.create_sandbox_from_pool,
                     thread_id,
                     tenant_id=tenant_id,
                     team_id=team_id,
@@ -531,7 +588,9 @@ async def investigate(request: InvestigateRequest):
                 )
             else:
                 # Direct creation (traditional path)
-                sandbox_info = sandbox_manager.create_sandbox(
+                # Run in thread pool to avoid blocking the event loop
+                sandbox_info = await asyncio.to_thread(
+                    sandbox_manager.create_sandbox,
                     thread_id,
                     tenant_id=tenant_id,
                     team_id=team_id,
@@ -542,7 +601,10 @@ async def investigate(request: InvestigateRequest):
 
                 # Wait for sandbox to be ready
                 print(f"⏳ Waiting for sandbox {sandbox_info.name} to be ready...")
-                if not sandbox_manager.wait_for_ready(thread_id, timeout=120):
+                ready = await asyncio.to_thread(
+                    sandbox_manager.wait_for_ready, thread_id, 120
+                )
+                if not ready:
                     raise HTTPException(
                         status_code=500, detail="Sandbox failed to become ready"
                     )

@@ -1,96 +1,129 @@
 {{- if and .Values.services.agent.sandbox.enabled .Values.services.agent.warmPool.enabled .Values.services.agent.warmPool.autoscaler.enabled }}
 # =============================================================================
-# KEDA-Based Warm Pool Autoscaler
+# Warm Pool Autoscaler - CronJob that scales the warm pool based on demand
 # =============================================================================
-# Dynamically scales the SandboxWarmPool based on active demand.
-# Agent server exposes /metrics/sandbox-demand which returns desired pool size.
-# KEDA polls this endpoint and scales the warm pool accordingly.
-#
-# Prerequisites:
-#   - KEDA installed: helm install keda kedacore/keda -n keda --create-namespace
-#   - SandboxWarmPool CRD supports /scale subresource
+# Polls the agent server's /metrics/sandbox-demand endpoint to get desired
+# pool size (active_claims + buffer), then patches SandboxWarmPool replicas.
+# Runs every minute, clamped to [minReplicas, maxReplicas].
 # =============================================================================
 
 ---
-# ClusterRole - grants KEDA operator access to scale SandboxWarmPool
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: {{ .Release.Name }}-keda-warmpool
-  labels:
-    app: incidentfox
-    component: warmpool-autoscaler
-    app.kubernetes.io/name: warmpool-autoscaler
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-rules:
-  - apiGroups: ["extensions.agents.x-k8s.io"]
-    resources: ["sandboxwarmpools"]
-    verbs: ["get", "list", "watch", "patch"]
-  - apiGroups: ["extensions.agents.x-k8s.io"]
-    resources: ["sandboxwarmpools/scale"]
-    verbs: ["get", "update", "patch"]
----
-# ClusterRoleBinding - binds to KEDA operator service account
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: {{ .Release.Name }}-keda-warmpool
-  labels:
-    app: incidentfox
-    component: warmpool-autoscaler
-    app.kubernetes.io/name: warmpool-autoscaler
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-subjects:
-  - kind: ServiceAccount
-    name: keda-operator
-    namespace: {{ .Values.services.agent.warmPool.autoscaler.kedaNamespace | default "keda" }}
-roleRef:
-  kind: ClusterRole
-  name: {{ .Release.Name }}-keda-warmpool
-  apiGroup: rbac.authorization.k8s.io
----
-# ScaledObject - KEDA autoscaler targeting SandboxWarmPool
-apiVersion: keda.sh/v1alpha1
-kind: ScaledObject
+apiVersion: v1
+kind: ServiceAccount
 metadata:
   name: {{ .Release.Name }}-warmpool-autoscaler
   namespace: {{ .Values.namespace }}
   labels:
-    app: incidentfox
-    component: warmpool-autoscaler
+    app: warmpool-autoscaler
+    app.kubernetes.io/name: warmpool-autoscaler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-warmpool-autoscaler
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: warmpool-autoscaler
+    app.kubernetes.io/name: warmpool-autoscaler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+rules:
+  - apiGroups: ["extensions.agents.x-k8s.io"]
+    resources: ["sandboxwarmpools"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-warmpool-autoscaler
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: warmpool-autoscaler
+    app.kubernetes.io/name: warmpool-autoscaler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-warmpool-autoscaler
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-warmpool-autoscaler
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-warmpool-autoscaler
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: warmpool-autoscaler
     app.kubernetes.io/name: warmpool-autoscaler
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
-  scaleTargetRef:
-    apiVersion: extensions.agents.x-k8s.io/v1alpha1
-    kind: SandboxWarmPool
-    name: {{ .Values.services.agent.warmPool.poolName }}
-  minReplicaCount: {{ .Values.services.agent.warmPool.autoscaler.minReplicas }}
-  maxReplicaCount: {{ .Values.services.agent.warmPool.autoscaler.maxReplicas }}
-  pollingInterval: {{ .Values.services.agent.warmPool.autoscaler.pollingInterval | default 15 }}
-  cooldownPeriod: {{ .Values.services.agent.warmPool.autoscaler.cooldownPeriod | default 300 }}
-  advanced:
-    horizontalPodAutoscalerConfig:
-      behavior:
-        scaleUp:
-          stabilizationWindowSeconds: 0
-          policies:
-            - type: Pods
-              value: 4
-              periodSeconds: 15
-        scaleDown:
-          stabilizationWindowSeconds: 120
-          policies:
-            - type: Pods
-              value: 1
-              periodSeconds: 60
-  triggers:
-    - type: metrics-api
-      metadata:
-        url: "http://{{ .Release.Name }}-agent.{{ .Values.namespace }}.svc.cluster.local:{{ .Values.services.agent.servicePort }}/metrics/sandbox-demand"
-        valueLocation: "value"
-        targetValue: "1"
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 120
+      template:
+        spec:
+          serviceAccountName: {{ .Release.Name }}-warmpool-autoscaler
+          restartPolicy: OnFailure
+          containers:
+            - name: autoscaler
+              image: {{ .Values.services.sandboxCleanup.image | default "bitnami/kubectl:latest" }}
+              resources:
+                requests:
+                  cpu: "10m"
+                  memory: "32Mi"
+                limits:
+                  cpu: "100m"
+                  memory: "64Mi"
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+
+                  POOL_NAME="{{ .Values.services.agent.warmPool.poolName }}"
+                  NAMESPACE="{{ .Values.namespace }}"
+                  METRICS_URL="http://{{ .Release.Name }}-agent.{{ .Values.namespace }}.svc.cluster.local:{{ .Values.services.agent.servicePort }}/metrics/sandbox-demand"
+                  MIN_REPLICAS={{ .Values.services.agent.warmPool.autoscaler.minReplicas }}
+                  MAX_REPLICAS={{ .Values.services.agent.warmPool.autoscaler.maxReplicas }}
+
+                  # Fetch desired pool size from agent metrics endpoint
+                  RESPONSE=$(curl -sf --max-time 5 "$METRICS_URL" 2>/dev/null) || {
+                    echo "WARN: Failed to fetch metrics from $METRICS_URL, skipping"
+                    exit 0
+                  }
+
+                  DESIRED=$(echo "$RESPONSE" | grep -o '"value":[0-9]*' | grep -o '[0-9]*')
+                  if [ -z "$DESIRED" ]; then
+                    echo "WARN: Could not parse metric value from: $RESPONSE"
+                    exit 0
+                  fi
+
+                  # Clamp to [min, max]
+                  if [ "$DESIRED" -lt "$MIN_REPLICAS" ]; then
+                    DESIRED=$MIN_REPLICAS
+                  fi
+                  if [ "$DESIRED" -gt "$MAX_REPLICAS" ]; then
+                    DESIRED=$MAX_REPLICAS
+                  fi
+
+                  # Get current replicas
+                  CURRENT=$(kubectl get sandboxwarmpool "$POOL_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.replicas}')
+
+                  if [ "$CURRENT" -eq "$DESIRED" ]; then
+                    echo "OK: replicas=$CURRENT (no change needed)"
+                    exit 0
+                  fi
+
+                  echo "SCALE: $CURRENT -> $DESIRED (min=$MIN_REPLICAS, max=$MAX_REPLICAS)"
+                  kubectl patch sandboxwarmpool "$POOL_NAME" -n "$NAMESPACE" \
+                    --type merge -p "{\"spec\":{\"replicas\":$DESIRED}}"
 {{- end }}

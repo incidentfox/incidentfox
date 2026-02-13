@@ -69,6 +69,29 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.services.agent.hpa.targetCPUUtilizationPercentage }}
+  {{- if .Values.services.agent.hpa.behavior }}
+  behavior:
+    {{- if .Values.services.agent.hpa.behavior.scaleUp }}
+    scaleUp:
+      stabilizationWindowSeconds: {{ .Values.services.agent.hpa.behavior.scaleUp.stabilizationWindowSeconds | default 0 }}
+      policies:
+        {{- range .Values.services.agent.hpa.behavior.scaleUp.policies }}
+        - type: {{ .type }}
+          value: {{ .value }}
+          periodSeconds: {{ .periodSeconds }}
+        {{- end }}
+    {{- end }}
+    {{- if .Values.services.agent.hpa.behavior.scaleDown }}
+    scaleDown:
+      stabilizationWindowSeconds: {{ .Values.services.agent.hpa.behavior.scaleDown.stabilizationWindowSeconds | default 300 }}
+      policies:
+        {{- range .Values.services.agent.hpa.behavior.scaleDown.policies }}
+        - type: {{ .type }}
+          value: {{ .value }}
+          periodSeconds: {{ .periodSeconds }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
 {{- end }}
 
 {{- if and .Values.services.aiPipelineApi.enabled .Values.services.aiPipelineApi.hpa.enabled }}

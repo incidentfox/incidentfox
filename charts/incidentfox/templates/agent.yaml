@@ -70,7 +70,9 @@ metadata:
   name: incidentfox-agent
   namespace: {{ .Values.namespace }}
 spec:
+  {{- if not .Values.services.agent.hpa.enabled }}
   replicas: {{ .Values.services.agent.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       app: incidentfox-agent
@@ -105,6 +107,8 @@ spec:
           ports:
             - containerPort: {{ .Values.services.agent.servicePort }}
               name: http
+            - containerPort: {{ .Values.services.agent.healthServer.port | default 8081 }}
+              name: health
           resources:
 {{ toYaml .Values.services.agent.resources | indent 12 }}
           env:
@@ -116,8 +120,6 @@ spec:
               value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
             - name: CONFIG_SERVICE_URL
               value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
-            - name: HEALTH_SERVER_PORT
-              value: {{ .Values.services.agent.healthServer.port | default 8081 | quote }}
             {{- if .Values.services.agent.kubernetes.enabled }}
             - name: K8S_ENABLED
               value: "true"
@@ -130,6 +132,11 @@ spec:
               value: {{ .Values.namespace | quote }}
             {{- end }}
             {{- end }}
+            # =================================================================
+            # Health server (dedicated liveness endpoint, isolated from event loop)
+            # =================================================================
+            - name: HEALTH_SERVER_PORT
+              value: {{ .Values.services.agent.healthServer.port | default 8081 | quote }}
             # =================================================================
             # Sandbox Mode Configuration
             # =================================================================
@@ -178,6 +185,11 @@ spec:
               value: {{ .Values.services.agent.warmPool.autoscaler.buffer | default 3 | quote }}
             {{- end }}
             {{- end }}
+            # =================================================================
+            # Concurrency limit (applies regardless of warm pool)
+            # =================================================================
+            - name: MAX_CONCURRENT_INVESTIGATIONS
+              value: {{ .Values.services.agent.maxConcurrentInvestigations | default 8 | quote }}
             # =================================================================
             # Tracing configuration (Langfuse / OTEL)
             # =================================================================
@@ -273,12 +285,12 @@ spec:
             periodSeconds: {{ .Values.services.agent.readinessProbe.periodSeconds | default 10 }}
             timeoutSeconds: {{ .Values.services.agent.readinessProbe.timeoutSeconds | default 5 }}
             failureThreshold: {{ .Values.services.agent.readinessProbe.failureThreshold | default 3 }}
-          # Liveness probe
+          # Liveness probe — targets dedicated health server (separate thread, always responsive)
           {{- if .Values.services.agent.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
               path: {{ .Values.services.agent.livenessProbe.path | default "/health" }}
-              port: {{ .Values.services.agent.servicePort }}
+              port: {{ .Values.services.agent.healthServer.port | default 8081 }}
             initialDelaySeconds: {{ .Values.services.agent.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.services.agent.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.services.agent.livenessProbe.timeoutSeconds | default 5 }}
