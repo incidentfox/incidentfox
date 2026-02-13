@@ -540,6 +540,7 @@ class AgentApiClient:
             dict[str, Any]
         ] = None,  # DEPRECATED: use output_destinations
         trigger_source: Optional[str] = None,  # Source that triggered this run
+        event_callback: Optional[Any] = None,  # Callback for SSE events (approval, etc.)
     ) -> dict[str, Any]:
         """Call the agent service's /investigate endpoint and consume the SSE stream."""
         base = agent_base_url.rstrip("/") if agent_base_url else self.base_url
@@ -596,12 +597,41 @@ class AgentApiClient:
                             "message", "Unknown error"
                         )
                         raise RuntimeError(f"Agent error: {error_msg}")
+                    elif event_callback:
+                        # Forward non-result/error events (approval, question, etc.)
+                        try:
+                            event_callback(event)
+                        except Exception:
+                            pass  # Don't let callback errors break the stream
 
         return {
             "thread_id": thread_id,
             "result": result_text,
             "success": result_success,
         }
+
+    def send_approval(
+        self,
+        *,
+        thread_id: str,
+        approved: bool,
+        comment: str = "",
+        agent_base_url: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Send approval/rejection for a gated action to the agent service."""
+        base = agent_base_url.rstrip("/") if agent_base_url else self.base_url
+        url = f"{base}/approve"
+        response = httpx.post(
+            url,
+            json={
+                "thread_id": thread_id,
+                "approved": approved,
+                "comment": comment,
+            },
+            timeout=10.0,
+        )
+        response.raise_for_status()
+        return response.json()
 
 
 class AuditApiClient:

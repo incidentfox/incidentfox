@@ -1133,6 +1133,48 @@ static_resources:
                 f"Failed to send answer to sandbox via Router: {e}"
             ) from e
 
+    def send_approval_to_sandbox(
+        self, sandbox_info: SandboxInfo, approved: bool, comment: str = ""
+    ) -> dict:
+        """
+        Send approval/rejection for a gated action to the sandbox via the Router.
+
+        Args:
+            sandbox_info: Sandbox information
+            approved: Whether the action was approved
+            comment: Optional comment from the reviewer
+
+        Returns:
+            Response from sandbox
+
+        Raises:
+            SandboxExecutionError: If the request fails
+        """
+        router_url = self.get_router_url()
+
+        headers = {
+            "X-Sandbox-ID": sandbox_info.name,
+            "X-Sandbox-Port": "8888",
+            "X-Sandbox-Namespace": self.namespace,
+        }
+
+        payload = {
+            "thread_id": sandbox_info.thread_id,
+            "approved": approved,
+            "comment": comment,
+        }
+
+        try:
+            response = requests.post(
+                f"{router_url}/approve", headers=headers, json=payload, timeout=10
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            raise SandboxExecutionError(
+                f"Failed to send approval to sandbox via Router: {e}"
+            ) from e
+
     # ==================== Warm Pool Methods ====================
 
     def count_active_claims(self) -> int:

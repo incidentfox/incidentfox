@@ -23,8 +23,10 @@ class StreamEvent:
     - tool_end: Tool execution completed
     - result: Final response from agent
     - error: Error occurred
-    - approval: Permission needed (future)
-    - question: Clarifying question (future)
+    - approval: Human approval needed for write operation
+    - approval_timeout: Approval request timed out
+    - approval_result: Approval decision recorded
+    - question: Clarifying question for user
     """
 
     type: str
@@ -183,7 +185,7 @@ def error_event(
     )
 
 
-# Future: approval and question events (Phase 3+)
+# Approval events for human-gated write operations
 
 
 def approval_event(
@@ -191,14 +193,45 @@ def approval_event(
     tool_name: str,
     tool_input: dict,
     request_id: str,
+    description: str = "",
 ) -> StreamEvent:
-    """Create an approval request event."""
+    """Create an approval request event for gated write operations."""
     return StreamEvent(
         type="approval",
         data={
             "tool": tool_name,
             "input": _truncate_dict(tool_input, max_str_len=500),
             "request_id": request_id,
+            "description": description,
+        },
+        thread_id=thread_id,
+    )
+
+
+def approval_timeout_event(
+    thread_id: str,
+) -> StreamEvent:
+    """Create a timeout event when user doesn't respond to approval request."""
+    return StreamEvent(
+        type="approval_timeout",
+        data={
+            "message": "Approval request timed out after 5 minutes. Please explicitly approve and re-request the action."
+        },
+        thread_id=thread_id,
+    )
+
+
+def approval_result_event(
+    thread_id: str,
+    approved: bool,
+    comment: str = "",
+) -> StreamEvent:
+    """Create an event recording the approval/rejection result."""
+    return StreamEvent(
+        type="approval_result",
+        data={
+            "approved": approved,
+            "comment": comment,
         },
         thread_id=thread_id,
     )

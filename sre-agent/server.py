@@ -216,6 +216,12 @@ class AnswerRequest(BaseModel):
     answers: dict
 
 
+class ApprovalRequest(BaseModel):
+    thread_id: str
+    approved: bool
+    comment: str = ""
+
+
 def _create_file_download_token(
     download_url: str, auth_header: str, filename: str, size: int
 ) -> str:
@@ -785,6 +791,41 @@ async def answer_question(request: AnswerRequest):
             raise HTTPException(404, "No active session for this investigation")
         else:
             raise HTTPException(500, f"Failed to forward answer: {error_msg}")
+
+
+@app.post("/approve")
+async def approve_action(request: ApprovalRequest):
+    """
+    Receive approval/rejection for a gated action from Slack bot.
+    Forwards the decision to the sandbox where the agent is waiting.
+    """
+    thread_id = request.thread_id
+
+    logger.info(
+        f"📬 [APPROVAL] Received {'approval' if request.approved else 'rejection'} "
+        f"for thread {thread_id}: {request.comment}"
+    )
+
+    # Get sandbox info
+    sandbox_info = sandbox_manager.get_sandbox(thread_id)
+    if not sandbox_info:
+        raise HTTPException(404, f"No sandbox found for {thread_id}")
+
+    # Forward approval to the sandbox
+    try:
+        response = sandbox_manager.send_approval_to_sandbox(
+            sandbox_info, request.approved, request.comment
+        )
+        logger.info(f"✅ [APPROVAL] Forwarded to sandbox: {response}")
+        return {"status": "ok", "thread_id": thread_id, "approved": request.approved}
+    except SandboxExecutionError as e:
+        error_msg = str(e)
+        logger.error(f"❌ [APPROVAL] Failed to forward to sandbox: {error_msg}")
+
+        if "No active session" in error_msg or "404" in error_msg:
+            raise HTTPException(404, "No active session for this investigation")
+        else:
+            raise HTTPException(500, f"Failed to forward approval: {error_msg}")
 
 
 if __name__ == "__main__":
