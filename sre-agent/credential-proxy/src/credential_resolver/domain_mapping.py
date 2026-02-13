@@ -36,6 +36,8 @@ DOMAIN_TO_INTEGRATION: dict[str, str] = {
     "api.blameless.io": "blameless",
     # FireHydrant
     "api.firehydrant.io": "firehydrant",
+    # VictoriaMetrics / VictoriaLogs (managed cloud)
+    "cloud.victoriametrics.com": "victoriametrics",
 }
 
 # Path prefixes for proxy mode (when host is envoy:8001, localhost:8001, etc.)

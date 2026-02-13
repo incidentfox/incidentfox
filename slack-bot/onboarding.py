@@ -1615,10 +1615,10 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "victoriametrics",
         "name": "VictoriaMetrics",
         "category": "observability",
-        "status": "coming_soon",
+        "status": "available",
         "icon": ":victoriametrics:",
         "icon_fallback": ":chart:",
-        "description": "Query time-series metrics.",
+        "description": "Query time-series metrics and logs.",
     },
     {
         "id": "kloudfuse",
