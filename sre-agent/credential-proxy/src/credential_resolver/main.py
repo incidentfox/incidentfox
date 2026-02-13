@@ -222,6 +222,10 @@ def load_env_credentials() -> dict[str, dict]:
         "firehydrant": {
             "api_key": os.getenv("FIREHYDRANT_API_KEY"),
         },
+        "victoriametrics": {
+            "domain": os.getenv("VICTORIAMETRICS_URL"),
+            "api_key": os.getenv("VICTORIAMETRICS_TOKEN"),
+        },
     }
 
 
@@ -349,6 +353,7 @@ async def list_integrations(request: Request):
         "opensearch",
         "blameless",
         "firehydrant",
+        "victoriametrics",
     ]
 
     available = []
@@ -383,8 +388,8 @@ def is_integration_configured(integration_id: str, creds: dict | None) -> bool:
     if integration_id == "elasticsearch":
         return bool(creds.get("domain"))
 
-    # Prometheus/Jaeger: only domain required (auth optional)
-    if integration_id in ["prometheus", "jaeger"]:
+    # Prometheus/Jaeger/VictoriaMetrics: only domain required (auth optional)
+    if integration_id in ["prometheus", "jaeger", "victoriametrics"]:
         return bool(creds.get("domain"))
 
     # GitHub: api_key required (domain optional for GHE)
@@ -570,6 +575,10 @@ def get_integration_metadata(integration_id: str, creds: dict) -> dict:
     elif integration_id == "gitlab":
         # Return URL (defaults to gitlab.com)
         return {"url": creds.get("domain") or "https://gitlab.com"}
+
+    elif integration_id == "victoriametrics":
+        # Return URL
+        return {"url": creds.get("domain")}
 
     # Default: just indicate it's configured (incident_io, etc.)
     return {}
@@ -1776,6 +1785,19 @@ async def firehydrant_proxy(path: str, request: Request):
 
 
 @app.api_route(
+    "/victoriametrics/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def victoriametrics_proxy(path: str, request: Request):
+    """Reverse proxy for VictoriaMetrics/VictoriaLogs API requests.
+
+    VictoriaMetrics auth is optional (many internal deployments are open).
+    Supports both VictoriaMetrics (metrics) and VictoriaLogs (logs) endpoints.
+    """
+    return await generic_proxy("victoriametrics", path, request, require_api_key=False)
+
+
+@app.api_route(
     "/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 )
 async def ext_authz_check(request: Request, path: str = ""):
@@ -1981,7 +2003,7 @@ def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
         api_key = creds.get("api_key", "")
         return {"Authorization": f"Bearer {api_key}"}
 
-    elif integration_id in ["grafana", "prometheus", "kubernetes"]:
+    elif integration_id in ["grafana", "prometheus", "kubernetes", "victoriametrics"]:
         # These use Bearer token
         api_key = creds.get("api_key", "")
         if api_key:
