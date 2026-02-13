@@ -2213,7 +2213,9 @@ async def teams_webhook(
         await teams_integration.process_activity(raw_body, authorization or "")
         return JSONResponse(content={"ok": True}, status_code=200)
     except Exception as e:
-        _log("teams_webhook_failed", error=str(e))
+        import traceback
+
+        _log("teams_webhook_failed", error=str(e), traceback=traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 
