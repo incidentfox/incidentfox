@@ -62,7 +62,9 @@ class E2ERunner:
             data = r.json()
             self.check("status is healthy", data.get("status") == "healthy")
         except httpx.ConnectError:
-            self.check("Server reachable", False, f"Cannot connect to {self.raptor_url}")
+            self.check(
+                "Server reachable", False, f"Cannot connect to {self.raptor_url}"
+            )
             return False
         return True
 
@@ -85,7 +87,11 @@ class E2ERunner:
             "task_context": "Validating self-learning system",
         }
         r = self.client.post("/api/v1/teach", json=payload)
-        self.check("POST /api/v1/teach returns 200", r.status_code == 200, f"got {r.status_code}: {r.text[:200]}")
+        self.check(
+            "POST /api/v1/teach returns 200",
+            r.status_code == 200,
+            f"got {r.status_code}: {r.text[:200]}",
+        )
         if r.status_code != 200:
             return None
 
@@ -96,7 +102,9 @@ class E2ERunner:
             status in ("created", "merged"),
             f"got status={status}",
         )
-        self.check("node_id returned", data.get("node_id") is not None or status == "merged")
+        self.check(
+            "node_id returned", data.get("node_id") is not None or status == "merged"
+        )
         return content
 
     def test_teach_duplicate(self, content: str):
@@ -161,12 +169,19 @@ class E2ERunner:
             if r.status_code == 200:
                 data = r.json()
                 results = data.get("results", [])
-                found = any(expected_keyword.lower() in res.get("text", "").lower() for res in results)
+                found = any(
+                    expected_keyword.lower() in res.get("text", "").lower()
+                    for res in results
+                )
                 self.check(
                     f"Query returns result containing '{expected_keyword}'",
                     found,
                     f"got {len(results)} results, none contain '{expected_keyword}'"
-                    + (f" | strategies: {data.get('strategies_used', [])}" if not found else ""),
+                    + (
+                        f" | strategies: {data.get('strategies_used', [])}"
+                        if not found
+                        else ""
+                    ),
                 )
                 if found:
                     any_found = True
@@ -283,7 +298,9 @@ class E2ERunner:
         # Summary
         total = self.passed + self.failed + self.skipped
         print("\n" + "=" * 60)
-        print(f"Results: {self.passed}/{total} passed, {self.failed} failed, {self.skipped} skipped")
+        print(
+            f"Results: {self.passed}/{total} passed, {self.failed} failed, {self.skipped} skipped"
+        )
         print("=" * 60)
 
         return self.failed == 0
