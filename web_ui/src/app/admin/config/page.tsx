@@ -504,7 +504,7 @@ export default function AdminConfigPage() {
       description: '',
       enabled: true,
       model: {
-        name: 'gpt-4o',
+        name: 'gpt-5.2',
         temperature: 0.3,
         max_tokens: 16000,
       },
@@ -1157,7 +1157,7 @@ export default function AdminConfigPage() {
                                   Model Name
                                 </label>
                                 <select
-                                  value={agentDraft.model?.name || 'gpt-4o'}
+                                  value={agentDraft.model?.name || 'gpt-5.2'}
                                   onChange={(e) =>
                                     setAgentDraft({
                                       ...agentDraft,
@@ -1167,9 +1167,8 @@ export default function AdminConfigPage() {
                                   className="w-full px-3 py-2 text-sm rounded-lg border border-slate-600 bg-slate-900 text-white"
                                 >
                                   <option value="gpt-5">gpt-5</option>
-                                  <option value="gpt-4o">gpt-4o</option>
-                                  <option value="gpt-4o-2024-11-20">gpt-4o-2024-11-20</option>
-                                  <option value="gpt-4o-mini">gpt-4o-mini</option>
+                                  <option value="gpt-5.2">gpt-5.2</option>
+                                  <option value="gpt-5.2-mini">gpt-5.2-mini</option>
                                   <option value="gpt-4-turbo">gpt-4-turbo</option>
                                   <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
                                   <option value="o1">o1</option>

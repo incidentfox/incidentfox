@@ -432,7 +432,7 @@ class OpenHandsProvider(LLMProvider):
     Supported models (via LiteLLM):
     - anthropic/claude-sonnet-4-20250514
     - gemini/gemini-2.0-flash
-    - openai/gpt-4o
+    - openai/gpt-5.2
     """
 
     def __init__(self, config: ProviderConfig):
@@ -510,16 +510,20 @@ class OpenHandsProvider(LLMProvider):
 
     def _build_system_prompt(self) -> str:
         """Build the full system prompt with skills and context."""
-        parts = [
-            "You are an AI agent for incident investigation and infrastructure automation.",
-            "",
-            "## Core Principles",
-            "- Always investigate before acting",
-            "- Use dry-run mode for dangerous operations",
-            "- Report findings clearly and concisely",
-            "- Use subagents for isolated deep-dive analysis",
-            "",
-        ]
+        # Use custom system prompt from team config if available
+        if self.config.system_prompt:
+            parts = [self.config.system_prompt]
+        else:
+            parts = [
+                "You are an AI agent for incident investigation and infrastructure automation.",
+                "",
+                "## Core Principles",
+                "- Always investigate before acting",
+                "- Use dry-run mode for dangerous operations",
+                "- Report findings clearly and concisely",
+                "- Use subagents for isolated deep-dive analysis",
+                "",
+            ]
 
         if self._skills_loader:
             parts.append(self._skills_loader.get_skill_summaries())
@@ -799,7 +803,39 @@ class OpenHandsProvider(LLMProvider):
                 }
             )
 
+        # Add all registered tools (pagerduty, kubernetes, github, etc.)
+        tools.extend(self._get_registry_tools_schema())
+
         return tools
+
+    # Built-in tool names that have custom execution logic in _execute_tool.
+    # Registry tools with these names are skipped to avoid duplicates.
+    _BUILTIN_TOOL_NAMES = frozenset(
+        {
+            "bash",
+            "read_file",
+            "write_file",
+            "edit_file",
+            "glob",
+            "grep",
+            "task",
+            "skill",
+            "web_search",
+            "web_fetch",
+        }
+    )
+
+    def _get_registry_tools_schema(self) -> list[dict]:
+        """Get OpenAI-compatible schemas for all registered tools."""
+        from ..tools import get_tool_registry
+
+        schemas = []
+        for name, func in get_tool_registry().items():
+            if name in self._BUILTIN_TOOL_NAMES:
+                continue
+            if hasattr(func, "_tool_schema") and func._tool_schema:
+                schemas.append(func._tool_schema)
+        return schemas
 
     async def _execute_tool(
         self,
@@ -993,7 +1029,18 @@ class OpenHandsProvider(LLMProvider):
                     yield (f"Fetch error: {str(e)}", False, "FetchError")
 
             else:
-                yield (f"Unknown tool: {tool_name}", False, "UnknownTool")
+                # Try registry tools (pagerduty, kubernetes, github, etc.)
+                from ..tools import get_tool
+
+                tool_func = get_tool(tool_name)
+                if tool_func:
+                    if asyncio.iscoroutinefunction(tool_func):
+                        result = await tool_func(**args)
+                    else:
+                        result = tool_func(**args)
+                    yield (result, True, None)
+                else:
+                    yield (f"Unknown tool: {tool_name}", False, "UnknownTool")
 
         except subprocess.TimeoutExpired:
             yield ("Command timed out", False, "Timeout")

@@ -4,11 +4,18 @@
 
 namespace: incidentfox
 
+# gVisor sandbox isolation for secure code execution
+gvisor:
+  enabled: true
+  installerImage: "alpine:latest"
+  pauseImage: "gcr.io/google-containers/pause:3.2"
+
 global:
   imagePullPolicy: Always
   configService:
     url: "http://incidentfox-config-service.incidentfox.svc.cluster.local:8080"
     orgId: "staging"
+  webUiUrl: "https://staging.incidentfox.ai"
   database:
     databaseUrlSecretName: incidentfox-database-url
     databaseUrlSecretKey: DATABASE_URL
@@ -20,14 +27,12 @@ ingress:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     alb.ingress.kubernetes.io/healthcheck-path: "/api/health"
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
   host: "staging.incidentfox.ai"
   tls:
     enabled: true
-    # us-west-2 ACM certificate (reuse existing)
-    certificateArn: "arn:aws:acm:us-west-2:103002841599:certificate/e79b663b-062a-45de-96a0-b4e8e50e3c4f"
+    # us-west-2 wildcard ACM certificate (*.incidentfox.ai)
+    certificateArn: "arn:aws:acm:us-west-2:103002841599:certificate/01a210b9-5f7b-4c60-a807-707d9f8d234b"
     redirectToHttps: true
   waf:
     enabled: false
@@ -35,7 +40,7 @@ ingress:
 
 externalSecrets:
   enabled: true
-  installClusterSecretStore: true
+  installClusterSecretStore: false  # Already exists in cluster
   awsRegion: "us-west-2"
   contract:
     databaseUrl:
@@ -49,14 +54,14 @@ externalSecrets:
       adminTokenKey: ADMIN_TOKEN
       tokenPepperKey: TOKEN_PEPPER
       impersonationJwtSecretKey: IMPERSONATION_JWT_SECRET
-      adminTokenRemoteRefKey: incidentfox/staging/config_service_admin_token
-      tokenPepperRemoteRefKey: incidentfox/staging/config_service_token_pepper
-      impersonationJwtSecretRemoteRefKey: incidentfox/staging/config_service_impersonation_jwt_secret
+      adminTokenRemoteRefKey: incidentfox-config-service/admin_token
+      tokenPepperRemoteRefKey: incidentfox-config-service/token_pepper
+      impersonationJwtSecretRemoteRefKey: incidentfox-config-service/impersonation_jwt_secret
     agentOpenAI:
       enabled: true
       secretName: incidentfox-openai
       apiKeyKey: api_key
-      apiKeyRemoteRefKey: incidentfox/staging/openai_api_key
+      apiKeyRemoteRefKey: incidentfox/prod/openai_api_key  # Using prod key for staging
     webUiOidc:
       enabled: false
     slack:
@@ -65,7 +70,7 @@ externalSecrets:
       signingSecretKey: signing_secret
       botTokenKey: bot_token
       signingSecretRemoteRefKey: incidentfox/staging/slack_signing_secret
-      botTokenRemoteRefKey: incidentfox/staging/slack_bot_token
+      botTokenRemoteRefKey: incidentfox/prod/slack_bot_token  # Using prod token for staging
     github:
       enabled: true
       secretName: incidentfox-github
@@ -85,7 +90,7 @@ externalSecrets:
       enabled: true
       secretName: incidentfox-orchestrator-internal
       internalTokenKey: internal_token
-      internalTokenRemoteRefKey: incidentfox/staging/orchestrator_internal_token
+      internalTokenRemoteRefKey: incidentfox/prod/orchestrator_internal_token  # Using prod token for staging
     langfuse:
       enabled: true
       secretName: incidentfox-langfuse
@@ -131,6 +136,12 @@ externalSecrets:
       clientIdRemoteRefKey: incidentfox/staging/slack_client_id
       clientSecretRemoteRefKey: incidentfox/staging/slack_client_secret
       signingSecretRemoteRefKey: incidentfox/staging/slack_signing_secret
+    # Encryption key for config-service column encryption
+    encryptionKey:
+      enabled: true
+      secretName: incidentfox-encryption-key
+      secretKey: ENCRYPTION_KEY
+      remoteRefKey: incidentfox/staging/encryption_key
 
 services:
   configService:
@@ -159,6 +170,9 @@ services:
       failureThreshold: 5
     oidc:
       enabled: false
+    encryptionKey:
+      secretName: incidentfox-encryption-key
+      secretKey: ENCRYPTION_KEY
 
   orchestrator:
     enabled: true
@@ -173,6 +187,7 @@ services:
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-slack-bot:latest"
     replicas: 1
     servicePort: 3000
+    baseUrl: "https://slack-staging.incidentfox.ai"  # OAuth redirect base URL (staging)
     freeTrial:
       enabled: true
       days: 7
@@ -186,10 +201,12 @@ services:
         service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
         service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
 
-  # Unified Agent with gVisor sandbox isolation
+  # SRE Agent with gVisor sandbox isolation
   agent:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
+    servicePort: 8000  # sre-agent server.py listens on 8000
+    command: ["python", "/app/server.py"]  # sre-agent orchestrator
     serviceAccount:
       create: true
       name: incidentfox-agent
@@ -202,9 +219,28 @@ services:
     # Enable sandbox mode with gVisor isolation
     sandbox:
       enabled: true
-      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:latest"
+      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
       namespace: ""  # Same namespace as agent
       useGvisor: true
+    # Warm pool for instant sandbox provisioning (<2s)
+    warmPool:
+      enabled: true
+      replicas: 3
+    startupProbe:
+      enabled: true
+      path: "/health"
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 5
+      failureThreshold: 12
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    extraEnv:
+      - name: K8S_GATEWAY_URL
+        value: "http://incidentfox-k8s-gateway.incidentfox.svc.cluster.local:8085"
+      - name: SANDBOX_TTL_MINUTES
+        value: "5"
     # Enable tracing in staging for debugging
     tracing:
       enabled: true
@@ -220,7 +256,7 @@ services:
   # Sandbox Router for routing to sandbox pods
   sandboxRouter:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sandbox-router:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/sandbox-router:latest"
     replicas: 2
     hpa:
       enabled: true
@@ -237,7 +273,7 @@ services:
   # Credential Resolver for sandbox credential injection
   credentialResolver:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-credential-resolver:latest"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:latest"
     replicas: 2
     credentialSource: config_service
     jwtMode: strict

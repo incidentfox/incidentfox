@@ -1,0 +1,391 @@
+{{- if and .Values.services.agent.sandbox.enabled .Values.services.agent.warmPool.enabled }}
+# =============================================================================
+# Sandbox Warm Pool - Pre-warmed pods for instant sandbox provisioning
+# =============================================================================
+# Reduces sandbox startup from ~30-60s to <2s by maintaining a pool of ready pods.
+#
+# Architecture:
+# 1. SandboxWarmPool maintains N warm pods from the SandboxTemplate
+# 2. When investigation starts, a SandboxClaim binds to a warm pod (<1s)
+# 3. Server calls /claim endpoint to inject JWT and tenant context
+# 4. Pool controller replenishes claimed pods automatically
+#
+# Key difference from direct Sandbox creation:
+# - Envoy uses Lua filter to read JWT from file (not static header)
+# - Placeholder env vars are set at claim time via /claim endpoint
+# - Shared emptyDir volume for JWT injection between agent and Envoy
+# =============================================================================
+
+---
+# Envoy ConfigMap for warm pool pods
+# Uses Lua filter to dynamically read JWT from /tmp/sandbox-jwt
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy-warmpool-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: incidentfox
+    component: envoy-warmpool
+    {{- include "incidentfox.labels" . | nindent 4 }}
+data:
+  envoy.yaml: |
+    admin:
+      address:
+        socket_address:
+          address: 127.0.0.1
+          port_value: 9901
+
+    static_resources:
+      listeners:
+      - name: http_proxy
+        address:
+          socket_address:
+            address: 0.0.0.0
+            port_value: 8001
+        filter_chains:
+        - filters:
+          - name: envoy.filters.network.http_connection_manager
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+              stat_prefix: credential_proxy
+              codec_type: AUTO
+
+              http_protocol_options:
+                allow_absolute_url: true
+
+              route_config:
+                name: proxy_routes
+                virtual_hosts:
+                - name: localhost_proxy
+                  domains:
+                  - "localhost:8001"
+                  - "127.0.0.1:8001"
+                  - "localhost"
+                  routes:
+                  # LLM API paths -> credential-resolver LLM proxy
+                  - match:
+                      prefix: "/v1/"
+                    route:
+                      cluster: credential_resolver_llm
+                      timeout: 0s
+                      idle_timeout: 0s
+                  - match:
+                      prefix: "/api/event_logging/"
+                    route:
+                      cluster: credential_resolver_llm
+                      timeout: 0s
+                      idle_timeout: 0s
+                  # Coralogix API paths
+                  - match:
+                      prefix: "/api/v1/dataprime/"
+                    route:
+                      cluster: coralogix_us2
+                      auto_host_rewrite: true
+                  - match:
+                      prefix: "/api/v1/query"
+                    route:
+                      cluster: coralogix_us2
+                      auto_host_rewrite: true
+
+                - name: anthropic
+                  domains:
+                  - "api.anthropic.com"
+                  - "api.anthropic.com:443"
+                  routes:
+                  - match:
+                      prefix: "/"
+                    route:
+                      cluster: credential_resolver_llm
+                      timeout: 0s
+                      idle_timeout: 0s
+
+                - name: coralogix_us2
+                  domains:
+                  - "api.us2.coralogix.com"
+                  - "api.us2.coralogix.com:443"
+                  routes:
+                  - match:
+                      prefix: "/"
+                    route:
+                      cluster: coralogix_us2
+                      auto_host_rewrite: true
+
+                - name: passthrough
+                  domains:
+                  - "*"
+                  routes:
+                  - match:
+                      prefix: "/"
+                    route:
+                      cluster: passthrough_cluster
+                      auto_host_rewrite: true
+
+              http_filters:
+              # Lua filter: Read JWT from file and add as header
+              - name: envoy.filters.http.lua
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+                  default_source_code:
+                    inline_string: |
+                      function envoy_on_request(request_handle)
+                        local f = io.open("/tmp/sandbox-jwt", "r")
+                        if f then
+                          local jwt = f:read("*all")
+                          f:close()
+                          jwt = jwt:gsub("^%s*(.-)%s*$", "%1")
+                          if jwt ~= "" then
+                            request_handle:headers():add("x-sandbox-jwt", jwt)
+                          end
+                        end
+                      end
+
+              # ext_authz filter - calls credential-resolver for auth headers
+              - name: envoy.filters.http.ext_authz
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                  transport_api_version: V3
+                  http_service:
+                    server_uri:
+                      uri: http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/check
+                      cluster: ext_authz
+                      timeout: 2s
+                    path_prefix: "/extauthz"
+                    authorization_request:
+                      allowed_headers:
+                        patterns:
+                        - exact: "x-sandbox-jwt"
+                        - exact: "x-tenant-id"
+                        - exact: "x-team-id"
+                      headers_to_add:
+                      - key: "x-original-host"
+                        value: "%REQ(:authority)%"
+                    authorization_response:
+                      allowed_upstream_headers:
+                        patterns:
+                        - exact: "authorization"
+                        - exact: "x-api-key"
+                        - exact: "x-tenant-id"
+                        - exact: "x-team-id"
+                        - exact: "x-llm-model"
+                  failure_mode_allow: false
+
+              - name: envoy.filters.http.router
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+      clusters:
+      - name: ext_authz
+        type: STRICT_DNS
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: ext_authz
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local
+                    port_value: 8002
+
+      - name: credential_resolver_llm
+        type: STRICT_DNS
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: credential_resolver_llm
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local
+                    port_value: 8002
+
+      - name: anthropic
+        type: LOGICAL_DNS
+        dns_lookup_family: V4_ONLY
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: anthropic
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: api.anthropic.com
+                    port_value: 443
+        transport_socket:
+          name: envoy.transport_sockets.tls
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            sni: api.anthropic.com
+
+      - name: coralogix_us2
+        type: LOGICAL_DNS
+        dns_lookup_family: V4_ONLY
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: coralogix_us2
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: api.us2.coralogix.com
+                    port_value: 443
+        transport_socket:
+          name: envoy.transport_sockets.tls
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            sni: api.us2.coralogix.com
+
+      - name: passthrough_cluster
+        type: LOGICAL_DNS
+        dns_lookup_family: V4_ONLY
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: passthrough_cluster
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: localhost
+                    port_value: 9999
+
+---
+# SandboxTemplate - Pod template for warm pool
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxTemplate
+metadata:
+  name: {{ .Values.services.agent.warmPool.templateName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: incidentfox
+    component: warmpool-template
+    {{- include "incidentfox.labels" . | nindent 4 }}
+spec:
+  podTemplate:
+    metadata:
+      labels:
+        app: incidentfox-agent
+        component: warmpool
+        warmpool: "true"
+    spec:
+      serviceAccountName: {{ .Release.Name }}-sandbox-pod
+      {{- if .Values.services.agent.sandbox.useGvisor }}
+      runtimeClassName: gvisor
+      {{- end }}
+
+      containers:
+      # Main agent container
+      - name: agent
+        image: {{ .Values.services.agent.sandbox.image | default .Values.services.agent.image }}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8888
+          name: sandbox
+        env:
+        # Placeholder values - set at claim time via /claim endpoint
+        - name: INCIDENTFOX_TENANT_ID
+          value: "unclaimed"
+        - name: INCIDENTFOX_TEAM_ID
+          value: "unclaimed"
+        - name: THREAD_ID
+          value: "unclaimed"
+        # Claude SDK: route API requests through Envoy proxy
+        - name: ANTHROPIC_BASE_URL
+          value: "http://localhost:8001"
+        # Placeholder API key - Envoy injects real one via ext_authz
+        - name: ANTHROPIC_API_KEY
+          value: "sk-ant-placeholder-proxy-will-inject-real-key"
+        # Coralogix SDK: route API requests through Envoy proxy
+        - name: CORALOGIX_BASE_URL
+          value: "http://localhost:8001"
+        # Laminar tracing (platform observability)
+        - name: LMNR_PROJECT_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: laminar-api-key
+              optional: true
+        # Disable Laminar's claude-agent-sdk instrumentation
+        - name: DISABLE_LAMINAR
+          value: "true"
+        # Kubernetes context
+        - name: KUBECONFIG
+          value: "/home/agent/.kube/config"
+        - name: SANDBOX_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        # Shared volume for JWT injection (Envoy reads, /claim writes)
+        - name: jwt-volume
+          mountPath: /tmp
+        resources:
+{{ toYaml .Values.services.agent.warmPool.agentResources | indent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      # Envoy sidecar - handles credential injection via ext_authz
+      - name: envoy
+        image: {{ .Values.services.agent.warmPool.envoyImage }}
+        args:
+        - "--config-path"
+        - "/etc/envoy/envoy.yaml"
+        - "--log-level"
+        - "warn"
+        ports:
+        - containerPort: 8001
+          name: proxy
+        volumeMounts:
+        - name: envoy-config
+          mountPath: /etc/envoy
+          readOnly: true
+        - name: jwt-volume
+          mountPath: /tmp
+        resources:
+{{ toYaml .Values.services.agent.warmPool.envoyResources | indent 10 }}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+
+      volumes:
+      - name: envoy-config
+        configMap:
+          name: envoy-warmpool-config
+      - name: jwt-volume
+        emptyDir:
+          sizeLimit: 1Mi
+
+---
+# SandboxWarmPool - Maintains pre-warmed pods
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxWarmPool
+metadata:
+  name: {{ .Values.services.agent.warmPool.poolName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: incidentfox
+    component: warmpool
+    {{- include "incidentfox.labels" . | nindent 4 }}
+spec:
+  sandboxTemplateRef:
+    name: {{ .Values.services.agent.warmPool.templateName }}
+  replicas: {{ .Values.services.agent.warmPool.replicas }}
+
+{{- end }}

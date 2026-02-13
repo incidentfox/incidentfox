@@ -12,7 +12,7 @@
       "name": "Planner",
       "description": "Top-level orchestrator that delegates to 3 specialized agents",
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.3,
         "max_tokens": 16000
       },
@@ -38,7 +38,7 @@
       "name": "Investigation Agent",
       "description": "Sub-orchestrator for incident investigation with 5 specialized sub-agents",
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.4,
         "max_tokens": 16000
       },
@@ -66,7 +66,7 @@
       "name": "GitHub Agent",
       "description": "GitHub repository analysis for change correlation",
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.3,
         "max_tokens": 16000
       },
@@ -94,7 +94,7 @@
       "name": "Kubernetes Agent",
       "description": "Kubernetes troubleshooting and operations",
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.3,
         "max_tokens": 16000
       },
@@ -125,7 +125,7 @@
       "name": "AWS Agent",
       "description": "AWS resource debugging and monitoring",
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.3,
         "max_tokens": 16000
       },
@@ -155,7 +155,7 @@
       "name": "Metrics Agent",
       "description": "Anomaly detection and metrics correlation",
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.2,
         "max_tokens": 16000
       },
@@ -185,7 +185,7 @@
       "name": "Log Analysis Agent",
       "description": "Partition-first log investigation specialist",
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.2,
         "max_tokens": 16000
       },
@@ -213,7 +213,7 @@
       "name": "Coding Agent",
       "description": "Code analysis and bug fixing specialist",
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.4,
         "max_tokens": 16000
       },
@@ -246,7 +246,7 @@
       "name": "Writeup Agent",
       "description": "Blameless postmortem and incident documentation",
       "model": {
-        "name": "gpt-4o",
+        "name": "gpt-5.2",
         "temperature": 0.5,
         "max_tokens": 16000
       },

@@ -1,5 +1,9 @@
 ---
+name: observability-loki
 description: Query and analyze logs from Grafana Loki using LogQL
+category: observability
+required_integrations:
+  - loki
 allowed-tools:
   - Bash
 ---

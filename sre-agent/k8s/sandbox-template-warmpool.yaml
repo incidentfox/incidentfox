@@ -1,0 +1,140 @@
+# SandboxTemplate for Warm Pool
+# Pre-warmed pods that can be claimed instantly via SandboxClaim
+#
+# Key differences from direct Sandbox creation:
+# - No JWT embedded in Envoy config (uses Lua filter to read from file)
+# - Placeholder tenant/team IDs (set at claim time via /claim endpoint)
+# - Shared emptyDir volume for JWT injection
+#
+# Flow:
+# 1. SandboxWarmPool creates warm pods from this template
+# 2. User investigation triggers SandboxClaim
+# 3. Claim binds to warm pod instantly (<1 second)
+# 4. Server calls /claim endpoint with JWT and tenant context
+# 5. Sandbox is ready for use
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxTemplate
+metadata:
+  name: incidentfox-warmpool-template
+  namespace: incidentfox-prod
+  labels:
+    app: incidentfox
+    component: warmpool-template
+spec:
+  podTemplate:
+    metadata:
+      labels:
+        app: incidentfox-agent
+        component: warmpool
+        warmpool: "true"
+    spec:
+      # gVisor provides kernel-level isolation
+      runtimeClassName: gvisor
+
+      containers:
+      # Main agent container
+      - name: agent
+        image: 654654426408.dkr.ecr.us-west-2.amazonaws.com/incidentfox/incidentfox-agent:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8888
+          name: sandbox
+        env:
+        # Placeholder values - set at claim time via /claim endpoint
+        - name: INCIDENTFOX_TENANT_ID
+          value: "unclaimed"
+        - name: INCIDENTFOX_TEAM_ID
+          value: "unclaimed"
+        - name: THREAD_ID
+          value: "unclaimed"
+        # Claude SDK: route API requests through Envoy proxy
+        - name: ANTHROPIC_BASE_URL
+          value: "http://localhost:8001"
+        # Placeholder API key - Envoy injects real one via ext_authz
+        - name: ANTHROPIC_API_KEY
+          value: "sk-ant-placeholder-proxy-will-inject-real-key"
+        # Coralogix SDK: route API requests through Envoy proxy
+        - name: CORALOGIX_BASE_URL
+          value: "http://localhost:8001"
+        # Laminar tracing (platform observability)
+        - name: LMNR_PROJECT_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: incidentfox-secrets
+              key: laminar-api-key
+              optional: true
+        # Disable Laminar's claude-agent-sdk instrumentation
+        - name: DISABLE_LAMINAR
+          value: "true"
+        # Kubernetes context
+        - name: KUBECONFIG
+          value: "/home/agent/.kube/config"
+        - name: SANDBOX_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        # Shared volume for JWT injection (Envoy reads, /claim writes)
+        - name: jwt-volume
+          mountPath: /tmp
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "100m"
+            ephemeral-storage: "2Gi"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+            ephemeral-storage: "10Gi"
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      # Envoy sidecar - handles credential injection via ext_authz
+      - name: envoy
+        image: envoyproxy/envoy:v1.28-latest
+        args:
+        - "--config-path"
+        - "/etc/envoy/envoy.yaml"
+        - "--log-level"
+        - "warn"
+        ports:
+        - containerPort: 8001
+          name: proxy
+        volumeMounts:
+        # Envoy config with Lua filter
+        - name: envoy-config
+          mountPath: /etc/envoy
+          readOnly: true
+        # Shared volume to read JWT (written by /claim endpoint)
+        - name: jwt-volume
+          mountPath: /tmp
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "128Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+
+      volumes:
+      # Envoy config with Lua filter for dynamic JWT
+      - name: envoy-config
+        configMap:
+          name: envoy-warmpool-config
+      # Shared emptyDir for JWT injection
+      # Agent /claim endpoint writes JWT, Envoy Lua filter reads it
+      - name: jwt-volume
+        emptyDir: {}

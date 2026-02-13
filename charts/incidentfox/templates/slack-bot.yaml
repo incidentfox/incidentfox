@@ -72,7 +72,8 @@ spec:
             - name: FREE_TRIAL_DAYS
               value: {{ .Values.services.slackBot.freeTrial.days | default 7 | quote }}
             {{- if .Values.externalSecrets.contract.slackBot.enabled }}
-            # Slack OAuth credentials (for public distribution)
+            # Slack OAuth credentials (DEPRECATED: migrate to slack_apps DB table)
+            # Kept as fallback when no apps are configured in config service
             - name: SLACK_CLIENT_ID
               valueFrom:
                 secretKeyRef:
@@ -88,6 +89,16 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.slackBot.secretName | quote }}
                   key: {{ .Values.externalSecrets.contract.slackBot.signingSecretKey | quote }}
+            {{- end }}
+            # Base URL for OAuth redirects (configurable per environment)
+            {{- if .Values.services.slackBot.baseUrl }}
+            - name: SLACK_BASE_URL
+              value: {{ .Values.services.slackBot.baseUrl | quote }}
+            {{- end }}
+            # Web UI URL for links in Slack messages
+            {{- if .Values.global.webUiUrl }}
+            - name: WEB_UI_URL
+              value: {{ .Values.global.webUiUrl | quote }}
             {{- end }}
           readinessProbe:
             httpGet:
@@ -117,8 +128,9 @@ metadata:
   {{- end }}
 spec:
   type: {{ .Values.services.slackBot.service.type | default "ClusterIP" }}
-  {{- if .Values.services.slackBot.service.loadBalancerClass }}
-  loadBalancerClass: {{ .Values.services.slackBot.service.loadBalancerClass }}
+  {{- if eq .Values.services.slackBot.service.type "LoadBalancer" }}
+  # loadBalancerClass is immutable - must match existing service to avoid recreation
+  loadBalancerClass: service.k8s.aws/nlb
   {{- end }}
   ports:
     {{- if eq .Values.services.slackBot.service.type "LoadBalancer" }}

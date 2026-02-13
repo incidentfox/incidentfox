@@ -161,7 +161,7 @@ def build_agent_from_config(agent_id: str, effective_config: Dict):
   "agents": {
     "planner": {
       "enabled": true,
-      "model": {"name": "gpt-4o", "temperature": 0.3},
+      "model": {"name": "gpt-5.2", "temperature": 0.3},
       "prompt": {
         "system": "You are an expert incident coordinator...",
         "prefix": "ALWAYS start by understanding the context"
@@ -285,18 +285,18 @@ Sub-Team Overrides (node_configurations table)
 
 **Example:**
 ```json
-// Default: All teams get gpt-4o
+// Default: All teams get gpt-5.2
 {
   "agents": {
-    "planner": {"model": {"name": "gpt-4o"}}
+    "planner": {"model": {"name": "gpt-5.2"}}
   }
 }
 
-// Team Override: SRE team uses gpt-4o with custom prompt
+// Team Override: SRE team uses gpt-5.2 with custom prompt
 {
   "agents": {
     "planner": {
-      "model": {"name": "gpt-4o", "temperature": 0.2},
+      "model": {"name": "gpt-5.2", "temperature": 0.2},
       "prompt": {
         "prefix": "You are specialized in Kubernetes troubleshooting."
       }
@@ -308,7 +308,7 @@ Sub-Team Overrides (node_configurations table)
 {
   "agents": {
     "planner": {
-      "model": {"name": "gpt-4o", "temperature": 0.2},
+      "model": {"name": "gpt-5.2", "temperature": 0.2},
       "prompt": {
         "system": "[default prompt]",
         "prefix": "You are specialized in Kubernetes troubleshooting."

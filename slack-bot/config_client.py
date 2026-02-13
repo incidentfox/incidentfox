@@ -54,6 +54,8 @@ class ConfigServiceClient:
     def __init__(self, base_url: str = None, admin_token: str = None):
         self.base_url = (base_url or CONFIG_SERVICE_URL).rstrip("/")
         self.admin_token = admin_token or CONFIG_SERVICE_ADMIN_TOKEN
+        # Reuse TCP connections (HTTP keep-alive) across requests
+        self._session = requests.Session()
 
     def _headers(self) -> Dict[str, str]:
         """Get headers for admin requests."""
@@ -74,6 +76,7 @@ class ConfigServiceClient:
         slack_team_id: str,
         slack_team_name: str,
         installer_user_id: str = None,
+        slack_app_slug: str = None,
     ) -> Dict[str, Any]:
         """
         Provision a new workspace in config_service.
@@ -91,15 +94,19 @@ class ConfigServiceClient:
 
         try:
             # Step 1: Create org node
+            metadata = {
+                "slack_team_id": slack_team_id,
+                "slack_team_name": slack_team_name,
+                "installer_user_id": installer_user_id,
+                "provisioned_at": datetime.utcnow().isoformat(),
+            }
+            if slack_app_slug:
+                metadata["slack_app_slug"] = slack_app_slug
+
             org_response = self._create_org_node(
                 org_id=org_id,
                 name=slack_team_name,
-                metadata={
-                    "slack_team_id": slack_team_id,
-                    "slack_team_name": slack_team_name,
-                    "installer_user_id": installer_user_id,
-                    "provisioned_at": datetime.utcnow().isoformat(),
-                },
+                metadata=metadata,
             )
             logger.info(
                 f"Created org node for workspace {slack_team_name}: {org_response}"
@@ -165,7 +172,9 @@ class ConfigServiceClient:
             "parent_id": None,
         }
 
-        response = requests.post(url, json=payload, headers=self._headers(), timeout=10)
+        response = self._session.post(
+            url, json=payload, headers=self._headers(), timeout=10
+        )
 
         # 400 might mean org already exists, which is fine
         if response.status_code == 400 and "already exists" in response.text.lower():
@@ -191,7 +200,9 @@ class ConfigServiceClient:
             "parent_id": org_id,
         }
 
-        response = requests.post(url, json=payload, headers=self._headers(), timeout=10)
+        response = self._session.post(
+            url, json=payload, headers=self._headers(), timeout=10
+        )
 
         # 400 might mean team already exists
         if response.status_code == 400 and "already exists" in response.text.lower():
@@ -209,7 +220,7 @@ class ConfigServiceClient:
         """Issue a team token for API access."""
         url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{team_node_id}/tokens"
 
-        response = requests.post(url, json={}, headers=self._headers(), timeout=10)
+        response = self._session.post(url, json={}, headers=self._headers(), timeout=10)
         response.raise_for_status()
         return response.json()
 
@@ -262,6 +273,96 @@ class ConfigServiceClient:
             logger.error(f"Failed to issue team token for {slack_team_id}: {e}")
             return None
 
+    def lookup_routing(self, channel_id: str) -> Optional[Dict[str, str]]:
+        """
+        Look up team routing by Slack channel ID.
+
+        This enables channel-based routing where different Slack channels
+        can be mapped to different teams within the same workspace.
+
+        Args:
+            channel_id: Slack channel ID (e.g., "C0ADSDTFF41")
+
+        Returns:
+            Dict with org_id and team_node_id if a match is found, None otherwise.
+            Example: {"org_id": "incidentfox-demo", "team_node_id": "weirwood-demo"}
+        """
+        url = f"{self.base_url}/api/v1/internal/routing/lookup"
+        headers = {
+            "X-Internal-Service": "slack-bot",
+            "Content-Type": "application/json",
+        }
+        payload = {"identifiers": {"slack_channel_id": channel_id}}
+
+        try:
+            response = self._session.post(
+                url, json=payload, headers=headers, timeout=10
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("found"):
+                logger.info(
+                    f"Channel routing found: channel={channel_id} -> "
+                    f"org={result['org_id']}, team={result['team_node_id']}"
+                )
+                return {
+                    "org_id": result["org_id"],
+                    "team_node_id": result["team_node_id"],
+                }
+
+            logger.debug(f"No channel routing found for {channel_id}")
+            return None
+
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Channel routing lookup failed for {channel_id}: {e}")
+            return None
+
+    def get_team_token_for_channel(
+        self, slack_team_id: str, channel_id: str
+    ) -> Optional[str]:
+        """
+        Get a team token, using channel-based routing if available.
+
+        This method first tries to find a team mapped to the specific channel.
+        If no channel mapping exists, it falls back to workspace-based routing
+        (the "default" team for the workspace).
+
+        Args:
+            slack_team_id: Slack workspace ID (team_id)
+            channel_id: Slack channel ID
+
+        Returns:
+            Team token string, or None if not found/provisioned.
+        """
+        # Try channel-based routing first
+        routing = self.lookup_routing(channel_id)
+
+        if routing:
+            org_id = routing["org_id"]
+            team_node_id = routing["team_node_id"]
+        else:
+            # Fall back to workspace-based routing
+            org_id = f"slack-{slack_team_id}"
+            team_node_id = "default"
+
+        try:
+            token_response = self._issue_team_token(org_id, team_node_id)
+            token = token_response.get("token")
+            if token:
+                logger.debug(f"Issued team token for org={org_id}, team={team_node_id}")
+                return token
+            return None
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                logger.warning(f"Team not found: org={org_id}, team={team_node_id}")
+                return None
+            logger.error(f"Failed to issue team token: {e}")
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to issue team token: {e}")
+            return None
+
     def _issue_org_admin_token(
         self,
         org_id: str,
@@ -269,7 +370,7 @@ class ConfigServiceClient:
         """Issue an org admin token for org-level management."""
         url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/admin-tokens"
 
-        response = requests.post(url, json={}, headers=self._headers(), timeout=10)
+        response = self._session.post(url, json={}, headers=self._headers(), timeout=10)
         response.raise_for_status()
         return response.json()
 
@@ -327,7 +428,7 @@ class ConfigServiceClient:
 
         # API expects {"config": ...} wrapper per ConfigPatchRequest schema
         body = {"config": config}
-        response = requests.patch(url, json=body, headers=headers, timeout=10)
+        response = self._session.patch(url, json=body, headers=headers, timeout=10)
         response.raise_for_status()
         return response.json()
 
@@ -353,7 +454,7 @@ class ConfigServiceClient:
         headers["X-Team-Node-Id"] = team_node_id
 
         try:
-            response = requests.get(url, headers=headers, timeout=10)
+            response = self._session.get(url, headers=headers, timeout=10)
             if response.status_code == 404:
                 logger.info(f"No config found for workspace {slack_team_id}")
                 return None
@@ -598,7 +699,7 @@ class ConfigServiceClient:
             params["featured"] = str(featured).lower()
 
         try:
-            response = requests.get(
+            response = self._session.get(
                 url, params=params, headers=self._headers(), timeout=10
             )
             response.raise_for_status()
@@ -731,7 +832,7 @@ class ConfigServiceClient:
             payload["display_name"] = display_name
 
         try:
-            response = requests.post(
+            response = self._session.post(
                 url, json=payload, headers=self._headers(), timeout=30
             )
 
@@ -791,7 +892,7 @@ class ConfigServiceClient:
             params["include_revoked"] = "true"
 
         try:
-            response = requests.get(
+            response = self._session.get(
                 url, params=params, headers=self._headers(), timeout=10
             )
             response.raise_for_status()
@@ -833,7 +934,7 @@ class ConfigServiceClient:
         url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{team_node_id}/k8s-clusters/{cluster_id}"
 
         try:
-            response = requests.delete(url, headers=self._headers(), timeout=10)
+            response = self._session.delete(url, headers=self._headers(), timeout=10)
 
             if response.status_code == 404:
                 raise ConfigServiceError(
@@ -880,7 +981,7 @@ class ConfigServiceClient:
         url = f"{self.base_url}/api/v1/internal/github/installations"
 
         try:
-            response = requests.get(
+            response = self._session.get(
                 url,
                 params={"org_id": org_id, "status": "active", "limit": 1},
                 headers=self._get_internal_headers(),
@@ -917,7 +1018,7 @@ class ConfigServiceClient:
         url = f"{self.base_url}/api/v1/internal/github/installations/link-by-account"
 
         try:
-            response = requests.post(
+            response = self._session.post(
                 url,
                 json={
                     "account_login": github_org,

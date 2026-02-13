@@ -123,4 +123,62 @@ roleRef:
   kind: ClusterRole
   name: {{ .Release.Name }}-sandbox-service-patcher
   apiGroup: rbac.authorization.k8s.io
+---
+# Sandbox Pod ServiceAccount - Used by sandbox pods for in-cluster K8s API access
+# Gives sandbox pods read-only access to cluster resources for investigation.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-sandbox-pod
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: incidentfox-sandbox
+    app.kubernetes.io/name: sandbox-pod
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+---
+# Read-only ClusterRole for sandbox pods to investigate cluster resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-sandbox-pod-reader
+  labels:
+    app: incidentfox-sandbox
+    app.kubernetes.io/name: sandbox-pod-reader
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+  # Core resources for investigation
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "namespaces", "nodes", "services", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  # Workload resources
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+  # Batch resources
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  # Networking resources
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-sandbox-pod-reader
+  labels:
+    app: incidentfox-sandbox
+    app.kubernetes.io/name: sandbox-pod-reader
+    app.kubernetes.io/instance: {{ .Release.Name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-sandbox-pod
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-sandbox-pod-reader
+  apiGroup: rbac.authorization.k8s.io
 {{- end }}

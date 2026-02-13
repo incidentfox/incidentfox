@@ -2,7 +2,7 @@
 
 **Template:** 08_dr_validator
 **Role:** Sub-agent
-**Model:** gpt-4o
+**Model:** gpt-5.2
 
 ---
 

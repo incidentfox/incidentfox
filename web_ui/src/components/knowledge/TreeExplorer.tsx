@@ -222,16 +222,27 @@ export function TreeExplorer({ treeName = 'mega_ultra_v2' }: TreeExplorerProps) 
   const [loadingNodeText, setLoadingNodeText] = useState(false);
   const [showDetailsPanel, setShowDetailsPanel] = useState(false);
   
+  // Expand error (shown as toast)
+  const [expandError, setExpandError] = useState<string | null>(null);
+
   // Track expanded and loading nodes
   const expandedNodes = useRef<Set<string>>(new Set());
   const loadingNodes = useRef<Set<string>>(new Set());
-  
+
+  // Refs for current state to avoid stale closures in async handlers
+  const nodesRef = useRef<Node[]>([]);
+  const edgesRef = useRef<Edge[]>([]);
+
   // Refs for stable handler references
   const handleExpandRef = useRef<(id: string) => void>(() => {});
   const handleNodeSelectRef = useRef<(id: string) => void>(() => {});
 
   // React Flow instance ref for programmatic control (pan, zoom)
   const reactFlowInstance = useRef<any>(null);
+
+  // Keep refs in sync with state to avoid stale closures
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
 
   // Load tree stats
   useEffect(() => {
@@ -403,50 +414,57 @@ export function TreeExplorer({ treeName = 'mega_ultra_v2' }: TreeExplorerProps) 
   // Handle node expansion (lazy load children)
   const handleExpand = useCallback(async (nodeId: string) => {
     if (loadingNodes.current.has(nodeId)) return;
-    
+    setExpandError(null);
+
     if (expandedNodes.current.has(nodeId)) {
       // Collapse: remove all descendants
       expandedNodes.current.delete(nodeId);
-      
-      // Find all descendants to remove
-      const descendantsToRemove = findDescendants(nodeId, edges);
-      
+
+      // Use edgesRef for up-to-date edges (avoids stale closure)
+      const descendantsToRemove = findDescendants(nodeId, edgesRef.current);
+
       // Also mark any expanded descendants as collapsed
       descendantsToRemove.forEach(id => expandedNodes.current.delete(id));
-      
+
       // Remove descendant nodes and their edges
       setNodes((nds) => nds
         .filter(n => !descendantsToRemove.has(n.id))
-        .map(n => n.id === nodeId 
+        .map(n => n.id === nodeId
           ? { ...n, data: { ...n.data, isExpanded: false } }
           : n
         )
       );
-      setEdges((eds) => eds.filter(e => 
+      setEdges((eds) => eds.filter(e =>
         !descendantsToRemove.has(e.target) && e.source !== nodeId
       ));
       return;
     }
-    
+
     loadingNodes.current.add(nodeId);
-    setNodes((nds) => nds.map(n => 
-      n.id === nodeId 
+    setNodes((nds) => nds.map(n =>
+      n.id === nodeId
         ? { ...n, data: { ...n.data, isLoading: true } }
         : n
     ));
-    
+
     try {
       let children: GraphNodeData[] = [];
       let newEdges: GraphEdgeData[] = [];
-      
+
       if (nodeId === '__root__') {
         // Special case: expanding root node - fetch top layer from tree structure
         const res = await apiFetch(`/api/team/knowledge/tree?tree=${treeName}&maxLayers=1&maxNodesPerLayer=30`);
-        if (!res.ok) throw new Error('Failed to load top layer');
-        
+        if (!res.ok) {
+          const errBody = await res.text();
+          throw new Error(errBody || `Failed to load top layer (${res.status})`);
+        }
+
         const data = await res.json();
         // Filter out the root node itself from the response
         children = (data.nodes || []).filter((n: GraphNodeData) => n.id !== '__root__');
+        if (children.length === 0 && data.nodes === undefined) {
+          console.warn('Unexpected API response format for tree structure:', Object.keys(data));
+        }
         // Create edges from root to each top-layer node
         newEdges = children.map((child: GraphNodeData) => ({
           source: '__root__',
@@ -455,27 +473,33 @@ export function TreeExplorer({ treeName = 'mega_ultra_v2' }: TreeExplorerProps) 
       } else {
         // Normal case: fetch children from node children endpoint
         const res = await apiFetch(`/api/team/knowledge/tree/nodes/${nodeId}/children?tree=${treeName}`);
-        if (!res.ok) throw new Error('Failed to load children');
-        
+        if (!res.ok) {
+          const errBody = await res.text();
+          throw new Error(errBody || `Failed to load children (${res.status})`);
+        }
+
         const data = await res.json();
         children = data.children || [];
         newEdges = data.edges || [];
       }
-      
+
       if (children.length > 0) {
-        // Get current parent node position
-        const parentNode = nodes.find(n => n.id === nodeId);
-        if (!parentNode) return;
-        
+        // Use nodesRef for up-to-date nodes (avoids stale closure)
+        const parentNode = nodesRef.current.find(n => n.id === nodeId);
+        if (!parentNode) {
+          console.error('Parent node not found in current nodes:', nodeId);
+          throw new Error('Parent node not found — please try again');
+        }
+
         // Calculate layout for children
         const nodeWidth = 280;
         const horizontalGap = 40;
         const totalWidth = children.length * (nodeWidth + horizontalGap) - horizontalGap;
         const startX = parentNode.position.x - totalWidth / 2 + nodeWidth / 2;
-        
+
         // Add new nodes below parent
         const newNodes: Node[] = children.map((child: GraphNodeData, i: number) => ({
-          id: child.id,
+          id: String(child.id),
           type: 'treeNode',
           position: {
             x: startX + i * (nodeWidth + horizontalGap),
@@ -483,38 +507,41 @@ export function TreeExplorer({ treeName = 'mega_ultra_v2' }: TreeExplorerProps) 
           },
           data: {
             ...child,
+            id: String(child.id),
             onExpand: (id: string) => handleExpandRef.current(id),
             onSelect: (id: string) => handleNodeSelectRef.current(id),
-            isHighlighted: highlightedNodes.has(child.id),
+            isHighlighted: highlightedNodes.has(String(child.id)),
           },
         }));
-        
+
         const newFlowEdges: Edge[] = newEdges.map((e: GraphEdgeData) => ({
           id: `${e.source}-${e.target}`,
-          source: e.source,
-          target: e.target,
+          source: String(e.source),
+          target: String(e.target),
           type: 'smoothstep',
           animated: false,
           style: { stroke: '#94a3b8', strokeWidth: 2 },
           markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
         }));
-        
-        setNodes((nds) => [...nds.filter(n => !children.some((c: GraphNodeData) => c.id === n.id)), ...newNodes]);
+
+        setNodes((nds) => [...nds.filter(n => !children.some((c: GraphNodeData) => String(c.id) === n.id)), ...newNodes]);
         setEdges((eds) => [...eds.filter(e => !newFlowEdges.some(ne => ne.id === e.id)), ...newFlowEdges]);
-        
+
         expandedNodes.current.add(nodeId);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to expand node:', e);
+      setExpandError(e?.message || 'Failed to expand node');
+      setTimeout(() => setExpandError(null), 6000);
     } finally {
       loadingNodes.current.delete(nodeId);
-      setNodes((nds) => nds.map(n => 
-        n.id === nodeId 
+      setNodes((nds) => nds.map(n =>
+        n.id === nodeId
           ? { ...n, data: { ...n.data, isLoading: false, isExpanded: expandedNodes.current.has(nodeId) } }
           : n
       ));
     }
-  }, [nodes, edges, treeName, setNodes, setEdges, highlightedNodes, findDescendants]);
+  }, [treeName, setNodes, setEdges, highlightedNodes, findDescendants]);
 
   // Update refs with latest handlers
   handleExpandRef.current = handleExpand;
@@ -765,6 +792,19 @@ export function TreeExplorer({ treeName = 'mega_ultra_v2' }: TreeExplorerProps) 
           </div>
         )}
         
+        {/* Expand error toast */}
+        {expandError && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50">
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white text-sm rounded-lg shadow-lg">
+              <X className="w-4 h-4 flex-shrink-0" />
+              <span>{expandError}</span>
+              <button onClick={() => setExpandError(null)} className="ml-2 hover:opacity-80">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Search bar */}
         <div className="absolute top-4 right-4 w-80">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">

@@ -29,7 +29,7 @@ class TreeBuildConfig:
 
     # Summarization
     summarization_length: int = 200  # Max tokens for summaries
-    summarization_model: str = "gpt-4o-mini"  # Model for summarization
+    summarization_model: str = "gpt-5.2-mini"  # Model for summarization
 
     # Clustering
     cluster_threshold: float = 0.1  # GMM membership threshold

@@ -39,7 +39,7 @@ static_resources:
           route_config:
             name: proxy_routes
             virtual_hosts:
-            # Anthropic API (with SSE streaming support)
+            # Anthropic API → LLM proxy (handles Claude pass-through + non-Claude translation)
             - name: anthropic
               domains:
               - "api.anthropic.com"
@@ -49,8 +49,7 @@ static_resources:
               - match:
                   prefix: "/"
                 route:
-                  cluster: anthropic
-                  auto_host_rewrite: true
+                  cluster: credential_resolver_llm
                   timeout: 0s  # Disable timeout for streaming responses
                   idle_timeout: 0s  # Keep connection alive indefinitely
 
@@ -108,19 +107,17 @@ static_resources:
               domains:
               - "*"
               routes:
-              # Anthropic API paths (with streaming support)
+              # LLM API paths → credential-resolver LLM proxy (handles translation + routing)
               - match:
                   prefix: "/v1/"
                 route:
-                  cluster: anthropic
-                  host_rewrite_literal: api.anthropic.com
+                  cluster: credential_resolver_llm
                   timeout: 0s  # Disable timeout for streaming responses
                   idle_timeout: 0s  # Keep connection alive indefinitely
               - match:
                   prefix: "/api/event_logging/"
                 route:
-                  cluster: anthropic
-                  host_rewrite_literal: api.anthropic.com
+                  cluster: credential_resolver_llm
                   timeout: 0s
                   idle_timeout: 0s
               # Coralogix paths (via CORALOGIX_BASE_URL)
@@ -146,6 +143,9 @@ static_resources:
                   uri: http://credential-resolver:8002/check
                   cluster: ext_authz
                   timeout: 2s
+                # Prepend /extauthz to avoid hitting LLM proxy routes
+                # e.g., /v1/messages → /extauthz/v1/messages → catch-all handler
+                path_prefix: "/extauthz"
                 authorization_request:
                   allowed_headers:
                     patterns:
@@ -159,6 +159,9 @@ static_resources:
                     patterns:
                     - exact: "authorization"
                     - exact: "x-api-key"
+                    - exact: "x-tenant-id"
+                    - exact: "x-team-id"
+                    - exact: "x-llm-model"
               failure_mode_allow: false
 
           - name: envoy.filters.http.router
@@ -181,7 +184,21 @@ static_resources:
                 address: credential-resolver
                 port_value: 8002
 
-  # Anthropic API
+  # LLM proxy - credential-resolver handles translation + routing
+  - name: credential_resolver_llm
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: credential_resolver_llm
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: credential-resolver
+                port_value: 8002
+
+  # Anthropic API (kept for direct API calls from credential-resolver's pass-through)
   - name: anthropic
     type: LOGICAL_DNS
     dns_lookup_family: V4_ONLY

@@ -50,7 +50,7 @@ class AgentPromptConfig(BaseModel):
 class AgentModelConfig(BaseModel):
     """Model configuration for an agent."""
 
-    name: str = "gpt-4o"
+    name: str = "gpt-5.2"
     temperature: float = 0.2
     max_tokens: int = 4000
 
@@ -87,7 +87,7 @@ class AgentConfig(BaseModel):
         """Get the model name."""
         if self.model:
             return self.model.name
-        return "gpt-4o"
+        return "gpt-5.2"
 
     def get_temperature(self) -> float:
         """Get the temperature."""
@@ -141,6 +141,12 @@ class RoutingConfig(BaseModel):
     # GitHub repositories (owner/repo format)
     github_repos: list[str] = Field(default_factory=list)
 
+    # Blameless team IDs
+    blameless_team_ids: list[str] = Field(default_factory=list)
+
+    # FireHydrant team IDs
+    firehydrant_team_ids: list[str] = Field(default_factory=list)
+
     # Services this team owns (for service-based routing)
     services: list[str] = Field(default_factory=list)
 
@@ -155,6 +161,8 @@ class RoutingConfig(BaseModel):
             pagerduty_service_ids=[v.strip() for v in self.pagerduty_service_ids],
             coralogix_team_names=[v.lower().strip() for v in self.coralogix_team_names],
             github_repos=[v.lower().strip() for v in self.github_repos],
+            blameless_team_ids=[v.strip() for v in self.blameless_team_ids],
+            firehydrant_team_ids=[v.strip() for v in self.firehydrant_team_ids],
             services=[v.lower().strip() for v in self.services],
         )
 

@@ -21,7 +21,7 @@ class ImageProcessor(BaseProcessor):
     def __init__(
         self,
         openai_api_key: Optional[str] = None,
-        model: str = "gpt-4o",
+        model: str = "gpt-5.2",
         use_ocr_fallback: bool = True,
         max_image_size_mb: float = 20.0,
     ):
@@ -30,7 +30,7 @@ class ImageProcessor(BaseProcessor):
 
         Args:
             openai_api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
-            model: Model to use ("gpt-4o", "gpt-4-vision-preview")
+            model: Model to use ("gpt-5.2", "gpt-4-vision-preview")
             use_ocr_fallback: Use pytesseract for simple text extraction
             max_image_size_mb: Maximum image size in MB
         """

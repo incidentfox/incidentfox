@@ -17,6 +17,7 @@ dependencies = [
     "aiohttp>=3.13.0",
 
     # Observability & Tracing
+    "langfuse>=2.6.0,<3.0.0",  # Langfuse tracing (LiteLLM callback, v3 breaks sdk_integration)
     "lmnr>=0.7.32",  # Laminar tracing
     "structlog>=24.4.0",
     "prometheus-client>=0.21.0",
@@ -29,7 +30,6 @@ dependencies = [
 
     # Monitoring & Observability Backends
     "datadog-api-client>=2.20.0",
-    "elasticsearch>=8.0.0",
 
     # VCS & Collaboration
     "PyGithub>=2.1.0",

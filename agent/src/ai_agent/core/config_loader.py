@@ -78,7 +78,7 @@ def _get_inline_defaults() -> dict[str, Any]:
             "planner": {
                 "enabled": True,
                 "name": "Planner",
-                "model": {"name": "gpt-4o", "temperature": 0.3},
+                "model": {"name": "gpt-5.2", "temperature": 0.3},
                 "prompt": {"system": "", "prefix": "", "suffix": ""},
                 "max_turns": 30,
                 "tools": {
@@ -90,7 +90,7 @@ def _get_inline_defaults() -> dict[str, Any]:
             "investigation": {
                 "enabled": True,
                 "name": "Investigation Agent",
-                "model": {"name": "gpt-4o", "temperature": 0.4},
+                "model": {"name": "gpt-5.2", "temperature": 0.4},
                 "prompt": {"system": ""},
                 "max_turns": 20,
                 "tools": {"enabled": ["*"], "disabled": []},
@@ -99,7 +99,7 @@ def _get_inline_defaults() -> dict[str, Any]:
             "k8s": {
                 "enabled": True,
                 "name": "Kubernetes Agent",
-                "model": {"name": "gpt-4o", "temperature": 0.3},
+                "model": {"name": "gpt-5.2", "temperature": 0.3},
                 "prompt": {"system": ""},
                 "max_turns": 15,
                 "tools": {"enabled": ["*"], "disabled": []},
@@ -108,7 +108,7 @@ def _get_inline_defaults() -> dict[str, Any]:
             "aws": {
                 "enabled": True,
                 "name": "AWS Agent",
-                "model": {"name": "gpt-4o", "temperature": 0.3},
+                "model": {"name": "gpt-5.2", "temperature": 0.3},
                 "prompt": {"system": ""},
                 "max_turns": 15,
                 "tools": {"enabled": ["*"], "disabled": []},
@@ -117,7 +117,7 @@ def _get_inline_defaults() -> dict[str, Any]:
             "metrics": {
                 "enabled": True,
                 "name": "Metrics Agent",
-                "model": {"name": "gpt-4o", "temperature": 0.2},
+                "model": {"name": "gpt-5.2", "temperature": 0.2},
                 "prompt": {"system": ""},
                 "max_turns": 15,
                 "tools": {"enabled": ["*"], "disabled": []},
@@ -126,7 +126,7 @@ def _get_inline_defaults() -> dict[str, Any]:
             "coding": {
                 "enabled": True,
                 "name": "Coding Agent",
-                "model": {"name": "gpt-4o", "temperature": 0.4},
+                "model": {"name": "gpt-5.2", "temperature": 0.4},
                 "prompt": {"system": ""},
                 "max_turns": 20,
                 "tools": {"enabled": ["*"], "disabled": []},

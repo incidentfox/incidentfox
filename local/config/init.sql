@@ -431,31 +431,31 @@ INSERT INTO node_configs (org_id, node_id, config_json, version, updated_by) VAL
         "agents": {
             "planner": {
                 "enabled": true,
-                "model": {"name": "gpt-4o", "temperature": 0.2}
+                "model": {"name": "gpt-5.2", "temperature": 0.2}
             },
             "investigation": {
                 "enabled": true,
-                "model": {"name": "gpt-4o", "temperature": 0.2}
+                "model": {"name": "gpt-5.2", "temperature": 0.2}
             },
             "k8s_agent": {
                 "enabled": true,
-                "model": {"name": "gpt-4o", "temperature": 0.1}
+                "model": {"name": "gpt-5.2", "temperature": 0.1}
             },
             "aws_agent": {
                 "enabled": true,
-                "model": {"name": "gpt-4o", "temperature": 0.1}
+                "model": {"name": "gpt-5.2", "temperature": 0.1}
             },
             "metrics_agent": {
                 "enabled": true,
-                "model": {"name": "gpt-4o", "temperature": 0.1}
+                "model": {"name": "gpt-5.2", "temperature": 0.1}
             },
             "coding_agent": {
                 "enabled": true,
-                "model": {"name": "gpt-4o", "temperature": 0.2}
+                "model": {"name": "gpt-5.2", "temperature": 0.2}
             },
             "ci_agent": {
                 "enabled": true,
-                "model": {"name": "gpt-4o", "temperature": 0.1}
+                "model": {"name": "gpt-5.2", "temperature": 0.1}
             }
         },
         "feature_flags": {

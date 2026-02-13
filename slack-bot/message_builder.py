@@ -206,7 +206,7 @@ def build_progress_message(
     loading_icon = loading_url
     done_icon = done_url
 
-    # Add trigger context if this was a nudge-initiated investigation
+    # Add trigger context if this was a prompt-initiated investigation (e.g. Coralogix)
     if trigger_user_id and trigger_text:
         display_text = (
             trigger_text[:80] + "..." if len(trigger_text) > 80 else trigger_text
@@ -463,6 +463,8 @@ def build_final_message(
     result_files: Optional[List[dict]] = None,
     trigger_user_id: Optional[str] = None,
     trigger_text: Optional[str] = None,
+    auto_listen_channel_id: Optional[str] = None,
+    auto_listen_thread_ts: Optional[str] = None,
 ) -> list:
     """
     Build Block Kit blocks for a completed investigation.
@@ -494,7 +496,7 @@ def build_final_message(
     # Use URL parameter (ignore deprecated file_id param)
     done_icon = done_url
 
-    # Add trigger context if this was a nudge-initiated investigation
+    # Add trigger context if this was a prompt-initiated investigation (e.g. Coralogix)
     if trigger_user_id and trigger_text:
         display_text = (
             trigger_text[:80] + "..." if len(trigger_text) > 80 else trigger_text
@@ -691,19 +693,37 @@ def build_final_message(
         )
 
     # View Session button - use message_ts as unique key for each message
-    blocks.append(
+    action_elements = [
         {
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "View Session"},
-                    "action_id": "view_investigation_session",
-                    "value": message_ts or thread_id or "unknown",
-                }
-            ],
+            "type": "button",
+            "text": {"type": "plain_text", "text": "View Session"},
+            "action_id": "view_investigation_session",
+            "value": message_ts or thread_id or "unknown",
         }
-    )
+    ]
+
+    # Add "Stop listening" button when auto-listen is active and investigation succeeded
+    if auto_listen_channel_id and auto_listen_thread_ts and success:
+        import json as _json
+
+        action_elements.append(
+            {
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "text": "\U0001f507 Stop listening",
+                },
+                "action_id": "stop_listening",
+                "value": _json.dumps(
+                    {
+                        "channel_id": auto_listen_channel_id,
+                        "thread_ts": auto_listen_thread_ts,
+                    }
+                ),
+            }
+        )
+
+    blocks.append({"type": "actions", "elements": action_elements})
 
     # Feedback buttons
     blocks.extend(_create_feedback_blocks())

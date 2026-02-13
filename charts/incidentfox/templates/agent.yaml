@@ -1,15 +1,16 @@
 {{- if .Values.services.agent.enabled }}
 # =============================================================================
-# Unified Agent - Investigation agent with sandbox isolation support
+# Agent - Investigation agent with sandbox isolation support
 # =============================================================================
-# Two operation modes:
-# 1. Direct mode (sandbox.enabled=false): Agent runs investigations directly
-# 2. Sandbox mode (sandbox.enabled=true): Agent creates gVisor sandbox pods
+# Supports both sre-agent and unified-agent via values:
+#   - Set services.agent.command to override the Dockerfile CMD
+#   - sre-agent: command=["python", "/app/server.py"], port=8000
+#   - unified-agent: command=[] (uses Dockerfile CMD), port=8888
 #
 # In sandbox mode, this deployment acts as a "sandbox manager" that:
-# - Receives investigation requests from orchestrator
+# - Receives investigation requests from slack-bot
 # - Creates isolated sandbox pods for each investigation
-# - Sandboxes run the same image in server mode (port 8888)
+# - Sandboxes run the same image with default CMD (sandbox server)
 # - Sandboxes connect to credential-resolver for credentials
 # =============================================================================
 {{- if .Values.services.agent.serviceAccount.create }}
@@ -77,6 +78,7 @@ spec:
     metadata:
       labels:
         app: incidentfox-agent
+        component: server
     spec:
       {{- if .Values.services.agent.serviceAccount.name }}
       serviceAccountName: {{ .Values.services.agent.serviceAccount.name | quote }}
@@ -87,28 +89,35 @@ spec:
       {{- end }}
       # Allow enough time for graceful shutdown to mark in-flight runs as failed
       terminationGracePeriodSeconds: {{ .Values.services.agent.terminationGracePeriodSeconds | default 60 }}
+      {{- with .Values.services.agent.podSecurityContext }}
+      securityContext:
+{{ toYaml . | indent 8 }}
+      {{- end }}
       containers:
         - name: agent
           image: {{ required "services.agent.image is required" .Values.services.agent.image }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          {{- if .Values.services.agent.command }}
+          command:
+{{ toYaml .Values.services.agent.command | indent 12 }}
+          {{- end }}
+          workingDir: /app
           ports:
             - containerPort: {{ .Values.services.agent.servicePort }}
               name: http
-            - containerPort: {{ .Values.services.agent.healthServer.port | default 8081 }}
-              name: health
           resources:
 {{ toYaml .Values.services.agent.resources | indent 12 }}
           env:
+            {{- if not .Values.services.agent.command }}
+            # --- unified-agent specific env vars (omitted when custom command is set) ---
             - name: USE_CONFIG_SERVICE
               value: "true"
             - name: CONFIG_BASE_URL
               value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
             - name: CONFIG_SERVICE_URL
               value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
-            # Dedicated health server port
             - name: HEALTH_SERVER_PORT
               value: {{ .Values.services.agent.healthServer.port | default 8081 | quote }}
-            # K8s tools configuration
             {{- if .Values.services.agent.kubernetes.enabled }}
             - name: K8S_ENABLED
               value: "true"
@@ -120,8 +129,9 @@ spec:
             - name: K8S_NAMESPACE
               value: {{ .Values.namespace | quote }}
             {{- end }}
+            {{- end }}
             # =================================================================
-            # Sandbox Mode Configuration (unified-agent sandbox manager)
+            # Sandbox Mode Configuration
             # =================================================================
             {{- if .Values.services.agent.sandbox.enabled }}
             # Sandbox image (same image, runs in sandbox server mode)
@@ -130,11 +140,17 @@ spec:
             # Namespace for sandbox pods
             - name: SANDBOX_NAMESPACE
               value: {{ .Values.services.agent.sandbox.namespace | default .Values.namespace | quote }}
+            # ServiceAccount for sandbox pods (K8s tools read-only access)
+            - name: SANDBOX_SERVICE_ACCOUNT
+              value: {{ .Release.Name }}-sandbox-pod
             # gVisor runtime for enhanced isolation
             - name: USE_GVISOR
               value: {{ .Values.services.agent.sandbox.useGvisor | default "true" | quote }}
             # Credential resolver namespace (for Envoy ext_authz)
             - name: CREDENTIAL_RESOLVER_NAMESPACE
+              value: {{ .Values.namespace | quote }}
+            # Router namespace (for sandbox-router service)
+            - name: ROUTER_NAMESPACE
               value: {{ .Values.namespace | quote }}
             # JWT secret for signing sandbox tokens
             - name: JWT_SECRET
@@ -142,6 +158,21 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.jwtSecret.secretName | default "incidentfox-jwt-secret" }}
                   key: {{ .Values.externalSecrets.contract.jwtSecret.secretKey | default "JWT_SECRET" }}
+            {{- end }}
+            # =================================================================
+            # Warm Pool Configuration
+            # =================================================================
+            {{- if and .Values.services.agent.sandbox.enabled .Values.services.agent.warmPool.enabled }}
+            - name: USE_WARM_POOL
+              value: "true"
+            - name: WARMPOOL_TEMPLATE_NAME
+              value: {{ .Values.services.agent.warmPool.templateName | quote }}
+            - name: WARMPOOL_TEMPLATE_NAMESPACE
+              value: {{ .Values.services.agent.sandbox.namespace | default .Values.namespace | quote }}
+            - name: WARMPOOL_NAME
+              value: {{ .Values.services.agent.warmPool.poolName | quote }}
+            - name: WARMPOOL_NAMESPACE
+              value: {{ .Values.services.agent.sandbox.namespace | default .Values.namespace | quote }}
             {{- end }}
             # =================================================================
             # Tracing configuration (Langfuse / OTEL)
@@ -176,7 +207,8 @@ spec:
                   name: {{ .Values.services.agent.staticTeamToken.secretName }}
                   key: {{ .Values.services.agent.staticTeamToken.secretKey }}
             {{- end }}
-            # OpenAI API key (for direct mode, sandbox mode uses credential-resolver)
+            {{- if not .Values.services.agent.command }}
+            # LLM API keys (unified-agent only; sre-agent uses credential-resolver)
             {{- if not .Values.services.agent.sandbox.enabled }}
             - name: OPENAI_API_KEY
               valueFrom:
@@ -203,11 +235,36 @@ spec:
                   key: {{ .Values.externalSecrets.contract.teams.appPasswordKey | quote }}
             {{- end }}
             {{- end }}
-          # Readiness probe
+            {{- if .Values.externalSecrets.contract.sharedAnthropicKey.enabled }}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.sharedAnthropicKey.secretName }}
+                  key: {{ .Values.externalSecrets.contract.sharedAnthropicKey.secretKey }}
+            {{- end }}
+            {{- end }}
+            # =================================================================
+            # Extra env vars (from values)
+            # =================================================================
+            {{- with .Values.services.agent.extraEnv }}
+{{ toYaml . | indent 12 }}
+            {{- end }}
+          # Startup probe (optional)
+          {{- if .Values.services.agent.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.services.agent.startupProbe.path | default "/health" }}
+              port: {{ .Values.services.agent.servicePort }}
+            initialDelaySeconds: {{ .Values.services.agent.startupProbe.initialDelaySeconds | default 5 }}
+            periodSeconds: {{ .Values.services.agent.startupProbe.periodSeconds | default 5 }}
+            timeoutSeconds: {{ .Values.services.agent.startupProbe.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.services.agent.startupProbe.failureThreshold | default 12 }}
+          {{- end }}
+          # Readiness probe (uses /health on main port since server.py doesn't have separate health server)
           readinessProbe:
             httpGet:
-              path: /readyz
-              port: {{ .Values.services.agent.healthServer.port | default 8081 }}
+              path: {{ .Values.services.agent.readinessProbe.path | default "/health" }}
+              port: {{ .Values.services.agent.servicePort }}
             initialDelaySeconds: {{ .Values.services.agent.readinessProbe.initialDelaySeconds | default 5 }}
             periodSeconds: {{ .Values.services.agent.readinessProbe.periodSeconds | default 10 }}
             timeoutSeconds: {{ .Values.services.agent.readinessProbe.timeoutSeconds | default 5 }}
@@ -216,8 +273,8 @@ spec:
           {{- if .Values.services.agent.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
-              path: /livez
-              port: {{ .Values.services.agent.healthServer.port | default 8081 }}
+              path: {{ .Values.services.agent.livenessProbe.path | default "/health" }}
+              port: {{ .Values.services.agent.servicePort }}
             initialDelaySeconds: {{ .Values.services.agent.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.services.agent.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.services.agent.livenessProbe.timeoutSeconds | default 5 }}
@@ -232,8 +289,10 @@ metadata:
 spec:
   selector:
     app: incidentfox-agent
+    component: server
   ports:
     - port: {{ .Values.services.agent.servicePort }}
       targetPort: {{ .Values.services.agent.servicePort }}
       protocol: TCP
+      name: http
 {{- end }}

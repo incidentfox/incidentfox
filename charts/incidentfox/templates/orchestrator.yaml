@@ -61,6 +61,8 @@ spec:
                   key: {{ .Values.externalSecrets.contract.orchestratorInternal.internalTokenKey | quote }}
             {{- end }}
             {{- if .Values.externalSecrets.contract.slack.enabled }}
+            # DEPRECATED: Signing secret loaded from slack_apps DB table.
+            # Kept as fallback when no apps are configured in config service.
             - name: SLACK_BOT_TOKEN
               valueFrom:
                 secretKeyRef:

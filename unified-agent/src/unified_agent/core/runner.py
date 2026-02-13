@@ -15,16 +15,22 @@ from typing import Any, AsyncIterator, Callable, Optional
 import litellm
 
 from .agent import Agent
+from .events import StreamEvent
 
 logger = logging.getLogger(__name__)
+
+# Enable Langfuse tracing if credentials are configured
+if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+    litellm.success_callback = ["langfuse"]
+    litellm.failure_callback = ["langfuse"]
 
 # Model alias mapping (short names to full LiteLLM model strings)
 MODEL_ALIASES = {
     "sonnet": "anthropic/claude-sonnet-4-20250514",
     "opus": "anthropic/claude-opus-4-20250514",
     "haiku": "anthropic/claude-haiku-4-20250514",
-    "gpt-4o": "openai/gpt-4o",
-    "gpt-4o-mini": "openai/gpt-4o-mini",
+    "gpt-5.2": "openai/gpt-5.2",
+    "gpt-5.2-mini": "openai/gpt-5.2-mini",
     "gemini-flash": "gemini/gemini-2.0-flash",
     "gemini-pro": "gemini/gemini-1.5-pro",
 }
@@ -38,15 +44,6 @@ class RunResult:
     messages: list[dict] = field(default_factory=list)
     tool_calls: list[dict] = field(default_factory=list)
     status: str = "complete"  # complete, incomplete, error
-
-
-@dataclass
-class StreamEvent:
-    """Event emitted during agent execution."""
-
-    type: str  # thought, tool_start, tool_end, result, error
-    data: dict = field(default_factory=dict)
-    thread_id: str = ""
 
 
 class MaxTurnsExceeded(Exception):

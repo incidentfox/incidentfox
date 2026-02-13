@@ -12,6 +12,8 @@ import json
 import logging
 import os
 import re
+import threading
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Dict, Optional
@@ -82,6 +84,9 @@ SLACK_SCOPES = [
 # Check if OAuth is configured (for public distribution)
 oauth_enabled = bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET)
 
+# Base URL for Slack OAuth redirects (configurable for staging/prod)
+SLACK_BASE_URL = os.environ.get("SLACK_BASE_URL", "https://slack.incidentfox.ai")
+
 if oauth_enabled:
     # Multi-workspace OAuth mode with database-backed installation store
     # This enables horizontal scaling (multiple replicas) and persistence
@@ -96,7 +101,7 @@ if oauth_enabled:
         state_store=FileOAuthStateStore(
             expiration_seconds=600, base_dir="/tmp/slack-oauth-states"
         ),
-        redirect_uri="https://slack.incidentfox.ai/slack/oauth_redirect",
+        redirect_uri=f"{SLACK_BASE_URL}/slack/oauth_redirect",
     )
     app = App(
         signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
@@ -126,6 +131,40 @@ SLACK_APP_MODE = os.environ.get("SLACK_APP_MODE", "socket")
 # Track channels where we've sent the welcome nudge (resets on restart, which is fine)
 # Key format: "{team_id}:{channel_id}"
 _nudge_sent_channels: set = set()
+
+# LRU cache for Slack user display name lookups (avoids repeated API calls
+# when the same users keep chatting in the same thread)
+_user_name_cache: Dict[str, str] = {}
+_USER_NAME_CACHE_MAX = 200
+
+
+def _get_user_display_name(client, user_id: str) -> str:
+    """Look up a Slack user's display name, with in-memory LRU caching."""
+    if user_id in _user_name_cache:
+        return _user_name_cache[user_id]
+
+    try:
+        resp = client.users_info(user=user_id)
+        if resp["ok"]:
+            user = resp["user"]
+            profile = user.get("profile", {})
+            name = (
+                profile.get("display_name")
+                or profile.get("real_name")
+                or user.get("name", f"User_{user_id}")
+            )
+        else:
+            name = f"User_{user_id}"
+    except Exception:
+        name = f"User_{user_id}"
+
+    # Evict oldest entry if at capacity (dict preserves insertion order in 3.7+)
+    if len(_user_name_cache) >= _USER_NAME_CACHE_MAX:
+        oldest_key = next(iter(_user_name_cache))
+        del _user_name_cache[oldest_key]
+
+    _user_name_cache[user_id] = name
+    return name
 
 
 @dataclass
@@ -319,6 +358,11 @@ def build_final_blocks(state: MessageState, client, team_id: str) -> list:
     # Get S3-hosted done icon URL
     done_url = get_asset_url("done")
 
+    # Check if auto-listen is active for this thread
+    auto_listen_active = _auto_listen_threads.get(
+        (state.channel_id, state.thread_ts), False
+    )
+
     return build_final_message(
         result_text=state.final_result or state.current_thought,
         thoughts=state.thoughts,
@@ -331,6 +375,8 @@ def build_final_blocks(state: MessageState, client, team_id: str) -> list:
         result_files=state.result_files,
         trigger_user_id=state.trigger_user_id,
         trigger_text=state.trigger_text,
+        auto_listen_channel_id=state.channel_id if auto_listen_active else None,
+        auto_listen_thread_ts=state.thread_ts if auto_listen_active else None,
     )
 
 
@@ -1311,15 +1357,22 @@ def _get_image_extension(media_type: str) -> str:
     return f".{ext}"
 
 
-def _download_slack_image(file_info: dict, client) -> dict | None:
+def _download_slack_image(
+    file_info: dict, client, thumbnail_only: bool = False
+) -> dict | None:
     """
     Download an image from Slack and return its content as base64.
 
-    Images are small enough to send as base64 directly.
+    Enforces the Claude API's 5MB per-image limit. If the full-size image
+    exceeds that, falls back to Slack's pre-generated thumbnails (1024 → 720
+    → 480px) which are much smaller. Skips the image if even thumbnails
+    are too large.
 
     Args:
         file_info: File object from Slack event
         client: Slack client
+        thumbnail_only: If True, skip full-size and use thumbnails directly
+            (useful for thread context images where full resolution isn't needed)
 
     Returns:
         dict with {data: base64_string, media_type: str, filename: str, size: int} or None
@@ -1328,6 +1381,8 @@ def _download_slack_image(file_info: dict, client) -> dict | None:
 
     import requests
 
+    MAX_IMAGE_BYTES = 5 * 1024 * 1024  # Claude API limit: 5MB per image
+
     mimetype = file_info.get("mimetype", "")
     filename = file_info.get("name", "image")
 
@@ -1335,31 +1390,68 @@ def _download_slack_image(file_info: dict, client) -> dict | None:
     if not mimetype.startswith("image/"):
         return None
 
-    # Get the download URL (requires bot token)
-    url_private = file_info.get("url_private_download") or file_info.get("url_private")
-    if not url_private:
-        logger.warning(f"No download URL for image: {filename}")
-        return None
+    # Build list of URLs to try
+    urls_to_try = []
 
-    try:
-        # Download the image using the bot token
-        response = requests.get(
-            url_private, headers={"Authorization": f"Bearer {client.token}"}, timeout=60
+    if not thumbnail_only:
+        url_private = file_info.get("url_private_download") or file_info.get(
+            "url_private"
         )
-        response.raise_for_status()
+        if url_private:
+            urls_to_try.append(("full", url_private))
 
-        # Convert to base64
-        image_data = base64.b64encode(response.content).decode("utf-8")
+    # Slack provides pre-generated thumbnails at various sizes
+    for thumb_key in ("thumb_1024", "thumb_720", "thumb_480"):
+        thumb_url = file_info.get(thumb_key)
+        if thumb_url:
+            urls_to_try.append((thumb_key, thumb_url))
 
-        return {
-            "data": image_data,
-            "media_type": mimetype,
-            "filename": filename,
-            "size": len(response.content),
-        }
-    except Exception as e:
-        logger.error(f"Failed to download image {filename}: {e}")
+    # Fallback: if thumbnail_only but no thumbnails found, try full-size
+    if thumbnail_only and not urls_to_try:
+        url_private = file_info.get("url_private_download") or file_info.get(
+            "url_private"
+        )
+        if url_private:
+            logger.info(f"No thumbnails for {filename}, falling back to full-size")
+            urls_to_try.append(("full", url_private))
+
+    if not urls_to_try:
+        logger.warning(
+            f"No download URL for image: {filename} "
+            f"(available keys: {sorted(file_info.keys())})"
+        )
         return None
+
+    auth_headers = {"Authorization": f"Bearer {client.token}"}
+
+    for variant, url in urls_to_try:
+        try:
+            response = requests.get(url, headers=auth_headers, timeout=60)
+            response.raise_for_status()
+
+            if len(response.content) <= MAX_IMAGE_BYTES:
+                image_data = base64.b64encode(response.content).decode("utf-8")
+                if variant != "full":
+                    logger.info(
+                        f"Image {filename} exceeded 5MB, using {variant} thumbnail "
+                        f"({len(response.content) / 1024 / 1024:.1f}MB)"
+                    )
+                return {
+                    "data": image_data,
+                    "media_type": mimetype,
+                    "filename": filename,
+                    "size": len(response.content),
+                }
+            else:
+                logger.info(
+                    f"Image {filename} ({variant}) is {len(response.content) / 1024 / 1024:.1f}MB, "
+                    f"exceeds 5MB limit, trying smaller variant..."
+                )
+        except Exception as e:
+            logger.warning(f"Failed to download image {filename} ({variant}): {e}")
+
+    logger.warning(f"All variants of image {filename} exceed 5MB, skipping inline")
+    return None
 
 
 def _get_file_attachment_metadata(file_info: dict, client) -> dict | None:
@@ -1457,6 +1549,129 @@ def _extract_file_attachments_from_event(event: dict, client) -> list:
     return attachments
 
 
+def _build_full_thread_context(messages, current_message_ts, bot_user_id, client):
+    """
+    Build full thread context from ALL messages in the thread.
+
+    Includes every message (human and bot) with text, sender name, timestamp,
+    and attachment annotations. Collects image metadata and file attachment
+    metadata from non-triggering messages (images are NOT downloaded here —
+    the caller decides which to download as base64 vs save as files).
+
+    Args:
+        messages: List of thread messages from conversations.replies
+        current_message_ts: Timestamp of the current triggering message
+        bot_user_id: Bot's user ID
+        client: Slack client (for user name lookups)
+
+    Returns:
+        tuple: (formatted_text, thread_image_metadata, thread_file_attachments)
+        - formatted_text: Full thread history with <thread_context> tags, or None
+        - thread_image_metadata: List of dicts with Slack file info + semantic name
+          for images from non-triggering messages (not yet downloaded)
+        - thread_file_attachments: File attachment metadata from non-triggering messages
+    """
+    from datetime import datetime
+
+    if not messages:
+        return None, [], []
+
+    # Check if there are any messages besides the triggering one
+    other_messages = [m for m in messages if m.get("ts") != current_message_ts]
+    if not other_messages:
+        return None, [], []
+
+    # Resolve user names via LRU-cached helper (avoids redundant API calls)
+    def get_name(uid):
+        return _get_user_display_name(client, uid)
+
+    context_parts = []
+    thread_image_metadata = []
+    thread_file_attachments = []
+
+    for msg in messages:
+        ts = msg.get("ts", "0")
+        is_trigger = ts == current_message_ts
+        is_bot = bool(msg.get("bot_id")) or (
+            bot_user_id and msg.get("user") == bot_user_id
+        )
+
+        # Format timestamp
+        try:
+            time_str = datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d %H:%M")
+            date_prefix = datetime.fromtimestamp(float(ts)).strftime("%Y%m%d_%H%M")
+        except (ValueError, TypeError, OSError, OverflowError):
+            time_str = "??:??"
+            date_prefix = "unknown"
+
+        text = msg.get("text", "").strip()
+
+        # Determine sender name
+        if is_bot:
+            sender = "IncidentFox"
+            sender_slug = "IncidentFox"
+            # Truncate long bot responses to keep context manageable
+            # (agent already has its own responses in sandbox conversation history)
+            if len(text) > 500:
+                text = text[:500] + "... [response truncated]"
+        else:
+            uid = msg.get("user", "unknown")
+            sender = get_name(uid)
+            # Sanitize for filenames: keep alphanumeric, replace spaces with _
+            sender_slug = re.sub(r"[^a-zA-Z0-9]", "_", sender).strip("_") or uid
+
+        trigger_marker = "  <<< THIS MESSAGE TRIGGERED YOU" if is_trigger else ""
+
+        line = f"[{time_str}] {sender}: {text}{trigger_marker}"
+
+        # Annotate file attachments in the text
+        files = msg.get("files", [])
+        if files:
+            file_descs = []
+            for f in files:
+                name = f.get("name", "file")
+                mimetype = f.get("mimetype", "")
+                if mimetype.startswith("image/"):
+                    file_descs.append(f"{name} (image)")
+                else:
+                    file_descs.append(name)
+            line += f"\n  Attachments: {', '.join(file_descs)}"
+
+        context_parts.append(line)
+
+        # Collect image metadata and file attachments from non-triggering messages
+        # (triggering message's attachments are handled separately in the caller)
+        if not is_trigger:
+            for file_info in files:
+                mimetype = file_info.get("mimetype", "")
+                if mimetype.startswith("image/"):
+                    # Collect metadata for images (caller decides base64 vs file)
+                    original_name = file_info.get("name", "image")
+                    semantic_name = f"{date_prefix}_{sender_slug}_{original_name}"
+                    thread_image_metadata.append(
+                        {
+                            "file_info": file_info,
+                            "semantic_name": semantic_name,
+                            "sender": sender,
+                            "time_str": time_str,
+                        }
+                    )
+                else:
+                    # Non-image files: collect as file_attachment metadata
+                    attachment = _get_file_attachment_metadata(file_info, client)
+                    if attachment:
+                        thread_file_attachments.append(attachment)
+
+    formatted = (
+        "<thread_context>\n"
+        "Full conversation history in this thread:\n\n"
+        + "\n\n".join(context_parts)
+        + "\n</thread_context>\n\n"
+    )
+
+    return formatted, thread_image_metadata, thread_file_attachments
+
+
 def _resolve_mentions(text: str, client, bot_user_id: str):
     """
     Resolve all user and bot mentions in text to human-readable names.
@@ -1520,16 +1735,22 @@ def handle_mention(event, say, client, context):
     """
     Handle @mentions of the bot.
 
-    Flow:
-    1. Post initial message
-    2. Stream SSE events from sre-agent
-    3. Update message as events arrive (using chat.update)
-    4. Final update with result and feedback buttons
+    Immediately ACKs by returning quickly, then processes in a background
+    thread so Bolt's listener thread pool stays free for new events.
     """
-    # DEBUG: Log every app_mention event
     logger.info(
         f"🔔 APP_MENTION EVENT RECEIVED: channel={event.get('channel')}, user={event.get('user')}, ts={event.get('ts')}"
     )
+    thread = threading.Thread(
+        target=_handle_mention_impl,
+        args=(event, say, client, context),
+        daemon=True,
+    )
+    thread.start()
+
+
+def _handle_mention_impl(event, say, client, context):
+    """Process an app_mention event (runs in background thread)."""
     user_id = event["user"]
     text = event.get("text", "").strip()
     channel_id = event["channel"]
@@ -1581,29 +1802,128 @@ def handle_mention(event, say, client, context):
             logger.warning(f"Failed to get bot user ID: {e}")
             bot_user_id = None
 
+    # Fetch full thread context when triggered in a thread.
+    # Loads ALL messages (human + bot) so the agent sees the complete conversation,
+    # and collects image metadata + file metadata from earlier messages in the thread.
+    thread_context_text = None
+    thread_image_metadata = []
+    thread_file_attachments = []
+    is_followup = event.get("thread_ts") is not None
+
+    if is_followup:
+        try:
+            thread_replies = client.conversations_replies(
+                channel=channel_id,
+                ts=thread_ts,
+                limit=200,
+            )
+            thread_context_text, thread_image_metadata, thread_file_attachments = (
+                _build_full_thread_context(
+                    thread_replies.get("messages", []),
+                    current_message_ts=event["ts"],
+                    bot_user_id=bot_user_id,
+                    client=client,
+                )
+            )
+            if thread_context_text:
+                logger.info(
+                    f"Full thread context loaded for thread {thread_ts} "
+                    f"({len(thread_image_metadata)} images, {len(thread_file_attachments)} files from thread)"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to fetch thread context: {e}")
+
     # Resolve all mentions (users and bots) to human-readable names
     resolved_text, id_to_name_mapping = _resolve_mentions(text, client, bot_user_id)
 
-    # Extract images from the event (downloaded as base64 - typically small)
+    # Extract images from the triggering event (downloaded as base64 - always inline)
     images = _extract_images_from_event(event, client)
 
-    # Extract file attachment metadata (not downloaded - uses proxy pattern for large files)
+    # Extract file attachment metadata from triggering event (not downloaded - uses proxy pattern)
     file_attachments = _extract_file_attachments_from_event(event, client)
 
-    # Get the user's name who sent this message
-    sender_name = "Unknown User"
-    try:
-        user_response = client.users_info(user=user_id)
-        if user_response["ok"]:
-            user = user_response["user"]
-            profile = user.get("profile", {})
-            sender_name = (
-                profile.get("display_name")
-                or profile.get("real_name")
-                or user.get("name", "Unknown User")
+    # app_mention events don't include files — look up the actual message
+    if not images and not file_attachments:
+        try:
+            result = client.conversations_replies(
+                channel=channel_id,
+                ts=thread_ts,
+                limit=200,
             )
-    except Exception as e:
-        logger.warning(f"Failed to get sender name for {user_id}: {e}")
+            for msg in result.get("messages", []):
+                if msg.get("ts") == event["ts"]:
+                    for file_info in msg.get("files", []):
+                        mimetype = file_info.get("mimetype", "")
+                        if mimetype.startswith("image/"):
+                            img = _download_slack_image(file_info, client)
+                            if img:
+                                images.append(img)
+                                logger.info(
+                                    f"Image from message lookup: {img['filename']}"
+                                )
+                        else:
+                            attachment = _get_file_attachment_metadata(
+                                file_info, client
+                            )
+                            if attachment:
+                                file_attachments.append(attachment)
+                    break
+        except Exception as e:
+            logger.warning(f"Failed to look up files for app_mention: {e}")
+
+    # Process thread images: last 5 as base64 (LLM sees directly), older ones
+    # saved to sandbox as files with semantic filenames via the file_attachment proxy.
+    # Claude API allows up to 100 images but 32MB total request, so 5 is practical.
+    MAX_INLINE_THREAD_IMAGES = 5
+    overflow_image_context = ""
+
+    if thread_image_metadata:
+        inline_meta = thread_image_metadata[-MAX_INLINE_THREAD_IMAGES:]
+        overflow_meta = (
+            thread_image_metadata[:-MAX_INLINE_THREAD_IMAGES]
+            if len(thread_image_metadata) > MAX_INLINE_THREAD_IMAGES
+            else []
+        )
+
+        # Download latest images as base64 for the LLM to see directly
+        for meta in inline_meta:
+            img = _download_slack_image(meta["file_info"], client, thumbnail_only=True)
+            if img:
+                images.insert(0, img)  # Thread images before triggering message's
+
+        # Older images → file_attachment metadata (downloaded to sandbox with semantic names)
+        for meta in overflow_meta:
+            file_info = meta["file_info"]
+            url = file_info.get("url_private_download") or file_info.get("url_private")
+            if url:
+                thread_file_attachments.append(
+                    {
+                        "filename": meta["semantic_name"],
+                        "size": file_info.get("size", 0),
+                        "media_type": file_info.get("mimetype", "image/png"),
+                        "download_url": url,
+                        "auth_header": f"Bearer {client.token}",
+                    }
+                )
+
+        # Build context about overflow images so LLM knows where they are
+        if overflow_meta:
+            lines = [
+                "\n**Earlier thread images (saved as files):**",
+                "These images from earlier in the thread have been saved to your workspace.",
+                "You can view them using the Read tool if needed:",
+            ]
+            for meta in overflow_meta:
+                lines.append(
+                    f"- `attachments/{meta['semantic_name']}` — from {meta['sender']} at {meta['time_str']}"
+                )
+            overflow_image_context = "\n".join(lines)
+
+    # Merge thread file attachments with triggering message's
+    file_attachments = thread_file_attachments + file_attachments
+
+    # Get the user's name who sent this message (cached)
+    sender_name = _get_user_display_name(client, user_id)
 
     # Remove bot's own mention from the resolved text
     # This handles all cases: "@Bot say hi", "say @Bot hi", "say hi @Bot"
@@ -1620,12 +1940,21 @@ def handle_mention(event, say, client, context):
     logger.info(f"Images attached: {len(images)}")
     logger.info(f"File attachments: {len(file_attachments)}")
 
-    if not prompt_text and not images and not file_attachments:
+    if (
+        not prompt_text
+        and not images
+        and not file_attachments
+        and not thread_context_text
+    ):
         say(
             text="Hey! What would you like me to investigate?",
             thread_ts=thread_ts,
         )
         return
+
+    # If prompt is empty but we have thread context, use a default prompt
+    if not prompt_text and thread_context_text:
+        prompt_text = "Based on the thread conversation above, how can I help?"
 
     # Build enriched prompt with Slack context
     context_lines = ["\n### Slack Context"]
@@ -1708,7 +2037,15 @@ def handle_mention(event, say, client, context):
     )
     context_lines.append("Only share files that are genuinely useful to the user.")
 
+    # Add context about overflow images saved as files in sandbox
+    if overflow_image_context:
+        context_lines.append(overflow_image_context)
+
     enriched_prompt = prompt_text + "\n" + "\n".join(context_lines)
+
+    # Prepend full thread context if available (all messages in the thread)
+    if thread_context_text:
+        enriched_prompt = thread_context_text + enriched_prompt
 
     # Post minimal initial message with loading indicator
     # Will be updated immediately with first event
@@ -1757,15 +2094,21 @@ def handle_mention(event, say, client, context):
         thread_id=thread_id,
     )
 
+    # Enable auto-listen for this thread (bot will respond to follow-ups without @mention)
+    _auto_listen_threads[(channel_id, thread_ts)] = True
+    logger.info(f"🔔 Auto-listen enabled for thread {thread_ts} in {channel_id}")
+
     try:
         # Get team token for config-driven agents
         # This enables the agent to load team config (agent definitions, tools, LLM settings)
+        # Uses channel-based routing: checks if this channel maps to a specific team,
+        # falls back to workspace-based routing ("default" team) if no mapping exists.
         team_token = None
         try:
             config_client = get_config_client()
-            team_token = config_client.get_team_token(team_id)
+            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
-            logger.warning(f"Failed to get team token for {team_id}: {e}")
+            logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
 
         # Build request payload with prompt and optional images
         request_payload = {
@@ -1870,6 +2213,328 @@ def handle_mention(event, say, client, context):
 # Track threads where we've already sent a nudge (one nudge per user per thread)
 # Key: (thread_ts, user_id), Value: True
 _nudge_sent: Dict[tuple, bool] = {}
+
+# Track threads where auto-listen is active (bot responds without @mention)
+# Key: (channel_id, thread_ts), Value: True
+_auto_listen_threads: Dict[tuple, bool] = {}
+
+
+def _run_auto_listen_investigation(event, client, context):
+    """
+    Trigger an investigation for a message in an auto-listen thread.
+    Called when a user sends a follow-up in a thread where the bot is actively
+    listening (without requiring an @mention).
+    """
+    channel_id = event.get("channel")
+    thread_ts = event.get("thread_ts")
+    user_id = event.get("user")
+
+    if not user_id or not channel_id or not thread_ts:
+        logger.warning("Auto-listen triggered with missing fields, skipping")
+        return
+
+    text = event.get("text", "")
+    team_id = context.get("team_id") or "unknown"
+
+    logger.info(
+        f"🔔 Auto-listen investigation: user={user_id}, "
+        f"thread={thread_ts}, text={text[:100]}"
+    )
+
+    # Check if trial has expired
+    try:
+        config_client = get_config_client()
+        trial_info = config_client.get_trial_status(team_id)
+        if trial_info and trial_info.get("expired"):
+            logger.info(
+                f"Trial expired for team {team_id}, "
+                "skipping auto-listen investigation"
+            )
+            return
+    except Exception as e:
+        logger.error(f"Failed to check trial status: {e}")
+        return
+
+    # Generate thread_id for sre-agent
+    sanitized_thread_ts = thread_ts.replace(".", "-")
+    sanitized_channel = channel_id.lower()
+    thread_id = f"slack-{sanitized_channel}-{sanitized_thread_ts}"
+
+    # Get bot's user ID
+    bot_user_id = context.get("bot_user_id")
+    if not bot_user_id:
+        try:
+            auth_response = client.auth_test()
+            bot_user_id = auth_response.get("user_id")
+        except Exception as e:
+            logger.warning(f"Failed to get bot user ID: {e}")
+
+    # Fetch full thread context (all messages in the thread)
+    thread_context_text = None
+    thread_images = []
+    thread_file_attachments = []
+    try:
+        thread_replies = client.conversations_replies(
+            channel=channel_id,
+            ts=thread_ts,
+            limit=200,
+        )
+        thread_context_text, thread_images, thread_file_attachments = (
+            _build_full_thread_context(
+                thread_replies.get("messages", []),
+                current_message_ts=event["ts"],
+                bot_user_id=bot_user_id,
+                client=client,
+            )
+        )
+        if thread_context_text:
+            logger.info(
+                f"Thread context loaded ({len(thread_images)} images, "
+                f"{len(thread_file_attachments)} files)"
+            )
+    except Exception as e:
+        logger.warning(f"Failed to fetch thread context: {e}")
+
+    # Resolve mentions and extract attachments from triggering message
+    resolved_text, id_to_name_mapping = _resolve_mentions(text, client, bot_user_id)
+    images = _extract_images_from_event(event, client)
+    file_attachments = _extract_file_attachments_from_event(event, client)
+
+    # Download thread images (thread_images are metadata, not yet downloaded)
+    MAX_INLINE_THREAD_IMAGES = 5
+    if thread_images:
+        inline_meta = thread_images[-MAX_INLINE_THREAD_IMAGES:]
+        overflow_meta = (
+            thread_images[:-MAX_INLINE_THREAD_IMAGES]
+            if len(thread_images) > MAX_INLINE_THREAD_IMAGES
+            else []
+        )
+        for meta in inline_meta:
+            img = _download_slack_image(meta["file_info"], client, thumbnail_only=True)
+            if img:
+                images.insert(0, img)
+        for meta in overflow_meta:
+            file_info = meta["file_info"]
+            url = file_info.get("url_private_download") or file_info.get("url_private")
+            if url:
+                thread_file_attachments.append(
+                    {
+                        "filename": meta["semantic_name"],
+                        "size": file_info.get("size", 0),
+                        "media_type": file_info.get("mimetype", "image/png"),
+                        "download_url": url,
+                        "auth_header": f"Bearer {client.token}",
+                    }
+                )
+
+    # Merge thread file attachments with triggering message's
+    file_attachments = thread_file_attachments + file_attachments
+
+    # Get the user's name (cached)
+    sender_name = _get_user_display_name(client, user_id)
+
+    prompt_text = resolved_text.strip()
+
+    if not prompt_text and not images and not file_attachments:
+        return  # Nothing to investigate
+
+    # Build enriched prompt with Slack context
+    context_lines = ["\n### Slack Context"]
+    context_lines.append(f"**Requested by:** {sender_name} (User ID: {user_id})")
+
+    if id_to_name_mapping:
+        context_lines.append("\n**User/Bot ID to Name Mapping:**")
+        for uid, name in id_to_name_mapping.items():
+            context_lines.append(f"- {name}: {uid}")
+        context_lines.append("\n**How to mention users/bots in your responses:**")
+        context_lines.append(
+            "To mention a user or bot in Slack, use this syntax: `<@USER_ID>`"
+        )
+
+    if file_attachments:
+        context_lines.append("\n**File Attachments:**")
+        context_lines.append(
+            "The user attached the following files, which are being "
+            "downloaded into your workspace:"
+        )
+        for att in file_attachments:
+            filename = att["filename"]
+            size_bytes = att["size"]
+            if size_bytes >= 1024 * 1024:
+                size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+            else:
+                size_str = f"{size_bytes / 1024:.1f} KB"
+            context_lines.append(f"- `attachments/{filename}` ({size_str})")
+        context_lines.append("\nYou can read these files using the Read tool.")
+
+    context_lines.append("\n**Including Images in Your Response:**")
+    context_lines.append("Use `![description](./path/to/image.png)` for images.")
+    context_lines.append("\n**Sharing Files with the User:**")
+    context_lines.append(
+        "Use `[description](./path/to/file)` for files " "(place at end of response)."
+    )
+
+    enriched_prompt = prompt_text + "\n" + "\n".join(context_lines)
+
+    # Prepend full thread context
+    if thread_context_text:
+        enriched_prompt = thread_context_text + enriched_prompt
+
+    # Post initial "Investigating..." message
+    from assets_config import get_asset_url
+
+    loading_url = get_asset_url("loading")
+
+    initial_blocks = (
+        [
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "image",
+                        "image_url": loading_url,
+                        "alt_text": "Loading",
+                    },
+                    {"type": "mrkdwn", "text": "Investigating..."},
+                ],
+            }
+        ]
+        if loading_url
+        else [
+            {
+                "type": "context",
+                "elements": [{"type": "mrkdwn", "text": "⏳ Investigating..."}],
+            }
+        ]
+    )
+
+    try:
+        initial_response = client.chat_postMessage(
+            channel=channel_id,
+            thread_ts=thread_ts,
+            text="Investigating...",
+            blocks=initial_blocks,
+        )
+    except Exception as e:
+        logger.error(f"Failed to post auto-listen message: {e}")
+        return
+
+    message_ts = initial_response["ts"]
+
+    state = MessageState(
+        channel_id=channel_id,
+        message_ts=message_ts,
+        thread_ts=thread_ts,
+        thread_id=thread_id,
+    )
+
+    try:
+        team_token = None
+        try:
+            config_client = get_config_client()
+            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
+        except Exception as e:
+            logger.warning(f"Failed to get team token: {e}")
+
+        request_payload = {
+            "prompt": enriched_prompt,
+            "thread_id": thread_id,
+            "tenant_id": team_id,
+            "team_id": team_id,
+        }
+
+        if team_token:
+            request_payload["team_token"] = team_token
+
+        if images:
+            request_payload["images"] = [
+                {
+                    "type": "base64",
+                    "media_type": img["media_type"],
+                    "data": img["data"],
+                    "filename": img.get("filename", "image"),
+                }
+                for img in images
+            ]
+
+        if file_attachments:
+            request_payload["file_attachments"] = [
+                {
+                    "filename": att["filename"],
+                    "size": att["size"],
+                    "media_type": att["media_type"],
+                    "download_url": att["download_url"],
+                    "auth_header": att["auth_header"],
+                }
+                for att in file_attachments
+            ]
+
+        response = requests.post(
+            f"{SRE_AGENT_URL}/investigate",
+            json=request_payload,
+            stream=True,
+            timeout=300,
+            headers={"Accept": "text/event-stream"},
+        )
+
+        if response.status_code != 200:
+            error_detail = response.text[:200] if response.text else "Unknown error"
+            state.error = f"Server error ({response.status_code}): {error_detail}"
+            update_slack_message(client, state, team_id, final=True)
+            return
+
+        event_count = 0
+        for line in response.iter_lines(decode_unicode=True):
+            if line:
+                sse_event = parse_sse_event(line)
+                if sse_event:
+                    event_count += 1
+                    handle_stream_event(state, sse_event, client, team_id)
+
+        import time
+
+        _investigation_cache[state.message_ts] = state
+        _cache_timestamps[state.message_ts] = time.time()
+
+        if event_count == 0 and not state.error:
+            state.error = "No response received from agent"
+
+        update_slack_message(client, state, team_id, final=True)
+        save_investigation_snapshot(state)
+
+    except requests.exceptions.ConnectionError:
+        state.error = "Could not connect to investigation service. Is it running?"
+        update_slack_message(client, state, team_id, final=True)
+    except requests.exceptions.Timeout:
+        state.error = "Investigation timed out (5 min limit). Try a simpler query?"
+        update_slack_message(client, state, team_id, final=True)
+    except Exception as e:
+        logger.exception(f"Error during auto-listen investigation: {e}")
+        state.error = f"Unexpected error: {str(e)}"
+        update_slack_message(client, state, team_id, final=True)
+
+
+@app.action("stop_listening")
+def handle_stop_listening(ack, body, client):
+    """Handle 'Stop listening' button click."""
+    ack()
+
+    value = json.loads(body["actions"][0]["value"])
+    channel_id = value["channel_id"]
+    thread_ts = value["thread_ts"]
+    user_id = body["user"]["id"]
+
+    # Disable auto-listen for this thread
+    _auto_listen_threads.pop((channel_id, thread_ts), None)
+
+    logger.info(f"🔇 Auto-listen disabled for thread {thread_ts} by user {user_id}")
+
+    # Post a visible message in the thread
+    client.chat_postMessage(
+        channel=channel_id,
+        thread_ts=thread_ts,
+        text="🔇 Stopped listening in this thread. @mention me to re-enable.",
+    )
 
 
 def fetch_incidentio_alert_details(
@@ -2171,14 +2836,19 @@ Use all available tools to gather context about this issue."""
         thread_id=thread_id,
     )
 
+    # Enable auto-listen for this thread (users can follow up without @mention)
+    _auto_listen_threads[(channel_id, thread_ts)] = True
+    logger.info(f"🔔 Auto-listen enabled for alert thread {thread_ts} in {channel_id}")
+
     try:
         # Get team token for config-driven agents
+        # Uses channel-based routing with fallback to workspace-based routing
         team_token = None
         try:
             config_client = get_config_client()
-            team_token = config_client.get_team_token(team_id)
+            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
-            logger.warning(f"Failed to get team token for {team_id}: {e}")
+            logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
 
         # Call sre-agent to investigate
         request_payload = {
@@ -2256,11 +2926,10 @@ def handle_message(event, client, context):
     """
     Handle regular messages (not @mentions).
 
-    Special case: Auto-trigger investigation for Incident.io alerts.
-
-    If the bot has already participated in this thread and the user
-    didn't mention us, send ONE private ephemeral nudge asking if they
-    want to invoke IncidentFox. Only nudge once per user per thread.
+    Special cases:
+    - Auto-trigger investigation for Incident.io alerts
+    - Auto-listen: respond to follow-ups in threads where the bot is active
+    - Coralogix insight detection: prompt to investigate shared links
     """
     # DEBUG: Log EVERY message event received - this should print for ALL messages
     logger.info("=" * 60)
@@ -2381,31 +3050,98 @@ def handle_message(event, client, context):
                 logger.warning(f"Failed to get bot user ID: {e}")
                 bot_user_id = None
 
+        # Fetch full thread context for DM threads
+        thread_context_text = None
+        thread_image_metadata = []
+        thread_file_attachments = []
+        is_dm_thread = event.get("thread_ts") is not None
+
+        if is_dm_thread:
+            try:
+                thread_replies = client.conversations_replies(
+                    channel=channel_id,
+                    ts=thread_ts,
+                    limit=200,
+                )
+                thread_context_text, thread_image_metadata, thread_file_attachments = (
+                    _build_full_thread_context(
+                        thread_replies.get("messages", []),
+                        current_message_ts=event["ts"],
+                        bot_user_id=bot_user_id,
+                        client=client,
+                    )
+                )
+                if thread_context_text:
+                    logger.info(
+                        f"Full DM thread context loaded for thread {thread_ts} "
+                        f"({len(thread_image_metadata)} images, {len(thread_file_attachments)} files)"
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to fetch DM thread context: {e}")
+
         # Resolve mentions in DM text (if any)
         resolved_text, id_to_name_mapping = _resolve_mentions(
             dm_text, client, bot_user_id
         )
 
-        # Extract images from the event
+        # Extract images from the triggering event (always inline)
         images = _extract_images_from_event(event, client)
 
-        # Extract file attachments
+        # Extract file attachments from the triggering event
         file_attachments = _extract_file_attachments_from_event(event, client)
 
-        # Get sender's name
-        sender_name = "Unknown User"
-        try:
-            user_response = client.users_info(user=user_id)
-            if user_response["ok"]:
-                user = user_response["user"]
-                profile = user.get("profile", {})
-                sender_name = (
-                    profile.get("display_name")
-                    or profile.get("real_name")
-                    or user.get("name", "Unknown User")
+        # Process thread images: last 5 as base64, older ones saved as files
+        MAX_INLINE_THREAD_IMAGES = 5
+        overflow_image_context = ""
+
+        if thread_image_metadata:
+            inline_meta = thread_image_metadata[-MAX_INLINE_THREAD_IMAGES:]
+            overflow_meta = (
+                thread_image_metadata[:-MAX_INLINE_THREAD_IMAGES]
+                if len(thread_image_metadata) > MAX_INLINE_THREAD_IMAGES
+                else []
+            )
+
+            for meta in inline_meta:
+                img = _download_slack_image(
+                    meta["file_info"], client, thumbnail_only=True
                 )
-        except Exception as e:
-            logger.warning(f"Failed to get sender name for {user_id}: {e}")
+                if img:
+                    images.insert(0, img)
+
+            for meta in overflow_meta:
+                file_info = meta["file_info"]
+                url = file_info.get("url_private_download") or file_info.get(
+                    "url_private"
+                )
+                if url:
+                    thread_file_attachments.append(
+                        {
+                            "filename": meta["semantic_name"],
+                            "size": file_info.get("size", 0),
+                            "media_type": file_info.get("mimetype", "image/png"),
+                            "download_url": url,
+                            "auth_header": f"Bearer {client.token}",
+                        }
+                    )
+
+            if overflow_meta:
+                lines = [
+                    "\n**Earlier thread images (saved as files):**",
+                    "These images from earlier in the thread have been saved to your workspace.",
+                    "You can view them using the Read tool if needed:",
+                ]
+                for meta in overflow_meta:
+                    lines.append(
+                        f"- `attachments/{meta['semantic_name']}` — from {meta['sender']} at {meta['time_str']}"
+                    )
+                overflow_image_context = "\n".join(lines)
+
+        # Merge thread file attachments with triggering message's
+        file_attachments = thread_file_attachments + file_attachments
+
+        # Get sender's name (cached)
+        sender_name = _get_user_display_name(client, user_id)
 
         prompt_text = resolved_text.strip()
 
@@ -2457,7 +3193,15 @@ def handle_message(event, client, context):
             "If you generate files, share them using: `[description](./path/to/file.csv)`"
         )
 
+        # Add context about overflow images saved as files in sandbox
+        if overflow_image_context:
+            context_lines.append(overflow_image_context)
+
         enriched_prompt = prompt_text + "\n" + "\n".join(context_lines)
+
+        # Prepend full thread context if available (all messages in the DM thread)
+        if thread_context_text:
+            enriched_prompt = thread_context_text + enriched_prompt
 
         # Post initial message
         from assets_config import get_asset_url
@@ -2506,12 +3250,17 @@ def handle_message(event, client, context):
 
         try:
             # Get team token for config-driven agents
+            # For DMs, channel routing won't match, falls back to workspace-based routing
             team_token = None
             try:
                 config_client = get_config_client()
-                team_token = config_client.get_team_token(team_id)
+                team_token = config_client.get_team_token_for_channel(
+                    team_id, channel_id
+                )
             except Exception as e:
-                logger.warning(f"Failed to get team token for {team_id}: {e}")
+                logger.warning(
+                    f"Failed to get team token for {team_id}/{channel_id}: {e}"
+                )
 
             # Build request payload
             request_payload = {
@@ -2646,7 +3395,11 @@ def handle_message(event, client, context):
                 return  # Block if we can't verify trial status
 
             logger.info("✅ Confirmed: NEW ALERT - triggering investigation")
-            _trigger_incident_io_investigation(event, client, context)
+            threading.Thread(
+                target=_trigger_incident_io_investigation,
+                args=(event, client, context),
+                daemon=True,
+            ).start()
             return
         else:
             logger.info("ℹ️  Has bot_id but not a new alert pattern")
@@ -2785,8 +3538,13 @@ def handle_message(event, client, context):
     # END CORALOGIX DETECTION
     # ============================================================================
 
-    # Skip subtypes (message edits, bot_message, etc.) for nudge logic
-    if subtype:
+    # Skip subtypes (message edits, bot_message, etc.) — but allow file_share
+    # (file_share = user sent a message with an image/file attachment)
+    if subtype and subtype != "file_share":
+        return
+
+    # Skip bot messages (prevents infinite loop in auto-listen threads)
+    if event.get("bot_id"):
         return
 
     # Only handle threaded messages (not top-level channel messages)
@@ -2795,6 +3553,9 @@ def handle_message(event, client, context):
         return
 
     user_id = event.get("user")
+    if not user_id:
+        return
+
     channel_id = event.get("channel")
     text = event.get("text", "")
 
@@ -2803,290 +3564,16 @@ def handle_message(event, client, context):
     if bot_user_id and f"<@{bot_user_id}>" in text:
         return
 
-    # Skip if we've already sent a nudge to this user in this thread
-    if _nudge_sent.get((thread_ts, user_id)):
-        return
-
-    # Check if the bot has participated in this thread
-    try:
-        replies = client.conversations_replies(
-            channel=channel_id,
-            ts=thread_ts,
-            limit=50,  # Check recent messages
+    # Auto-listen: if this thread has auto-listen enabled, trigger investigation directly
+    if _auto_listen_threads.get((channel_id, thread_ts)):
+        logger.info(
+            f"🔔 Auto-listen triggered for thread {thread_ts} by user {user_id}"
         )
-
-        bot_has_replied = False
-        for msg in replies.get("messages", []):
-            # Check if any message is from our bot
-            if msg.get("bot_id") or (msg.get("user") == bot_user_id):
-                bot_has_replied = True
-                break
-
-        if not bot_has_replied:
-            return  # Bot hasn't participated, no need to nudge
-
-    except Exception as e:
-        logger.warning(f"Failed to check thread history: {e}")
-        return
-
-    # Send ephemeral nudge to the user (only once per thread)
-    logger.info(f"Sending nudge to {user_id} in thread {thread_ts}")
-
-    # Truncate text for display (keep it short)
-    display_text = text[:50] + "..." if len(text) > 50 else text
-
-    # Get bot's name for the @mention hint
-    bot_name = "IncidentFox"
-
-    try:
-        client.chat_postEphemeral(
-            channel=channel_id,
-            user=user_id,
-            thread_ts=thread_ts,
-            text=f"Did you want to ask me '{display_text}'?",
-            blocks=[
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"👋 Did you want to ask me _{display_text}_?",
-                    },
-                },
-                {
-                    "type": "actions",
-                    "elements": [
-                        {
-                            "type": "button",
-                            "text": {"type": "plain_text", "text": "Yes"},
-                            "style": "primary",
-                            "action_id": "nudge_invoke",
-                            "value": json.dumps(
-                                {
-                                    "channel_id": channel_id,
-                                    "thread_ts": thread_ts,
-                                    "user_id": user_id,
-                                    "text": text,
-                                }
-                            ),
-                        },
-                        {
-                            "type": "button",
-                            "text": {"type": "plain_text", "text": "No"},
-                            "action_id": "nudge_dismiss",
-                            "value": json.dumps(
-                                {
-                                    "thread_ts": thread_ts,
-                                    "user_id": user_id,
-                                }
-                            ),
-                        },
-                    ],
-                },
-                {
-                    "type": "context",
-                    "elements": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"_You can <@{bot_user_id}> to ask me followup questions. I won't ask again in this thread._",
-                        }
-                    ],
-                },
-            ],
-        )
-
-        # Mark that we've sent a nudge to this user in this thread
-        _nudge_sent[(thread_ts, user_id)] = True
-
-    except Exception as e:
-        logger.warning(f"Failed to send nudge: {e}")
-
-
-@app.action("nudge_invoke")
-def handle_nudge_invoke(ack, body, client, context, respond):
-    """Handle 'Yes, ask IncidentFox' button from nudge."""
-    ack()
-
-    # Delete this ephemeral message
-    respond({"delete_original": True})
-
-    # Parse the value
-    value = json.loads(body["actions"][0]["value"])
-    channel_id = value["channel_id"]
-    thread_ts = value["thread_ts"]
-    user_id = value["user_id"]
-    text = value["text"]
-
-    logger.info(f"Nudge accepted by {user_id} in thread {thread_ts}")
-
-    # Get team_id
-    team_id = body.get("team", {}).get("id") or "unknown"
-
-    # Get the user's name
-    sender_name = "Unknown User"
-    try:
-        user_response = client.users_info(user=user_id)
-        if user_response["ok"]:
-            user = user_response["user"]
-            profile = user.get("profile", {})
-            sender_name = (
-                profile.get("display_name")
-                or profile.get("real_name")
-                or user.get("name", "Unknown User")
-            )
-    except Exception as e:
-        logger.warning(f"Failed to get sender name: {e}")
-
-    # Generate thread_id
-    sanitized_thread_ts = thread_ts.replace(".", "-")
-    sanitized_channel = channel_id.lower()
-    thread_id = f"slack-{sanitized_channel}-{sanitized_thread_ts}"
-
-    # Build a simple prompt with context
-    context_lines = ["\n### Slack Context"]
-    context_lines.append(f"**Requested by:** {sender_name} (User ID: {user_id})")
-    context_lines.append("\n**Including Images in Your Response:**")
-    context_lines.append("Use `![description](./path/to/image.png)` for images.")
-    context_lines.append("\n**Sharing Files with the User:**")
-    context_lines.append(
-        "Use `[description](./path/to/file)` for files (place at end of response)."
-    )
-
-    enriched_prompt = text + "\n" + "\n".join(context_lines)
-
-    # Post initial "Investigating..." message
-    from assets_config import get_asset_url
-
-    loading_url = get_asset_url("loading")
-
-    # Truncate text for display
-    display_text = text[:80] + "..." if len(text) > 80 else text
-
-    # Build initial blocks with context about who triggered it
-    trigger_context = {
-        "type": "context",
-        "elements": [
-            {"type": "mrkdwn", "text": f"_Triggered by <@{user_id}>: {display_text}_"}
-        ],
-    }
-
-    if loading_url:
-        initial_blocks = [
-            trigger_context,
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "image",
-                        "image_url": loading_url,
-                        "alt_text": "Loading",
-                    },
-                    {"type": "mrkdwn", "text": "Investigating..."},
-                ],
-            },
-        ]
-    else:
-        initial_blocks = [
-            trigger_context,
-            {
-                "type": "context",
-                "elements": [{"type": "mrkdwn", "text": "⏳ Investigating..."}],
-            },
-        ]
-
-    try:
-        initial_response = client.chat_postMessage(
-            channel=channel_id,
-            thread_ts=thread_ts,
-            text=f"Investigating (triggered by <@{user_id}>)...",
-            blocks=initial_blocks,
-        )
-    except Exception as e:
-        logger.error(f"Failed to post initial message: {e}")
-        return
-
-    message_ts = initial_response["ts"]
-
-    # Initialize state with trigger context (for nudge-initiated investigations)
-    state = MessageState(
-        channel_id=channel_id,
-        message_ts=message_ts,
-        thread_ts=thread_ts,
-        thread_id=thread_id,
-        trigger_user_id=user_id,
-        trigger_text=text,
-    )
-
-    # Call sre-agent with SSE streaming
-    try:
-        # Get team token for config-driven agents
-        team_token = None
-        try:
-            config_client = get_config_client()
-            team_token = config_client.get_team_token(team_id)
-        except Exception as e:
-            logger.warning(f"Failed to get team token for {team_id}: {e}")
-
-        request_payload = {
-            "prompt": enriched_prompt,
-            "thread_id": thread_id,
-            "tenant_id": team_id,  # Slack team_id = tenant for credential lookup
-            "team_id": team_id,
-        }
-
-        # Add team_token for config-driven agents
-        if team_token:
-            request_payload["team_token"] = team_token
-
-        response = requests.post(
-            f"{SRE_AGENT_URL}/investigate",
-            json=request_payload,
-            stream=True,
-            timeout=300,
-            headers={"Accept": "text/event-stream"},
-        )
-
-        if response.status_code != 200:
-            state.error = f"Server error ({response.status_code})"
-            update_slack_message(client, state, team_id, final=True)
-            return
-
-        # Process SSE stream
-        for line in response.iter_lines(decode_unicode=True):
-            if line:
-                event = parse_sse_event(line)
-                if event:
-                    handle_stream_event(state, event, client, team_id)
-
-        # Cache state for modal (keyed by message_ts for per-message uniqueness)
-        import time
-
-        _investigation_cache[state.message_ts] = state
-        _cache_timestamps[state.message_ts] = time.time()
-
-        # Final update
-        update_slack_message(client, state, team_id, final=True)
-        save_investigation_snapshot(state)
-
-    except Exception as e:
-        logger.exception(f"Error during investigation: {e}")
-        state.error = f"Error: {str(e)}"
-        update_slack_message(client, state, team_id, final=True)
-
-
-@app.action("nudge_dismiss")
-def handle_nudge_dismiss(ack, body, respond):
-    """Handle 'No' button from nudge."""
-    ack()
-
-    # Delete this ephemeral message
-    respond({"delete_original": True})
-
-    # Parse the value
-    value = json.loads(body["actions"][0]["value"])
-    thread_ts = value["thread_ts"]
-    user_id = value["user_id"]
-
-    logger.info(f"Nudge dismissed by {user_id} in thread {thread_ts}")
+        threading.Thread(
+            target=_run_auto_listen_investigation,
+            args=(event, client, context),
+            daemon=True,
+        ).start()
 
 
 @app.action("coralogix_investigate")
@@ -3110,20 +3597,8 @@ def handle_coralogix_investigate(ack, body, client, context, respond):
     # Get team_id
     team_id = body.get("team", {}).get("id") or "unknown"
 
-    # Get the user's name
-    sender_name = "Unknown User"
-    try:
-        user_response = client.users_info(user=user_id)
-        if user_response["ok"]:
-            user = user_response["user"]
-            profile = user.get("profile", {})
-            sender_name = (
-                profile.get("display_name")
-                or profile.get("real_name")
-                or user.get("name", "Unknown User")
-            )
-    except Exception as e:
-        logger.warning(f"Failed to get sender name: {e}")
+    # Get the user's name (cached)
+    sender_name = _get_user_display_name(client, user_id)
 
     # Generate thread_id
     sanitized_thread_ts = thread_ts.replace(".", "-")
@@ -3210,14 +3685,21 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
         trigger_text=original_text,
     )
 
+    # Enable auto-listen for this thread
+    _auto_listen_threads[(channel_id, thread_ts)] = True
+    logger.info(
+        f"🔔 Auto-listen enabled for Coralogix thread {thread_ts} in {channel_id}"
+    )
+
     try:
         # Get team token for config-driven agents
+        # Uses channel-based routing with fallback to workspace-based routing
         team_token = None
         try:
             config_client = get_config_client()
-            team_token = config_client.get_team_token(team_id)
+            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
-            logger.warning(f"Failed to get team token for {team_id}: {e}")
+            logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
 
         # Call sre-agent to investigate
         request_payload = {
@@ -4554,13 +5036,14 @@ def handle_filter_category(ack, body, client):
         if github_installation:
             configured["github"] = {"enabled": True, "_github_linked": True}
 
-        # Rebuild the integrations page with new category filter
+        # Rebuild the integrations page with new category filter (reset to page 0)
         onboarding = get_onboarding_modules()
         modal = onboarding.build_integrations_page(
             team_id=team_id,
             category_filter=category,
             configured=configured,
             trial_info=trial_info,
+            page=0,
         )
 
         # Update the current modal view
@@ -4572,6 +5055,52 @@ def handle_filter_category(ack, body, client):
 
     except Exception as e:
         logger.error(f"Failed to filter integrations: {e}", exc_info=True)
+
+
+@app.action(re.compile(r"^integrations_(prev|next)_page$"))
+def handle_integrations_pagination(ack, body, client):
+    """Handle pagination buttons on integrations page."""
+    ack()
+
+    action_id = body.get("actions", [{}])[0].get("action_id", "")
+    view = body.get("view", {})
+    private_metadata = json.loads(view.get("private_metadata", "{}"))
+
+    team_id = private_metadata.get("team_id") or body.get("team", {}).get("id")
+    category_filter = private_metadata.get("category_filter", "all")
+    current_page = private_metadata.get("page", 0)
+
+    if action_id == "integrations_next_page":
+        page = current_page + 1
+    else:
+        page = max(0, current_page - 1)
+
+    try:
+        config_client = get_config_client()
+        configured = config_client.get_configured_integrations(team_id)
+        trial_info = config_client.get_trial_status(team_id)
+
+        github_installation = config_client.get_linked_github_installation(team_id)
+        if github_installation:
+            configured["github"] = {"enabled": True, "_github_linked": True}
+
+        onboarding = get_onboarding_modules()
+        modal = onboarding.build_integrations_page(
+            team_id=team_id,
+            category_filter=category_filter,
+            configured=configured,
+            trial_info=trial_info,
+            page=page,
+        )
+
+        client.views_update(
+            view_id=view.get("id"),
+            view=modal,
+        )
+        logger.info(f"Paginated integrations to page {page}")
+
+    except Exception as e:
+        logger.error(f"Failed to paginate integrations: {e}", exc_info=True)
 
 
 @app.view("integrations_page")
@@ -4908,6 +5437,410 @@ def handle_advanced_settings_submission(ack, body, client, view):
     logger.info(f"Advanced settings submission completed for team {team_id}")
 
 
+# =============================================================================
+# AI MODEL SELECTION HANDLERS
+# =============================================================================
+
+
+def _detect_provider_from_model(model: str) -> Optional[str]:
+    """Detect provider ID from a LiteLLM model string.
+
+    Delegates to onboarding.detect_provider_from_model (single source of truth).
+    """
+    onboarding = get_onboarding_modules()
+    return onboarding.detect_provider_from_model(model)
+
+
+@app.action("home_open_ai_model_selector")
+def handle_open_ai_model_selector(ack, body, client):
+    """Open the unified AI model configuration modal from Home Tab."""
+    ack()
+
+    team_id = body.get("team", {}).get("id")
+    if not team_id:
+        logger.error("No team_id in home_open_ai_model_selector")
+        return
+
+    # Open modal immediately with empty state to avoid trigger_id expiration
+    # (trigger_id has ~3s TTL, config-service calls can be slow)
+    try:
+        onboarding = get_onboarding_modules()
+        modal = onboarding.build_ai_model_modal(team_id=team_id)
+        resp = client.views_open(trigger_id=body["trigger_id"], view=modal)
+        view_id = resp["view"]["id"]
+    except Exception as e:
+        logger.error(f"Failed to open AI model modal: {e}", exc_info=True)
+        return
+
+    # Now fetch existing config and update the modal with pre-filled values
+    try:
+        config_client = get_config_client()
+        workspace_config = config_client.get_workspace_config(team_id) or {}
+        integrations = workspace_config.get("integrations", {})
+        llm_config = integrations.get("llm", {})
+        current_model = llm_config.get("model", "")
+
+        if current_model:
+            current_provider = _detect_provider_from_model(current_model)
+            existing_provider_config = integrations.get(current_provider) or {}
+
+            modal = onboarding.build_ai_model_modal(
+                team_id=team_id,
+                provider_id=current_provider,
+                current_model=current_model,
+                existing_provider_config=existing_provider_config,
+            )
+            client.views_update(view_id=view_id, view=modal)
+
+        logger.info(f"Opened AI model modal for team {team_id}")
+
+    except Exception as e:
+        logger.warning(f"Failed to pre-fill AI model modal: {e}")
+
+
+@app.action("ai_provider_select")
+def handle_ai_provider_change(ack, body, client):
+    """Handle provider dropdown change — update the modal with provider-specific fields."""
+    ack()
+
+    view = body.get("view", {})
+    view_id = view.get("id")
+
+    # Get selected provider from the action
+    selected_provider = (
+        body.get("actions", [{}])[0].get("selected_option", {}).get("value")
+    )
+    if not selected_provider or not view_id:
+        return
+
+    try:
+        private_metadata = json.loads(view.get("private_metadata", "{}"))
+        team_id = private_metadata.get("team_id")
+
+        config_client = get_config_client()
+        existing_provider_config = (
+            config_client.get_integration_config(team_id, selected_provider) or {}
+        )
+
+        onboarding = get_onboarding_modules()
+        modal = onboarding.build_ai_model_modal(
+            team_id=team_id,
+            provider_id=selected_provider,
+            current_model=None,  # Don't carry over model from different provider
+            existing_provider_config=existing_provider_config,
+        )
+
+        client.views_update(view_id=view_id, view=modal)
+        logger.info(
+            f"Updated AI model modal for provider {selected_provider}, team {team_id}"
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to update AI model modal: {e}", exc_info=True)
+
+
+@app.action("input_model_id")
+def handle_model_select_change(ack, body, client):
+    """Handle model dropdown change — show model description."""
+    ack()
+
+    view = body.get("view", {})
+    view_id = view.get("id")
+    selected_model = (
+        body.get("actions", [{}])[0].get("selected_option", {}).get("value")
+    )
+    if not selected_model or not view_id:
+        return
+
+    try:
+        private_metadata = json.loads(view.get("private_metadata", "{}"))
+        team_id = private_metadata.get("team_id")
+
+        # Get provider from form state
+        values = view.get("state", {}).get("values", {})
+        provider_id = (
+            values.get("provider_block", {})
+            .get("ai_provider_select", {})
+            .get("selected_option", {})
+            .get("value")
+        ) or private_metadata.get("provider_id")
+
+        if not provider_id:
+            return
+
+        # Look up model description
+        from model_catalog import get_model_description
+
+        description = get_model_description(provider_id, selected_model)
+
+        config_client = get_config_client()
+        existing_provider_config = (
+            config_client.get_integration_config(team_id, provider_id) or {}
+        )
+
+        onboarding = get_onboarding_modules()
+        modal = onboarding.build_ai_model_modal(
+            team_id=team_id,
+            provider_id=provider_id,
+            current_model=selected_model,
+            existing_provider_config=existing_provider_config,
+            model_description=description,
+        )
+
+        client.views_update(view_id=view_id, view=modal)
+    except Exception as e:
+        logger.error(f"Failed to update model description: {e}", exc_info=True)
+
+
+@app.view("ai_model_config_submission")
+def handle_ai_model_config_submission(ack, body, client, view):
+    """Handle AI model config submission: validate key + save provider + model."""
+    private_metadata = json.loads(view.get("private_metadata", "{}"))
+    team_id = private_metadata.get("team_id")
+    provider_id = private_metadata.get("provider_id")
+    field_names = private_metadata.get("field_names", [])
+    values = view.get("state", {}).get("values", {})
+
+    # Also read provider from form state (authoritative if present)
+    dropdown_provider = (
+        values.get("provider_block", {})
+        .get("ai_provider_select", {})
+        .get("selected_option", {})
+        .get("value")
+    )
+    if dropdown_provider:
+        provider_id = dropdown_provider
+
+    # 1. Extract model ID — block_id is provider-specific (field_model_id_{provider})
+    model_field = {}
+    model_block_id = "field_model_id"
+    for block_id, block_vals in values.items():
+        if block_id.startswith("field_model_id") and "input_model_id" in block_vals:
+            model_field = block_vals["input_model_id"]
+            model_block_id = block_id
+            break
+    selected_option = model_field.get("selected_option")
+    model_id = (
+        selected_option.get("value", "").strip()
+        if selected_option
+        else model_field.get("value", "").strip()  # fallback for plain_text_input
+    )
+    if not model_id:
+        ack(
+            response_action="errors",
+            errors={model_block_id: "Model ID is required."},
+        )
+        return
+
+    import re
+
+    if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9._/:@\-]*$", model_id):
+        ack(
+            response_action="errors",
+            errors={
+                model_block_id: "Invalid model ID. Use letters, numbers, hyphens, slashes, dots, colons, or underscores."
+            },
+        )
+        return
+
+    # 2. Extract provider-specific fields
+    config_client = get_config_client()
+    try:
+        existing_provider_config = (
+            config_client.get_integration_config(team_id, provider_id) or {}
+        )
+    except Exception:
+        existing_provider_config = {}
+
+    provider_config = {}
+    for field_id in field_names:
+        block_id = f"field_{field_id}"
+        action_id = f"input_{field_id}"
+        field_value = values.get(block_id, {}).get(action_id, {})
+
+        if "value" in field_value:
+            val = (field_value.get("value") or "").strip()
+            if val and re.fullmatch(r"\*+", val):
+                # Masked secret field unchanged — preserve existing value
+                if field_id in existing_provider_config:
+                    provider_config[field_id] = existing_provider_config[field_id]
+            elif val:
+                provider_config[field_id] = val
+            elif field_id in existing_provider_config:
+                # Secret field left blank — preserve existing value
+                provider_config[field_id] = existing_provider_config[field_id]
+        elif "selected_option" in field_value:
+            selected = field_value.get("selected_option", {})
+            if selected:
+                provider_config[field_id] = selected.get("value")
+            elif field_id in existing_provider_config:
+                provider_config[field_id] = existing_provider_config[field_id]
+        elif "selected_options" in field_value:
+            # Checkboxes (boolean)
+            selected = field_value.get("selected_options", [])
+            provider_config[field_id] = len(selected) > 0
+
+    # 3. Show loading state immediately (Slack requires ack within 3 seconds)
+    #    Push on top of form so user can go Back on error (form fields preserved)
+    from assets_config import get_asset_url
+
+    user_id = body.get("user", {}).get("id")
+    validation_ext_id = f"ai_validation_{team_id}_{user_id or 'u'}_{int(time.time())}"
+    loading_url = get_asset_url("loading")
+    loading_elements = []
+    if loading_url:
+        loading_elements.append(
+            {"type": "image", "image_url": loading_url, "alt_text": "Loading"}
+        )
+    loading_elements.append({"type": "mrkdwn", "text": "*Validating your API key...*"})
+    ack(
+        response_action="push",
+        view={
+            "type": "modal",
+            "external_id": validation_ext_id,
+            "title": {"type": "plain_text", "text": "AI Model"},
+            "blocks": [{"type": "context", "elements": loading_elements}],
+        },
+    )
+
+    # 4. Validate API key via live test request (no time pressure now)
+    onboarding = get_onboarding_modules()
+    validation_config = {**existing_provider_config, **provider_config}
+    is_valid, error_msg = onboarding.validate_provider_api_key(
+        provider_id, validation_config, model_id
+    )
+
+    if not is_valid:
+        # Update the pushed loading view to show error; "Back" pops it, revealing the form
+        client.views_update(
+            external_id=validation_ext_id,
+            view={
+                "type": "modal",
+                "title": {"type": "plain_text", "text": "AI Model"},
+                "close": {"type": "plain_text", "text": "Back"},
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f":x: *Validation failed*\n{error_msg[:300]}",
+                        },
+                    },
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": "Press *Back* to fix your API key and try again.",
+                            }
+                        ],
+                    },
+                ],
+            },
+        )
+        return
+
+    # 5. Save provider config (API key + provider-specific fields)
+    try:
+        if provider_id != "llm" and provider_config:
+            config_client.save_integration_config(
+                slack_team_id=team_id,
+                integration_id=provider_id,
+                config=provider_config,
+            )
+            logger.info(f"Saved {provider_id} provider config for team {team_id}")
+
+        # 6. Save LLM model preference
+        config_client.save_integration_config(
+            slack_team_id=team_id,
+            integration_id="llm",
+            config={"model": model_id},
+        )
+        logger.info(f"Saved llm model={model_id} for team {team_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to save AI model config: {e}", exc_info=True)
+        client.views_update(
+            external_id=validation_ext_id,
+            view={
+                "type": "modal",
+                "title": {"type": "plain_text", "text": "AI Model"},
+                "close": {"type": "plain_text", "text": "Back"},
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f":x: *Failed to save:* {str(e)[:300]}",
+                        },
+                    },
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": "Press *Back* to try again.",
+                            }
+                        ],
+                    },
+                ],
+            },
+        )
+        return
+
+    logger.info(
+        f"AI model config saved: provider={provider_id}, model={model_id}, team={team_id}"
+    )
+
+    # 7. Show success + refresh Home Tab
+    done_url = get_asset_url("done")
+    success_elements = []
+    if done_url:
+        success_elements.append(
+            {"type": "image", "image_url": done_url, "alt_text": "Done"}
+        )
+    success_elements.append({"type": "mrkdwn", "text": "*Model saved!*"})
+    success_blocks = [
+        {"type": "context", "elements": success_elements},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"Using `{model_id}`",
+            },
+        },
+    ]
+    # Update pushed validation view with success
+    # clear_on_close=True closes the entire modal stack (not just pop back to form)
+    client.views_update(
+        external_id=validation_ext_id,
+        view={
+            "type": "modal",
+            "title": {"type": "plain_text", "text": "AI Model"},
+            "close": {"type": "plain_text", "text": "Done"},
+            "clear_on_close": True,
+            "blocks": success_blocks,
+        },
+    )
+
+    if user_id and team_id:
+        try:
+            from home_tab import build_home_tab_view
+
+            trial_info = config_client.get_trial_status(team_id)
+            configured = config_client.get_configured_integrations(team_id)
+
+            home_view = build_home_tab_view(
+                team_id=team_id,
+                trial_info=trial_info,
+                configured_integrations=configured,
+            )
+            client.views_publish(user_id=user_id, view=home_view)
+            logger.info(f"Refreshed Home Tab after AI model config for {user_id}")
+        except Exception as e:
+            logger.warning(f"Failed to refresh Home Tab: {e}")
+
+
 @app.view("integration_config_submission")
 def handle_integration_config_submission(ack, body, client, view):
     """Handle integration configuration modal submission."""
@@ -4917,6 +5850,7 @@ def handle_integration_config_submission(ack, body, client, view):
     team_id = private_metadata.get("team_id")
     integration_id = private_metadata.get("integration_id")
     field_names = private_metadata.get("field_names", [])
+    secret_fields = set(private_metadata.get("secret_fields", []))
 
     values = view.get("state", {}).get("values", {})
 
@@ -4945,6 +5879,16 @@ def handle_integration_config_submission(ack, body, client, view):
             val = field_value.get("value")
             if val:
                 val = val.strip()
+
+                # Secret fields: if value is all asterisks, user didn't change it
+                # Preserve the existing value instead of saving the redacted mask
+                if (
+                    field_id in secret_fields
+                    and val == "*" * len(val)
+                    and field_id in existing_config
+                ):
+                    config[field_id] = existing_config[field_id]
+                    continue
 
                 # Special handling for Coralogix domain field
                 if integration_id == "coralogix" and field_id == "domain":
@@ -5043,6 +5987,46 @@ def handle_integration_config_submission(ack, body, client, view):
                     onboarding = get_onboarding_modules()
                     is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
                         val, "Honeycomb"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
+                # Special handling for Loki URL field
+                elif integration_id == "loki" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "Loki"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
+                # Special handling for Splunk URL field
+                elif integration_id == "splunk" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "Splunk"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
+                # Special handling for Sentry URL field (self-hosted)
+                elif integration_id == "sentry" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "Sentry"
+                    )
+                    if not is_valid:
+                        validation_errors.append(error_msg)
+                    else:
+                        config[field_id] = parsed_url
+                # Special handling for GitLab URL field (self-hosted)
+                elif integration_id == "gitlab" and field_id == "domain":
+                    onboarding = get_onboarding_modules()
+                    is_valid, parsed_url, error_msg = onboarding.extract_generic_url(
+                        val, "GitLab"
                     )
                     if not is_valid:
                         validation_errors.append(error_msg)
@@ -5411,6 +6395,45 @@ def handle_home_retry_load(ack, body, client, context):
             pass
 
 
+@app.action(re.compile(r"^home_page_(prev|next)$"))
+def handle_home_pagination(ack, body, client, context):
+    """Handle pagination buttons on Home Tab."""
+    ack()
+
+    user_id = body.get("user", {}).get("id")
+    team_id = body.get("team", {}).get("id") or context.get("team_id")
+
+    if not user_id or not team_id:
+        return
+
+    action = body.get("actions", [{}])[0]
+    try:
+        action_value = json.loads(action.get("value", "{}"))
+        page = action_value.get("page", 1)
+    except (json.JSONDecodeError, TypeError):
+        page = 1
+
+    try:
+        config_client = get_config_client()
+        trial_info = config_client.get_trial_status(team_id)
+        configured = config_client.get_configured_integrations(team_id)
+
+        from home_tab import build_home_tab_view
+
+        view = build_home_tab_view(
+            team_id=team_id,
+            trial_info=trial_info,
+            configured_integrations=configured,
+            page=page,
+        )
+
+        client.views_publish(user_id=user_id, view=view)
+        logger.info(f"Home Tab page {page} for user {user_id}, team {team_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to paginate Home Tab: {e}", exc_info=True)
+
+
 @app.action(re.compile(r"^home_(edit|add)_integration_.*"))
 def handle_home_integration_action(ack, body, client):
     """Handle Edit/Connect buttons on Home Tab."""
@@ -5454,6 +6477,12 @@ def handle_home_integration_action(ack, body, client):
         logger.error(
             f"Failed to open integration modal from Home Tab: {e}", exc_info=True
         )
+
+
+@app.action("home_book_demo")
+def handle_home_book_demo(ack):
+    """Ack the Book a Demo URL button click (URL opens in browser)."""
+    ack()
 
 
 @app.action("home_open_api_key_modal")
@@ -5574,6 +6603,132 @@ def handle_member_joined_channel(event, client, context):
         logger.warning(f"Error sending welcome message: {e}")
 
 
+# =============================================================================
+# =============================================================================
+# Options Handlers (external_select dynamic data)
+# =============================================================================
+
+
+@app.options("input_model_id")
+def handle_model_options(ack, body):
+    """Handle dynamic model search for AI model selector (external_select)."""
+    query = body.get("value", "")
+
+    # Extract provider_id from the modal's private_metadata
+    provider_id = ""
+    view = body.get("view", {})
+    try:
+        metadata = json.loads(view.get("private_metadata", "{}"))
+        provider_id = metadata.get("provider_id", "")
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    logger.info(f"Model options request: provider={provider_id!r}, query={query!r}")
+
+    try:
+        from model_catalog import get_models_for_provider
+
+        models = get_models_for_provider(provider_id, query=query, limit=100)
+        options = [
+            {
+                "text": {"type": "plain_text", "text": m["name"][:75]},
+                "value": m["id"],
+            }
+            for m in models
+        ]
+        logger.info(f"Returning {len(options)} model options for {provider_id}")
+        ack(options=options)
+    except Exception as e:
+        logger.error(f"Failed to load model options: {e}", exc_info=True)
+        ack(options=[])
+
+
+# =============================================================================
+# Multi-App Handler Registration
+# =============================================================================
+
+
+def register_all_handlers(bolt_app):
+    """
+    Register all event/action/view handlers on a Bolt App instance.
+
+    Used by SlackAppRegistry to register the same handlers on multiple
+    Bolt App instances (one per white-label Slack app). The handler
+    functions are defined above as module-level functions.
+    """
+    # Event handlers
+    bolt_app.event("app_mention")(handle_mention)
+    bolt_app.event("message")(handle_message)
+    bolt_app.event("app_home_opened")(handle_app_home_opened)
+    bolt_app.event("member_joined_channel")(handle_member_joined_channel)
+
+    # Action handlers (string patterns)
+    bolt_app.action("stop_listening")(handle_stop_listening)
+    bolt_app.action("coralogix_investigate")(handle_coralogix_investigate)
+    bolt_app.action("coralogix_dismiss")(handle_coralogix_dismiss)
+    bolt_app.action("feedback_positive")(handle_positive_feedback)
+    bolt_app.action("feedback_negative")(handle_negative_feedback)
+    bolt_app.action("view_investigation_session")(handle_view_session)
+    bolt_app.action("modal_page_prev")(handle_modal_pagination)
+    bolt_app.action("modal_page_next")(handle_modal_pagination)
+    bolt_app.action("modal_page_info")(handle_modal_page_info)
+    bolt_app.action("view_tool_output")(handle_view_tool_output)
+    bolt_app.action("view_full_output")(handle_view_full_output)
+    bolt_app.action("view_subagent_details")(handle_view_subagent_details)
+    bolt_app.action("subagent_modal_page_prev")(handle_subagent_modal_pagination)
+    bolt_app.action("subagent_modal_page_next")(handle_subagent_modal_pagination)
+    bolt_app.action("feedback")(handle_feedback)
+    bolt_app.action("button_click")(action_button_click)
+    bolt_app.action("github_app_install_button")(handle_github_app_install_button)
+    bolt_app.action("open_api_key_modal")(handle_open_api_key_modal)
+    bolt_app.action("dismiss_setup_message")(handle_dismiss_setup)
+    bolt_app.action("open_setup_wizard")(handle_open_setup_wizard)
+    bolt_app.action("dismiss_welcome")(handle_dismiss_welcome)
+    bolt_app.action("k8s_saas_add_cluster")(handle_k8s_saas_add_cluster)
+    bolt_app.action("k8s_saas_remove_cluster")(handle_k8s_saas_remove_cluster)
+    bolt_app.action("open_advanced_settings")(handle_open_advanced_settings)
+    bolt_app.action("home_retry_load")(handle_home_retry_load)
+    bolt_app.action("home_book_demo")(handle_home_book_demo)
+    bolt_app.action("home_open_api_key_modal")(handle_home_api_key_modal)
+    bolt_app.action("mention_open_setup_wizard")(handle_mention_setup_wizard)
+    bolt_app.action("home_open_ai_model_selector")(handle_open_ai_model_selector)
+    bolt_app.action("ai_provider_select")(handle_ai_provider_change)
+    bolt_app.action("input_model_id")(handle_model_select_change)
+
+    # Action handlers (regex patterns)
+    bolt_app.action(re.compile(r"^answer_q\d+_.*"))(handle_checkbox_action)
+    bolt_app.action(re.compile(r"^toggle_q\d+_opt\d+_.*"))(handle_toggle_button)
+    bolt_app.action(re.compile(r"^submit_answer_.*"))(handle_answer_submit)
+    bolt_app.action(re.compile(r"^configure_integration_.*"))(
+        handle_configure_integration
+    )
+    bolt_app.action(re.compile(r"^filter_category_.*"))(handle_filter_category)
+    bolt_app.action(re.compile(r"^integrations_(prev|next)_page$"))(
+        handle_integrations_pagination
+    )
+    bolt_app.action(re.compile(r"^home_page_(prev|next)$"))(handle_home_pagination)
+    bolt_app.action(re.compile(r"^home_(edit|add)_integration_.*"))(
+        handle_home_integration_action
+    )
+
+    # View handlers
+    bolt_app.view("api_key_submission")(handle_api_key_submission)
+    bolt_app.view("integrations_page")(handle_integrations_page_done)
+    bolt_app.view("k8s_saas_add_cluster_submission")(
+        handle_k8s_saas_add_cluster_submission
+    )
+    bolt_app.view("k8s_saas_clusters_modal")(handle_k8s_saas_clusters_modal_close)
+    bolt_app.view("k8s_saas_cluster_created_modal")(
+        handle_k8s_saas_cluster_created_close
+    )
+    bolt_app.view("advanced_settings_submission")(handle_advanced_settings_submission)
+    bolt_app.view("integration_config_submission")(handle_integration_config_submission)
+    bolt_app.view("ai_model_config_submission")(handle_ai_model_config_submission)
+
+    # Options handlers (external_select dynamic data)
+    bolt_app.options("input_model_id")(handle_model_options)
+
+
 if __name__ == "__main__":
     logger.info("=" * 50)
     logger.info("IncidentFox Slack Bot v2.0.0")
@@ -5587,6 +6742,8 @@ if __name__ == "__main__":
         # Configure Flask to find templates and assets
         import os as os_module
 
+        from app_registry import SlackAppRegistry
+
         base_dir = os_module.path.dirname(os_module.path.abspath(__file__))
         flask_app = Flask(
             __name__,
@@ -5594,75 +6751,97 @@ if __name__ == "__main__":
             static_folder=os_module.path.join(base_dir, "assets"),
             static_url_path="/assets",
         )
+
+        # Load multi-app registry from config service
+        registry = SlackAppRegistry()
+        registry.load_all()
+
+        # Legacy handler for backward compat (default app)
         handler = SlackRequestHandler(app)
 
-        @flask_app.route("/slack/events", methods=["POST"])
-        def slack_events():
-            """Handle incoming Slack events via HTTP."""
-            return handler.handle(request)
+        # --- Slug-based routes (multi-app) ---
 
-        @flask_app.route("/slack/install", methods=["GET"])
-        def slack_install():
-            """Initiate OAuth flow for new workspace installation."""
-            if not oauth_enabled:
-                return {"error": "OAuth not configured"}, 400
+        @flask_app.route("/slack/<slug>/events", methods=["POST"])
+        def slack_events_for_app(slug):
+            """Handle incoming Slack events for a specific app."""
+            app_handler = registry.get_handler(slug)
+            if not app_handler:
+                return {"error": f"Unknown app: {slug}"}, 404
+            return app_handler.handle(request)
 
-            # Generate the OAuth URL using the Slack SDK
+        @flask_app.route("/slack/<slug>/install", methods=["GET"])
+        def slack_install_for_app(slug):
+            """Initiate OAuth flow for a specific app."""
+            creds = registry.get_credentials(slug)
+            if not creds:
+                return {"error": f"Unknown app: {slug}"}, 404
+
+            client_id = creds.get("client_id")
+            if not client_id:
+                return {"error": "OAuth not configured for this app"}, 400
+
             import uuid
 
             from slack_sdk.oauth.authorize_url_generator import AuthorizeUrlGenerator
 
+            bot_scopes = (creds.get("bot_scopes") or "").split(",")
+            bot_scopes = [s.strip() for s in bot_scopes if s.strip()] or SLACK_SCOPES
+            redirect_uri = creds.get("oauth_redirect_url", "")
+
             authorize_url_generator = AuthorizeUrlGenerator(
-                client_id=SLACK_CLIENT_ID,
-                scopes=SLACK_SCOPES,
-                redirect_uri=oauth_settings.redirect_uri,
+                client_id=client_id,
+                scopes=bot_scopes,
+                redirect_uri=redirect_uri,
             )
 
-            # Generate state for CSRF protection
             state = str(uuid.uuid4())
             install_url = authorize_url_generator.generate(state)
 
-            # Render custom branded installation page
             return render_template("install.html", install_url=install_url)
 
-        @flask_app.route("/slack/oauth_redirect", methods=["GET"])
-        def slack_oauth_redirect():
-            """Handle OAuth callback after workspace authorization."""
-            if not oauth_enabled:
-                return {"error": "OAuth not configured"}, 400
+        @flask_app.route("/slack/<slug>/oauth_redirect", methods=["GET"])
+        def slack_oauth_redirect_for_app(slug):
+            """Handle OAuth callback for a specific app."""
+            creds = registry.get_credentials(slug)
+            if not creds:
+                return {"error": f"Unknown app: {slug}"}, 404
+
+            client_id = creds.get("client_id")
+            client_secret = creds.get("client_secret")
+            if not client_id or not client_secret:
+                return {"error": "OAuth not configured for this app"}, 400
+
+            redirect_uri = creds.get("oauth_redirect_url", "")
 
             code = request.args.get("code")
             if not code:
                 error = request.args.get("error", "unknown_error")
-                logger.error(f"OAuth error: {error}")
+                logger.error(f"OAuth error for app {slug}: {error}")
                 return (
                     f"<html><body><h1>Installation Failed</h1><p>Error: {error}</p></body></html>",
                     400,
                 )
 
             try:
-                # Exchange code for token and install the app
                 from slack_sdk import WebClient
+                from slack_sdk.oauth.installation_store import Installation
 
-                client = WebClient()
+                ws_client = WebClient()
 
-                oauth_response = client.oauth_v2_access(
-                    client_id=SLACK_CLIENT_ID,
-                    client_secret=SLACK_CLIENT_SECRET,
+                oauth_response = ws_client.oauth_v2_access(
+                    client_id=client_id,
+                    client_secret=client_secret,
                     code=code,
-                    redirect_uri=oauth_settings.redirect_uri,
+                    redirect_uri=redirect_uri,
                 )
 
                 if not oauth_response.get("ok"):
                     error_msg = oauth_response.get("error", "unknown_error")
-                    logger.error(f"OAuth v2 access failed: {error_msg}")
+                    logger.error(f"OAuth v2 access failed for app {slug}: {error_msg}")
                     return (
                         f"<html><body><h1>Installation Failed</h1><p>Error: {error_msg}</p></body></html>",
                         400,
                     )
-
-                # Store the installation
-                from slack_sdk.oauth.installation_store import Bot, Installation
 
                 team_id = oauth_response["team"]["id"]
                 team_name = oauth_response["team"]["name"]
@@ -5670,7 +6849,6 @@ if __name__ == "__main__":
                 bot_id = oauth_response["bot_user_id"]
                 bot_user_id = oauth_response["bot_user_id"]
 
-                # Handle None values for enterprise and authed_user
                 enterprise = oauth_response.get("enterprise") or {}
                 authed_user = oauth_response.get("authed_user") or {}
 
@@ -5687,12 +6865,29 @@ if __name__ == "__main__":
                     user_scopes=(authed_user.get("scope") or "").split(","),
                 )
 
-                oauth_settings.installation_store.save(installation)
+                # Save via the app-specific installation store
+                bolt_app_instance = registry.get_app(slug)
+                if (
+                    bolt_app_instance
+                    and bolt_app_instance._oauth_flow
+                    and bolt_app_instance._oauth_flow.settings
+                ):
+                    bolt_app_instance._oauth_flow.settings.installation_store.save(
+                        installation
+                    )
+                else:
+                    # Fallback: use a direct store with slug
+                    store = ConfigServiceInstallationStore(
+                        client_id=client_id,
+                        slack_app_slug=slug,
+                    )
+                    store.save(installation)
+
                 logger.info(
-                    f"Successfully installed app for team {team_name} ({team_id})"
+                    f"Successfully installed app {slug} for team {team_name} ({team_id})"
                 )
 
-                # Provision workspace in config_service for multi-tenancy
+                # Provision workspace in config_service
                 trial_enabled = False
                 try:
                     config_client = get_config_client()
@@ -5700,6 +6895,7 @@ if __name__ == "__main__":
                         slack_team_id=team_id,
                         slack_team_name=team_name,
                         installer_user_id=authed_user.get("id"),
+                        slack_app_slug=slug,
                     )
                     logger.info(
                         f"Provisioned workspace in config_service: {provision_result}"
@@ -5708,7 +6904,6 @@ if __name__ == "__main__":
                         "enabled", False
                     )
                 except Exception as provision_error:
-                    # Log but don't fail OAuth - workspace can be provisioned later
                     logger.warning(
                         f"Failed to provision workspace in config_service: {provision_error}"
                     )
@@ -5733,12 +6928,13 @@ if __name__ == "__main__":
                                 if provision_result
                                 else None
                             )
+                            display_name = creds.get("display_name", "IncidentFox")
                             welcome_blocks = onboarding.build_welcome_message(
                                 trial_info=trial_info, team_name=team_name
                             )
                             dm_client.chat_postMessage(
                                 channel=dm_channel,
-                                text="Welcome to IncidentFox!",
+                                text=f"Welcome to {display_name}!",
                                 blocks=welcome_blocks,
                             )
                             logger.info(
@@ -5747,7 +6943,6 @@ if __name__ == "__main__":
                     except Exception as dm_error:
                         logger.warning(f"Failed to send welcome DM: {dm_error}")
 
-                # Render custom success page with trial info
                 return render_template(
                     "success.html",
                     team_name=team_name,
@@ -5756,23 +6951,59 @@ if __name__ == "__main__":
                 )
 
             except Exception as e:
-                logger.error(f"OAuth error: {e}", exc_info=True)
+                logger.error(f"OAuth error for app {slug}: {e}", exc_info=True)
                 return (
                     "<html><body><h1>Installation Failed</h1><p>An unexpected error occurred. Please try again.</p></body></html>",
                     500,
                 )
 
+        # --- Legacy routes (backward compat, forward to default app) ---
+
+        @flask_app.route("/slack/events", methods=["POST"])
+        def slack_events():
+            """Legacy: Handle Slack events for default app."""
+            return handler.handle(request)
+
+        @flask_app.route("/slack/install", methods=["GET"])
+        def slack_install():
+            """Legacy: Initiate OAuth for default app."""
+            default = registry.default_slug
+            if default:
+                return slack_install_for_app(default)
+            # Fallback to original behavior
+            if not oauth_enabled:
+                return {"error": "OAuth not configured"}, 400
+
+            import uuid
+
+            from slack_sdk.oauth.authorize_url_generator import AuthorizeUrlGenerator
+
+            authorize_url_generator = AuthorizeUrlGenerator(
+                client_id=SLACK_CLIENT_ID,
+                scopes=SLACK_SCOPES,
+                redirect_uri=oauth_settings.redirect_uri,
+            )
+
+            state = str(uuid.uuid4())
+            install_url = authorize_url_generator.generate(state)
+            return render_template("install.html", install_url=install_url)
+
+        @flask_app.route("/slack/oauth_redirect", methods=["GET"])
+        def slack_oauth_redirect():
+            """Legacy: Handle OAuth callback for default app."""
+            default = registry.default_slug
+            if default:
+                return slack_oauth_redirect_for_app(default)
+            return {"error": "No app configured"}, 500
+
         @flask_app.route("/health", methods=["GET"])
         def health():
             """Health check endpoint."""
-            return {"status": "healthy"}, 200
+            return {"status": "healthy", "apps": registry.list_slugs()}, 200
 
         port = int(os.environ.get("PORT", 3000))
         logger.info(f"Starting HTTP server on port {port}")
-        logger.info(f"OAuth mode: {'enabled' if oauth_enabled else 'disabled'}")
-        if oauth_enabled:
-            logger.info("Install URL: http://<your-domain>/slack/install")
-            logger.info("OAuth Redirect URL: http://<your-domain>/slack/oauth_redirect")
+        logger.info(f"Apps loaded: {registry.list_slugs()}")
         flask_app.run(host="0.0.0.0", port=port)
     else:
         # Local dev: Socket Mode

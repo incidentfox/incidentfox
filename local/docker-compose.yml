@@ -10,7 +10,11 @@ version: '3.8'
 # Required services (default):
 #   - postgres       PostgreSQL database
 #   - config-service Team configuration, tokens, audit
-#   - agent          Multi-agent AI execution
+#   - agent          AI investigation engine
+#
+# Note: Production/staging use sre-agent via Helm charts (charts/incidentfox/).
+# This trial stack uses the unified-agent Docker Hub image for simplified
+# single-container operation.
 #
 # Optional services (via profiles):
 #   - web-ui         Browser-based config UI (--profile ui)
@@ -96,7 +100,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.2}
       # Only set OPENAI_BASE_URL if you're using a custom endpoint (LiteLLM, Azure, etc.)
       # Config service integration
       USE_CONFIG_SERVICE: "true"

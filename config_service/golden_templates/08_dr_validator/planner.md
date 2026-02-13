@@ -2,7 +2,7 @@
 
 **Template:** 08_dr_validator
 **Role:** Master (orchestrator)
-**Model:** gpt-4o
+**Model:** gpt-5.2
 
 ---
 

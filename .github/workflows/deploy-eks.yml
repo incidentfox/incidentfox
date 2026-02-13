@@ -6,6 +6,14 @@ name: Deploy to EKS
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
       services:
         description: 'Services to build and deploy'
         required: true
@@ -14,13 +22,15 @@ on:
         options:
           - all
           - agent
-          - ai-pipeline
           - config-service
+          - credential-resolver
           - k8s-gateway
-          - knowledge-base
           - orchestrator
+          - sandbox-router
+          - slack-bot
           - ultimate-rag
           - web-ui
+          - ai-pipeline
       skip_deploy:
         description: 'Skip Helm deployment (build & push only)'
         required: false
@@ -30,8 +40,6 @@ on:
 env:
   AWS_REGION: us-west-2
   ECR_REGISTRY: 103002841599.dkr.ecr.us-west-2.amazonaws.com
-  EKS_CLUSTER: incidentfox-demo
-  HELM_NAMESPACE: incidentfox
 
 jobs:
   build-and-push:
@@ -42,32 +50,36 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [agent, ai-pipeline, config-service, k8s-gateway, knowledge-base, orchestrator, ultimate-rag, web-ui]
+        service: [agent, config-service, credential-resolver, k8s-gateway, orchestrator, sandbox-router, slack-bot, ultimate-rag, web-ui, ai-pipeline]
         include:
           - service: agent
-            context: ./agent
-            dockerfile: ./agent/Dockerfile
+            context: ./sre-agent
+            dockerfile: ./sre-agent/Dockerfile
             image: incidentfox-agent
-          - service: ai-pipeline
-            context: ./ai_pipeline
-            dockerfile: ./ai_pipeline/Dockerfile
-            image: incidentfox-ai-pipeline
           - service: config-service
             context: ./config_service
             dockerfile: ./config_service/Dockerfile
             image: incidentfox-config-service
+          - service: credential-resolver
+            context: ./sre-agent/credential-proxy
+            dockerfile: ./sre-agent/credential-proxy/Dockerfile
+            image: credential-resolver
           - service: k8s-gateway
             context: ./k8s_gateway
             dockerfile: ./k8s_gateway/Dockerfile
             image: incidentfox-k8s-gateway
-          - service: knowledge-base
-            context: ./knowledge_base
-            dockerfile: ./knowledge_base/Dockerfile
-            image: incidentfox-knowledge-base
           - service: orchestrator
             context: ./orchestrator
             dockerfile: ./orchestrator/Dockerfile
             image: incidentfox-orchestrator
+          - service: sandbox-router
+            context: ./sre-agent/sandbox-router
+            dockerfile: ./sre-agent/sandbox-router/Dockerfile
+            image: sandbox-router
+          - service: slack-bot
+            context: ./slack-bot
+            dockerfile: ./slack-bot/Dockerfile
+            image: incidentfox-slack-bot
           - service: ultimate-rag
             context: .
             dockerfile: ./ultimate_rag/Dockerfile
@@ -76,6 +88,10 @@ jobs:
             context: ./web_ui
             dockerfile: ./web_ui/Dockerfile
             image: incidentfox-web-ui
+          - service: ai-pipeline
+            context: ./ai_pipeline
+            dockerfile: ./ai_pipeline/Dockerfile
+            image: incidentfox-ai-pipeline
 
     steps:
       - name: Check if service should be built
@@ -133,12 +149,17 @@ jobs:
           echo "- **Digest**: \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
 
   deploy:
-    name: Deploy to EKS
+    name: Deploy to EKS (${{ github.event.inputs.environment }})
     needs: build-and-push
     if: ${{ github.event.inputs.skip_deploy != 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      # Environment-specific configuration
+      EKS_CLUSTER: ${{ github.event.inputs.environment == 'production' && 'incidentfox-prod' || 'incidentfox-demo' }}
+      HELM_NAMESPACE: ${{ github.event.inputs.environment == 'production' && 'incidentfox-prod' || 'incidentfox' }}
+      VALUES_FILE: ${{ github.event.inputs.environment == 'production' && 'values.prod.yaml' || 'values.staging.yaml' }}
 
     steps:
       - name: Checkout code
@@ -151,8 +172,14 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Show AWS identity (for aws-auth debugging)
+      - name: Show deployment configuration
         run: |
+          echo "=== Deployment Configuration ==="
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "EKS Cluster: ${{ env.EKS_CLUSTER }}"
+          echo "Namespace: ${{ env.HELM_NAMESPACE }}"
+          echo "Values File: ${{ env.VALUES_FILE }}"
+          echo ""
           echo "=== AWS Caller Identity ==="
           aws sts get-caller-identity
           echo ""
@@ -176,7 +203,6 @@ jobs:
         run: |
           # Fix resources that exist but weren't created by this Helm release
           # This adds required Helm ownership labels so Helm can manage them
-          RESOURCE_NAME="incidentfox-knowledge-base"
           NS="${{ env.HELM_NAMESPACE }}"
 
           # Helper function to patch a resource with Helm ownership metadata
@@ -192,27 +218,25 @@ jobs:
             fi
           }
 
-          # Patch all knowledge-base resources
-          patch_resource serviceaccount "$RESOURCE_NAME"
-          patch_resource service "$RESOURCE_NAME"
-          patch_resource poddisruptionbudget "$RESOURCE_NAME"
+          # Adopt static service names that may have been created manually
+          # These are required by hardcoded Envoy configs in sandbox pods
+          patch_resource service "sandbox-router-svc"
+          patch_resource service "credential-resolver-svc"
 
-          # Deployment selector is immutable - must delete and let Helm recreate
-          if kubectl get deployment "$RESOURCE_NAME" -n "$NS" &>/dev/null; then
-            echo "Deleting deployment/$RESOURCE_NAME (selector is immutable, Helm will recreate)..."
-            kubectl delete deployment "$RESOURCE_NAME" -n "$NS" --wait=false
-          fi
+          # Note: slack-bot service no longer needs deletion
+          # The Helm template now includes loadBalancerClass: service.k8s.aws/nlb
+          # to match existing services and avoid immutable field conflicts
 
       - name: Deploy with Helm (no wait)
         working-directory: charts
         run: |
           # Deploy without --wait to avoid Helm's aggressive API polling
           # We'll use kubectl rollout status instead (more efficient, better errors)
+          echo "Deploying with: incidentfox/${{ env.VALUES_FILE }}"
           helm upgrade --install incidentfox ./incidentfox \
             -n ${{ env.HELM_NAMESPACE }} \
             -f incidentfox/values.staging.yaml \
             --no-hooks \
-            --force \
             --timeout 5m
 
       - name: Restart deployments to pull latest images
@@ -240,9 +264,9 @@ jobs:
             restart_deployment "incidentfox-agent"
             restart_deployment "incidentfox-web-ui"
             restart_deployment "incidentfox-k8s-gateway"
-            restart_deployment "incidentfox-knowledge-base"
             restart_deployment "incidentfox-ultimate-rag"
             restart_deployment "incidentfox-ai-pipeline"
+            restart_deployment "incidentfox-slack-bot"
           else
             # Restart only the specific service
             case "$SERVICES" in
@@ -250,8 +274,8 @@ jobs:
               ai-pipeline) restart_deployment "incidentfox-ai-pipeline" ;;
               config-service) restart_deployment "incidentfox-config-service" ;;
               k8s-gateway) restart_deployment "incidentfox-k8s-gateway" ;;
-              knowledge-base) restart_deployment "incidentfox-knowledge-base" ;;
               orchestrator) restart_deployment "incidentfox-orchestrator" ;;
+              slack-bot) restart_deployment "incidentfox-slack-bot" ;;
               ultimate-rag) restart_deployment "incidentfox-ultimate-rag" ;;
               web-ui) restart_deployment "incidentfox-web-ui" ;;
             esac
@@ -260,16 +284,25 @@ jobs:
       - name: Wait for core services
         run: |
           echo "Waiting for core services to be ready..."
-          # Core services should start quickly (1-2 min)
-          kubectl rollout status deployment/incidentfox-config-service -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/incidentfox-agent -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+          NS="${{ env.HELM_NAMESPACE }}"
 
-          # K8s Gateway (optional - only if enabled)
-          if kubectl get deployment/incidentfox-k8s-gateway -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
-            kubectl rollout status deployment/incidentfox-k8s-gateway -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          fi
+          wait_for_deployment() {
+            local deploy=$1
+            if kubectl get deployment "$deploy" -n "$NS" &>/dev/null; then
+              echo "Waiting for $deploy..."
+              kubectl rollout status deployment/"$deploy" -n "$NS" --timeout=5m
+            else
+              echo "Skipping $deploy (not found)"
+            fi
+          }
+
+          # Core services should start quickly (1-2 min)
+          wait_for_deployment "incidentfox-config-service"
+          wait_for_deployment "incidentfox-orchestrator"
+          wait_for_deployment "incidentfox-agent"
+          wait_for_deployment "incidentfox-web-ui"
+          wait_for_deployment "incidentfox-k8s-gateway"
+          wait_for_deployment "incidentfox-slack-bot"
 
       - name: Wait for RAG services (slow startup)
         run: |
@@ -277,11 +310,6 @@ jobs:
           # RAG services need longer timeout (S3 download + model loading)
           # Run in parallel with background processes
           pids=()
-
-          if kubectl get deployment/incidentfox-knowledge-base -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
-            kubectl rollout status deployment/incidentfox-knowledge-base -n ${{ env.HELM_NAMESPACE }} --timeout=10m &
-            pids+=($!)
-          fi
 
           if kubectl get deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
             kubectl rollout status deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} --timeout=10m &
@@ -298,8 +326,8 @@ jobs:
 
           if [ $failed -eq 1 ]; then
             echo "::warning::One or more RAG services failed to start. Checking pod status..."
-            kubectl get pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component in (knowledge-base, ultimate-rag)'
-            kubectl describe pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component in (knowledge-base, ultimate-rag)' | tail -100
+            kubectl get pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component=ultimate-rag'
+            kubectl describe pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component=ultimate-rag' | tail -100
             exit 1
           fi
 
@@ -314,7 +342,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Image Digests" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|knowledge-base|orchestrator|web-ui|ultimate-rag)" >> $GITHUB_STEP_SUMMARY || true
+          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|orchestrator|web-ui|ultimate-rag)" >> $GITHUB_STEP_SUMMARY || true
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Summary

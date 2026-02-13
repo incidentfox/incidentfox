@@ -29,6 +29,7 @@ import {
   ChevronRight,
   Settings,
   Trash2,
+  BookOpen,
 } from 'lucide-react';
 
 interface ConfigField {
@@ -157,6 +158,15 @@ export default function TeamToolsPage() {
     warnings: string[];
     error?: string;
   } | null>(null);
+
+  // Skills catalog state
+  const [skillsCatalog, setSkillsCatalog] = useState<Array<{
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    required_integrations: string[];
+  }>>([]);
 
   // NEW: Tool filtering modal state
   const [filteringMcp, setFilteringMcp] = useState<ToolItem | null>(null);
@@ -303,6 +313,17 @@ export default function TeamToolsPage() {
         }
       } catch (e) {
         console.error('Failed to load integration schemas:', e);
+      }
+
+      // Load skills catalog from dedicated endpoint
+      try {
+        const skillsRes = await fetch('/api/team/skills');
+        if (skillsRes.ok) {
+          const skillsData = await skillsRes.json();
+          setSkillsCatalog(skillsData.skills || []);
+        }
+      } catch (e) {
+        console.error('Failed to load skills catalog:', e);
       }
     } catch (e) {
       console.error('Failed to load tools/MCPs:', e);
@@ -1035,8 +1056,8 @@ export default function TeamToolsPage() {
               <Wrench className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Tools</h1>
-              <p className="text-sm text-gray-500">Configure tools and integrations for your AI agents</p>
+              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Tools & Skills</h1>
+              <p className="text-sm text-gray-500">Integrations, tools, and skills available to your AI agents</p>
             </div>
           </div>
           <button
@@ -1065,11 +1086,23 @@ export default function TeamToolsPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-8 space-y-6">
+        {/* Summary Strip */}
+        <div className="flex flex-wrap gap-3 text-xs">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-cyan-50 dark:bg-cyan-900/20 text-cyan-700 dark:text-cyan-300">
+            <Server className="w-3.5 h-3.5" />
+            <span>{customServers.length} MCP Servers</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300">
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>{skillsCatalog.length} Skills</span>
+          </div>
+        </div>
+
         {/* Search Bar */}
         <div className="mb-6">
           <input
             type="text"
-            placeholder="Search integrations and tools..."
+            placeholder="Search integrations, tools, and skills..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full px-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
@@ -1083,7 +1116,7 @@ export default function TeamToolsPage() {
             item.description?.toLowerCase().includes(searchQuery.toLowerCase())
           );
           return (
-            <section className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+            <section className="border border-gray-200 dark:border-gray-800 border-l-4 border-l-gray-400 dark:border-l-gray-500 rounded-lg overflow-hidden">
               <button
                 onClick={() => {
                   const next = new Set(expandedCategories);
@@ -1094,10 +1127,13 @@ export default function TeamToolsPage() {
               >
                 {expandedCategories.has('integration') ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 <Settings className="w-4 h-4 text-gray-500" />
-                <span className="font-medium text-gray-900 dark:text-white">Integrations</span>
-                <span className="text-xs text-gray-500">
-                  {searchQuery ? `${filteredIntegrations.length} of ${integrations.length}` : `${integrations.length} total`}
-                </span>
+                <div className="flex-1 text-left">
+                  <span className="font-medium text-gray-900 dark:text-white">Integrations</span>
+                  <span className="text-xs text-gray-500 ml-2">
+                    {searchQuery ? `${filteredIntegrations.length} of ${integrations.length}` : `${integrations.length} connected`}
+                  </span>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">API connections to external services (Datadog, Grafana, PagerDuty, etc.)</p>
+                </div>
               </button>
               {expandedCategories.has('integration') && (
                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1117,15 +1153,7 @@ export default function TeamToolsPage() {
           const filteredEnabled = filteredServers.filter(m => m.enabled).length;
           const filteredDisabled = filteredServers.filter(m => !m.enabled).length;
           return (
-            <>
-              {/* Separator */}
-              <div className="space-y-4">
-                <h2 className="text-sm font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
-                  MCP Servers ({enabledServers.length} enabled, {disabledServers.length} disabled)
-                </h2>
-              </div>
-
-              <section className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+            <section className="border border-gray-200 dark:border-gray-800 border-l-4 border-l-cyan-500 rounded-lg overflow-hidden">
                 <button
                   onClick={() => {
                     const next = new Set(expandedCategories);
@@ -1136,10 +1164,13 @@ export default function TeamToolsPage() {
                 >
                   {expandedCategories.has('mcp') ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                   <Server className="w-4 h-4 text-cyan-500" />
-                  <span className="font-medium text-gray-900 dark:text-white">MCP Servers</span>
-                  <span className="text-xs text-gray-500">
-                    {searchQuery ? `${filteredEnabled} enabled, ${filteredDisabled} disabled` : `${enabledServers.length} enabled, ${disabledServers.length} disabled`}
-                  </span>
+                  <div className="flex-1 text-left">
+                    <span className="font-medium text-gray-900 dark:text-white">MCP Servers</span>
+                    <span className="text-xs text-gray-500 ml-2">
+                      {searchQuery ? `${filteredEnabled} enabled, ${filteredDisabled} disabled` : `${enabledServers.length} enabled, ${disabledServers.length} disabled`}
+                    </span>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">Custom tool providers via Model Context Protocol</p>
+                  </div>
                 </button>
                 {expandedCategories.has('mcp') && (
                   <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1147,25 +1178,112 @@ export default function TeamToolsPage() {
                   </div>
                 )}
               </section>
-            </>
           );
         })()}
 
-        {/* Tools by Category */}
-        <div className="space-y-4">
-          <h2 className="text-sm font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
-            Built-in Tools ({enabledToolCount} enabled, {disabledToolCount} disabled)
-          </h2>
-          
+        {/* Skills Section */}
+        {skillsCatalog.length > 0 && (() => {
+          const filteredSkills = skillsCatalog.filter(skill =>
+            skill.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            skill.description?.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+          const skillsByCategory: Record<string, typeof skillsCatalog> = {};
+          filteredSkills.forEach(skill => {
+            const cat = skill.category || 'other';
+            if (!skillsByCategory[cat]) skillsByCategory[cat] = [];
+            skillsByCategory[cat].push(skill);
+          });
+          const SKILL_CATEGORY_LABELS: Record<string, string> = {
+            methodology: 'Methodology',
+            observability: 'Observability',
+            infrastructure: 'Infrastructure',
+            incident: 'Incident Management',
+            communication: 'Communication',
+            code: 'Code & Deployment',
+            documentation: 'Documentation',
+            'project-management': 'Project Management',
+            other: 'Other',
+          };
+          return (
+              <section className="border border-gray-200 dark:border-gray-800 border-l-4 border-l-violet-500 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => {
+                    const next = new Set(expandedCategories);
+                    next.has('skills') ? next.delete('skills') : next.add('skills');
+                    setExpandedCategories(next);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800"
+                >
+                  {expandedCategories.has('skills') ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  <BookOpen className="w-4 h-4 text-violet-500" />
+                  <div className="flex-1 text-left">
+                    <span className="font-medium text-gray-900 dark:text-white">Skills</span>
+                    <span className="text-xs text-gray-500 ml-2">
+                      {searchQuery ? `${filteredSkills.length} of ${skillsCatalog.length}` : `${skillsCatalog.length} available`}
+                    </span>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">Knowledge documents loaded into agent context on-demand (query syntax, methodologies, runbooks)</p>
+                  </div>
+                </button>
+                {expandedCategories.has('skills') && (
+                  <div className="p-4 space-y-4">
+                    {Object.entries(skillsByCategory)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([category, skills]) => (
+                        <div key={category}>
+                          <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                            {SKILL_CATEGORY_LABELS[category] || category}
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {skills.map(skill => (
+                              <div
+                                key={skill.id}
+                                className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                              >
+                                <BookOpen className="w-4 h-4 text-violet-500 mt-0.5 flex-shrink-0" />
+                                <div className="min-w-0">
+                                  <div className="font-medium text-sm text-gray-900 dark:text-white">{skill.name}</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{skill.description}</div>
+                                  {skill.required_integrations?.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1.5">
+                                      {skill.required_integrations.map((int: string) => (
+                                        <span key={int} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">
+                                          {int}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </section>
+          );
+        })()}
+
+        {/* Built-in Tools by Category */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 pt-2">
+            <Wrench className="w-4 h-4 text-green-500" />
+            <h2 className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              Built-in Tools
+            </h2>
+            <span className="text-xs text-gray-400">
+              {enabledToolCount} enabled{disabledToolCount > 0 ? `, ${disabledToolCount} disabled` : ''} — Executable actions the agent can perform
+            </span>
+          </div>
           {Object.entries(toolsByCategory)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([category, tools]) => {
               const enabled = tools.filter(t => t.enabled);
               const disabled = tools.filter(t => !t.enabled);
               const isExpanded = expandedCategories.has(category);
-              
+
               return (
-                <section key={category} className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+                <section key={category} className="border border-gray-200 dark:border-gray-800 border-l-4 border-l-green-500 rounded-lg overflow-hidden">
                   <button
                     onClick={() => {
                       const next = new Set(expandedCategories);
@@ -1175,7 +1293,7 @@ export default function TeamToolsPage() {
                     className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800"
                   >
                     {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                    <span className="text-gray-500">{CATEGORY_ICONS[category] || <Wrench className="w-4 h-4" />}</span>
+                    <span className="text-green-500">{CATEGORY_ICONS[category] || <Wrench className="w-4 h-4" />}</span>
                     <span className="font-medium text-gray-900 dark:text-white">{CATEGORY_LABELS[category] || category}</span>
                     <span className="text-xs text-gray-500">
                       {enabled.length} enabled{disabled.length > 0 ? `, ${disabled.length} disabled` : ''}

@@ -7,9 +7,9 @@ It maintains persistent agent sessions per thread_id to enable interrupts.
 Streams structured events via SSE (Server-Sent Events) for client consumption.
 
 Key features:
-- **Config-driven agents**: Loads team config from Config Service via TEAM_TOKEN
-- **Multi-LLM support**: Claude, Gemini, OpenAI via LiteLLM
-- **Dynamic agent hierarchy**: Builds agents from config with topological sorting
+- **Config-driven**: Loads team config from Config Service via TEAM_TOKEN
+- **Multi-LLM support**: Claude, Gemini, OpenAI via LiteLLM (OpenHandsProvider)
+- **Conversation persistence**: Sessions maintain full conversation history across calls
 
 Endpoints:
 - GET /health - Health check
@@ -23,25 +23,22 @@ import asyncio
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+import time
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ..core.agent import Agent
-from ..core.agent_builder import build_agent_hierarchy, normalize_model_name
 from ..core.config import Config, get_config, reload_config
 from ..core.events import (
-    StreamEvent,
     error_event,
     result_event,
     thought_event,
-    tool_end_event,
-    tool_start_event,
 )
-from ..core.runner import Runner, RunResult
+from ..providers.base import LLMProvider, ProviderConfig, create_provider
+from .manager import SandboxExecutionError, SandboxManager
 
 logger = logging.getLogger(__name__)
 
@@ -63,18 +60,14 @@ class AgentSession:
     Manages a persistent agent session for a thread.
 
     Sessions maintain:
-    - Built agent hierarchy from team config
-    - Conversation history for context
+    - OpenHandsProvider with conversation history
     - Interrupt flag for cancellation
     """
 
     thread_id: str
-    agents: Dict[str, Agent] = field(default_factory=dict)
-    root_agent: Optional[Agent] = None
-    conversation_history: List[Dict[str, Any]] = field(default_factory=list)
+    provider: Optional[LLMProvider] = None
     is_running: bool = False
     _interrupt_flag: bool = False
-    model: str = ""
 
     def interrupt(self):
         """Signal the session to stop."""
@@ -94,155 +87,137 @@ class AgentSession:
 _sessions: Dict[str, AgentSession] = {}
 _session_lock = asyncio.Lock()
 
-# Cached config and agents (rebuilt on config reload)
-_cached_config: Optional[Config] = None
-_cached_agents: Optional[Dict[str, Agent]] = None
+# Sandbox manager (lazy initialized, used when USE_GVISOR=true)
+_sandbox_manager: Optional[SandboxManager] = None
 
 
-def _get_effective_config() -> Dict[str, Any]:
+def _is_sandbox_mode() -> bool:
+    """Check if running in sandbox manager mode (creates gVisor pods)."""
+    return os.getenv("USE_GVISOR", "false").lower() == "true"
+
+
+def _get_sandbox_manager() -> SandboxManager:
+    """Get or create the sandbox manager."""
+    global _sandbox_manager
+    if _sandbox_manager is None:
+        namespace = os.getenv("SANDBOX_NAMESPACE") or os.getenv("NAMESPACE", "default")
+        image = os.getenv("SANDBOX_IMAGE") or os.getenv("UNIFIED_AGENT_IMAGE")
+        _sandbox_manager = SandboxManager(namespace=namespace, image=image)
+    return _sandbox_manager
+
+
+async def _async_stream_response(response):
+    """Convert sync streaming response to async generator.
+
+    Reads chunks from a synchronous requests.Response in a thread pool
+    to avoid blocking the async event loop.
     """
-    Get effective config for agent building.
 
-    Converts TeamConfig to the dict format expected by build_agent_hierarchy.
+    def _get_next(it):
+        try:
+            return next(it)
+        except StopIteration:
+            return None
+
+    it = response.iter_content(chunk_size=None)
+    while True:
+        chunk = await asyncio.to_thread(_get_next, it)
+        if chunk is None:
+            break
+        yield chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk
+
+
+def _get_root_agent_config(config: Config):
     """
-    config = get_config()
+    Get the root agent config from team config.
 
+    Prefers 'investigator', then 'planner', then first available.
+    Returns None if no team config or no agents configured.
+    """
     if config.team_config is None:
-        # Return minimal default config
-        return {
-            "agents": {
-                "investigator": {
-                    "enabled": True,
-                    "name": "Investigator",
-                    "model": {"name": config.llm_model},
-                    "tools": {"enabled": ["*"]},
-                }
-            }
-        }
+        return None
 
-    # Convert TeamConfig to dict format
-    team_config = config.team_config
-    agents_dict = {}
-
-    for agent_name, agent_config in team_config.agents_config.items():
-        agents_dict[agent_name] = {
-            "enabled": agent_config.enabled,
-            "name": agent_config.name or agent_name,
-            "model": {
-                "name": agent_config.model.name,
-                "temperature": agent_config.model.temperature,
-                "max_tokens": agent_config.model.max_tokens,
-                "reasoning": agent_config.model.reasoning,
-                "verbosity": agent_config.model.verbosity,
-            },
-            "prompt": {
-                "system": agent_config.prompt.system,
-                "prefix": agent_config.prompt.prefix,
-                "suffix": agent_config.prompt.suffix,
-            },
-            "tools": {
-                "enabled": agent_config.tools.enabled,
-                "disabled": agent_config.tools.disabled,
-            },
-            "sub_agents": agent_config.sub_agents,
-            "max_turns": agent_config.max_turns,
-        }
-
-    # If no agents defined, create default investigator
-    if not agents_dict:
-        agents_dict["investigator"] = {
-            "enabled": True,
-            "name": "Investigator",
-            "model": {"name": config.llm_model},
-            "tools": {"enabled": ["*"]},
-        }
-
-    return {
-        "agents": agents_dict,
-        "integrations": team_config.integrations,
-        "mcp_servers": team_config.mcp_servers,
-    }
-
-
-def _build_agents_from_config() -> Dict[str, Agent]:
-    """
-    Build agent hierarchy from team configuration.
-
-    This is called once on startup and cached.
-    Agents are rebuilt if config is reloaded.
-    """
-    global _cached_config, _cached_agents
-
-    config = get_config()
-
-    # Check if we need to rebuild
-    if _cached_agents is not None and _cached_config is config:
-        return _cached_agents
-
-    effective_config = _get_effective_config()
-
-    logger.info(
-        f"Building agents from config: {list(effective_config.get('agents', {}).keys())}"
+    agents_config = config.team_config.agents_config
+    return (
+        agents_config.get("investigator")
+        or agents_config.get("planner")
+        or next(iter(agents_config.values()), None)
     )
 
-    try:
-        agents = build_agent_hierarchy(effective_config, team_config=config.team_config)
-        _cached_config = config
-        _cached_agents = agents
 
-        logger.info(f"Built {len(agents)} agents: {list(agents.keys())}")
-        for name, agent in agents.items():
-            logger.info(
-                f"  - {name}: model={agent.model}, tools={len(agent.tools or [])}"
-            )
+def _get_allowed_tools(config: Config) -> list[str]:
+    """
+    Get allowed tools from team config or defaults.
 
-        return agents
-    except Exception as e:
-        logger.error(f"Failed to build agents from config: {e}")
-        # Return minimal default agent on error
-        from ..core.agent import Agent
+    Maps team config tool settings to the tool names expected by OpenHandsProvider.
+    """
+    default_tools = [
+        "Bash",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep",
+        "WebSearch",
+        "WebFetch",
+        "Skill",
+        "Task",
+    ]
 
-        default_agent = Agent(
-            name="Investigator",
-            instructions="You are an expert SRE investigator. Help debug production issues.",
-            model=config.llm_model,
-        )
-        return {"investigator": default_agent}
+    root_config = _get_root_agent_config(config)
+    if root_config is None:
+        return default_tools
+
+    enabled = root_config.tools.enabled
+    if "*" in enabled:
+        if root_config.tools.disabled:
+            return [t for t in default_tools if t not in root_config.tools.disabled]
+        return default_tools
+
+    return enabled
+
+
+def _get_system_prompt(config: Config) -> Optional[str]:
+    """
+    Get custom system prompt from team config, if any.
+
+    Returns the root agent's system prompt, or None for default.
+    """
+    root_config = _get_root_agent_config(config)
+    if root_config is None:
+        return None
+
+    return root_config.prompt.system or None
 
 
 async def get_or_create_session(thread_id: str) -> AgentSession:
     """
     Get existing session or create new one for thread_id.
 
-    Sessions use agents built from team configuration loaded via TEAM_TOKEN.
+    Creates an OpenHandsProvider-based session that maintains conversation
+    history across calls, enabling multi-turn investigations.
     """
     async with _session_lock:
         if thread_id not in _sessions:
-            # Build agents from config
-            agents = _build_agents_from_config()
-
-            # Get root agent (prefer 'investigator' or 'planner', fallback to first)
-            root_agent = (
-                agents.get("investigator")
-                or agents.get("planner")
-                or next(iter(agents.values()), None)
-            )
-
-            if root_agent is None:
-                raise RuntimeError("No agents available - check configuration")
-
             config = get_config()
 
-            session = AgentSession(
+            system_prompt = _get_system_prompt(config)
+            provider_config = ProviderConfig(
+                cwd=os.getenv("WORKSPACE_DIR", "/workspace"),
                 thread_id=thread_id,
-                agents=agents,
-                root_agent=root_agent,
                 model=config.llm_model,
+                allowed_tools=_get_allowed_tools(config),
+                system_prompt=system_prompt,
             )
 
+            provider = create_provider(provider_config)
+            await provider.start()
+
+            session = AgentSession(thread_id=thread_id, provider=provider)
             _sessions[thread_id] = session
             logger.info(
-                f"Created session {thread_id} with root agent: {root_agent.name}"
+                f"Created session {thread_id} with model: {config.llm_model}"
+                f", custom_prompt: {bool(system_prompt)}"
             )
 
         return _sessions[thread_id]
@@ -272,6 +247,25 @@ class ExecuteRequest(BaseModel):
     max_turns: Optional[int] = None
 
 
+class InvestigateRequest(BaseModel):
+    """
+    Request to investigate - compatibility endpoint for slack-bot.
+
+    This model accepts the legacy /investigate request format used by slack-bot,
+    which includes team_token in the request body instead of environment.
+    """
+
+    prompt: str
+    thread_id: Optional[str] = None
+    tenant_id: Optional[str] = None  # Slack team_id for credential lookup
+    team_id: Optional[str] = None  # Slack team_id
+    team_token: Optional[str] = None  # Team token for config loading
+    images: Optional[List[ImageData]] = None
+    file_attachments: Optional[List[Dict[str, Any]]] = (
+        None  # File metadata (not used yet)
+    )
+
+
 class InterruptRequest(BaseModel):
     """Request to interrupt the investigation."""
 
@@ -298,6 +292,7 @@ async def health():
         "status": "healthy",
         "service": "unified-agent-sandbox",
         "version": "2.0.0",
+        "mode": "sandbox-manager" if _is_sandbox_mode() else "direct",
         "active_sessions": len(_sessions),
         "model": config.llm_model,
         "tenant_id": config.tenant_id,
@@ -311,26 +306,17 @@ async def get_loaded_config():
     """
     View the loaded configuration (for debugging).
 
-    Shows which agents are configured and their settings.
+    Shows provider settings and active sessions.
     """
     config = get_config()
-    effective = _get_effective_config()
 
     return {
         "tenant_id": config.tenant_id,
         "team_id": config.team_id,
         "llm_model": config.llm_model,
         "config_source": "config_service" if os.getenv("TEAM_TOKEN") else "local",
-        "agents": {
-            name: {
-                "enabled": cfg.get("enabled", True),
-                "model": cfg.get("model", {}).get("name", "default"),
-                "tools_enabled": cfg.get("tools", {}).get("enabled", []),
-                "sub_agents": list(cfg.get("sub_agents", {}).keys()),
-            }
-            for name, cfg in effective.get("agents", {}).items()
-        },
-        "integrations": list(effective.get("integrations", {}).keys()),
+        "allowed_tools": _get_allowed_tools(config),
+        "active_sessions": len(_sessions),
     }
 
 
@@ -340,22 +326,23 @@ async def reload_configuration():
     Force reload of configuration from Config Service.
 
     Useful after config changes to pick up new agent settings.
+    Clears all sessions so new ones are created with updated config.
     """
-    global _cached_config, _cached_agents
-
-    # Clear cache
-    _cached_config = None
-    _cached_agents = None
+    # Close existing sessions
+    async with _session_lock:
+        for session in _sessions.values():
+            if session.provider:
+                await session.provider.close()
+        _sessions.clear()
 
     # Reload config
     reload_config()
-
-    # Rebuild agents
-    agents = _build_agents_from_config()
+    config = get_config()
 
     return {
         "status": "reloaded",
-        "agents": list(agents.keys()),
+        "model": config.llm_model,
+        "tools": _get_allowed_tools(config),
     }
 
 
@@ -367,9 +354,13 @@ async def list_sessions():
             {
                 "thread_id": thread_id,
                 "is_running": session.is_running,
-                "root_agent": session.root_agent.name if session.root_agent else None,
-                "model": session.model,
-                "history_length": len(session.conversation_history),
+                "has_provider": session.provider is not None,
+                "history_length": (
+                    len(session.provider._conversation_history)
+                    if session.provider
+                    and hasattr(session.provider, "_conversation_history")
+                    else 0
+                ),
             }
             for thread_id, session in _sessions.items()
         ]
@@ -385,7 +376,6 @@ async def execute(request: ExecuteRequest):
     Supports multi-LLM (Claude, Gemini, OpenAI) based on config.
     """
     thread_id = request.thread_id or os.getenv("THREAD_ID", "default")
-    max_turns = request.max_turns or int(os.getenv("AGENT_MAX_TURNS", "25"))
 
     # Get or create session
     try:
@@ -404,28 +394,31 @@ async def execute(request: ExecuteRequest):
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    # Get agent to use (specific or root)
-    agent = session.root_agent
-    if request.agent and request.agent in session.agents:
-        agent = session.agents[request.agent]
-
     # Reset interrupt flag
     session.reset_interrupt()
     session.is_running = True
 
+    # Build images list for multimodal input
+    images_list = None
+    if request.images:
+        images_list = [
+            {
+                "type": img.type,
+                "media_type": img.media_type,
+                "data": img.data,
+            }
+            for img in request.images
+        ]
+
     async def stream():
         try:
-            logger.info(
-                f"Starting execution for thread {thread_id} with agent {agent.name}"
-            )
+            logger.info(f"Starting execution for thread {thread_id}")
             event_count = 0
 
-            # Stream events from Runner
-            async for event in Runner.run_streaming(
-                agent,
+            # Stream events from provider (maintains conversation history)
+            async for event in session.provider.execute(
                 request.prompt,
-                max_turns=max_turns,
-                context={"thread_id": thread_id},
+                images=images_list,
             ):
                 if session.was_interrupted:
                     yield thought_event(thread_id, "Execution interrupted.").to_sse()
@@ -439,13 +432,8 @@ async def execute(request: ExecuteRequest):
 
                 event_count += 1
 
-                # Convert Runner StreamEvent to our StreamEvent format
                 if hasattr(event, "to_sse"):
                     yield event.to_sse()
-                elif isinstance(event, dict):
-                    # Handle dict events from Runner
-                    sse_event = _convert_runner_event(thread_id, event)
-                    yield sse_event.to_sse()
                 else:
                     yield f"data: {json.dumps({'type': 'unknown', 'data': str(event)})}\n\n"
 
@@ -472,30 +460,110 @@ async def execute(request: ExecuteRequest):
     )
 
 
-def _convert_runner_event(thread_id: str, event: dict) -> StreamEvent:
-    """Convert Runner event dict to StreamEvent."""
-    event_type = event.get("type", "unknown")
-    data = event.get("data", {})
+@app.post("/investigate")
+async def investigate(request: InvestigateRequest):
+    """
+    Investigation endpoint - routes to sandbox or direct execution.
 
-    if event_type == "thought":
-        return thought_event(thread_id, data.get("text", ""))
-    elif event_type == "tool_start":
-        return tool_start_event(thread_id, data.get("tool", ""), data.get("args", {}))
-    elif event_type == "tool_end":
-        return tool_end_event(
-            thread_id,
-            data.get("tool", ""),
-            success=data.get("success", True),
-            output=data.get("output", ""),
-        )
-    elif event_type == "result":
-        return result_event(thread_id, data.get("text", ""), success=True)
-    elif event_type == "error":
-        return error_event(
-            thread_id, data.get("message", "Unknown error"), recoverable=False
-        )
-    else:
-        return thought_event(thread_id, str(data))
+    In sandbox mode (USE_GVISOR=true):
+      - Creates/reuses gVisor sandbox pod via SandboxManager
+      - Routes request through sandbox-router
+      - Credentials injected via Envoy sidecar + credential-resolver
+
+    In direct mode:
+      - Executes agent locally (no isolation)
+    """
+    if _is_sandbox_mode():
+        return await _investigate_via_sandbox(request)
+    return await _investigate_direct(request)
+
+
+async def _investigate_direct(request: InvestigateRequest):
+    """Execute investigation directly in this process (no sandbox)."""
+    # Set team_token as env var if provided (for config service auth)
+    if request.team_token:
+        os.environ["TEAM_TOKEN"] = request.team_token
+        logger.info(f"Set TEAM_TOKEN from request for thread {request.thread_id}")
+
+        # Reload config to pick up new team token
+        reload_config()
+
+    # Forward to execute with compatible fields
+    execute_request = ExecuteRequest(
+        prompt=request.prompt,
+        thread_id=request.thread_id,
+        images=request.images,
+    )
+    return await execute(execute_request)
+
+
+async def _investigate_via_sandbox(request: InvestigateRequest):
+    """Execute investigation in an isolated gVisor sandbox pod."""
+    thread_id = request.thread_id or f"inv-{int(time.time())}"
+    tenant_id = request.tenant_id or os.getenv("INCIDENTFOX_TENANT_ID", "default")
+    team_id = request.team_id or os.getenv("INCIDENTFOX_TEAM_ID", "default")
+
+    manager = _get_sandbox_manager()
+
+    async def stream():
+        try:
+            # Check for existing sandbox for this thread
+            sandbox_info = await asyncio.to_thread(manager.get_sandbox, thread_id)
+
+            if sandbox_info is None:
+                yield thought_event(thread_id, "Creating isolated sandbox...").to_sse()
+
+                sandbox_info = await asyncio.to_thread(
+                    manager.create_sandbox,
+                    thread_id=thread_id,
+                    tenant_id=tenant_id,
+                    team_id=team_id,
+                    team_token=request.team_token,
+                )
+
+                yield thought_event(
+                    thread_id, "Waiting for sandbox to be ready..."
+                ).to_sse()
+
+                ready = await asyncio.to_thread(manager.wait_for_ready, thread_id, 120)
+                if not ready:
+                    yield error_event(
+                        thread_id,
+                        "Sandbox failed to start within timeout",
+                        recoverable=False,
+                    ).to_sse()
+                    return
+
+                yield thought_event(
+                    thread_id, "Sandbox ready. Starting investigation..."
+                ).to_sse()
+
+            # Execute in sandbox via router (streaming SSE)
+            images = (
+                [img.model_dump() for img in request.images] if request.images else None
+            )
+            response = await asyncio.to_thread(
+                manager.execute_in_sandbox, sandbox_info, request.prompt, images
+            )
+
+            # Forward SSE stream from sandbox pod
+            async for chunk in _async_stream_response(response):
+                yield chunk
+
+        except SandboxExecutionError as e:
+            logger.error(f"Sandbox execution failed: {e}", exc_info=True)
+            yield error_event(thread_id, str(e), recoverable=False).to_sse()
+        except Exception as e:
+            logger.error(f"Sandbox error: {e}", exc_info=True)
+            yield error_event(
+                thread_id, f"Sandbox error: {e}", recoverable=False
+            ).to_sse()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/interrupt")
@@ -505,6 +573,13 @@ async def interrupt(request: InterruptRequest):
 
     After interrupt, new messages can be sent via execute endpoint.
     """
+    if _is_sandbox_mode():
+        return await _interrupt_via_sandbox(request)
+    return await _interrupt_direct(request)
+
+
+async def _interrupt_direct(request: InterruptRequest):
+    """Interrupt a local execution."""
     thread_id = request.thread_id
 
     async def stream():
@@ -543,6 +618,42 @@ async def interrupt(request: InterruptRequest):
     )
 
 
+async def _interrupt_via_sandbox(request: InterruptRequest):
+    """Interrupt an execution running in a sandbox pod."""
+    thread_id = request.thread_id
+    manager = _get_sandbox_manager()
+
+    async def stream():
+        try:
+            sandbox_info = await asyncio.to_thread(manager.get_sandbox, thread_id)
+            if sandbox_info is None:
+                yield error_event(
+                    thread_id, "No active sandbox found", recoverable=False
+                ).to_sse()
+                return
+
+            response = await asyncio.to_thread(manager.interrupt_sandbox, sandbox_info)
+
+            # Forward SSE stream from sandbox
+            async for chunk in _async_stream_response(response):
+                yield chunk
+
+        except Exception as e:
+            logger.error(f"Sandbox interrupt failed: {e}", exc_info=True)
+            yield error_event(
+                thread_id, f"Interrupt failed: {e}", recoverable=False
+            ).to_sse()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.post("/answer")
 async def answer_question(request: AnswerRequest):
     """Receive answer to AskUserQuestion from main server."""
@@ -564,6 +675,8 @@ async def cleanup_session(thread_id: str):
         if thread_id in _sessions:
             session = _sessions.pop(thread_id)
             session.interrupt()
+            if session.provider:
+                await session.provider.close()
             return {"status": "cleaned", "thread_id": thread_id}
         return {"status": "not_found", "thread_id": thread_id}
 
@@ -572,18 +685,22 @@ async def cleanup_session(thread_id: str):
 async def startup_event():
     """Initialize on startup."""
     config = get_config()
+    sandbox_mode = _is_sandbox_mode()
     logger.info("Sandbox server starting...")
+    logger.info(f"  Mode: {'sandbox-manager' if sandbox_mode else 'direct'}")
     logger.info(f"  Tenant: {config.tenant_id}")
     logger.info(f"  Team: {config.team_id}")
     logger.info(f"  Model: {config.llm_model}")
     logger.info(f"  Config loaded: {config.team_config is not None}")
 
-    # Pre-build agents
-    try:
-        agents = _build_agents_from_config()
-        logger.info(f"  Agents available: {list(agents.keys())}")
-    except Exception as e:
-        logger.warning(f"  Failed to pre-build agents: {e}")
+    if sandbox_mode:
+        logger.info(f"  Sandbox image: {os.getenv('SANDBOX_IMAGE', 'not set')}")
+        logger.info(f"  Sandbox namespace: {os.getenv('SANDBOX_NAMESPACE', 'not set')}")
+        logger.info(f"  gVisor: {os.getenv('USE_GVISOR', 'false')}")
+    else:
+        logger.info("  Provider: OpenHands (LiteLLM)")
+        logger.info(f"  Allowed tools: {_get_allowed_tools(config)}")
+        logger.info(f"  Workspace: {os.getenv('WORKSPACE_DIR', '/workspace')}")
 
 
 @app.on_event("shutdown")
@@ -592,6 +709,8 @@ async def shutdown_event():
     async with _session_lock:
         for session in _sessions.values():
             session.interrupt()
+            if session.provider:
+                await session.provider.close()
         _sessions.clear()
 
 

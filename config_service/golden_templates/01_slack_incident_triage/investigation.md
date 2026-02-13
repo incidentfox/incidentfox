@@ -2,7 +2,7 @@
 
 **Template:** 01_slack_incident_triage
 **Role:** Master (orchestrator)
-**Model:** gpt-4o
+**Model:** gpt-5.2
 
 ---
 

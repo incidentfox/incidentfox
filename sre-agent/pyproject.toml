@@ -25,9 +25,6 @@ dependencies = [
     "slack-sdk>=3.27.0",
     "atlassian-python-api>=3.41.0",  # Confluence integration
 
-    # Logging & Search
-    "elasticsearch>=8.0.0",
-
     # Utilities
     "pyyaml>=6.0",
 

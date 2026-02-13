@@ -28,7 +28,8 @@ RUN pip install --no-cache-dir fastapi uvicorn httpx \
     "pyasn1>=0.6.2" \
     "jaraco.context>=6.1.0" \
     "starlette>=0.49.1" \
-    "aiohttp>=3.13.3"
+    "aiohttp>=3.13.3" \
+    "Pillow>=12.1.1"
 
 # Patch setuptools' vendored packages to fix CVEs (must run AFTER all pip installs)
 # setuptools bundles old versions in _vendor/ that Trivy flags as vulnerable:

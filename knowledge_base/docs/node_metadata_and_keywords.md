@@ -64,7 +64,7 @@ The `metadata` field contains a serialized `SourceMetadata` object with:
   "original_format": "mp4",
   "mime_type": "video/mp4",
   "processing_steps": ["video_processing", "audio_transcription", "frame_extraction"],
-  "processing_model": "whisper-1 + gpt-4o",
+  "processing_model": "whisper-1 + gpt-5.2",
   "processing_cost_usd": 0.25,
   "processing_duration_seconds": 15.3,
   "language": "en",

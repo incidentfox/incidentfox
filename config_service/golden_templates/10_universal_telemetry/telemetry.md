@@ -2,7 +2,7 @@
 
 **Template:** 10_universal_telemetry
 **Role:** Sub-agent
-**Model:** gpt-4o
+**Model:** gpt-5.2
 
 ---
 

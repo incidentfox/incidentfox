@@ -9,6 +9,7 @@ dependencies = [
     "requests>=2.32.0",  # For calling sre-agent
     "mistune>=3.0.0",  # Markdown parser for Slack mrkdwn conversion
     "flask>=3.0.0",  # For HTTP mode (production)
+    "litellm>=1.55.0",  # For API key validation (same as backend proxy)
 ]
 
 [build-system]

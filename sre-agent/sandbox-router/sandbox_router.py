@@ -27,8 +27,9 @@ DEFAULT_SANDBOX_PORT = 8888
 DEFAULT_NAMESPACE = "default"
 
 # Retry configuration for handling DNS propagation delays and pod startup
-RETRY_COUNT = 3
-RETRY_BASE_DELAY = 0.5  # seconds, will use exponential backoff: 0.5, 1.0, 2.0
+# Headless Services for new sandboxes can take 5-10s for DNS to propagate
+RETRY_COUNT = 8
+RETRY_BASE_DELAY = 1.0  # seconds, with exponential backoff capped at 4s
 # For streaming SSE, use separate connect/read/write/pool timeouts
 # connect: 30s to establish connection
 # read: None - no timeout between SSE events (agent may think for minutes)
@@ -100,9 +101,9 @@ async def proxy_request(request: Request, full_path: str):
         except httpx.ConnectError as e:
             last_error = e
             if attempt < RETRY_COUNT - 1:
-                delay = RETRY_BASE_DELAY * (
-                    2**attempt
-                )  # Exponential backoff: 0.5, 1.0, 2.0
+                delay = min(
+                    RETRY_BASE_DELAY * (2**attempt), 4.0
+                )  # Exponential backoff capped at 4s
                 print(
                     f"Connection to sandbox '{sandbox_id}' failed (attempt {attempt + 1}/{RETRY_COUNT}), "
                     f"retrying in {delay}s... Error: {e}"

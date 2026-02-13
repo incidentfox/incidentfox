@@ -420,7 +420,7 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "enabled": True,
                 "name": "Planner",
                 "description": "Top-level orchestrator that delegates to 3 specialized agents",
-                "model": {"name": "gpt-4o", "temperature": 0.3, "max_tokens": 16000},
+                "model": {"name": "gpt-5.2", "temperature": 0.3, "max_tokens": 16000},
                 "prompt": {
                     "system": DEFAULT_PROMPTS.get("planner", ""),
                     "prefix": "",
@@ -444,7 +444,7 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "enabled": True,
                 "name": "Investigation Agent",
                 "description": "Sub-orchestrator for incident investigation with 5 specialized sub-agents",
-                "model": {"name": "gpt-4o", "temperature": 0.4, "max_tokens": 16000},
+                "model": {"name": "gpt-5.2", "temperature": 0.4, "max_tokens": 16000},
                 "prompt": {
                     "system": DEFAULT_PROMPTS.get("investigation", ""),
                     "prefix": "",
@@ -469,7 +469,7 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "enabled": True,
                 "name": "Coding Agent",
                 "description": "Code analysis, debugging, and fixes",
-                "model": {"name": "gpt-4o", "temperature": 0.4, "max_tokens": 16000},
+                "model": {"name": "gpt-5.2", "temperature": 0.4, "max_tokens": 16000},
                 "prompt": {
                     "system": DEFAULT_PROMPTS.get("coding", ""),
                     "prefix": "",
@@ -501,7 +501,7 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "enabled": True,
                 "name": "Writeup Agent",
                 "description": "Blameless postmortem and incident documentation",
-                "model": {"name": "gpt-4o", "temperature": 0.5, "max_tokens": 16000},
+                "model": {"name": "gpt-5.2", "temperature": 0.5, "max_tokens": 16000},
                 "prompt": {
                     "system": DEFAULT_PROMPTS.get("writeup", ""),
                     "prefix": "",
@@ -519,7 +519,7 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "enabled": True,
                 "name": "GitHub Agent",
                 "description": "GitHub repository analysis for change correlation",
-                "model": {"name": "gpt-4o", "temperature": 0.3, "max_tokens": 16000},
+                "model": {"name": "gpt-5.2", "temperature": 0.3, "max_tokens": 16000},
                 "prompt": {
                     "system": DEFAULT_PROMPTS.get("github", ""),
                     "prefix": "",
@@ -544,7 +544,7 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "enabled": True,
                 "name": "Kubernetes Agent",
                 "description": "Kubernetes troubleshooting and operations",
-                "model": {"name": "gpt-4o", "temperature": 0.3, "max_tokens": 16000},
+                "model": {"name": "gpt-5.2", "temperature": 0.3, "max_tokens": 16000},
                 "prompt": {
                     "system": DEFAULT_PROMPTS.get("k8s", ""),
                     "prefix": "",
@@ -576,7 +576,7 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "enabled": True,
                 "name": "AWS Agent",
                 "description": "AWS resource management and debugging",
-                "model": {"name": "gpt-4o", "temperature": 0.3, "max_tokens": 16000},
+                "model": {"name": "gpt-5.2", "temperature": 0.3, "max_tokens": 16000},
                 "prompt": {
                     "system": DEFAULT_PROMPTS.get("aws", ""),
                     "prefix": "",
@@ -602,7 +602,7 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "enabled": True,
                 "name": "Metrics Agent",
                 "description": "Metrics analysis and anomaly detection",
-                "model": {"name": "gpt-4o", "temperature": 0.2, "max_tokens": 16000},
+                "model": {"name": "gpt-5.2", "temperature": 0.2, "max_tokens": 16000},
                 "prompt": {
                     "system": DEFAULT_PROMPTS.get("metrics", ""),
                     "prefix": "",
@@ -634,7 +634,7 @@ def get_default_agent_config() -> Dict[str, Any]:
                 "enabled": True,
                 "name": "Log Analysis Agent",
                 "description": "Partition-first log investigation specialist",
-                "model": {"name": "gpt-4o", "temperature": 0.2, "max_tokens": 16000},
+                "model": {"name": "gpt-5.2", "temperature": 0.2, "max_tokens": 16000},
                 "prompt": {
                     "system": DEFAULT_PROMPTS.get("log_analysis", ""),
                     "prefix": "",
@@ -670,6 +670,19 @@ def get_default_tool_config() -> Dict[str, Any]:
     Teams can override specific tools via their config.
     """
     return {"tools": {}}  # Empty dict - no default team-level overrides
+
+
+def get_default_skill_config() -> Dict[str, Any]:
+    """
+    Get the default team-level skill overrides.
+
+    NOTE: This returns team-level skill overrides (Dict[str, bool]), NOT the skills catalog.
+    The skills catalog with metadata comes from get_skills_catalog() and is stored in built_in_skills.
+
+    Returns empty dict because all skills are enabled by default via the catalog.
+    Teams can override specific skills via their config.
+    """
+    return {"skills": {}}  # Empty dict - no default team-level overrides
 
 
 def get_default_mcp_config() -> Dict[str, Any]:
@@ -814,6 +827,7 @@ def get_full_default_config(db: Optional[Session] = None) -> Dict[str, Any]:
     config = {}
     config.update(get_default_agent_config())
     config.update(get_default_tool_config())
+    config.update(get_default_skill_config())
     config.update(get_default_mcp_config())
     config.update(get_default_integration_config(db=db))
 

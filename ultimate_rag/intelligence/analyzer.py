@@ -52,7 +52,7 @@ class ContentAnalyzer:
     def __init__(
         self,
         openai_client: Optional[AsyncOpenAI] = None,
-        model: str = "gpt-4o-2024-08-06",
+        model: str = "gpt-5.2",
         temperature: float = 0.1,
         max_retries: int = 3,
     ):
@@ -61,7 +61,7 @@ class ContentAnalyzer:
 
         Args:
             openai_client: AsyncOpenAI client instance. If None, creates one.
-            model: Model to use. Default gpt-4o-2024-08-06 supports structured outputs.
+            model: Model to use. Default gpt-5.2 supports structured outputs.
             temperature: LLM temperature. Low for consistency.
             max_retries: Number of retries on failures.
         """

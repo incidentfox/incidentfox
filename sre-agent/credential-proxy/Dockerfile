@@ -25,5 +25,7 @@ USER resolver
 # Expose port
 EXPOSE 8002
 
-# Run the service
-CMD ["python", "-m", "credential_resolver.main"]
+# Run the service (use uvicorn directly to avoid dual-import of main.py
+# as both __main__ and credential_resolver.main — llm_proxy.py uses
+# relative imports that must resolve to the same module instance)
+CMD ["uvicorn", "credential_resolver.main:app", "--host", "0.0.0.0", "--port", "8002"]

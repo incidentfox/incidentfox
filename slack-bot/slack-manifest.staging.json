@@ -1,0 +1,76 @@
+{
+    "display_information": {
+        "name": "IncidentFox (Staging)",
+        "description": "AI incident investigator that debugs while you sleep.",
+        "background_color": "#DE6D1D",
+        "long_description": "Stop context-switching during incidents. IncidentFox is an AI investigator that digs through your logs, metrics, and deployments so you don't have to.\r\n\r\n*The problem:*\r\nIncident hits at 2am. You're jumping between Datadog, Grafana, CloudWatch, and git blame trying to piece together what happened. By the time you find the root cause, you've lost an hour and your sanity.\r\n\r\n*The fix:*\r\n@mention IncidentFox in Slack. Ask \"why is checkout-service throwing 500s?\" and watch it work - pulling logs, correlating metrics, checking recent deploys, and building a timeline. In real-time. While you drink your coffee.\r\n\r\n*What makes it different:*\r\n• *It investigates, not just answers* - IncidentFox doesn't guess. It queries your actual systems, shows its work, and lets you follow along.\r\n• *Thread memory* - Follow-up with \"what changed in that service last week?\" and it picks up right where you left off.\r\n• *Sandboxed execution* - All diagnostics run in isolated environments. Your production stays safe.\r\n\r\n*Connects to your stack:*\r\nCoralogix · CloudWatch · Datadog · Prometheus · Grafana · GitHub · PagerDuty · and more\r\n\r\n*AI Disclosure:*\r\nPowered by Claude (Anthropic). AI outputs may be inaccurate - verify before acting. Your data is never used for training.\r\n\r\nGet started → https://incidentfox.ai"
+    },
+    "features": {
+        "app_home": {
+            "home_tab_enabled": true,
+            "messages_tab_enabled": true,
+            "messages_tab_read_only_enabled": false
+        },
+        "bot_user": {
+            "display_name": "IncidentFox",
+            "always_online": true
+        }
+    },
+    "oauth_config": {
+        "redirect_urls": [
+            "https://slack-staging.incidentfox.ai/slack/oauth_redirect"
+        ],
+        "scopes": {
+            "bot": [
+                "app_mentions:read",
+                "channels:history",
+                "channels:join",
+                "channels:read",
+                "chat:write",
+                "chat:write.customize",
+                "commands",
+                "files:read",
+                "files:write",
+                "groups:history",
+                "groups:read",
+                "im:history",
+                "im:read",
+                "im:write",
+                "links:read",
+                "links:write",
+                "links.embed:write",
+                "metadata.message:read",
+                "mpim:history",
+                "mpim:read",
+                "reactions:read",
+                "reactions:write",
+                "usergroups:read",
+                "users:read"
+            ]
+        }
+    },
+    "settings": {
+        "event_subscriptions": {
+            "request_url": "https://slack-staging.incidentfox.ai/slack/events",
+            "bot_events": [
+                "app_home_opened",
+                "app_mention",
+                "member_joined_channel",
+                "message.channels",
+                "message.im"
+            ]
+        },
+        "interactivity": {
+            "is_enabled": true,
+            "request_url": "https://slack-staging.incidentfox.ai/slack/events"
+        },
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false,
+        "unfurl_domains": [
+            "www.youtube.com",
+            "youtube.com",
+            "youtu.be"
+        ]
+    }
+}

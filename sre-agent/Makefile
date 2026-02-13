@@ -10,15 +10,12 @@ help: ## Show available commands
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@grep -E '^[a-zA-Z_-]+:.*?## 🏠.*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}'
 	@echo ""
-	@echo "☁️  PRODUCTION"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@grep -E '^[a-zA-Z_-]+:.*?## ☁️.*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}'
-	@echo ""
 	@echo "📊 UTILITIES"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@grep -E '^[a-zA-Z_-]+:.*?## 📊.*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}'
 	@echo ""
-	@echo "For more details, see: DEPLOYMENT_QUICK_START.md"
+	@echo "Production deploy: gh workflow run deploy-eks.yml -f environment=production -f services=all"
+	@echo "For more details, see: scripts/README.md"
 	@echo ""
 
 # ═══════════════════════════════════════════════════════════════
@@ -52,16 +49,6 @@ dev-reset: ## 🏠 Delete Kind cluster and start fresh (nuclear option)
 		kind delete cluster --name incidentfox || true; \
 		echo "✅ Deleted. Run 'make setup-local' to recreate"; \
 	fi
-
-# ═══════════════════════════════════════════════════════════════
-# ☁️  PRODUCTION
-# ═══════════════════════════════════════════════════════════════
-
-setup-prod: ## ☁️ First-time production setup (creates EKS cluster, installs components)
-	@./scripts/setup-prod.sh
-
-deploy-prod: ## ☁️ Deploy to production (builds multi-platform, pushes to ECR, deploys)
-	@./scripts/deploy-prod.sh
 
 # ═══════════════════════════════════════════════════════════════
 # 📊 UTILITIES
@@ -100,40 +87,9 @@ dev-logs: ## 📊 View server and router logs
 	@echo "📋 Router logs:"
 	@kubectl logs -l app=sandbox-router --tail=20 --prefix=true 2>/dev/null || echo "  Router not running"
 
-prod-url: ## 📊 Get production LoadBalancer URL
-	@CONTEXT=$$(kubectl config current-context 2>/dev/null); \
-	if ! echo "$$CONTEXT" | grep -q "incidentfox-prod"; then \
-		echo "⚠️  Current context: $$CONTEXT"; \
-		echo "💡 Switch to production: kubectl config use-context arn:aws:eks:us-west-2:103002841599:cluster/incidentfox-prod"; \
-		echo ""; \
-	fi; \
-	kubectl get svc incidentfox-server-svc -n incidentfox-prod \
-		-o jsonpath='http://{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null && echo "" \
-		|| echo "❌ Not deployed or context not set to production"
-
 test-local-server: ## 📊 Run quick E2E test against local server
 	@echo "🧪 Testing local server..."
 	@curl -s -X POST http://localhost:8000/investigate \
-		-H "Content-Type: application/json" \
-		-d '{"prompt": "What is 2+2?"}' | head -20
-	@echo ""
-	@echo "✅ Test complete"
-
-test-prod: ## 📊 Run quick E2E test against production
-	@echo "🧪 Testing production..."
-	@CONTEXT=$$(kubectl config current-context 2>/dev/null); \
-	if ! echo "$$CONTEXT" | grep -q "incidentfox-prod"; then \
-		echo "⚠️  Current context: $$CONTEXT"; \
-		echo "💡 Switch to production: kubectl config use-context arn:aws:eks:us-west-2:103002841599:cluster/incidentfox-prod"; \
-		echo ""; \
-	fi; \
-	PROD_URL=$$(kubectl get svc incidentfox-server-svc -n incidentfox-prod \
-		-o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null); \
-	if [ -z "$$PROD_URL" ]; then \
-		echo "❌ Production URL not found"; \
-		exit 1; \
-	fi; \
-	curl -s -m 30 -X POST "http://$$PROD_URL/investigate" \
 		-H "Content-Type: application/json" \
 		-d '{"prompt": "What is 2+2?"}' | head -20
 	@echo ""
