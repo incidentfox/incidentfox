@@ -168,6 +168,7 @@ async def claim_sandbox(request: ClaimRequest):
     os.environ["THREAD_ID"] = request.thread_id
     os.environ["INCIDENTFOX_TENANT_ID"] = request.tenant_id
     os.environ["INCIDENTFOX_TEAM_ID"] = request.team_id
+    os.environ["SANDBOX_JWT"] = request.jwt_token  # For skill scripts hitting credential-resolver directly
     if request.team_token:
         os.environ["TEAM_TOKEN"] = request.team_token
 
