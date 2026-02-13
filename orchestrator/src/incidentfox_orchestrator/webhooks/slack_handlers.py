@@ -417,9 +417,7 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
         try:
             value = json.loads(action.get("value", "{}"))
         except (json.JSONDecodeError, ValueError):
-            await respond(
-                text="Failed to parse approval data.", replace_original=False
-            )
+            await respond(text="Failed to parse approval data.", replace_original=False)
             return
 
         thread_id = value.get("thread_id", "")
@@ -451,9 +449,7 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                 thread_id=thread_id,
                 error=str(e),
             )
-            await respond(
-                text=f"Failed to send approval: {e}", replace_original=False
-            )
+            await respond(text=f"Failed to send approval: {e}", replace_original=False)
 
     @app.action("remediation_reject")
     async def handle_remediation_reject(ack, body, respond):
@@ -499,9 +495,7 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
                 thread_id=thread_id,
                 error=str(e),
             )
-            await respond(
-                text=f"Failed to send rejection: {e}", replace_original=False
-            )
+            await respond(text=f"Failed to send rejection: {e}", replace_original=False)
 
     @app.action(re.compile(r"^view_"))
     async def handle_view_phase(ack, body, client):

@@ -540,7 +540,9 @@ class AgentApiClient:
             dict[str, Any]
         ] = None,  # DEPRECATED: use output_destinations
         trigger_source: Optional[str] = None,  # Source that triggered this run
-        event_callback: Optional[Any] = None,  # Callback for SSE events (approval, etc.)
+        event_callback: Optional[
+            Any
+        ] = None,  # Callback for SSE events (approval, etc.)
     ) -> dict[str, Any]:
         """Call the agent service's /investigate endpoint and consume the SSE stream."""
         base = agent_base_url.rstrip("/") if agent_base_url else self.base_url

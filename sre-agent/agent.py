@@ -530,9 +530,7 @@ class InteractiveAgentSession:
                 is_gated, description = _is_gated_command(command)
                 if is_gated:
                     logger = logging.getLogger(__name__)
-                    logger.info(
-                        f"[Approval] Gated command detected: {description}"
-                    )
+                    logger.info(f"[Approval] Gated command detected: {description}")
 
                     event = asyncio.Event()
                     self._pending_approval_event = event
@@ -560,14 +558,10 @@ class InteractiveAgentSession:
                             logger.info(
                                 f"[Approval] Approved: {result.get('comment', '')}"
                             )
-                            return PermissionResultAllow(
-                                updated_input=input_data
-                            )
+                            return PermissionResultAllow(updated_input=input_data)
                         else:
                             comment = result.get("comment", "") if result else ""
-                            logger.info(
-                                f"[Approval] Rejected: {comment}"
-                            )
+                            logger.info(f"[Approval] Rejected: {comment}")
                             return PermissionResultDeny(
                                 message=f"Action rejected by user. {comment}"
                             )
@@ -877,8 +871,8 @@ class InteractiveAgentSession:
                                     # If gated command, emit approval event
                                     if block.name == "Bash":
                                         command = tool_input.get("command", "")
-                                        is_gated, description = (
-                                            _is_gated_command(command)
+                                        is_gated, description = _is_gated_command(
+                                            command
                                         )
                                         if is_gated:
                                             import uuid
