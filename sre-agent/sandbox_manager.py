@@ -672,11 +672,8 @@ static_resources:
                                             "https://us.cloud.langfuse.com",
                                         ),
                                     },
-                                    # Kubernetes context (use pre-configured kubeconfig for incidentfox-demo cluster)
-                                    {
-                                        "name": "KUBECONFIG",
-                                        "value": "/home/agent/.kube/config",
-                                    },
+                                    # Kubernetes: use in-cluster SA auth (incidentfox-sandbox-pod)
+                                    # NOT kubeconfig — that resolves to EC2 node IAM identity
                                     # Dynamic values
                                     {"name": "THREAD_ID", "value": thread_id},
                                     {"name": "SANDBOX_NAME", "value": sandbox_name},

@@ -302,6 +302,23 @@ spec:
         # Coralogix SDK: route API requests through Envoy proxy
         - name: CORALOGIX_BASE_URL
           value: "http://localhost:8001"
+        # Integration proxies: route through credential-resolver reverse proxy
+        # These integrations have customer-specific URLs, so credential-resolver
+        # looks up the real URL from config-service and injects auth headers.
+        - name: CONFLUENCE_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/confluence"
+        - name: GRAFANA_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/grafana"
+        - name: ELASTICSEARCH_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/elasticsearch"
+        - name: PROMETHEUS_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/prometheus"
+        - name: JAEGER_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/jaeger"
+        - name: GITHUB_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/github"
+        - name: DATADOG_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/datadog"
         # Laminar tracing (platform observability)
         - name: LMNR_PROJECT_API_KEY
           valueFrom:
@@ -312,9 +329,8 @@ spec:
         # Disable Laminar's claude-agent-sdk instrumentation
         - name: DISABLE_LAMINAR
           value: "true"
-        # Kubernetes context
-        - name: KUBECONFIG
-          value: "/home/agent/.kube/config"
+        # Kubernetes: use in-cluster service account auth (incidentfox-sandbox-pod SA)
+        # NOT kubeconfig — that resolves to the EC2 node IAM identity via aws eks get-token
         - name: SANDBOX_NAME
           valueFrom:
             fieldRef:
