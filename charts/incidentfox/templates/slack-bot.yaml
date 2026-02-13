@@ -117,6 +117,9 @@ metadata:
   {{- end }}
 spec:
   type: {{ .Values.services.slackBot.service.type | default "ClusterIP" }}
+  {{- if .Values.services.slackBot.service.loadBalancerClass }}
+  loadBalancerClass: {{ .Values.services.slackBot.service.loadBalancerClass }}
+  {{- end }}
   ports:
     {{- if eq .Values.services.slackBot.service.type "LoadBalancer" }}
     - port: 443
