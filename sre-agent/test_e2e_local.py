@@ -12,16 +12,14 @@ Usage:
 """
 
 import asyncio
+import json
 import os
 import sys
-import json
 
 # ── Step 0: Setup ───────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(__file__))
 
-CONFIG_SERVICE_URL = os.environ.get(
-    "CONFIG_SERVICE_URL", "http://localhost:18082"
-)
+CONFIG_SERVICE_URL = os.environ.get("CONFIG_SERVICE_URL", "http://localhost:18082")
 ADMIN_TOKEN = os.environ.get(
     "CONFIG_SERVICE_ADMIN_TOKEN",
     "JZzFK8FVfWnPjPgPUj8laL9H-IjbFTmq2jffvPrUfNLSYSSvUHPZpu9XRug6n8-y",
@@ -31,8 +29,10 @@ ADMIN_TOKEN = os.environ.get(
 async def main():
     import httpx
     from claude_agent_sdk import (
-        ClaudeAgentOptions,
         AgentDefinition,
+        ClaudeAgentOptions,
+    )
+    from claude_agent_sdk import (
         query as claude_query,
     )
 
@@ -61,7 +61,7 @@ async def main():
     os.environ["TEAM_TOKEN"] = team_token
     os.environ["CONFIG_SERVICE_URL"] = CONFIG_SERVICE_URL
 
-    from config import load_team_config, get_root_agent_config
+    from config import get_root_agent_config, load_team_config
 
     team_config = load_team_config()
     print(f"  Agents: {len(team_config.agents)}")
@@ -106,8 +106,16 @@ async def main():
     print("=" * 60)
 
     allowed_tools = [
-        "Skill", "Read", "Write", "Edit", "Bash",
-        "Glob", "Grep", "WebSearch", "WebFetch", "Task",
+        "Skill",
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Glob",
+        "Grep",
+        "WebSearch",
+        "WebFetch",
+        "Task",
     ]
 
     # Use cwd with .claude/skills
@@ -128,7 +136,7 @@ async def main():
     )
     print(f"  cwd: {cwd}")
     print(f"  allowed_tools: {allowed_tools}")
-    print(f"  system_prompt type: preset + append")
+    print("  system_prompt type: preset + append")
     print(f"  subagents: {len(subagents)}")
 
     # ── Step 6: Run a query ─────────────────────────────────────────────────
@@ -139,7 +147,7 @@ async def main():
     prompt = "Are there any active incident scenarios right now? Use the runtime-config-flagd skill to check."
 
     print(f"  Prompt: {prompt}")
-    print(f"  Streaming...\n")
+    print("  Streaming...\n")
 
     message_count = 0
     assistant_count = 0
@@ -150,7 +158,9 @@ async def main():
 
         if msg_type == "AssistantMessage":
             assistant_count += 1
-            content = getattr(message, "content", None) or getattr(message, "message", {})
+            content = getattr(message, "content", None) or getattr(
+                message, "message", {}
+            )
             if hasattr(content, "content"):
                 content = content.content
             if isinstance(content, list):
