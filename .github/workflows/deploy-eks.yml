@@ -235,7 +235,7 @@ jobs:
           echo "Deploying with: incidentfox/${{ env.VALUES_FILE }}"
           helm upgrade --install incidentfox ./incidentfox \
             -n ${{ env.HELM_NAMESPACE }} \
-            -f incidentfox/values.staging.yaml \
+            -f incidentfox/${{ env.VALUES_FILE }} \
             --no-hooks \
             --timeout 5m
 
