@@ -93,6 +93,22 @@ externalSecrets:
       secretKeyKey: LANGFUSE_SECRET_KEY
       publicKeyRemoteRefKey: incidentfox/staging/langfuse_public_key
       secretKeyRemoteRefKey: incidentfox/staging/langfuse_secret_key
+    googleChat:
+      enabled: true
+      secretName: incidentfox-google-chat
+      projectIdKey: project_id
+      serviceAccountKeyKey: service_account_key
+      projectIdRemoteRefKey: incidentfox/prod/google_chat_project_id
+      serviceAccountKeyRemoteRefKey: incidentfox/prod/google_chat_service_account_key
+    teams:
+      enabled: true
+      secretName: incidentfox-teams
+      appIdKey: app_id
+      appPasswordKey: app_password
+      tenantIdKey: tenant_id
+      appIdRemoteRefKey: incidentfox/prod/teams_app_id
+      appPasswordRemoteRefKey: incidentfox/prod/teams_app_password
+      tenantIdRemoteRefKey: incidentfox/prod/teams_tenant_id
     # JWT secret for sandbox credential injection
     jwtSecret:
       enabled: true
@@ -119,7 +135,7 @@ externalSecrets:
 services:
   configService:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-config-service:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-config-service:latest"
     adminAuthMode: token
     teamAuthMode: token
     resources:
@@ -146,7 +162,7 @@ services:
 
   orchestrator:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-orchestrator:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-orchestrator:latest"
     requireAdminStar: true
     slackAgentMaxTurns: "200"
     slackAgentTimeoutSeconds: "180"
@@ -154,7 +170,7 @@ services:
   # Slack Bot - Multi-tenant Slack integration
   slackBot:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-slack-bot:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-slack-bot:latest"
     replicas: 1
     servicePort: 3000
     freeTrial:
@@ -172,7 +188,7 @@ services:
   # Unified Agent with gVisor sandbox isolation
   agent:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:latest"
     serviceAccount:
       create: true
       name: incidentfox-agent
@@ -185,7 +201,7 @@ services:
     # Enable sandbox mode with gVisor isolation
     sandbox:
       enabled: true
-      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:staging"
+      image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-unified-agent:latest"
       namespace: ""  # Same namespace as agent
       useGvisor: true
     # Enable tracing in staging for debugging
@@ -203,7 +219,7 @@ services:
   # Sandbox Router for routing to sandbox pods
   sandboxRouter:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sandbox-router:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-sandbox-router:latest"
     replicas: 2
     hpa:
       enabled: true
@@ -220,7 +236,7 @@ services:
   # Credential Resolver for sandbox credential injection
   credentialResolver:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-credential-resolver:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-credential-resolver:latest"
     replicas: 2
     credentialSource: config_service
     jwtMode: strict
@@ -238,7 +254,7 @@ services:
   # Ultimate RAG - Knowledge base with graph queries, teaching, analytics
   ultimateRag:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ultimate-rag:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ultimate-rag:latest"
     replicas: 1
     serviceAccountRoleArn: "arn:aws:iam::103002841599:role/incidentfox-raptor-kb-role"
     defaultTree: "mega_ultra_v2"
@@ -254,7 +270,7 @@ services:
 
   webUi:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-web-ui:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-web-ui:latest"
     cookieSecure: true
     raptorApiUrl: "http://incidentfox-rag.incidentfox.svc.cluster.local:8000"
     oidc:
@@ -268,6 +284,6 @@ services:
   # K8s Gateway for SaaS mode (customer K8s agents)
   k8sGateway:
     enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:staging"
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:latest"
     replicas: 2
     logLevel: "INFO"

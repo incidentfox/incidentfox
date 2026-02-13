@@ -103,6 +103,7 @@ class TeamsIntegration:
         audit_api: AuditApiClient | None,
         app_id: str,
         app_password: str,
+        tenant_id: str = "",
     ):
         self.config_service = config_service
         self.agent_api = agent_api
@@ -111,9 +112,11 @@ class TeamsIntegration:
         self.app_password = app_password
 
         # Create adapter with credentials
+        # channel_auth_tenant is required for single-tenant Azure Bots
         settings = BotFrameworkAdapterSettings(
             app_id=app_id,
             app_password=app_password,
+            channel_auth_tenant=tenant_id or None,
         )
         self.adapter = BotFrameworkAdapter(settings)
 

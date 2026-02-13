@@ -133,8 +133,10 @@ externalSecrets:
       secretName: incidentfox-teams
       appIdKey: app_id
       appPasswordKey: app_password
+      tenantIdKey: tenant_id
       appIdRemoteRefKey: incidentfox/prod/teams_app_id
       appPasswordRemoteRefKey: incidentfox/prod/teams_app_password
+      tenantIdRemoteRefKey: incidentfox/prod/teams_tenant_id
     # JWT secret for sandbox credential injection (shared between unified-agent and credential-resolver)
     jwtSecret:
       enabled: true

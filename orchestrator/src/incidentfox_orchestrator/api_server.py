@@ -259,12 +259,14 @@ def create_app() -> FastAPI:
         if teams_app_id and teams_app_password:
             from incidentfox_orchestrator.webhooks.teams_bot import TeamsIntegration
 
+            teams_tenant_id = (os.getenv("TEAMS_TENANT_ID") or "").strip()
             app_.state.teams_bot = TeamsIntegration(
                 config_service=app_.state.config_service,
                 agent_api=app_.state.agent_api,
                 audit_api=app_.state.audit_api,
                 app_id=teams_app_id,
                 app_password=teams_app_password,
+                tenant_id=teams_tenant_id,
             )
             _log("teams_bot_initialized")
         else:

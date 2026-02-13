@@ -136,6 +136,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
                   key: {{ .Values.externalSecrets.contract.teams.appPasswordKey | quote }}
+            - name: TEAMS_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.teams.tenantIdKey | quote }}
             {{- end }}
             # Slack-triggered agent run parameters (enterprise defaults)
             - name: ORCHESTRATOR_SLACK_AGENT_MAX_TURNS

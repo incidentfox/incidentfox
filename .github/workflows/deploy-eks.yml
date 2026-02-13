@@ -210,7 +210,7 @@ jobs:
           # We'll use kubectl rollout status instead (more efficient, better errors)
           helm upgrade --install incidentfox ./incidentfox \
             -n ${{ env.HELM_NAMESPACE }} \
-            -f incidentfox/values.prod.yaml \
+            -f incidentfox/values.staging.yaml \
             --no-hooks \
             --force \
             --timeout 5m
