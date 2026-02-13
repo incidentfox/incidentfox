@@ -298,7 +298,7 @@ class GoogleChatIntegration:
                 destinations=[d.get("type") for d in output_destinations],
             )
 
-            # Run agent in thread pool
+            # Run agent in thread pool — calls /investigate and streams SSE
             result = await asyncio.to_thread(
                 partial(
                     agent_api.run_agent,
@@ -320,15 +320,20 @@ class GoogleChatIntegration:
                     timeout=int(
                         os.getenv("ORCHESTRATOR_GCHAT_AGENT_TIMEOUT_SECONDS", "300")
                     ),
-                    max_turns=int(
-                        os.getenv("ORCHESTRATOR_GCHAT_AGENT_MAX_TURNS", "50")
-                    ),
                     correlation_id=correlation_id,
                     agent_base_url=dedicated_agent_url,
-                    output_destinations=output_destinations,
-                    trigger_source="google_chat",
                 )
             )
+
+            # TODO: Send result back to Google Chat space via REST API
+            result_text = result.get("result", "")
+            if result_text:
+                _log(
+                    "gchat_result_ready",
+                    correlation_id=correlation_id,
+                    space_name=space_name,
+                    result_length=len(result_text),
+                )
 
             _log(
                 "gchat_message_completed",
