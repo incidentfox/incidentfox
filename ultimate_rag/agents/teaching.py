@@ -499,7 +499,7 @@ Resolution: {resolution}
             client = AsyncOpenAI()
 
             response = await client.chat.completions.create(
-                model="gpt-5.2-mini",
+                model="gpt-4o-mini",
                 temperature=0.0,
                 max_tokens=50,
                 messages=[

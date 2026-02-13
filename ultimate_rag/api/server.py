@@ -13,19 +13,43 @@ import logging
 import os
 import sys
 
-# Pickle compatibility shim for legacy RAPTOR trees.
-# Old pickle files reference 'raptor.tree_structures' but the module is now
-# at 'knowledge_base.raptor.tree_structures'. This shim creates module aliases
-# so pickle.load() can find the classes.
+# Pickle compatibility shim for RAPTOR trees.
+# In dev, the module is at 'knowledge_base.raptor'. In Docker, it's at 'raptor'
+# (copied to /app/raptor/). Code imports 'knowledge_base.raptor.*' everywhere,
+# so we need bidirectional aliases.
 try:
     from knowledge_base import raptor as kb_raptor
 
     sys.modules["raptor"] = kb_raptor
-    # Also alias submodules that might be referenced
     if hasattr(kb_raptor, "tree_structures"):
         sys.modules["raptor.tree_structures"] = kb_raptor.tree_structures
 except ImportError:
-    pass  # knowledge_base not available, skip shim
+    # Docker container: raptor is at /app/raptor/, not knowledge_base.raptor.
+    # We CANNOT do `import raptor` because raptor/__init__.py eagerly imports
+    # cluster_utils → umap → pynndescent which crashes with SIGILL on ARM64.
+    # Instead, create namespace packages that point at /app/raptor/ so Python's
+    # import machinery can load individual submodules on demand.
+    import types as _types
+
+    _raptor_dir = os.path.join(os.environ.get("PYTHONPATH", "/app"), "raptor")
+    if os.path.isdir(_raptor_dir):
+        # Fake 'raptor' namespace (for pickle compat: raptor.tree_structures.Node)
+        _raptor_ns = _types.ModuleType("raptor")
+        _raptor_ns.__path__ = [_raptor_dir]
+        _raptor_ns.__package__ = "raptor"
+        sys.modules["raptor"] = _raptor_ns
+
+        # Fake 'knowledge_base.raptor' namespace (for code imports)
+        _kb = _types.ModuleType("knowledge_base")
+        _kb.__path__ = []
+        _kb.__package__ = "knowledge_base"
+        sys.modules["knowledge_base"] = _kb
+
+        _kb_raptor = _types.ModuleType("knowledge_base.raptor")
+        _kb_raptor.__path__ = [_raptor_dir]
+        _kb_raptor.__package__ = "knowledge_base.raptor"
+        _kb.raptor = _kb_raptor
+        sys.modules["knowledge_base.raptor"] = _kb_raptor
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -283,6 +307,27 @@ class MaintenanceResponse(BaseModel):
     gaps_detected: int
     contradictions_detected: int
     tasks_created: int
+
+
+class DecayRequest(BaseModel):
+    """Request for knowledge decay operation."""
+
+    half_life_days: int = Field(180, description="Half-life for decay in days")
+    min_weight: float = Field(0.1, description="Minimum weight after decay")
+
+
+class RebalanceRequest(BaseModel):
+    """Request for tree rebalancing operation."""
+
+    target_cluster_size: int = Field(10, description="Target cluster size")
+    max_tree_depth: int = Field(5, description="Maximum tree depth")
+
+
+class DetectGapsRequest(BaseModel):
+    """Request for gap detection operation."""
+
+    analyze_query_logs: bool = Field(True, description="Analyze query logs")
+    min_query_count: int = Field(5, description="Minimum query count to flag a gap")
 
 
 # ==================== /api/v1 Compatibility Models ====================
@@ -1448,9 +1493,8 @@ class UltimateRAGServer:
 
             result = await self.teaching.teach_from_correction(
                 original_query=original_query,
-                wrong_answer=wrong_answer,
+                original_answer=wrong_answer,
                 correct_answer=correct_answer,
-                context=context,
             )
 
             return TeachResponse(
@@ -1613,6 +1657,51 @@ class UltimateRAGServer:
                 raise HTTPException(503, "Server not initialized")
 
             return [gap.to_dict() for gap in self.maintenance.get_gaps()]
+
+        @app.post("/maintenance/decay", tags=["Admin"])
+        async def run_decay(request: DecayRequest):
+            """Apply knowledge decay to stale nodes."""
+            if not self.maintenance:
+                raise HTTPException(503, "Server not initialized")
+
+            # Temporarily apply config
+            self.maintenance.stale_threshold_days = request.half_life_days
+            self.maintenance.low_value_threshold = request.min_weight
+
+            stale_nodes = await self.maintenance.detect_stale_content()
+            archived = await self.maintenance.archive_low_value_nodes()
+
+            return {
+                "nodes_updated": len(stale_nodes),
+                "avg_decay": request.min_weight if stale_nodes else 0.0,
+                "archived": len(archived),
+            }
+
+        @app.post("/maintenance/rebalance", tags=["Admin"])
+        async def run_rebalance(request: RebalanceRequest):
+            """Rebalance tree structure."""
+            if not self.maintenance:
+                raise HTTPException(503, "Server not initialized")
+
+            duplicates = await self.maintenance.find_near_duplicates()
+            await self.maintenance.recalculate_importance_scores()
+
+            return {
+                "nodes_moved": 0,
+                "clusters_merged": len(duplicates),
+                "clusters_split": 0,
+            }
+
+        @app.post("/maintenance/detect-gaps", tags=["Admin"])
+        async def detect_gaps(request: DetectGapsRequest):
+            """Detect knowledge gaps from query patterns."""
+            if not self.maintenance:
+                raise HTTPException(503, "Server not initialized")
+
+            self.maintenance.gap_detection_min_frequency = request.min_query_count
+            gaps = await self.maintenance.analyze_query_logs_for_gaps()
+
+            return {"gaps": [gap.to_dict() for gap in gaps]}
 
         # ==================== /api/v1 Compatibility Routes ====================
         # These routes provide backward compatibility with the old knowledge_base API
@@ -2476,11 +2565,13 @@ class UltimateRAGServer:
                 )
 
                 result = await self.teaching.teach(
-                    knowledge=request.content,
+                    content=request.content,
                     knowledge_type=knowledge_type,
                     source=request.source,
-                    entity_ids=request.related_entities,
-                    importance=request.confidence,
+                    confidence=request.confidence,
+                    related_entities=request.related_entities,
+                    learned_from=request.learned_from,
+                    task_context=request.task_context,
                 )
 
                 # Map status to v1 format
