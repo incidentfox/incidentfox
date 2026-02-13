@@ -90,6 +90,7 @@ class ClaimRequest(BaseModel):
     thread_id: str
     tenant_id: str
     team_id: str
+    team_token: Optional[str] = None  # Config service token (for dynamic config loading)
 
 
 class ExecuteResponse(BaseModel):
@@ -165,10 +166,13 @@ async def claim_sandbox(request: ClaimRequest):
     os.environ["THREAD_ID"] = request.thread_id
     os.environ["INCIDENTFOX_TENANT_ID"] = request.tenant_id
     os.environ["INCIDENTFOX_TEAM_ID"] = request.team_id
+    if request.team_token:
+        os.environ["TEAM_TOKEN"] = request.team_token
 
     print(
         f"🔑 [CLAIM] Sandbox claimed for thread {request.thread_id} "
-        f"(tenant={request.tenant_id}, team={request.team_id})"
+        f"(tenant={request.tenant_id}, team={request.team_id}, "
+        f"team_token={'yes' if request.team_token else 'no'})"
     )
 
     return {

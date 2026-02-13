@@ -5,7 +5,9 @@ Fetches team-specific config (system prompts, tools, subagents) from the
 config_service at sandbox startup. This enables per-team customization of
 agent behavior without rebuilding the image.
 
-Auth: Uses X-Org-Id + X-Team-Node-Id headers (internal K8s traffic).
+Auth priority:
+1. TEAM_TOKEN env var → Bearer token auth (resolves correct org/team via routing)
+2. INCIDENTFOX_TENANT_ID + INCIDENTFOX_TEAM_ID → X-Org-Id/X-Team-Node-Id headers
 """
 
 import os
@@ -52,20 +54,27 @@ def load_team_config() -> TeamConfig:
     """
     Load team config from config_service. Raises on failure.
 
-    Requires INCIDENTFOX_TENANT_ID and INCIDENTFOX_TEAM_ID env vars.
-    Calls GET /api/v1/config/me/effective with X-Org-Id/X-Team-Node-Id headers.
+    Auth priority:
+    1. TEAM_TOKEN → Bearer auth (token encodes correct org/team from routing)
+    2. INCIDENTFOX_TENANT_ID + INCIDENTFOX_TEAM_ID → header-based auth
     """
+    team_token = os.getenv("TEAM_TOKEN")
     tenant_id = os.getenv("INCIDENTFOX_TENANT_ID")
     team_id = os.getenv("INCIDENTFOX_TEAM_ID")
 
-    if not tenant_id or not team_id:
-        raise RuntimeError(
-            "INCIDENTFOX_TENANT_ID and INCIDENTFOX_TEAM_ID must be set. "
-            "Cannot load team configuration."
-        )
-
     url = f"{CONFIG_SERVICE_URL}/api/v1/config/me/effective"
-    headers = {"X-Org-Id": tenant_id, "X-Team-Node-Id": team_id}
+
+    if team_token:
+        # Preferred: Bearer token auth (resolves correct org/team via routing)
+        headers = {"Authorization": f"Bearer {team_token}"}
+    elif tenant_id and team_id:
+        # Fallback: direct header auth
+        headers = {"X-Org-Id": tenant_id, "X-Team-Node-Id": team_id}
+    else:
+        raise RuntimeError(
+            "Either TEAM_TOKEN or both INCIDENTFOX_TENANT_ID and "
+            "INCIDENTFOX_TEAM_ID must be set. Cannot load team configuration."
+        )
 
     resp = httpx.get(url, headers=headers, timeout=10.0)
     resp.raise_for_status()

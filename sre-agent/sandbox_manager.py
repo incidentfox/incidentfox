@@ -1309,6 +1309,7 @@ static_resources:
         thread_id: str,
         tenant_id: str,
         team_id: str,
+        team_token: Optional[str] = None,
     ) -> bool:
         """
         Inject JWT and tenant context into a warm sandbox via /claim endpoint.
@@ -1323,6 +1324,7 @@ static_resources:
             thread_id: Investigation thread ID
             tenant_id: Organization/tenant ID
             team_id: Team node ID
+            team_token: Config service token for dynamic config loading
 
         Returns:
             True if successful, False otherwise
@@ -1341,6 +1343,8 @@ static_resources:
             "tenant_id": tenant_id,
             "team_id": team_id,
         }
+        if team_token:
+            payload["team_token"] = team_token
 
         # Retry with backoff — DNS/Service for newly-bound warm pool pods
         # may take a few seconds to propagate
@@ -1466,6 +1470,7 @@ static_resources:
                 thread_id=thread_id,
                 tenant_id=tenant_id,
                 team_id=team_id,
+                team_token=team_token,
             ):
                 total_ms = (time.time() - warmpool_start) * 1000
                 print(
