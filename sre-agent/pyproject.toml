@@ -31,10 +31,6 @@ dependencies = [
     # Optional dependencies for advanced features
     "numpy>=1.24.0",  # For anomaly detection
     "scipy>=1.11.0",  # For statistical analysis
-
-    # Multi-LLM support via LiteLLM (Claude, Gemini, OpenAI)
-    # Set LLM_PROVIDER=openhands and LLM_MODEL=gemini/gemini-2.0-flash to use
-    "litellm>=1.55.0",
 ]
 
 [build-system]
@@ -43,5 +39,5 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
-only-include = ["agent.py", "events.py", "sandbox_server.py", "server.py", "sandbox_manager.py", "providers"]
+only-include = ["agent.py", "events.py", "sandbox_server.py", "server.py", "sandbox_manager.py"]
 

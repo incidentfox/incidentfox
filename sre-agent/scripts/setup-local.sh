@@ -112,23 +112,32 @@ fi
 
 source "$ENV_FILE"
 
-# Check for at least one LLM API key based on provider
-if [ "${LLM_PROVIDER:-claude}" = "openhands" ]; then
-    # OpenHands provider - need at least one of: GEMINI, OPENAI, or ANTHROPIC
-    if [ -z "$GEMINI_API_KEY" ] && [ -z "$OPENAI_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
-        echo "❌ No LLM API key set in .env"
-        echo "   Set one of: GEMINI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY"
+# Check for at least one LLM API key (or allow none for local models)
+if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$GEMINI_API_KEY" ] && [ -z "$OPENAI_API_KEY" ]; then
+    echo "⚠️  No LLM API keys set in .env"
+    echo "   You can use local models (e.g., Ollama) or add one of:"
+    echo "   - ANTHROPIC_API_KEY for Claude"
+    echo "   - GEMINI_API_KEY for Gemini"
+    echo "   - OPENAI_API_KEY for GPT"
+    echo "   The credential-proxy will route requests based on available keys."
+    echo ""
+    read -p "Continue without API keys? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         exit 1
     fi
-    echo "  ✓ LLM provider: openhands (model: ${LLM_MODEL:-default})"
+    echo "  ℹ️  Continuing without LLM API keys (local models only)"
 else
-    # Claude provider - requires ANTHROPIC_API_KEY
-    if [ -z "$ANTHROPIC_API_KEY" ]; then
-        echo "❌ ANTHROPIC_API_KEY not set in .env"
-        echo "   Required when using LLM_PROVIDER=claude (default)"
-        exit 1
+    if [ -n "$ANTHROPIC_API_KEY" ]; then
+        echo "  ✓ Anthropic API key configured"
     fi
-    echo "  ✓ LLM provider: claude"
+    if [ -n "$GEMINI_API_KEY" ]; then
+        echo "  ✓ Gemini API key configured"
+    fi
+    if [ -n "$OPENAI_API_KEY" ]; then
+        echo "  ✓ OpenAI API key configured"
+    fi
+    echo "  ✓ LLM provider: Claude SDK with credential-proxy for multi-LLM routing"
 fi
 
 kubectl create secret generic incidentfox-secrets \

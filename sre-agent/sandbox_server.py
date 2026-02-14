@@ -23,7 +23,7 @@ sys.path.insert(0, "/app")
 from config import TeamConfig, load_team_config
 from events import StreamEvent, error_event
 
-from agent import InteractiveAgentSession, OpenHandsAgentSession, create_agent_session
+from agent import InteractiveAgentSession, create_agent_session
 
 app = FastAPI(
     title="IncidentFox Sandbox Runtime",
@@ -31,8 +31,8 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# Global session manager: thread_id -> Agent session (InteractiveAgentSession or OpenHandsAgentSession)
-_sessions: Dict[str, InteractiveAgentSession | OpenHandsAgentSession] = {}
+# Global session manager: thread_id -> Agent session (InteractiveAgentSession)
+_sessions: Dict[str, InteractiveAgentSession] = {}
 _session_lock = asyncio.Lock()
 
 # Team config cache (one load per sandbox lifetime)
@@ -190,20 +190,20 @@ async def claim_sandbox(request: ClaimRequest):
 
 async def get_or_create_session(
     thread_id: str,
-) -> InteractiveAgentSession | OpenHandsAgentSession:
+) -> InteractiveAgentSession:
     """
     Get existing session or create new one for thread_id.
 
     Loads team config from config_service on first call (cached for sandbox lifetime).
-    Uses create_agent_session() factory function which respects LLM_PROVIDER env var:
-    - LLM_PROVIDER=claude (default): Uses Claude Agent SDK
-    - LLM_PROVIDER=openhands: Uses OpenHands SDK for multi-LLM support
+    Uses create_agent_session() factory function which returns InteractiveAgentSession.
+    Multi-LLM support is handled by the credential-proxy which routes requests to
+    different providers (Claude, Gemini, OpenAI) based on configuration.
 
     Args:
         thread_id: Investigation thread ID
 
     Returns:
-        Agent session instance (InteractiveAgentSession or OpenHandsAgentSession)
+        Agent session instance (InteractiveAgentSession)
     """
     global _team_config, _team_config_loaded
     async with _session_lock:

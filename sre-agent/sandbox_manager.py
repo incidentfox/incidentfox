@@ -538,8 +538,8 @@ static_resources:
                                         "name": "ANTHROPIC_API_KEY",
                                         "value": "sk-ant-placeholder-proxy-will-inject-real-key",
                                     },
-                                    # LLM Provider configuration (multi-LLM support)
-                                    # Set LLM_PROVIDER=openhands and LLM_MODEL to use Gemini/OpenAI
+                                    # LLM Provider configuration
+                                    # Multi-LLM routing handled by credential-proxy
                                     {
                                         "name": "LLM_PROVIDER",
                                         "valueFrom": {
