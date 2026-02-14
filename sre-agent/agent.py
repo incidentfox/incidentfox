@@ -33,17 +33,6 @@ import re
 from pathlib import Path
 from typing import AsyncIterator, Optional, Union
 
-from dotenv import load_dotenv
-from events import (
-    StreamEvent,
-    error_event,
-    result_event,
-    thought_event,
-    tool_end_event,
-    tool_start_event,
-)
-from lmnr import Laminar, observe
-
 # Claude SDK imports
 from claude_agent_sdk import (
     AssistantMessage,
@@ -54,6 +43,16 @@ from claude_agent_sdk import (
     TextBlock,
 )
 from claude_agent_sdk.types import StreamEvent as SDKStreamEvent
+from dotenv import load_dotenv
+from events import (
+    StreamEvent,
+    error_event,
+    result_event,
+    thought_event,
+    tool_end_event,
+    tool_start_event,
+)
+from lmnr import Laminar, observe
 
 # Max image size to embed (5MB)
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
