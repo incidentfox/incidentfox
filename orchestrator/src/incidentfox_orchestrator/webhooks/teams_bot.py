@@ -423,17 +423,8 @@ class TeamsIntegration:
                 )
             )
 
-            # Send agent result back to Teams conversation as a reply
-            # to the "working on it" message (shows as quoted reply in Teams)
+            # Send agent result back to Teams conversation
             result_text = result.get("result", "")
-            _log(
-                "teams_agent_result",
-                correlation_id=correlation_id,
-                result_length=len(result_text),
-                result_success=result.get("success"),
-                thread_id=result.get("thread_id"),
-                has_result=bool(result_text),
-            )
 
             if result_text:
                 try:

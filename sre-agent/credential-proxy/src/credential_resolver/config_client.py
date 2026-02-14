@@ -200,13 +200,11 @@ class ConfigServiceClient:
         creds = self._extract_credentials(anthropic_config)
         customer_api_key = creds.get("api_key")
         # Trial/subscription fields may be at top level or inside integrations.anthropic
-        is_trial = config.get("is_trial") or anthropic_config.get("is_trial", False)
-        trial_expires_at = config.get("trial_expires_at") or anthropic_config.get(
-            "trial_expires_at"
-        )
-        subscription_status = config.get("subscription_status") or anthropic_config.get(
-            "subscription_status", "none"
-        )
+        # Use `is not None` checks to avoid falsy values (False, "") falling through
+        is_trial = config.get("is_trial") if config.get("is_trial") is not None else anthropic_config.get("is_trial", False)
+        trial_expires_at = config.get("trial_expires_at") if config.get("trial_expires_at") is not None else anthropic_config.get("trial_expires_at")
+        subscription_status = config.get("subscription_status") if config.get("subscription_status") is not None else anthropic_config.get("subscription_status", "none")
+>>>>>>> 53a2f360 (fix: Trial field falsy-value bug, remove stale LLM_PROVIDER/LLM_MODEL, clean up debug logs)
 
         # Step 1: Check if customer has valid access (trial OR subscription)
         has_valid_trial = False

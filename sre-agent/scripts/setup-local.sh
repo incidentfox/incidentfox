@@ -176,8 +176,6 @@ kubectl create secret generic incidentfox-secrets \
     --from-literal=database-url="${DATABASE_URL:-}" \
     --from-literal=history-db-path="${HISTORY_DB_PATH:-~/.incidentfox/history.db}" \
     --from-literal=remediation-log-path="${REMEDIATION_LOG_PATH:-~/.incidentfox/logs/remediation.log}" \
-    --from-literal=llm-provider="${LLM_PROVIDER:-claude}" \
-    --from-literal=llm-model="${LLM_MODEL:-}" \
     --from-literal=gemini-api-key="${GEMINI_API_KEY:-}" \
     --from-literal=openai-api-key="${OPENAI_API_KEY:-}" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null

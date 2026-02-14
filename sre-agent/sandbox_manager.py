@@ -538,29 +538,7 @@ static_resources:
                                         "name": "ANTHROPIC_API_KEY",
                                         "value": "sk-ant-placeholder-proxy-will-inject-real-key",
                                     },
-                                    # LLM Provider configuration
-                                    # Multi-LLM routing handled by credential-proxy
-                                    {
-                                        "name": "LLM_PROVIDER",
-                                        "valueFrom": {
-                                            "secretKeyRef": {
-                                                "name": "incidentfox-secrets",
-                                                "key": "llm-provider",
-                                                "optional": True,  # Defaults to "claude" if not set
-                                            }
-                                        },
-                                    },
-                                    {
-                                        "name": "LLM_MODEL",
-                                        "valueFrom": {
-                                            "secretKeyRef": {
-                                                "name": "incidentfox-secrets",
-                                                "key": "llm-model",
-                                                "optional": True,  # Defaults to provider default
-                                            }
-                                        },
-                                    },
-                                    # Gemini API key (only needed if using LLM_MODEL=gemini/*)
+                                    # Gemini API key (used by credential-proxy for gemini/* models)
                                     {
                                         "name": "GEMINI_API_KEY",
                                         "valueFrom": {
@@ -571,7 +549,7 @@ static_resources:
                                             }
                                         },
                                     },
-                                    # OpenAI API key (only needed if using LLM_MODEL=openai/*)
+                                    # OpenAI API key (used by credential-proxy for openai/* models)
                                     {
                                         "name": "OPENAI_API_KEY",
                                         "valueFrom": {
