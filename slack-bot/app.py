@@ -2105,12 +2105,16 @@ def _handle_mention_impl(event, say, client, context):
         routing_result = None
         try:
             config_client = get_config_client()
-            routing_result = config_client.get_team_token_for_channel(team_id, channel_id)
+            routing_result = config_client.get_team_token_for_channel(
+                team_id, channel_id
+            )
         except Exception as e:
             logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
 
         resolved_org_id = routing_result["org_id"] if routing_result else None
-        resolved_team_node_id = routing_result["team_node_id"] if routing_result else None
+        resolved_team_node_id = (
+            routing_result["team_node_id"] if routing_result else None
+        )
         team_token = routing_result["token"] if routing_result else None
 
         # Build request payload with prompt and optional images
@@ -2439,12 +2443,16 @@ def _run_auto_listen_investigation(event, client, context):
         routing_result = None
         try:
             config_client = get_config_client()
-            routing_result = config_client.get_team_token_for_channel(team_id, channel_id)
+            routing_result = config_client.get_team_token_for_channel(
+                team_id, channel_id
+            )
         except Exception as e:
             logger.warning(f"Failed to get team token: {e}")
 
         resolved_org_id = routing_result["org_id"] if routing_result else None
-        resolved_team_node_id = routing_result["team_node_id"] if routing_result else None
+        resolved_team_node_id = (
+            routing_result["team_node_id"] if routing_result else None
+        )
         team_token = routing_result["token"] if routing_result else None
 
         request_payload = {
@@ -2862,12 +2870,16 @@ Use all available tools to gather context about this issue."""
         routing_result = None
         try:
             config_client = get_config_client()
-            routing_result = config_client.get_team_token_for_channel(team_id, channel_id)
+            routing_result = config_client.get_team_token_for_channel(
+                team_id, channel_id
+            )
         except Exception as e:
             logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
 
         resolved_org_id = routing_result["org_id"] if routing_result else None
-        resolved_team_node_id = routing_result["team_node_id"] if routing_result else None
+        resolved_team_node_id = (
+            routing_result["team_node_id"] if routing_result else None
+        )
         team_token = routing_result["token"] if routing_result else None
 
         # Call sre-agent to investigate
@@ -3289,7 +3301,9 @@ def handle_message(event, client, context):
                 )
 
             resolved_org_id = routing_result["org_id"] if routing_result else None
-            resolved_team_node_id = routing_result["team_node_id"] if routing_result else None
+            resolved_team_node_id = (
+                routing_result["team_node_id"] if routing_result else None
+            )
             team_token = routing_result["token"] if routing_result else None
 
             # Build request payload
@@ -3732,12 +3746,16 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
         routing_result = None
         try:
             config_client = get_config_client()
-            routing_result = config_client.get_team_token_for_channel(team_id, channel_id)
+            routing_result = config_client.get_team_token_for_channel(
+                team_id, channel_id
+            )
         except Exception as e:
             logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
 
         resolved_org_id = routing_result["org_id"] if routing_result else None
-        resolved_team_node_id = routing_result["team_node_id"] if routing_result else None
+        resolved_team_node_id = (
+            routing_result["team_node_id"] if routing_result else None
+        )
         team_token = routing_result["token"] if routing_result else None
 
         # Call sre-agent to investigate

@@ -201,8 +201,12 @@ class ConfigServiceClient:
         customer_api_key = creds.get("api_key")
         # Trial/subscription fields may be at top level or inside integrations.anthropic
         is_trial = config.get("is_trial") or anthropic_config.get("is_trial", False)
-        trial_expires_at = config.get("trial_expires_at") or anthropic_config.get("trial_expires_at")
-        subscription_status = config.get("subscription_status") or anthropic_config.get("subscription_status", "none")
+        trial_expires_at = config.get("trial_expires_at") or anthropic_config.get(
+            "trial_expires_at"
+        )
+        subscription_status = config.get("subscription_status") or anthropic_config.get(
+            "subscription_status", "none"
+        )
 
         # Step 1: Check if customer has valid access (trial OR subscription)
         has_valid_trial = False

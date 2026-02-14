@@ -318,7 +318,9 @@ class ConfigServiceClient:
                     "team_node_id": result["team_node_id"],
                 }
 
-            logger.debug(f"No routing found for channel={channel_id}, workspace={workspace_id}")
+            logger.debug(
+                f"No routing found for channel={channel_id}, workspace={workspace_id}"
+            )
             return None
 
         except requests.exceptions.RequestException as e:
@@ -344,7 +346,9 @@ class ConfigServiceClient:
         routing = self.lookup_routing(channel_id, workspace_id=slack_team_id)
 
         if not routing:
-            logger.warning(f"No routing for channel={channel_id}, workspace={slack_team_id}")
+            logger.warning(
+                f"No routing for channel={channel_id}, workspace={slack_team_id}"
+            )
             return None
 
         org_id = routing["org_id"]
