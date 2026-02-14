@@ -402,7 +402,7 @@ class ConfigServiceClient:
                 "anthropic": {
                     "workspace_attribution": org_id,  # For cost tracking
                 }
-            }
+            },
         }
 
         self._update_config(org_id, team_node_id, config)
