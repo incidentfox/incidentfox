@@ -85,12 +85,45 @@ spec:
               value: {{ default "email" .Values.services.configService.oidc.emailClaim | quote }}
             - name: OIDC_SUBJECT_CLAIM
               value: {{ default "sub" .Values.services.configService.oidc.subjectClaim | quote }}
-            {{- if and .Values.externalSecrets.contract.encryptionKey .Values.externalSecrets.contract.encryptionKey.enabled }}
+            {{- if .Values.services.configService.encryptionKey }}
             - name: ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.externalSecrets.contract.encryptionKey.secretName | quote }}
-                  key: {{ .Values.externalSecrets.contract.encryptionKey.secretKey | quote }}
+                  name: {{ .Values.services.configService.encryptionKey.secretName }}
+                  key: {{ .Values.services.configService.encryptionKey.secretKey }}
+            {{- end }}
+            {{- if .Values.services.configService.githubApp }}
+            {{- if .Values.services.configService.githubApp.enabled }}
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.services.configService.githubApp.secretName }}
+                  key: {{ .Values.services.configService.githubApp.appIdKey }}
+            - name: GITHUB_APP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.services.configService.githubApp.secretName }}
+                  key: {{ .Values.services.configService.githubApp.clientIdKey }}
+            - name: GITHUB_APP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.services.configService.githubApp.secretName }}
+                  key: {{ .Values.services.configService.githubApp.clientSecretKey }}
+            - name: GITHUB_APP_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.services.configService.githubApp.secretName }}
+                  key: {{ .Values.services.configService.githubApp.privateKeyKey }}
+            - name: GITHUB_APP_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.services.configService.githubApp.secretName }}
+                  key: {{ .Values.services.configService.githubApp.webhookSecretKey }}
+            - name: GITHUB_APP_NAME
+              value: {{ .Values.services.configService.githubApp.appName | quote }}
+            - name: GITHUB_SETUP_REDIRECT_URL
+              value: {{ .Values.services.configService.githubApp.setupRedirectUrl | quote }}
+            {{- end }}
             {{- end }}
           readinessProbe:
             httpGet:

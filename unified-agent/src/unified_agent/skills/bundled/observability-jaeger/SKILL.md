@@ -1,6 +1,9 @@
 ---
 name: jaeger-analysis
 description: Jaeger distributed tracing analysis. Use when investigating request latency, tracing errors across services, finding slow spans, or understanding service dependencies.
+category: observability
+required_integrations:
+  - jaeger
 allowed-tools: Bash(python *)
 ---
 

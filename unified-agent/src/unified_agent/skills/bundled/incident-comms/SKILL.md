@@ -1,6 +1,9 @@
 ---
 name: incident-comms
 description: Slack integration for incident communication. Use when searching for context in incident channels, posting status updates, or finding discussions about issues.
+category: communication
+required_integrations:
+  - slack
 allowed-tools: Bash(python *)
 ---
 

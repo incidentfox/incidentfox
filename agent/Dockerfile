@@ -21,7 +21,7 @@ COPY pyproject.toml poetry.lock ./
 # Also install AWS CLI for EKS authentication (aws eks get-token)
 RUN poetry config virtualenvs.create false \
     && poetry install --no-root --only main --extras "langfuse github slack snowflake postgresql bigquery splunk jira gitlab notion" \
-    && pip install --no-cache-dir --upgrade "jaraco.context>=6.1.0" "starlette>=0.49.1" \
+    && pip install --no-cache-dir --upgrade "jaraco.context>=6.1.0" "starlette>=0.49.1" "cryptography>=46.0.5" \
     && pip install --no-cache-dir awscli
 
 # Patch setuptools' vendored wheel to fix CVE-2026-24049 (must run AFTER all pip/poetry installs)

@@ -7,6 +7,7 @@ GRAFANA_API_KEY in environment variables.
 
 import json
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -101,6 +102,7 @@ def get_grafana_headers() -> dict[str, str]:
         else:
             # Bearer token (service account)
             headers["Authorization"] = f"Bearer {api_key}"
+        print("[grafana-auth] Using API key / service account token", file=sys.stderr)
         return headers
 
     # Priority 2: Explicit user/password
@@ -109,6 +111,7 @@ def get_grafana_headers() -> dict[str, str]:
     if user and password:
         encoded = base64.b64encode(f"{user}:{password}".encode()).decode()
         headers["Authorization"] = f"Basic {encoded}"
+        print("[grafana-auth] Using user/password", file=sys.stderr)
         return headers
 
     # Priority 3: Proxy mode - add JWT for authentication with credential-resolver
@@ -116,10 +119,18 @@ def get_grafana_headers() -> dict[str, str]:
     sandbox_jwt = os.getenv("SANDBOX_JWT")
     if sandbox_jwt:
         headers["X-Sandbox-JWT"] = sandbox_jwt
+        print(
+            f"[grafana-auth] Using sandbox JWT (len={len(sandbox_jwt)})",
+            file=sys.stderr,
+        )
     else:
         # Fallback to tenant headers (for local dev without JWT)
         headers["X-Tenant-Id"] = config.get("tenant_id") or "local"
         headers["X-Team-Id"] = config.get("team_id") or "local"
+        print(
+            "[grafana-auth] WARNING: No SANDBOX_JWT env var, using tenant headers (will 401 in strict JWT mode)",
+            file=sys.stderr,
+        )
 
     return headers
 

@@ -1,0 +1,107 @@
+# SandboxTemplate for Warm Pool - LOCAL TESTING VERSION
+# Same as production but without gVisor (not available on Kind)
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxTemplate
+metadata:
+  name: incidentfox-warmpool-template
+  namespace: incidentfox-prod
+  labels:
+    app: incidentfox
+    component: warmpool-template
+spec:
+  podTemplate:
+    metadata:
+      labels:
+        app: incidentfox-agent
+        component: warmpool
+        warmpool: "true"
+    spec:
+      # NO gVisor for local testing (Kind doesn't support it)
+      # runtimeClassName: gvisor
+
+      containers:
+      # Main agent container
+      - name: agent
+        image: incidentfox-agent:dev
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8888
+          name: sandbox
+        env:
+        # Placeholder values - set at claim time via /claim endpoint
+        - name: INCIDENTFOX_TENANT_ID
+          value: "unclaimed"
+        - name: INCIDENTFOX_TEAM_ID
+          value: "unclaimed"
+        - name: THREAD_ID
+          value: "unclaimed"
+        # Claude SDK: route API requests through Envoy proxy
+        - name: ANTHROPIC_BASE_URL
+          value: "http://localhost:8001"
+        # Placeholder API key - Envoy injects real one via ext_authz
+        - name: ANTHROPIC_API_KEY
+          value: "sk-ant-placeholder-proxy-will-inject-real-key"
+        # Coralogix SDK: route API requests through Envoy proxy
+        - name: CORALOGIX_BASE_URL
+          value: "http://localhost:8001"
+        # Disable Laminar's claude-agent-sdk instrumentation
+        - name: DISABLE_LAMINAR
+          value: "true"
+        # Kubernetes context
+        - name: KUBECONFIG
+          value: "/home/agent/.kube/config"
+        - name: SANDBOX_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        # Shared volume for JWT injection (Envoy reads, /claim writes)
+        - name: jwt-volume
+          mountPath: /tmp
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "50m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+      # Envoy sidecar - handles credential injection via ext_authz
+      - name: envoy
+        image: envoyproxy/envoy:v1.28-latest
+        args:
+        - "--config-path"
+        - "/etc/envoy/envoy.yaml"
+        - "--log-level"
+        - "warn"
+        ports:
+        - containerPort: 8001
+          name: proxy
+        volumeMounts:
+        # Envoy config with Lua filter
+        - name: envoy-config
+          mountPath: /etc/envoy
+          readOnly: true
+        # Shared volume to read JWT (written by /claim endpoint)
+        - name: jwt-volume
+          mountPath: /tmp
+        resources:
+          requests:
+            cpu: "25m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+
+      volumes:
+      # Envoy config with Lua filter for dynamic JWT
+      - name: envoy-config
+        configMap:
+          name: envoy-warmpool-config
+      # Shared emptyDir for JWT injection
+      - name: jwt-volume
+        emptyDir: {}

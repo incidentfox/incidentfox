@@ -1,0 +1,84 @@
+{{- if and .Values.karpenter .Values.karpenter.enabled }}
+# =============================================================================
+# Karpenter NodePool + EC2NodeClass -- burst node provisioning
+# =============================================================================
+# Auto-provisions AMD64 (x86) nodes when sandbox pods are Pending.
+# Consolidates and removes nodes when idle. gVisor installs automatically
+# via the gvisor-installer DaemonSet (tolerates all taints).
+# =============================================================================
+
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: sandbox-burst
+  labels:
+    {{- include "incidentfox.labels" . | nindent 4 }}
+spec:
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: sandbox-burst
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values:
+            {{- toYaml .Values.karpenter.capacityTypes | nindent 12 }}
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c", "m"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["6"]
+        - key: karpenter.k8s.aws/instance-size
+          operator: In
+          values: ["medium", "large", "xlarge", "2xlarge"]
+  limits:
+    cpu: {{ .Values.karpenter.limits.cpu | quote }}
+    memory: {{ .Values.karpenter.limits.memory | quote }}
+  disruption:
+    # WhenEmptyOrUnderutilized: consolidate underutilized nodes (e.g., nodes
+    # with only idle warm pool pods). Active investigation pods are protected
+    # via karpenter.sh/do-not-disrupt annotation (added at claim time).
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: {{ .Values.karpenter.consolidateAfter | quote }}
+    budgets:
+      - nodes: "10%"
+
+---
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: sandbox-burst
+  labels:
+    {{- include "incidentfox.labels" . | nindent 4 }}
+spec:
+  amiSelectorTerms:
+    - alias: al2023@latest
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: {{ required "karpenter.clusterName is required when karpenter is enabled" .Values.karpenter.clusterName }}
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: {{ .Values.karpenter.clusterName }}
+  role: {{ required "karpenter.nodeRoleName is required when karpenter is enabled" .Values.karpenter.nodeRoleName }}
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: {{ .Values.karpenter.rootVolumeSize | quote }}
+        volumeType: gp3
+        encrypted: true
+        deleteOnTermination: true
+  metadataOptions:
+    httpEndpoint: enabled
+    httpPutResponseHopLimit: 2
+    httpTokens: required
+  tags:
+    Name: {{ .Values.karpenter.clusterName }}-karpenter-sandbox
+    ManagedBy: karpenter
+{{- end }}

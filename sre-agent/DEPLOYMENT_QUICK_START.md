@@ -1,28 +1,18 @@
-# 🚀 Deployment Quick Start
-
-Dead simple deployment. No confusion.
+# Deployment Quick Start
 
 ## Local Development
 
-### First Time (Setup Once)
-
+### First Time
 ```bash
-./scripts/setup-local.sh
+make setup-local
 ```
+Creates Kind cluster with agent-sandbox controller, router, and secrets.
 
-This creates the Kind cluster and installs all components. **Run once.**
-
-### Day-to-Day (Every Time You Test)
-
+### Day-to-Day
 ```bash
 make dev
 ```
-
-This:
-- Builds latest code
-- Loads into Kind
-- Starts server
-- **Auto-cleanup on Ctrl+C** (docker-compose-like!)
+Builds image, starts server on port 8000, auto-cleans on Ctrl+C.
 
 Test with:
 ```bash
@@ -31,226 +21,63 @@ curl -X POST http://localhost:8000/investigate \
   -d '{"prompt": "What is 2+2?"}'
 ```
 
-**Press Ctrl+C to stop** - everything cleans up automatically.
-
----
-
-## Production Deployment
-
-### First Time (Setup Once)
-
+### Other Local Commands
 ```bash
-./scripts/setup-prod.sh
-```
-
-This creates the EKS cluster and installs all components. **Run once per environment.**
-
-What it does:
-- Creates EKS cluster (15 min)
-- Installs agent-sandbox controller
-- Installs gVisor runtime
-- Configures IAM, networking, secrets
-- Sets up ECR repository
-
-**Prerequisites:**
-- AWS credentials configured (`aws configure`)
-- `eksctl` installed
-- `.env` file with `ANTHROPIC_API_KEY`
-
-### Day-to-Day (Deploy Code Changes)
-
-```bash
-make deploy-prod
-```
-
-This:
-- Builds multi-platform image (AMD64 + ARM64)
-- Pushes to ECR
-- Updates secrets
-- Rolls out deployment
-
-**That's it!** No platform mismatch, no manual steps.
-
-Get production URL:
-```bash
-make prod-url
-```
-
-Test production:
-```bash
-make test-prod
-```
-
----
-
-## Quick Reference
-
-### Local
-```bash
-make setup-local    # First-time only
-make dev            # Day-to-day (Ctrl+C to stop)
 make dev-status     # Check what's running
-make dev-reset      # Nuclear option (delete cluster)
-```
-
-### Production
-```bash
-make setup-prod     # First-time only
-make deploy-prod    # Day-to-day (deploy code)
-make prod-url       # Get URL
-make test-prod      # Quick test
-```
-
-### Utilities
-```bash
-make help           # Show all commands
-make dev-logs       # View logs
-make dev-clean      # Manual cleanup
+make dev-logs       # View server/router logs
+make dev-clean      # Manual sandbox cleanup
+make dev-reset      # Delete Kind cluster (nuclear option)
 ```
 
 ---
 
-## Common Issues & Solutions
+## Production / Staging Deployment
 
-### "Kind cluster not found"
-❌ Problem: First-time setup not done
-✅ Solution: Run `make setup-local`
+Deployed via Helm charts through GitHub Actions:
 
-### "Router not deployed"
-❌ Problem: First-time setup not done
-✅ Solution: Run `make setup-local`
+```bash
+# Staging (incidentfox-demo cluster)
+gh workflow run deploy-eks.yml -f environment=staging -f services=all
 
-### "Platform mismatch" in production
-✅ **IMPOSSIBLE** - `make deploy-prod` always builds multi-platform
+# Production (incidentfox-prod cluster)
+gh workflow run deploy-eks.yml -f environment=production -f services=all
 
-### "ErrImagePull" in production
-❌ Problem: ECR credentials expired (rare)
-✅ Solution: Run `make deploy-prod` again (refreshes credentials automatically)
+# Deploy a single service
+gh workflow run deploy-eks.yml -f environment=staging -f services=agent
+```
 
-### Local server won't start
-❌ Problem: Port 8000 or 8080 in use
-✅ Solution: Kill other processes or change ports in `.env`
+### Manual Helm Deploy
+```bash
+aws eks update-kubeconfig --name incidentfox-demo --region us-west-2
+cd charts
+helm upgrade --install incidentfox ./incidentfox \
+  -n incidentfox -f incidentfox/values.staging.yaml --timeout 5m
+kubectl rollout restart deployment/incidentfox-agent -n incidentfox
+```
+
+### Check Production Status
+```bash
+kubectl get pods -n incidentfox-prod
+kubectl logs -n incidentfox-prod deployment/incidentfox-agent --tail=50
+```
+
+---
+
+## Docker Compose (Self-Hosted)
+
+For running locally with docker-compose (no Kubernetes):
+```bash
+# From repo root
+cp .env.example .env
+# Edit .env with your API keys
+docker compose up -d
+```
 
 ---
 
 ## Architecture
 
-### Local (Kind Cluster)
-```
-make dev
-  ↓
-Build image (AMD64, your Mac)
-  ↓
-Load into Kind
-  ↓
-Start server (Python) → Router (pod) → Sandboxes (pods)
-  ↓
-Ctrl+C = auto cleanup
-```
-
-### Production (EKS Cluster)
-```
-make deploy-prod
-  ↓
-Build multi-platform (AMD64 + ARM64)
-  ↓
-Push to ECR
-  ↓
-Rolling deployment
-  ↓
-LoadBalancer → Server (pods) → Router (pods) → Sandboxes (pods)
-```
-
----
-
-## What's What
-
-### Scripts
-
-**Local:**
-- `scripts/setup-local.sh` - First-time setup (Kind cluster, router, controller)
-- `scripts/dev.sh` - Day-to-day dev (build, run, cleanup)
-
-**Production:**
-- `scripts/setup-prod.sh` - First-time setup (EKS cluster, ECR, IAM)
-- `scripts/deploy-prod.sh` - Day-to-day deploy (build, push, deploy)
-
-### Makefile Targets
-
-All commands are simple wrappers around the scripts above.
-Run `make help` to see everything.
-
----
-
-## Design Philosophy
-
-**Separate setup from deployment:**
-- Setup = slow, complex, one-time
-- Deployment = fast, simple, many times
-
-**Docker-compose-like UX:**
-- `make dev` = one command to start everything
-- Ctrl+C = auto cleanup, no orphaned resources
-
-**No platform mismatch:**
-- Local: single-platform OK (your machine)
-- Production: always multi-platform (AMD64 + ARM64)
-
-**Single source of truth:**
-- One way to do local dev: `make dev`
-- One way to deploy prod: `make deploy-prod`
-- No confusion possible
-
----
-
-## Cost Estimate (Production)
-
-**Base Infrastructure:**
-- EKS control plane: $73/month
-- 3x t3.medium nodes: $93/month
-- **Total: ~$166/month**
-
-**Per Investigation:**
-- ~$0.001-0.01 (depending on complexity)
-
-**Auto-scaling:**
-- Pods: 2-10 replicas (HPA)
-- Nodes: 2-6 nodes (Cluster Autoscaler)
-- Scales down when idle
-
----
-
-## Troubleshooting
-
-### Everything is broken locally
-```bash
-make dev-reset      # Nuclear option
-make setup-local    # Fresh start
-make dev            # Should work now
-```
-
-### Everything is broken in prod
-```bash
-# Check pods
-kubectl get pods -n incidentfox-prod
-
-# Check logs
-kubectl logs -n incidentfox-prod -l app=incidentfox-server --tail=50
-
-# Redeploy
-make deploy-prod
-```
-
-### Need help?
-1. Run `make dev-status` or `make prod-url` to see current state
-2. Check logs with `make dev-logs`
-3. Read `BUG_FIX_SUMMARY.md` for known issues
-
----
-
-**TL;DR:**
-
-Local: `make setup-local` (once) then `make dev` (daily)
-Production: `make setup-prod` (once) then `make deploy-prod` (daily)
-
-That's it. 🎯
+- **Helm charts**: `charts/incidentfox/` (staging: `values.staging.yaml`, prod: `values.prod.yaml`)
+- **CI/CD**: `.github/workflows/deploy-eks.yml` builds all services and deploys via Helm
+- **Agent image**: Built from `sre-agent/Dockerfile`, pushed to ECR as `incidentfox-agent`
+- **Local dev**: Kind cluster with `make dev` (uses `sre-agent/scripts/`)

@@ -20,9 +20,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 sys.path.insert(0, "/app")
+from config import TeamConfig, load_team_config
 from events import StreamEvent, error_event
 
-from agent import InteractiveAgentSession, OpenHandsAgentSession, create_agent_session
+from agent import InteractiveAgentSession, create_agent_session
 
 app = FastAPI(
     title="IncidentFox Sandbox Runtime",
@@ -30,9 +31,13 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# Global session manager: thread_id -> Agent session (InteractiveAgentSession or OpenHandsAgentSession)
-_sessions: Dict[str, InteractiveAgentSession | OpenHandsAgentSession] = {}
+# Global session manager: thread_id -> Agent session (InteractiveAgentSession)
+_sessions: Dict[str, InteractiveAgentSession] = {}
 _session_lock = asyncio.Lock()
+
+# Team config cache (one load per sandbox lifetime)
+_team_config: TeamConfig | None = None
+_team_config_loaded = False
 
 
 class ImageData(BaseModel):
@@ -78,6 +83,18 @@ class AnswerRequest(BaseModel):
     answers: dict
 
 
+class ClaimRequest(BaseModel):
+    """Request to claim a warm sandbox by injecting JWT."""
+
+    jwt_token: str
+    thread_id: str
+    tenant_id: str
+    team_id: str
+    team_token: Optional[str] = (
+        None  # Config service token (for dynamic config loading)
+    )
+
+
 class ExecuteResponse(BaseModel):
     """Response from executing an investigation."""
 
@@ -88,11 +105,21 @@ class ExecuteResponse(BaseModel):
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
+    """Health check endpoint.
+
+    Returns claim status for warm pool sandboxes.
+    A sandbox is 'claimed' when JWT has been injected via /claim endpoint.
+    """
+    from pathlib import Path
+
+    jwt_path = Path("/tmp/sandbox-jwt")
+    claimed = jwt_path.exists() and jwt_path.read_text().strip() != ""
+
     return {
         "status": "healthy",
         "service": "incidentfox-sandbox",
         "active_sessions": len(_sessions),
+        "claimed": claimed,
     }
 
 
@@ -107,26 +134,91 @@ async def list_sessions():
     }
 
 
+@app.post("/claim")
+async def claim_sandbox(request: ClaimRequest):
+    """
+    Claim a warm sandbox by injecting JWT and setting context.
+
+    This endpoint is called by the SandboxManager after a SandboxClaim
+    binds to a warm pod. It:
+    1. Writes JWT to /tmp/sandbox-jwt (read by Envoy Lua filter)
+    2. Sets environment variables for tenant context
+
+    Once claimed, the sandbox is ready for use and Envoy will inject
+    the JWT in ext_authz requests.
+    """
+    import stat
+    from pathlib import Path
+
+    jwt_path = Path("/tmp/sandbox-jwt")
+
+    # Prevent re-claiming an already-claimed sandbox
+    if jwt_path.exists() and jwt_path.read_text().strip():
+        raise HTTPException(
+            status_code=409,
+            detail="Sandbox already claimed",
+        )
+
+    # Write JWT to file (Envoy Lua filter reads this on each request)
+    jwt_path.write_text(request.jwt_token)
+    jwt_path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600 — owner only
+
+    # Set environment variables for tenant context
+    # These are used by the agent for logging and context
+    os.environ["THREAD_ID"] = request.thread_id
+    os.environ["INCIDENTFOX_TENANT_ID"] = request.tenant_id
+    os.environ["INCIDENTFOX_TEAM_ID"] = request.team_id
+    os.environ["SANDBOX_JWT"] = (
+        request.jwt_token
+    )  # For skill scripts hitting credential-resolver directly
+    if request.team_token:
+        os.environ["TEAM_TOKEN"] = request.team_token
+
+    print(
+        f"🔑 [CLAIM] Sandbox claimed for thread {request.thread_id} "
+        f"(tenant={request.tenant_id}, team={request.team_id}, "
+        f"team_token={'yes' if request.team_token else 'no'})"
+    )
+
+    return {
+        "status": "claimed",
+        "thread_id": request.thread_id,
+        "tenant_id": request.tenant_id,
+        "team_id": request.team_id,
+    }
+
+
 async def get_or_create_session(
     thread_id: str,
-) -> InteractiveAgentSession | OpenHandsAgentSession:
+) -> InteractiveAgentSession:
     """
     Get existing session or create new one for thread_id.
 
-    Uses create_agent_session() factory function which respects LLM_PROVIDER env var:
-    - LLM_PROVIDER=claude (default): Uses Claude Agent SDK
-    - LLM_PROVIDER=openhands: Uses OpenHands SDK for multi-LLM support
+    Loads team config from config_service on first call (cached for sandbox lifetime).
+    Uses create_agent_session() factory function which returns InteractiveAgentSession.
+    Multi-LLM support is handled by the credential-proxy which routes requests to
+    different providers (Claude, Gemini, OpenAI) based on configuration.
 
     Args:
         thread_id: Investigation thread ID
 
     Returns:
-        Agent session instance (InteractiveAgentSession or OpenHandsAgentSession)
+        Agent session instance (InteractiveAgentSession)
     """
+    global _team_config, _team_config_loaded
     async with _session_lock:
         if thread_id not in _sessions:
+            # Load team config once per sandbox lifetime
+            if not _team_config_loaded:
+                _team_config = load_team_config()
+                _team_config_loaded = True
+                print(
+                    f"📋 [SANDBOX] Loaded team config: "
+                    f"{len(_team_config.agents)} agents, "
+                    f"{len(_team_config.business_context)} chars business context"
+                )
             # Create new session using factory
-            session = create_agent_session(thread_id)
+            session = create_agent_session(thread_id, _team_config)
             await session.start()
             _sessions[thread_id] = session
         return _sessions[thread_id]
@@ -312,25 +404,68 @@ async def execute(request: ExecuteRequest):
     # Get thread_id from env or request
     thread_id = request.thread_id or os.getenv("THREAD_ID", "default")
 
-    # Download file attachments from proxy BEFORE starting agent
-    if request.file_downloads:
-        print(
-            f"📎 [SANDBOX] Downloading {len(request.file_downloads)} file(s) for thread {thread_id}"
-        )
-        saved_paths = _download_files_from_proxy(request.file_downloads, thread_id)
-        print(f"📎 [SANDBOX] Downloaded {len(saved_paths)} file(s): {saved_paths}")
+    try:
+        # Download file attachments from proxy BEFORE starting agent
+        if request.file_downloads:
+            print(
+                f"📎 [SANDBOX] Downloading {len(request.file_downloads)} file(s) for thread {thread_id}"
+            )
+            saved_paths = _download_files_from_proxy(request.file_downloads, thread_id)
+            print(f"📎 [SANDBOX] Downloaded {len(saved_paths)} file(s): {saved_paths}")
 
-    # Convert images to list of dicts if provided
-    images_list = None
-    if request.images:
-        images_list = [img.model_dump() for img in request.images]
+        # Convert images to list of dicts if provided
+        images_list = None
+        if request.images:
+            images_list = [img.model_dump() for img in request.images]
+            print(
+                f"📷 [SANDBOX] Received {len(images_list)} image(s) for thread {thread_id}"
+            )
+
+        # CRITICAL: Get or create session BEFORE StreamingResponse
+        # Otherwise FastAPI sends response headers before session exists, causing race conditions
+        # Retry session creation — on freshly-replenished warm pool pods, envoy sidecar
+        # may not be ready yet, causing transient connection errors to the LLM proxy.
+        import asyncio
+
+        session = None
+        for attempt in range(3):
+            try:
+                session = await get_or_create_session(thread_id)
+                break
+            except Exception as e:
+                if attempt < 2:
+                    delay = 1.0 * (2**attempt)
+                    print(
+                        f"⚠️ [SANDBOX] Session creation attempt {attempt + 1}/3 failed for {thread_id}, "
+                        f"retrying in {delay}s... ({e})"
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    raise
+    except Exception as e:
+        import traceback
+
         print(
-            f"📷 [SANDBOX] Received {len(images_list)} image(s) for thread {thread_id}"
+            f"❌ [SANDBOX] Pre-stream setup failed for {thread_id}: {e}\n{traceback.format_exc()}"
+        )
+        # Return error as SSE stream instead of raw 500
+        err = error_event(
+            thread_id,
+            f"Sandbox setup failed: {e}",
+            recoverable=False,
         )
 
-    # CRITICAL: Get or create session BEFORE StreamingResponse
-    # Otherwise FastAPI sends response headers before session exists, causing race conditions
-    session = await get_or_create_session(thread_id)
+        async def error_stream():
+            yield err.to_sse()
+
+        return StreamingResponse(
+            error_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     async def stream():
         try:

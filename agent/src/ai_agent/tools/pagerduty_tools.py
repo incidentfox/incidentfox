@@ -949,6 +949,109 @@ def pagerduty_get_alert_analytics(
         raise ToolExecutionError("pagerduty_get_alert_analytics", str(e), e)
 
 
+def pagerduty_create_incident(
+    service_id: str,
+    title: str,
+    urgency: str = "high",
+    description: str = "",
+    escalation_policy_id: str = "",
+) -> dict[str, Any]:
+    """
+    Create a PagerDuty incident to page the on-call responder.
+
+    Use this to page an on-call engineer for urgent customer issues.
+    High urgency triggers phone calls; low urgency sends push/email notifications.
+
+    Args:
+        service_id: PagerDuty service ID to create the incident on
+        title: Incident title (e.g. "[Enterprise] Acme Corp: service down")
+        urgency: "high" (phone call) or "low" (push/email notification)
+        description: Incident body with details about the issue
+        escalation_policy_id: Optional escalation policy ID override
+
+    Returns:
+        Created incident details including ID, status, assignments, and URL
+    """
+    try:
+        import requests
+
+        api_key = _get_pagerduty_client()
+
+        headers = {
+            "Authorization": f"Token token={api_key}",
+            "Accept": "application/vnd.pagerduty+json;version=2",
+            "Content-Type": "application/json",
+        }
+
+        payload: dict[str, Any] = {
+            "incident": {
+                "type": "incident",
+                "title": title,
+                "urgency": urgency,
+                "service": {
+                    "id": service_id,
+                    "type": "service_reference",
+                },
+            }
+        }
+
+        if description:
+            payload["incident"]["body"] = {
+                "type": "incident_body",
+                "details": description,
+            }
+
+        if escalation_policy_id:
+            payload["incident"]["escalation_policy"] = {
+                "id": escalation_policy_id,
+                "type": "escalation_policy_reference",
+            }
+
+        response = requests.post(
+            "https://api.pagerduty.com/incidents",
+            headers=headers,
+            json=payload,
+        )
+        response.raise_for_status()
+
+        incident = response.json()["incident"]
+
+        logger.info(
+            "pagerduty_incident_created",
+            incident_id=incident["id"],
+            title=title,
+            urgency=urgency,
+            service_id=service_id,
+        )
+
+        return {
+            "id": incident["id"],
+            "incident_number": incident.get("incident_number"),
+            "title": incident["title"],
+            "status": incident["status"],
+            "urgency": incident["urgency"],
+            "service": incident["service"]["summary"],
+            "assignments": [
+                a.get("assignee", {}).get("summary")
+                for a in incident.get("assignments", [])
+            ],
+            "url": incident["html_url"],
+        }
+
+    except IntegrationNotConfiguredError as e:
+        return handle_integration_not_configured(
+            e, "pagerduty_create_incident", "pagerduty"
+        )
+    except Exception as e:
+        logger.error(
+            "pagerduty_create_incident_failed",
+            error=str(e),
+            service_id=service_id,
+            title=title,
+        )
+        raise ToolExecutionError("pagerduty_create_incident", str(e), e)
+
+
 # List of all PagerDuty tools for registration
 PAGERDUTY_TOOLS = [
     pagerduty_get_incident,
@@ -960,4 +1063,5 @@ PAGERDUTY_TOOLS = [
     pagerduty_list_services,
     pagerduty_get_on_call,
     pagerduty_get_alert_analytics,
+    pagerduty_create_incident,
 ]

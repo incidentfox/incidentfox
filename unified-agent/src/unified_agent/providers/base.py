@@ -53,6 +53,9 @@ class ProviderConfig:
     # Skills directory path
     skills_dir: Optional[str] = None
 
+    # Custom system prompt (from team config)
+    system_prompt: Optional[str] = None
+
     def __post_init__(self):
         if self.setting_sources is None:
             self.setting_sources = ["user", "project"]

@@ -1,6 +1,9 @@
 ---
 name: coralogix-analysis
 description: Coralogix log analysis with DataPrime query language. Use when querying Coralogix logs, metrics, or traces. Provides syntax reference and intelligent investigation scripts.
+category: observability
+required_integrations:
+  - coralogix
 ---
 
 # Coralogix Analysis

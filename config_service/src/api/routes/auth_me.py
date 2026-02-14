@@ -120,7 +120,7 @@ def auth_me_impl(
                 ),
             )
         except (ValueError, Exception):
-            pass  # Not an org admin token, try team token
+            session.rollback()  # Reset failed transaction before next query
 
         # Keep behavior consistent with team endpoints: respect TEAM_AUTH_MODE.
         team_mode = (os.getenv("TEAM_AUTH_MODE", "token") or "token").strip().lower()

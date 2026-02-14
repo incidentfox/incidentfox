@@ -12,7 +12,9 @@ dependencies = [
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "pyjwt>=2.8.0",
-    "boto3>=1.34.0",  # For AWS Secrets Manager (shared API key for trials)
+    "boto3>=1.39.0",  # For AWS Secrets Manager + Bedrock API key support
+    "awscrt>=0.29.0",  # For Bedrock API key (bearer token) authentication
+    "litellm>=1.55.0",  # Multi-provider LLM routing for non-Claude models
 ]
 
 [project.optional-dependencies]

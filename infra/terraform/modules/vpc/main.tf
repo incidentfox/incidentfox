@@ -9,7 +9,7 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  subnet_count = max(length(var.public_subnets), length(var.private_subnets))
+  subnet_count  = max(length(var.public_subnets), length(var.private_subnets))
   effective_azs = length(var.azs) > 0 ? var.azs : slice(data.aws_availability_zones.available.names, 0, local.subnet_count)
 }
 
@@ -30,6 +30,8 @@ module "vpc" {
 
   enable_dns_hostnames = true
   enable_dns_support   = true
+
+  private_subnet_tags = var.private_subnet_tags
 
   tags = var.tags
 }

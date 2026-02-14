@@ -31,7 +31,6 @@ on:
           - ultimate-rag
           - web-ui
           - ai-pipeline
-          - knowledge-base (deprecated)
       skip_deploy:
         description: 'Skip Helm deployment (build & push only)'
         required: false
@@ -51,11 +50,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [agent, config-service, credential-resolver, k8s-gateway, orchestrator, sandbox-router, slack-bot, ultimate-rag, web-ui, ai-pipeline, "knowledge-base (deprecated)"]
+        service: [agent, config-service, credential-resolver, k8s-gateway, orchestrator, sandbox-router, slack-bot, ultimate-rag, web-ui, ai-pipeline]
         include:
           - service: agent
-            context: ./unified-agent
-            dockerfile: ./unified-agent/Dockerfile
+            context: ./sre-agent
+            dockerfile: ./sre-agent/Dockerfile
             image: incidentfox-agent
           - service: config-service
             context: ./config_service
@@ -93,10 +92,6 @@ jobs:
             context: ./ai_pipeline
             dockerfile: ./ai_pipeline/Dockerfile
             image: incidentfox-ai-pipeline
-          - service: "knowledge-base (deprecated)"
-            context: ./knowledge_base
-            dockerfile: ./knowledge_base/Dockerfile
-            image: incidentfox-knowledge-base
 
     steps:
       - name: Check if service should be built
@@ -204,11 +199,20 @@ jobs:
         with:
           version: 'v3.14.0'
 
+      - name: Install cluster dependencies
+        if: ${{ github.event.inputs.environment == 'production' }}
+        env:
+          KARPENTER_ROLE_ARN: ${{ secrets.KARPENTER_ROLE_ARN }}
+          KARPENTER_QUEUE_NAME: ${{ secrets.KARPENTER_QUEUE_NAME }}
+          CLUSTER_NAME: ${{ env.EKS_CLUSTER }}
+        run: |
+          chmod +x scripts/setup-cluster-deps.sh
+          ./scripts/setup-cluster-deps.sh
+
       - name: Adopt orphaned resources for Helm
         run: |
           # Fix resources that exist but weren't created by this Helm release
           # This adds required Helm ownership labels so Helm can manage them
-          RESOURCE_NAME="incidentfox-knowledge-base"
           NS="${{ env.HELM_NAMESPACE }}"
 
           # Helper function to patch a resource with Helm ownership metadata
@@ -223,17 +227,6 @@ jobs:
                 meta.helm.sh/release-namespace="$NS" --overwrite
             fi
           }
-
-          # Patch all knowledge-base resources
-          patch_resource serviceaccount "$RESOURCE_NAME"
-          patch_resource service "$RESOURCE_NAME"
-          patch_resource poddisruptionbudget "$RESOURCE_NAME"
-
-          # Deployment selector is immutable - must delete and let Helm recreate
-          if kubectl get deployment "$RESOURCE_NAME" -n "$NS" &>/dev/null; then
-            echo "Deleting deployment/$RESOURCE_NAME (selector is immutable, Helm will recreate)..."
-            kubectl delete deployment "$RESOURCE_NAME" -n "$NS" --wait=false
-          fi
 
           # Adopt static service names that may have been created manually
           # These are required by hardcoded Envoy configs in sandbox pods
@@ -254,7 +247,6 @@ jobs:
             -n ${{ env.HELM_NAMESPACE }} \
             -f incidentfox/${{ env.VALUES_FILE }} \
             --no-hooks \
-            --force \
             --timeout 5m
 
       - name: Restart deployments to pull latest images
@@ -282,9 +274,9 @@ jobs:
             restart_deployment "incidentfox-agent"
             restart_deployment "incidentfox-web-ui"
             restart_deployment "incidentfox-k8s-gateway"
-            restart_deployment "incidentfox-knowledge-base"
             restart_deployment "incidentfox-ultimate-rag"
             restart_deployment "incidentfox-ai-pipeline"
+            restart_deployment "incidentfox-slack-bot"
           else
             # Restart only the specific service
             case "$SERVICES" in
@@ -292,8 +284,8 @@ jobs:
               ai-pipeline) restart_deployment "incidentfox-ai-pipeline" ;;
               config-service) restart_deployment "incidentfox-config-service" ;;
               k8s-gateway) restart_deployment "incidentfox-k8s-gateway" ;;
-              knowledge-base) restart_deployment "incidentfox-knowledge-base" ;;
               orchestrator) restart_deployment "incidentfox-orchestrator" ;;
+              slack-bot) restart_deployment "incidentfox-slack-bot" ;;
               ultimate-rag) restart_deployment "incidentfox-ultimate-rag" ;;
               web-ui) restart_deployment "incidentfox-web-ui" ;;
             esac
@@ -302,16 +294,25 @@ jobs:
       - name: Wait for core services
         run: |
           echo "Waiting for core services to be ready..."
-          # Core services should start quickly (1-2 min)
-          kubectl rollout status deployment/incidentfox-config-service -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/incidentfox-orchestrator -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/incidentfox-agent -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/incidentfox-web-ui -n ${{ env.HELM_NAMESPACE }} --timeout=5m
+          NS="${{ env.HELM_NAMESPACE }}"
 
-          # K8s Gateway (optional - only if enabled)
-          if kubectl get deployment/incidentfox-k8s-gateway -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
-            kubectl rollout status deployment/incidentfox-k8s-gateway -n ${{ env.HELM_NAMESPACE }} --timeout=5m
-          fi
+          wait_for_deployment() {
+            local deploy=$1
+            if kubectl get deployment "$deploy" -n "$NS" &>/dev/null; then
+              echo "Waiting for $deploy..."
+              kubectl rollout status deployment/"$deploy" -n "$NS" --timeout=5m
+            else
+              echo "Skipping $deploy (not found)"
+            fi
+          }
+
+          # Core services should start quickly (1-2 min)
+          wait_for_deployment "incidentfox-config-service"
+          wait_for_deployment "incidentfox-orchestrator"
+          wait_for_deployment "incidentfox-agent"
+          wait_for_deployment "incidentfox-web-ui"
+          wait_for_deployment "incidentfox-k8s-gateway"
+          wait_for_deployment "incidentfox-slack-bot"
 
       - name: Wait for RAG services (slow startup)
         run: |
@@ -319,11 +320,6 @@ jobs:
           # RAG services need longer timeout (S3 download + model loading)
           # Run in parallel with background processes
           pids=()
-
-          if kubectl get deployment/incidentfox-knowledge-base -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
-            kubectl rollout status deployment/incidentfox-knowledge-base -n ${{ env.HELM_NAMESPACE }} --timeout=10m &
-            pids+=($!)
-          fi
 
           if kubectl get deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} &>/dev/null; then
             kubectl rollout status deployment/incidentfox-ultimate-rag -n ${{ env.HELM_NAMESPACE }} --timeout=10m &
@@ -340,8 +336,8 @@ jobs:
 
           if [ $failed -eq 1 ]; then
             echo "::warning::One or more RAG services failed to start. Checking pod status..."
-            kubectl get pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component in (knowledge-base, ultimate-rag)'
-            kubectl describe pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component in (knowledge-base, ultimate-rag)' | tail -100
+            kubectl get pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component=ultimate-rag'
+            kubectl describe pods -n ${{ env.HELM_NAMESPACE }} -l 'app.kubernetes.io/component=ultimate-rag' | tail -100
             exit 1
           fi
 
@@ -356,8 +352,32 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Image Digests" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|knowledge-base|orchestrator|web-ui|ultimate-rag)" >> $GITHUB_STEP_SUMMARY || true
+          kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|orchestrator|web-ui|ultimate-rag)" >> $GITHUB_STEP_SUMMARY || true
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verify Karpenter (production)
+        if: ${{ github.event.inputs.environment == 'production' }}
+        run: |
+          echo "### Karpenter Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check controller
+          if kubectl get pods -n karpenter -l app.kubernetes.io/name=karpenter --no-headers 2>/dev/null | grep -q Running; then
+            echo "- Karpenter controller: Running" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::warning::Karpenter controller not running"
+            echo "- Karpenter controller: **NOT RUNNING**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check NodePool
+          if kubectl get nodepool sandbox-burst --no-headers 2>/dev/null; then
+            echo "- NodePool sandbox-burst: Created" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::warning::NodePool sandbox-burst not found"
+            echo "- NodePool sandbox-burst: **NOT FOUND**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
 
       - name: Summary
         run: |

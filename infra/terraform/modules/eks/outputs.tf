@@ -18,4 +18,15 @@ output "node_security_group_id" {
   value = module.eks.node_security_group_id
 }
 
+# Karpenter outputs (null when disabled)
+output "karpenter_irsa_role_arn" {
+  value = try(module.karpenter[0].iam_role_arn, null)
+}
 
+output "karpenter_node_role_name" {
+  value = try(module.karpenter[0].node_iam_role_name, null)
+}
+
+output "karpenter_queue_name" {
+  value = try(module.karpenter[0].queue_name, null)
+}

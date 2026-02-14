@@ -3,9 +3,8 @@ namespace: incidentfox
 global:
   imagePullPolicy: IfNotPresent
 
-  # Docker registry authentication for private images
-  imagePullSecrets:
-    - name: incidentfox-registry
+  # Image pull secrets (empty - ECR auth handled via IAM roles)
+  imagePullSecrets: []
 
   # External DB (recommended). Provide via External Secrets -> K8s Secret -> env.
   database:
@@ -16,6 +15,9 @@ global:
   configService:
     url: "" # e.g. http://incidentfox-config-service.incidentfox.svc.cluster.local:8080
     orgId: "pilot"
+
+  # Public URL for the web UI (used by slack-bot for links in messages)
+  webUiUrl: ""
 
 ingress:
   enabled: true
@@ -133,9 +135,11 @@ externalSecrets:
       secretName: incidentfox-teams
       appIdKey: app_id
       appPasswordKey: app_password
+      tenantIdKey: tenant_id
       appIdRemoteRefKey: incidentfox/prod/teams_app_id
       appPasswordRemoteRefKey: incidentfox/prod/teams_app_password
-    # JWT secret for sandbox credential injection (shared between unified-agent and credential-resolver)
+      tenantIdRemoteRefKey: incidentfox/prod/teams_tenant_id
+    # JWT secret for sandbox credential injection (shared between agent and credential-resolver)
     jwtSecret:
       enabled: true
       secretName: incidentfox-jwt-secret
@@ -162,7 +166,7 @@ services:
   configService:
     enabled: true
     image: "incidentfox/config-service:v1.0.0"
-    replicas: 2
+    replicas: 1
     servicePort: 8080
     resources:
       requests:
@@ -213,24 +217,24 @@ services:
     # Admin RBAC (OIDC group -> permissions). Default keeps backwards-compatible admin:*.
     adminPermissionsDefault: "admin:*"
     adminGroupPermissionsJson: "{}"
-  # Unified Agent - Investigation agent with sandbox isolation support
-  # Now powered by unified-agent, replacing legacy agent and sre-agent architectures
+  # Agent - SRE investigation agent with sandbox isolation support
   agent:
     enabled: true
-    image: "incidentfox/unified-agent:v1.0.0"
+    image: "incidentfox/agent:v1.0.0"
     replicas: 2
-    servicePort: 8888  # unified-agent sandbox server listens on 8888
+    servicePort: 8000
+    # Command override for the container entrypoint
+    command: ["python", "/app/server.py"]
+    # Additional env vars injected into the agent container
+    extraEnv: []
     # Time to allow for graceful shutdown (marking in-flight runs as failed)
     terminationGracePeriodSeconds: 60
+    # Pod-level security context (e.g., runAsNonRoot, runAsUser)
+    podSecurityContext: {}
     serviceAccount:
       create: true
       name: incidentfox-agent
       annotations: {}
-    # Kubernetes tools configuration (agent has in-cluster access)
-    kubernetes:
-      enabled: true
-      # Namespace for K8s tools to query (defaults to same namespace)
-      namespace: ""
     # Sandbox mode: creates isolated gVisor pods for each investigation
     # When disabled, agent runs investigations directly (dev/testing only)
     sandbox:
@@ -241,6 +245,45 @@ services:
       namespace: ""
       # Use gVisor runtime for enhanced isolation
       useGvisor: true
+    # Warm pool: pre-warmed sandbox pods for instant provisioning (<2s vs ~30-60s)
+    # Requires sandbox.enabled=true and agent-sandbox controller with extensions
+    warmPool:
+      enabled: false
+      # Number of warm pods to maintain (replenished as pods are claimed)
+      replicas: 1
+      # Template name for warm pool pods
+      templateName: incidentfox-warmpool-template
+      # Warm pool name
+      poolName: incidentfox-warmpool
+      # Envoy image for sidecar
+      envoyImage: "envoyproxy/envoy:v1.28-latest"
+      # Resource limits for warm pool agent container
+      agentResources:
+        requests:
+          memory: "512Mi"
+          cpu: "100m"
+          ephemeral-storage: "2Gi"
+        limits:
+          memory: "2Gi"
+          cpu: "2000m"
+          ephemeral-storage: "10Gi"
+      # Resource limits for warm pool Envoy sidecar
+      envoyResources:
+        requests:
+          cpu: "50m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "128Mi"
+      # CronJob autoscaler: dynamically scales warm pool based on active demand
+      # Polls /metrics/sandbox-demand endpoint and patches warm pool replicas
+      autoscaler:
+        enabled: false
+        minReplicas: 1
+        maxReplicas: 5
+        pollingInterval: 15    # seconds between metric polls
+        cooldownPeriod: 300    # seconds before scaling down after last trigger
+        buffer: 1              # standby pods to maintain above active claims
     # Tracing configuration (supports multiple backends via OTEL)
     tracing:
       enabled: false
@@ -262,9 +305,18 @@ services:
       limits:
         cpu: "2000m"
         memory: "3Gi"
-    # Dedicated health server runs in separate thread, always responsive
+    # Dedicated health server (separate thread, always responsive)
     healthServer:
       port: 8081
+    # Max concurrent sandbox investigations
+    maxConcurrentInvestigations: 8
+    startupProbe:
+      enabled: false
+      path: "/health"
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 5
+      failureThreshold: 12
     readinessProbe:
       initialDelaySeconds: 5
       periodSeconds: 10
@@ -720,4 +772,15 @@ services:
       enabled: true
       minAvailable: 1
 
-
+# Karpenter — dynamic node provisioning for burst workloads (production only)
+# Requires: Terraform karpenter_enabled=true + Karpenter Helm chart installed
+karpenter:
+  enabled: false
+  clusterName: ""
+  nodeRoleName: ""
+  capacityTypes: ["on-demand"]
+  limits:
+    cpu: "16"
+    memory: "64Gi"
+  consolidateAfter: "5m"
+  rootVolumeSize: "40Gi"

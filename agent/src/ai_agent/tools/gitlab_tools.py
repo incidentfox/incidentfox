@@ -18,8 +18,19 @@ def _get_gitlab_config() -> dict:
     context = get_execution_context()
     if context:
         config = context.get_integration_config("gitlab")
-        if config and config.get("token"):
-            return config
+        if config:
+            # Normalize field names: Slack bot uses "api_key"/"domain",
+            # tools historically used "token"/"url". Accept both.
+            token = config.get("token") or config.get("api_key")
+            if token:
+                return {
+                    "token": token,
+                    "url": config.get("url")
+                    or config.get("domain")
+                    or "https://gitlab.com",
+                    "default_project": config.get("default_project"),
+                    "verify_ssl": config.get("verify_ssl", True),
+                }
 
     # 2. Try environment variables (dev/testing fallback)
     if os.getenv("GITLAB_TOKEN"):
@@ -27,6 +38,8 @@ def _get_gitlab_config() -> dict:
             "token": os.getenv("GITLAB_TOKEN"),
             "url": os.getenv("GITLAB_URL", "https://gitlab.com"),
             "default_project": os.getenv("GITLAB_DEFAULT_PROJECT"),
+            "verify_ssl": os.getenv("GITLAB_VERIFY_SSL", "true").lower()
+            in ("true", "1", "yes"),
         }
 
     # 3. Not configured - raise error
@@ -43,7 +56,9 @@ def _get_gitlab_client():
         config = _get_gitlab_config()
 
         return gitlab.Gitlab(
-            url=config.get("url", "https://gitlab.com"), private_token=config["token"]
+            url=config.get("url", "https://gitlab.com"),
+            private_token=config["token"],
+            ssl_verify=config.get("verify_ssl", True),
         )
 
     except ImportError:

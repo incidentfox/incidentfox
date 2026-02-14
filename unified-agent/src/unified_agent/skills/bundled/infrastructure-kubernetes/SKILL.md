@@ -1,6 +1,9 @@
 ---
 name: kubernetes-debug
 description: Kubernetes debugging methodology and scripts. Use for pod crashes, CrashLoopBackOff, OOMKilled, deployment issues, resource problems, or container failures.
+category: infrastructure
+required_integrations:
+  - kubernetes
 ---
 
 # Kubernetes Debugging

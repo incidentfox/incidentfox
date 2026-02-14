@@ -61,6 +61,8 @@ spec:
                   key: {{ .Values.externalSecrets.contract.orchestratorInternal.internalTokenKey | quote }}
             {{- end }}
             {{- if .Values.externalSecrets.contract.slack.enabled }}
+            # DEPRECATED: Signing secret loaded from slack_apps DB table.
+            # Kept as fallback when no apps are configured in config service.
             - name: SLACK_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -136,6 +138,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
                   key: {{ .Values.externalSecrets.contract.teams.appPasswordKey | quote }}
+            - name: TEAMS_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.teams.tenantIdKey | quote }}
             {{- end }}
             # Slack-triggered agent run parameters (enterprise defaults)
             - name: ORCHESTRATOR_SLACK_AGENT_MAX_TURNS

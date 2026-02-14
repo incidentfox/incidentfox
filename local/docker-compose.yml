@@ -10,7 +10,11 @@ version: '3.8'
 # Required services (default):
 #   - postgres       PostgreSQL database
 #   - config-service Team configuration, tokens, audit
-#   - agent          Multi-agent AI execution
+#   - agent          AI investigation engine
+#
+# Note: Production/staging use sre-agent via Helm charts (charts/incidentfox/).
+# This trial stack uses the agent Docker Hub image for simplified
+# single-container operation.
 #
 # Optional services (via profiles):
 #   - web-ui         Browser-based config UI (--profile ui)

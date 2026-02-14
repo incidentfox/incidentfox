@@ -20,17 +20,23 @@ from kubernetes.client.rest import ApiException
 
 
 def get_k8s_client():
-    """Get Kubernetes API client."""
-    kubeconfig = Path.home() / ".kube" / "config"
-    in_cluster = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+    """Get Kubernetes API client.
 
-    if kubeconfig.exists():
-        k8s_config.load_kube_config()
-    elif in_cluster.exists():
+    Prefers in-cluster service account auth (correct RBAC identity)
+    over kubeconfig (which may resolve to the EC2 node IAM identity).
+    """
+    in_cluster = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+    kubeconfig = Path.home() / ".kube" / "config"
+
+    if in_cluster.exists():
         k8s_config.load_incluster_config()
+        print("[k8s-auth] Using in-cluster service account", file=sys.stderr)
+    elif kubeconfig.exists():
+        k8s_config.load_kube_config()
+        print("[k8s-auth] Using kubeconfig (fallback)", file=sys.stderr)
     else:
         print(
-            "Error: Kubernetes not configured. Ensure ~/.kube/config exists.",
+            "Error: Kubernetes not configured. No in-cluster token or ~/.kube/config.",
             file=sys.stderr,
         )
         sys.exit(1)

@@ -1,6 +1,7 @@
 ---
 name: observability
 description: Log, metric, and trace analysis methodology. Use when analyzing logs, investigating errors, querying metrics, or correlating signals across observability backends (Coralogix, Datadog, CloudWatch).
+category: methodology
 ---
 
 # Observability Analysis

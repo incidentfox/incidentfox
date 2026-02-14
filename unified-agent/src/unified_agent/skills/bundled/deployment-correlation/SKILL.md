@@ -1,6 +1,9 @@
 ---
 name: deployment-correlation
 description: Correlate incidents with recent deployments and code changes. Use when investigating if a deployment caused an issue, finding what changed, or identifying the commit that introduced a bug.
+category: code
+required_integrations:
+  - github
 allowed-tools: Bash(python *)
 ---
 

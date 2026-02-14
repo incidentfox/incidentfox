@@ -150,8 +150,12 @@ metadata:
 rules:
   # Core resources for investigation
   - apiGroups: [""]
-    resources: ["pods", "pods/log", "events", "namespaces", "nodes", "services", "configmaps"]
+    resources: ["pods", "pods/log", "events", "namespaces", "nodes", "services"]
     verbs: ["get", "list", "watch"]
+  # ConfigMaps: read + patch (patch needed for flagd feature flag remediation)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "patch"]
   # Workload resources
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]

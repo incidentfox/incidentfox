@@ -11,6 +11,7 @@ umap-learn==0.5.5  # Required for RAPTOR tree pickle deserialization
 # NLP/Embeddings
 sentence-transformers==2.2.2
 tiktoken==0.5.1
+rank_bm25>=0.2.2
 
 # LLM APIs
 openai>=1.50.0

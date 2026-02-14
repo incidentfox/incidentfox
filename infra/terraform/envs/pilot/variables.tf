@@ -180,6 +180,13 @@ variable "memory_intensive_desired_size" {
   default = 1
 }
 
+# Karpenter dynamic node provisioning
+variable "karpenter_enabled" {
+  type        = bool
+  default     = false
+  description = "Enable Karpenter for dynamic node provisioning (burst workloads)"
+}
+
 # ESO permissions
 variable "eso_allowed_secret_arns" {
   type        = list(string)

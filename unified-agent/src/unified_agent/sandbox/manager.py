@@ -215,6 +215,10 @@ static_resources:
           http_protocol_options:
             allow_absolute_url: true
 
+          # Disable idle/request timeouts for long-running LLM streaming connections
+          stream_idle_timeout: 0s
+          request_timeout: 0s
+
           route_config:
             name: proxy_routes
             virtual_hosts:
@@ -230,6 +234,8 @@ static_resources:
                 route:
                   cluster: anthropic
                   auto_host_rewrite: true
+                  timeout: 0s
+                  idle_timeout: 0s
               # Coralogix API
               - match:
                   prefix: "/api/v1/dataprime/"
@@ -247,6 +253,8 @@ static_resources:
                 route:
                   cluster: anthropic
                   auto_host_rewrite: true
+                  timeout: 0s
+                  idle_timeout: 0s
 
           http_filters:
           - name: envoy.filters.http.ext_authz
@@ -450,6 +458,46 @@ static_resources:
             {
                 "name": "GITLAB_BASE_URL",
                 "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/gitlab",
+            },
+            {
+                "name": "JIRA_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/jira",
+            },
+            {
+                "name": "NEWRELIC_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/newrelic",
+            },
+            {
+                "name": "ELASTICSEARCH_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/elasticsearch",
+            },
+            {
+                "name": "OPENSEARCH_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/opensearch",
+            },
+            {
+                "name": "PROMETHEUS_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/prometheus",
+            },
+            {
+                "name": "JAEGER_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/jaeger",
+            },
+            {
+                "name": "HONEYCOMB_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/honeycomb",
+            },
+            {
+                "name": "CLICKUP_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/clickup",
+            },
+            {
+                "name": "BLAMELESS_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/blameless",
+            },
+            {
+                "name": "FIREHYDRANT_BASE_URL",
+                "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/firehydrant",
             },
             # LiteLLM observability callback (Langfuse)
             {"name": "LITELLM_CALLBACKS", "value": "langfuse"},

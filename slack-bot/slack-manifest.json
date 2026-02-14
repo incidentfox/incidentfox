@@ -18,7 +18,8 @@
     },
     "oauth_config": {
         "redirect_urls": [
-            "https://slack.incidentfox.ai/slack/oauth_redirect"
+            "https://slack.incidentfox.ai/slack/oauth_redirect",
+            "https://slack.incidentfox.ai/slack/default/oauth_redirect"
         ],
         "scopes": {
             "bot": [
