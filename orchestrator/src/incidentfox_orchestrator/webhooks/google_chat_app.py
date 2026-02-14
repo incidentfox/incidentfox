@@ -19,6 +19,8 @@ import uuid
 from functools import partial
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+import httpx
+
 if TYPE_CHECKING:
     from incidentfox_orchestrator.clients import (
         AgentApiClient,
@@ -315,14 +317,15 @@ class GoogleChatIntegration:
                 )
             )
 
-            # TODO: Send result back to Google Chat space via REST API
+            # Send result back to Google Chat space
             result_text = result.get("result", "")
             if result_text:
-                _log(
-                    "gchat_result_ready",
-                    correlation_id=correlation_id,
+                await self._send_message_to_space(
                     space_name=space_name,
-                    result_length=len(result_text),
+                    text=result_text,
+                    thread_key=thread_key,
+                    effective_config=effective_config,
+                    correlation_id=correlation_id,
                 )
 
             _log(
@@ -341,6 +344,112 @@ class GoogleChatIntegration:
                 space_id=space_id,
                 error=str(e),
             )
+
+    async def _send_message_to_space(
+        self,
+        space_name: str,
+        text: str,
+        thread_key: str,
+        effective_config: Dict[str, Any],
+        correlation_id: str,
+    ) -> None:
+        """
+        Send a message to a Google Chat space via REST API.
+
+        Uses service account credentials from team config or environment
+        to authenticate with the Google Chat API.
+        """
+        try:
+            # Get service account credentials
+            sa_key_json = (
+                (effective_config or {})
+                .get("integrations", {})
+                .get("google_chat", {})
+                .get("service_account_key")
+            ) or os.getenv("GOOGLE_CHAT_SERVICE_ACCOUNT_KEY", "")
+
+            if not sa_key_json:
+                _log(
+                    "gchat_send_no_credentials",
+                    correlation_id=correlation_id,
+                    space_name=space_name,
+                )
+                return
+
+            # Parse key if it's a JSON string
+            if isinstance(sa_key_json, str):
+                sa_key_info = json.loads(sa_key_json)
+            else:
+                sa_key_info = sa_key_json
+
+            # Build access token from service account
+            from google.oauth2 import service_account
+
+            credentials = service_account.Credentials.from_service_account_info(
+                sa_key_info,
+                scopes=["https://www.googleapis.com/auth/chat.bot"],
+            )
+            # Refresh to get access token
+            from google.auth.transport import requests as google_requests
+
+            credentials.refresh(google_requests.Request())
+            access_token = credentials.token
+
+            # Build message payload
+            url = f"https://chat.googleapis.com/v1/{space_name}/messages"
+            payload: Dict[str, Any] = {"text": text}
+            if thread_key:
+                payload["thread"] = {"name": thread_key}
+
+            params = {}
+            if thread_key:
+                params["messageReplyOption"] = "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
+
+            # Send message
+            resp = await asyncio.to_thread(
+                self._post_gchat_message,
+                url=url,
+                access_token=access_token,
+                payload=payload,
+                params=params,
+            )
+
+            _log(
+                "gchat_message_sent",
+                correlation_id=correlation_id,
+                space_name=space_name,
+                result_length=len(text),
+                status_code=resp,
+            )
+
+        except Exception as e:
+            _log(
+                "gchat_send_failed",
+                correlation_id=correlation_id,
+                space_name=space_name,
+                error=str(e),
+            )
+
+    @staticmethod
+    def _post_gchat_message(
+        url: str,
+        access_token: str,
+        payload: Dict[str, Any],
+        params: Dict[str, str],
+    ) -> int:
+        """Sync helper to POST a message to Google Chat API. Returns status code."""
+        with httpx.Client(timeout=15.0) as c:
+            r = c.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                params=params,
+            )
+            r.raise_for_status()
+            return r.status_code
 
     def _handle_added_to_space(
         self,
