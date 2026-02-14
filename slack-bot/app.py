@@ -2099,23 +2099,26 @@ def _handle_mention_impl(event, say, client, context):
     logger.info(f"🔔 Auto-listen enabled for thread {thread_ts} in {channel_id}")
 
     try:
-        # Get team token for config-driven agents
-        # This enables the agent to load team config (agent definitions, tools, LLM settings)
+        # Get team token and routing info for config-driven agents
         # Uses channel-based routing: checks if this channel maps to a specific team,
         # falls back to workspace-based routing ("default" team) if no mapping exists.
-        team_token = None
+        routing_result = None
         try:
             config_client = get_config_client()
-            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
+            routing_result = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
             logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
+
+        resolved_org_id = routing_result["org_id"] if routing_result else None
+        resolved_team_node_id = routing_result["team_node_id"] if routing_result else None
+        team_token = routing_result["token"] if routing_result else None
 
         # Build request payload with prompt and optional images
         request_payload = {
             "prompt": enriched_prompt,
             "thread_id": thread_id,
-            "tenant_id": team_id,  # Slack team_id = tenant for credential lookup
-            "team_id": team_id,
+            "tenant_id": resolved_org_id,
+            "team_id": resolved_team_node_id,
         }
 
         # Add team_token for config-driven agents (enables dynamic config loading)
@@ -2433,18 +2436,22 @@ def _run_auto_listen_investigation(event, client, context):
     )
 
     try:
-        team_token = None
+        routing_result = None
         try:
             config_client = get_config_client()
-            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
+            routing_result = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
             logger.warning(f"Failed to get team token: {e}")
+
+        resolved_org_id = routing_result["org_id"] if routing_result else None
+        resolved_team_node_id = routing_result["team_node_id"] if routing_result else None
+        team_token = routing_result["token"] if routing_result else None
 
         request_payload = {
             "prompt": enriched_prompt,
             "thread_id": thread_id,
-            "tenant_id": team_id,
-            "team_id": team_id,
+            "tenant_id": resolved_org_id,
+            "team_id": resolved_team_node_id,
         }
 
         if team_token:
@@ -2851,21 +2858,24 @@ Use all available tools to gather context about this issue."""
     logger.info(f"🔔 Auto-listen enabled for alert thread {thread_ts} in {channel_id}")
 
     try:
-        # Get team token for config-driven agents
-        # Uses channel-based routing with fallback to workspace-based routing
-        team_token = None
+        # Get team token and routing info for config-driven agents
+        routing_result = None
         try:
             config_client = get_config_client()
-            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
+            routing_result = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
             logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
+
+        resolved_org_id = routing_result["org_id"] if routing_result else None
+        resolved_team_node_id = routing_result["team_node_id"] if routing_result else None
+        team_token = routing_result["token"] if routing_result else None
 
         # Call sre-agent to investigate
         request_payload = {
             "prompt": investigation_prompt,
             "thread_id": thread_id,
-            "tenant_id": team_id,  # Slack team_id = tenant for credential lookup
-            "team_id": team_id,
+            "tenant_id": resolved_org_id,
+            "team_id": resolved_team_node_id,
         }
 
         # Add team_token for config-driven agents
@@ -3265,12 +3275,12 @@ def handle_message(event, client, context):
         )
 
         try:
-            # Get team token for config-driven agents
+            # Get team token and routing info for config-driven agents
             # For DMs, channel routing won't match, falls back to workspace-based routing
-            team_token = None
+            routing_result = None
             try:
                 config_client = get_config_client()
-                team_token = config_client.get_team_token_for_channel(
+                routing_result = config_client.get_team_token_for_channel(
                     team_id, channel_id
                 )
             except Exception as e:
@@ -3278,12 +3288,16 @@ def handle_message(event, client, context):
                     f"Failed to get team token for {team_id}/{channel_id}: {e}"
                 )
 
+            resolved_org_id = routing_result["org_id"] if routing_result else None
+            resolved_team_node_id = routing_result["team_node_id"] if routing_result else None
+            team_token = routing_result["token"] if routing_result else None
+
             # Build request payload
             request_payload = {
                 "prompt": enriched_prompt,
                 "thread_id": thread_id,
-                "tenant_id": team_id,  # Slack team_id = tenant for credential lookup
-                "team_id": team_id,
+                "tenant_id": resolved_org_id,
+                "team_id": resolved_team_node_id,
             }
 
             # Add team_token for config-driven agents
@@ -3714,21 +3728,24 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
     )
 
     try:
-        # Get team token for config-driven agents
-        # Uses channel-based routing with fallback to workspace-based routing
-        team_token = None
+        # Get team token and routing info for config-driven agents
+        routing_result = None
         try:
             config_client = get_config_client()
-            team_token = config_client.get_team_token_for_channel(team_id, channel_id)
+            routing_result = config_client.get_team_token_for_channel(team_id, channel_id)
         except Exception as e:
             logger.warning(f"Failed to get team token for {team_id}/{channel_id}: {e}")
+
+        resolved_org_id = routing_result["org_id"] if routing_result else None
+        resolved_team_node_id = routing_result["team_node_id"] if routing_result else None
+        team_token = routing_result["token"] if routing_result else None
 
         # Call sre-agent to investigate
         request_payload = {
             "prompt": investigation_prompt,
             "thread_id": thread_id,
-            "tenant_id": team_id,  # Slack team_id = tenant for credential lookup
-            "team_id": team_id,
+            "tenant_id": resolved_org_id,
+            "team_id": resolved_team_node_id,
         }
 
         # Add team_token for config-driven agents
