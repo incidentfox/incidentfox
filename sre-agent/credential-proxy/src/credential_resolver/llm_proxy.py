@@ -537,8 +537,11 @@ async def _forward_to_provider(
         if cf_token:
             extra_headers["cf-aig-authorization"] = f"Bearer {cf_token}"
         # Provider API key — stored per upstream provider (e.g. provider_api_key_openai)
+        # Falls back to generic provider_api_key for configs saved before per-upstream storage
         upstream = model_name.split("/")[0] if "/" in model_name else ""
-        provider_key = (creds or {}).get(f"provider_api_key_{upstream}", "")
+        provider_key = (creds or {}).get(
+            f"provider_api_key_{upstream}", ""
+        ) or (creds or {}).get("provider_api_key", "")
         if provider_key:
             litellm_kwargs["api_key"] = provider_key
         else:
