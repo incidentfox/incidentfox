@@ -426,21 +426,42 @@ class TeamsIntegration:
             # Send agent result back to Teams conversation as a reply
             # to the "working on it" message (shows as quoted reply in Teams)
             result_text = result.get("result", "")
+            _log(
+                "teams_agent_result",
+                correlation_id=correlation_id,
+                result_length=len(result_text),
+                result_success=result.get("success"),
+                thread_id=result.get("thread_id"),
+                has_result=bool(result_text),
+            )
+
             if result_text:
+                try:
 
-                async def _send_result(turn_context: TurnContext):
-                    reply = Activity(
-                        type=ActivityTypes.message,
-                        text=result_text,
-                        reply_to_id=initial_message_id,
+                    async def _send_result(turn_context: TurnContext):
+                        reply = Activity(
+                            type=ActivityTypes.message,
+                            text=result_text,
+                            reply_to_id=initial_message_id,
+                        )
+                        await turn_context.send_activity(reply)
+
+                    await self.adapter.continue_conversation(
+                        conversation_ref,
+                        _send_result,
+                        self.app_id,
                     )
-                    await turn_context.send_activity(reply)
-
-                await self.adapter.continue_conversation(
-                    conversation_ref,
-                    _send_result,
-                    self.app_id,
-                )
+                    _log(
+                        "teams_result_sent",
+                        correlation_id=correlation_id,
+                        result_length=len(result_text),
+                    )
+                except Exception as send_err:
+                    _log(
+                        "teams_result_send_failed",
+                        correlation_id=correlation_id,
+                        error=str(send_err),
+                    )
 
             _log(
                 "teams_message_completed",
