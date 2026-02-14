@@ -305,18 +305,8 @@ class GoogleChatIntegration:
                     team_token=team_token,
                     agent_name=entrance_agent_name,
                     message=text,
-                    context={
-                        "user_id": user_id,
-                        "session_id": session_id,
-                        "metadata": {
-                            "google_chat": {
-                                "space_id": space_id,
-                                "space_name": space_name,
-                                "thread_key": thread_key,
-                            },
-                            "trigger": "google_chat",
-                        },
-                    },
+                    tenant_id=org_id,
+                    team_id=team_node_id,
                     timeout=int(
                         os.getenv("ORCHESTRATOR_GCHAT_AGENT_TIMEOUT_SECONDS", "300")
                     ),
