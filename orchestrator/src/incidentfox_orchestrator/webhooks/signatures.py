@@ -475,8 +475,11 @@ def verify_google_chat_bearer_token(
         )
 
         # Verify issuer is Google Chat
+        # HTTP endpoint apps use "https://accounts.google.com" as issuer
+        # Apps Script/Cloud Function apps use "chat@system.gserviceaccount.com"
+        valid_issuers = {"chat@system.gserviceaccount.com", "https://accounts.google.com"}
         issuer = claims.get("iss", "")
-        if issuer != "chat@system.gserviceaccount.com":
+        if issuer not in valid_issuers:
             raise SignatureVerificationError(
                 f"invalid_issuer (got {issuer})", "google_chat"
             )
