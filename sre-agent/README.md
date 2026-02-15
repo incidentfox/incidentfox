@@ -22,6 +22,141 @@ python agent.py
 python server.py
 ```
 
+## Agent Configuration
+
+The agent supports rich configuration via config_service for team-specific behavior:
+
+### Agent Config Fields
+
+Each agent in your team config supports:
+
+- **`enabled`** (bool): Whether this agent is active
+- **`prompt.system`** (str): Agent's system prompt defining its role and behavior
+- **`prompt.prefix`** (str): Description shown to parent agent (when used as subagent)
+- **`tools.enabled`** (list): Allowed tools (`["*"]` for all)
+- **`tools.disabled`** (list): Tools to exclude from enabled set
+- **`model`** (object): Model settings for LLM calls
+  - **`temperature`** (float, 0.0-1.0): Sampling temperature (None = provider default)
+  - **`max_tokens`** (int): Maximum response tokens
+  - **`top_p`** (float, 0.0-1.0): Nucleus sampling parameter
+- **`max_turns`** (int): Maximum conversation turns (prevents infinite loops)
+- **`sub_agents`** (dict): Nested subagent dependencies for hierarchical agents
+
+### Example: Flat Agent Configuration
+
+```json
+{
+  "agents": {
+    "investigator": {
+      "enabled": true,
+      "model": {
+        "temperature": 0.3,
+        "max_tokens": 4000
+      },
+      "max_turns": 50,
+      "prompt": {
+        "system": "You are an SRE investigator...",
+        "prefix": "Use for incident investigation"
+      },
+      "tools": {
+        "enabled": ["*"],
+        "disabled": ["Write", "Edit"]
+      }
+    },
+    "log-analyst": {
+      "enabled": true,
+      "max_turns": 20,
+      "prompt": {
+        "system": "You are a log analysis specialist..."
+      }
+    }
+  }
+}
+```
+
+### Example: Nested Agent Hierarchy (STARSHIP TOPOLOGY)
+
+Agents can depend on other agents via `sub_agents` field. The agent builder uses **topological sort** to build dependencies first:
+
+```json
+{
+  "agents": {
+    "planner": {
+      "enabled": true,
+      "model": {"temperature": 0.3, "max_tokens": 4000},
+      "max_turns": 50,
+      "sub_agents": {"investigation": true},
+      "prompt": {
+        "system": "You are a high-level planner...",
+        "prefix": "Use for planning and coordination"
+      }
+    },
+    "investigation": {
+      "enabled": true,
+      "max_turns": 40,
+      "sub_agents": {
+        "k8s": true,
+        "metrics": true,
+        "logs": true
+      },
+      "prompt": {
+        "system": "You are an incident investigator. Coordinate with specialists...",
+        "prefix": "Use for multi-faceted incident investigation"
+      }
+    },
+    "k8s": {
+      "enabled": true,
+      "prompt": {
+        "system": "You are a Kubernetes specialist...",
+        "prefix": "Use for pod crashes, deployments, resource issues"
+      }
+    },
+    "metrics": {
+      "enabled": true,
+      "prompt": {
+        "system": "You are a metrics analysis specialist...",
+        "prefix": "Use for analyzing Prometheus/Grafana metrics"
+      }
+    },
+    "logs": {
+      "enabled": true,
+      "prompt": {
+        "system": "You are a log analysis specialist...",
+        "prefix": "Use for analyzing application logs"
+      }
+    }
+  }
+}
+```
+
+**Build order** (automatically determined by topological sort):
+1. Leaf agents: `k8s`, `metrics`, `logs`
+2. Orchestrator: `investigation` (uses leaf agents)
+3. Top-level: `planner` (uses investigation)
+
+**Important Note about Hierarchy Enforcement:**
+- The `sub_agents` field defines the **intended hierarchy** and ensures correct build order
+- However, due to Claude SDK limitations, all subagents are registered **flat at the root level**
+- This means the root agent can technically call any subagent directly, not just its immediate children
+- The hierarchy is a **preference/hint** enforced through agent descriptions, not a strict constraint
+- Claude's intelligence generally respects the intended delegation pattern based on descriptions
+
+### Model Settings
+
+Model settings are applied **globally** to the session (Claude SDK limitation):
+
+- Settings from the **root agent** (investigator or planner) apply to all subagents
+- credential-proxy forwards these to LiteLLM which passes them to the LLM API
+- Supported by most models (temperature, max_tokens, top_p)
+- Future: per-agent model specification would require credential-proxy detection of subagent context
+
+### Execution Limits
+
+- **`max_turns`**: Prevents infinite loops by limiting conversation turns
+- Applied at the session level (affects main agent and all subagents)
+- When exceeded, investigation returns partial results with status="incomplete"
+- **Note**: Timeout limits not implemented (per user request)
+
 ## API
 
 ### Simple Investigation
