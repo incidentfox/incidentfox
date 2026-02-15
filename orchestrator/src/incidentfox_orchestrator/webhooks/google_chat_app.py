@@ -172,14 +172,8 @@ class GoogleChatIntegration:
             )
         )
 
-        # Return immediate response
-        response: Dict[str, Any] = {
-            "text": "IncidentFox is working on it...",
-        }
-        if thread_key:
-            response["thread"] = {"name": thread_key}
-
-        return response
+        # Return empty — the async handler sends the result as a thread reply
+        return {}
 
     async def _process_message_async(
         self,
@@ -376,9 +370,15 @@ class GoogleChatIntegration:
                 )
                 return
 
-            # Parse key if it's a JSON string
+            # Parse key — may be raw JSON, base64-encoded JSON, or a dict
             if isinstance(sa_key_json, str):
-                sa_key_info = json.loads(sa_key_json)
+                try:
+                    sa_key_info = json.loads(sa_key_json)
+                except json.JSONDecodeError:
+                    # Try base64 decode
+                    import base64
+
+                    sa_key_info = json.loads(base64.b64decode(sa_key_json))
             else:
                 sa_key_info = sa_key_json
 
