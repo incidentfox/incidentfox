@@ -70,7 +70,6 @@ COPY auth.py .
 COPY config.py .
 COPY pyproject.toml .
 COPY uv.lock .
-COPY providers/ ./providers/
 COPY .claude/ ./.claude/
 COPY kubeconfig-demo.yaml /app/kubeconfig-demo.yaml
 

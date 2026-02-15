@@ -681,7 +681,7 @@ def main() -> None:
             "description": "AI SRE for OpenTelemetry Demo — incident triage, diagnosis, and remediation",
             "routing": {
                 "slack_channel_ids": [slack_channel_id],
-                "github_repos": ["incidentfox/aws-playground"],
+                "github_repos": [],
                 "pagerduty_service_ids": [],
                 "services": list(SERVICES.keys()),
             },

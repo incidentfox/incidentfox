@@ -28,6 +28,64 @@ from .jwt_auth import validate_sandbox_jwt
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Cache for GitHub App installation tokens (key: installation_id, value: token)
+# Tokens are valid for 1 hour; we cache for 50 minutes to refresh early
+_github_app_token_cache: TTLCache = TTLCache(maxsize=32, ttl=3000)
+
+
+def _get_github_app_token(creds: dict) -> str | None:
+    """Generate a GitHub App installation token from app credentials.
+
+    Requires creds to have: app_id, private_key, installation_id.
+    Returns an installation access token, or None if not GitHub App creds.
+    """
+    app_id = creds.get("app_id")
+    private_key = creds.get("private_key")
+    installation_id = creds.get("installation_id")
+
+    if not (app_id and private_key and installation_id):
+        return None
+
+    # Check cache
+    cache_key = str(installation_id)
+    if cache_key in _github_app_token_cache:
+        return _github_app_token_cache[cache_key]
+
+    try:
+        import json
+        import time
+        import urllib.request
+
+        import jwt
+
+        # Generate JWT signed with app's private key
+        now = int(time.time())
+        payload = {"iat": now - 60, "exp": now + (10 * 60), "iss": str(app_id)}
+        app_jwt = jwt.encode(payload, private_key, algorithm="RS256")
+
+        # Exchange JWT for installation access token
+        req = urllib.request.Request(
+            f"https://api.github.com/app/installations/{installation_id}/access_tokens",
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {app_jwt}",
+                "Accept": "application/vnd.github+json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read())
+            token = result["token"]
+            _github_app_token_cache[cache_key] = token
+            logger.info(
+                f"Generated GitHub App installation token "
+                f"(app_id={app_id}, installation_id={installation_id})"
+            )
+            return token
+    except Exception as e:
+        logger.error(f"Failed to generate GitHub App token: {e}")
+        return None
+
+
 # Credential source: "config_service" (SaaS) or "environment" (local/self-hosted)
 CREDENTIAL_SOURCE = os.getenv("CREDENTIAL_SOURCE", "environment")
 
@@ -392,9 +450,15 @@ def is_integration_configured(integration_id: str, creds: dict | None) -> bool:
     if integration_id in ["prometheus", "jaeger", "victoriametrics"]:
         return bool(creds.get("domain"))
 
-    # GitHub: api_key required (domain optional for GHE)
+    # GitHub: api_key OR GitHub App credentials (app_id + private_key + installation_id)
     if integration_id == "github":
-        return bool(creds.get("api_key"))
+        has_pat = bool(creds.get("api_key"))
+        has_app = bool(
+            creds.get("app_id")
+            and creds.get("private_key")
+            and creds.get("installation_id")
+        )
+        return has_pat or has_app
 
     # Honeycomb: api_key required (domain optional, defaults to api.honeycomb.io)
     if integration_id == "honeycomb":
@@ -956,12 +1020,85 @@ async def jaeger_proxy(path: str, request: Request):
     methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
 )
 async def github_proxy(path: str, request: Request):
-    """Reverse proxy for GitHub API requests (for GitHub Enterprise).
+    """Reverse proxy for GitHub API requests.
 
-    Note: For github.com, clients can use the fixed URL directly.
-    This proxy is for GitHub Enterprise with customer-specific URLs.
+    Defaults to api.github.com for standard GitHub.
+    Supports GitHub Enterprise via optional 'domain' field in credentials.
     """
-    return await generic_proxy("github", path, request)
+    import httpx
+
+    logger.info(f"GitHub proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get GitHub credentials
+    creds = await get_credentials(tenant_id, team_id, "github")
+    if not creds:
+        logger.error(f"GitHub not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Github integration not configured",
+        )
+
+    # Resolve the API token: GitHub App (preferred) or PAT fallback
+    api_token = _get_github_app_token(creds)
+    if api_token:
+        logger.info("GitHub proxy: using GitHub App installation token")
+    else:
+        api_token = creds.get("api_key")
+    if not api_token:
+        logger.error(f"GitHub: no api_key or App credentials for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Github integration not configured",
+        )
+
+    # Build target URL (default to github.com, support GHE via domain field)
+    domain = creds.get("domain", "https://api.github.com")
+    if not domain.startswith(("http://", "https://")):
+        domain = f"https://{domain}"
+    target_url = f"{domain.rstrip('/')}/{path}"
+    logger.info(f"GitHub proxy: forwarding to {target_url}")
+
+    auth_headers = {"Authorization": f"Bearer {api_token}"}
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/vnd.github+json"),
+        **auth_headers,
+    }
+
+    # Get query params
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            resp = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            headers={
+                "Content-Type": resp.headers.get("Content-Type", "application/json"),
+            },
+        )
+    except httpx.TimeoutException:
+        logger.error("GitHub request timed out")
+        raise HTTPException(status_code=504, detail="GitHub request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"GitHub request error: {e}")
+        raise HTTPException(status_code=502, detail=f"GitHub request failed: {e}")
 
 
 @app.api_route(
@@ -2030,9 +2167,9 @@ def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
         return {}
 
     elif integration_id == "github":
-        # GitHub uses Bearer token
-        api_key = creds.get("api_key", "")
-        return {"Authorization": f"Bearer {api_key}"}
+        # GitHub: prefer App installation token, fall back to PAT
+        token = _get_github_app_token(creds) or creds.get("api_key", "")
+        return {"Authorization": f"Bearer {token}"}
 
     elif integration_id == "incident_io":
         # incident.io uses Bearer token

@@ -288,6 +288,23 @@ async def github_webhook(
         )
         return JSONResponse(content={"ok": True})
 
+    # Only process actionable event types — ignore noisy CI/CD events
+    # (workflow_run, check_suite, check_run, status, deployment_status, etc.)
+    _ACTIONABLE_GITHUB_EVENTS = {
+        "pull_request",
+        "push",
+        "issues",
+        "issue_comment",
+    }
+    if x_github_event not in _ACTIONABLE_GITHUB_EVENTS:
+        _log(
+            "github_webhook_skipped",
+            event_type=x_github_event,
+            delivery_id=x_github_delivery,
+            reason="non_actionable_event_type",
+        )
+        return JSONResponse(content={"ok": True})
+
     # Extract repository for routing
     repo = payload.get("repository", {})
     repo_full_name = repo.get("full_name", "")  # e.g., "org/repo"
@@ -573,6 +590,8 @@ async def _process_github_webhook(
                 agent_base_url=dedicated_agent_url,
                 output_destinations=output_destinations,
                 trigger_source="github",
+                tenant_id=org_id,
+                team_id=team_node_id,
             )
         )
 
@@ -1122,6 +1141,8 @@ async def _process_pagerduty_webhook(
             agent_base_url=dedicated_agent_url,
             output_destinations=output_destinations,
             trigger_source="pagerduty",
+            tenant_id=org_id,
+            team_id=team_node_id,
         )
 
         # Note: Agent service handles run completion recording
@@ -1540,6 +1561,8 @@ async def _process_incidentio_webhook(
                 agent_base_url=dedicated_agent_url,
                 output_destinations=output_destinations,
                 trigger_source="incidentio",
+                tenant_id=org_id,
+                team_id=team_node_id,
             )
         )
 
@@ -2144,8 +2167,10 @@ async def google_chat_webhook(
     # Google Chat HTTP endpoints use the webhook URL as the JWT audience.
     # Behind TLS-terminating LB, request.url is http:// but the token uses https://
     url = str(request.url)
-    if request.headers.get("x-forwarded-proto") == "https" and url.startswith("http://"):
-        url = "https://" + url[len("http://"):]
+    if request.headers.get("x-forwarded-proto") == "https" and url.startswith(
+        "http://"
+    ):
+        url = "https://" + url[len("http://") :]
     expected_audience = os.getenv("GOOGLE_CHAT_AUDIENCE", "").strip() or url
     try:
         verify_google_chat_bearer_token(
@@ -2455,6 +2480,8 @@ async def _process_blameless_webhook(
             agent_base_url=dedicated_agent_url,
             output_destinations=output_destinations,
             trigger_source="blameless",
+            tenant_id=org_id,
+            team_id=team_node_id,
         )
 
         _log(
@@ -2653,6 +2680,8 @@ async def _process_firehydrant_webhook(
             agent_base_url=dedicated_agent_url,
             output_destinations=output_destinations,
             trigger_source="firehydrant",
+            tenant_id=org_id,
+            team_id=team_node_id,
         )
 
         _log(
