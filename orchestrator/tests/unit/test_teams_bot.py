@@ -106,9 +106,7 @@ class TestHelpCommand:
         ctx.send_activity.assert_called_once_with(HELP_MESSAGE)
 
     @pytest.mark.asyncio
-    @patch(
-        "incidentfox_orchestrator.webhooks.teams_bot.asyncio.create_task"
-    )
+    @patch("incidentfox_orchestrator.webhooks.teams_bot.asyncio.create_task")
     async def test_help_does_not_trigger_agent(self, mock_create_task):
         integration = _make_integration()
         activity = _make_activity(text="help")
@@ -123,9 +121,7 @@ class TestRegularMessage:
     """Non-help MESSAGE should trigger async agent processing."""
 
     @pytest.mark.asyncio
-    @patch(
-        "incidentfox_orchestrator.webhooks.teams_bot.asyncio.create_task"
-    )
+    @patch("incidentfox_orchestrator.webhooks.teams_bot.asyncio.create_task")
     async def test_regular_message_triggers_agent(self, mock_create_task):
         integration = _make_integration()
         activity = _make_activity(text="investigate high error rate")
