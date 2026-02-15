@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """
-Integration test for PR #1: Enhanced Config-Driven Agent Building.
+Integration test for Enhanced Config-Driven Agent Building.
 
 Tests the complete implementation:
-1. Config loading with new fields
-2. Topological sort for nested agents
-3. Model settings and max_turns application
-4. Backward compatibility
+1. Config loading with new fields (ModelConfig, max_turns)
+2. Model settings application via environment variables
+3. Backward compatibility
 """
 
 import json
+import sys
 import tempfile
 import os
 from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def test_config_loading():
     """Test that config loads correctly with new fields."""
@@ -24,71 +27,20 @@ def test_config_loading():
         name="test",
         model=ModelConfig(temperature=0.3, max_tokens=4000, top_p=0.9),
         max_turns=50,
-        sub_agents={"k8s": True, "metrics": True}
     )
 
     assert agent.model.temperature == 0.3
     assert agent.model.max_tokens == 4000
     assert agent.model.top_p == 0.9
     assert agent.max_turns == 50
-    assert agent.sub_agents["k8s"] is True
     print("✅ Config loading with new fields works!")
-
-
-def test_topological_sort():
-    """Test topological sort with nested hierarchy."""
-    from config import AgentConfig
-    from agent_builder import topological_sort_agents
-
-    # Create STARSHIP TOPOLOGY
-    agents = {
-        "planner": AgentConfig(
-            name="planner",
-            enabled=True,
-            sub_agents={"investigation": True}
-        ),
-        "investigation": AgentConfig(
-            name="investigation",
-            enabled=True,
-            sub_agents={"k8s": True, "metrics": True}
-        ),
-        "k8s": AgentConfig(name="k8s", enabled=True),
-        "metrics": AgentConfig(name="metrics", enabled=True),
-    }
-
-    build_order = topological_sort_agents(agents)
-
-    # Verify correct order
-    assert build_order.index("k8s") < build_order.index("investigation")
-    assert build_order.index("metrics") < build_order.index("investigation")
-    assert build_order.index("investigation") < build_order.index("planner")
-
-    print(f"✅ Topological sort works! Build order: {build_order}")
-
-
-def test_circular_dependency_detection():
-    """Test that circular dependencies are detected."""
-    from config import AgentConfig
-    from agent_builder import topological_sort_agents
-
-    agents = {
-        "a": AgentConfig(name="a", enabled=True, sub_agents={"b": True}),
-        "b": AgentConfig(name="b", enabled=True, sub_agents={"a": True}),
-    }
-
-    try:
-        topological_sort_agents(agents)
-        assert False, "Should have raised ValueError for circular dependency"
-    except ValueError as e:
-        assert "Circular dependency" in str(e)
-        print("✅ Circular dependency detection works!")
 
 
 def test_backward_compatibility():
     """Test that old configs without new fields still work."""
     from config import AgentConfig, PromptConfig, ToolsConfig
 
-    # Old-style config without model, max_turns, sub_agents
+    # Old-style config without model, max_turns
     agent = AgentConfig(
         name="old_agent",
         enabled=True,
@@ -100,7 +52,6 @@ def test_backward_compatibility():
     assert agent.model.name == "claude-sonnet-4-20250514"
     assert agent.model.temperature is None
     assert agent.max_turns is None
-    assert agent.sub_agents == {}
 
     print("✅ Backward compatibility maintained!")
 
@@ -136,34 +87,6 @@ def test_model_settings_environment():
     print("✅ Model settings environment variables work!")
 
 
-def test_validation():
-    """Test dependency validation."""
-    from config import AgentConfig
-    from agent_builder import validate_agent_dependencies
-
-    # Test missing dependency
-    agents = {
-        "a": AgentConfig(name="a", enabled=True, sub_agents={"missing": True})
-    }
-
-    errors = validate_agent_dependencies(agents)
-    assert len(errors) == 1
-    assert "missing" in errors[0]
-    assert "does not exist" in errors[0]
-
-    # Test disabled dependency
-    agents = {
-        "a": AgentConfig(name="a", enabled=False),
-        "b": AgentConfig(name="b", enabled=True, sub_agents={"a": True})
-    }
-
-    errors = validate_agent_dependencies(agents)
-    assert len(errors) == 1
-    assert "disabled" in errors[0]
-
-    print("✅ Dependency validation works!")
-
-
 def test_complete_integration():
     """Test complete integration with mock config."""
     print("\n🧪 Testing complete integration...")
@@ -178,7 +101,6 @@ def test_complete_integration():
                     "max_tokens": 4000
                 },
                 "max_turns": 50,
-                "sub_agents": {"investigation": True},
                 "prompt": {
                     "system": "You are a planner agent",
                     "prefix": "Planning and coordination"
@@ -189,7 +111,7 @@ def test_complete_integration():
             },
             "investigation": {
                 "enabled": True,
-                "sub_agents": {"k8s": True, "metrics": True},
+                "max_turns": 40,
                 "prompt": {
                     "system": "You are an investigator",
                     "prefix": "Incident investigation"
@@ -231,7 +153,6 @@ def test_complete_integration():
                 top_p=model_data.get("top_p")
             ),
             max_turns=cfg.get("max_turns"),
-            sub_agents=cfg.get("sub_agents", {}),
             prompt=PromptConfig(
                 system=prompt_data.get("system", ""),
                 prefix=prompt_data.get("prefix", ""),
@@ -243,35 +164,30 @@ def test_complete_integration():
             )
         )
 
-    # Test topological sort
-    from agent_builder import topological_sort_agents
+    # Verify agents were parsed correctly
+    assert len(agents) == 4
+    assert agents["planner"].model.temperature == 0.3
+    assert agents["planner"].max_turns == 50
+    assert agents["investigation"].max_turns == 40
+    assert agents["k8s"].max_turns is None
 
-    build_order = topological_sort_agents(agents)
-    expected_order = ["k8s", "metrics", "investigation", "planner"]
-
-    assert build_order == expected_order, f"Expected {expected_order}, got {build_order}"
-
-    print(f"  ✅ Build order correct: {build_order}")
+    print(f"  ✅ Loaded {len(agents)} agents")
     print(f"  ✅ Planner has {agents['planner'].max_turns} max_turns")
     print(f"  ✅ Planner temperature: {agents['planner'].model.temperature}")
     print(f"  ✅ Planner max_tokens: {agents['planner'].model.max_tokens}")
-    print(f"  ✅ Investigation depends on: {list(agents['investigation'].sub_agents.keys())}")
 
     print("\n✅ Complete integration test passed!")
 
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("PR #1 Integration Tests")
+    print("Enhanced Config Integration Tests")
     print("=" * 60)
 
     try:
         test_config_loading()
-        test_topological_sort()
-        test_circular_dependency_detection()
         test_backward_compatibility()
         test_model_settings_environment()
-        test_validation()
         test_complete_integration()
 
         print("\n" + "=" * 60)

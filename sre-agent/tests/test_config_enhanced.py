@@ -1,6 +1,10 @@
-"""Tests for enhanced config loading (ModelConfig, max_turns, sub_agents)."""
+"""Tests for enhanced config loading (ModelConfig, max_turns)."""
 
-import pytest
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import AgentConfig, ModelConfig, PromptConfig, ToolsConfig
 
@@ -49,25 +53,9 @@ def test_agent_config_with_max_turns():
     assert agent.max_turns == 50
 
 
-def test_agent_config_with_sub_agents():
-    """Test AgentConfig with sub_agents dict."""
-    agent = AgentConfig(
-        name="orchestrator",
-        enabled=True,
-        sub_agents={
-            "k8s": True,
-            "metrics": True,
-            "logs": False,
-        },
-    )
-    assert agent.sub_agents["k8s"] is True
-    assert agent.sub_agents["metrics"] is True
-    assert agent.sub_agents["logs"] is False
-
-
 def test_agent_config_backward_compatibility():
     """Test that AgentConfig works without new fields (backward compatibility)."""
-    # Old config without model, max_turns, sub_agents
+    # Old config without model, max_turns
     agent = AgentConfig(
         name="test",
         enabled=True,
@@ -79,7 +67,6 @@ def test_agent_config_backward_compatibility():
     assert agent.model.name == "claude-sonnet-4-20250514"
     assert agent.model.temperature is None
     assert agent.max_turns is None
-    assert agent.sub_agents == {}
 
 
 def test_agent_config_full_example():
@@ -103,10 +90,6 @@ def test_agent_config_full_example():
             top_p=0.9,
         ),
         max_turns=50,
-        sub_agents={
-            "k8s": True,
-            "metrics": True,
-        },
     )
 
     assert agent.enabled is True
@@ -115,7 +98,6 @@ def test_agent_config_full_example():
     assert agent.tools.disabled == ["Write", "Edit"]
     assert agent.model.temperature == 0.3
     assert agent.max_turns == 50
-    assert len(agent.sub_agents) == 2
 
 
 def test_model_config_temperature_bounds():
@@ -150,46 +132,60 @@ def test_agent_config_max_turns_positive():
     assert agent.max_turns == 100
 
 
-def test_agent_config_empty_sub_agents():
-    """Test AgentConfig with empty sub_agents (leaf agent)."""
-    agent = AgentConfig(name="leaf", sub_agents={})
-    assert agent.sub_agents == {}
-    assert len(agent.sub_agents) == 0
-
-
-def test_agent_config_nested_hierarchy_example():
-    """Test creating agents for STARSHIP TOPOLOGY."""
-    # Planner (top level)
+def test_multiple_agents_with_different_configs():
+    """Test creating multiple agents with different configurations."""
+    # Planner with conservative settings
     planner = AgentConfig(
         name="planner",
         enabled=True,
         model=ModelConfig(temperature=0.3, max_tokens=4000),
         max_turns=50,
-        sub_agents={"investigation": True},
     )
 
-    # Investigation (orchestrator)
+    # Investigation agent with default settings
     investigation = AgentConfig(
         name="investigation",
         enabled=True,
         max_turns=40,
-        sub_agents={
-            "k8s": True,
-            "metrics": True,
-            "logs": True,
-        },
     )
 
-    # Leaf agents
-    k8s = AgentConfig(name="k8s", enabled=True, sub_agents={})
-    metrics = AgentConfig(name="metrics", enabled=True, sub_agents={})
-    logs = AgentConfig(name="logs", enabled=True, sub_agents={})
+    # Specialized agents
+    k8s = AgentConfig(name="k8s", enabled=True)
+    metrics = AgentConfig(name="metrics", enabled=True)
 
-    # Verify hierarchy
-    assert "investigation" in planner.sub_agents
-    assert "k8s" in investigation.sub_agents
-    assert "metrics" in investigation.sub_agents
-    assert "logs" in investigation.sub_agents
-    assert len(k8s.sub_agents) == 0
-    assert len(metrics.sub_agents) == 0
-    assert len(logs.sub_agents) == 0
+    # Verify each agent has independent config
+    assert planner.model.temperature == 0.3
+    assert investigation.model.temperature is None
+    assert k8s.max_turns is None
+    assert metrics.max_turns is None
+
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("Enhanced Config Tests")
+    print("=" * 60)
+
+    tests = [
+        test_model_config_defaults,
+        test_model_config_custom,
+        test_agent_config_with_model,
+        test_agent_config_with_max_turns,
+        test_agent_config_backward_compatibility,
+        test_agent_config_full_example,
+        test_model_config_temperature_bounds,
+        test_model_config_top_p_bounds,
+        test_agent_config_max_turns_positive,
+        test_multiple_agents_with_different_configs,
+    ]
+
+    for test in tests:
+        try:
+            test()
+            print(f"✅ {test.__name__}")
+        except AssertionError as e:
+            print(f"❌ {test.__name__}: {e}")
+            exit(1)
+
+    print("\n" + "=" * 60)
+    print("🎉 ALL TESTS PASSED!")
+    print("=" * 60)

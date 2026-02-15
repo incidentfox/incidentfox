@@ -520,46 +520,19 @@ class InteractiveAgentSession:
                     f"from root agent '{root_config.name}'"
                 )
 
-            # Build subagents from config with topological sort for nested hierarchies
+            # Build subagents from config
             root_name = root_config.name if root_config else None
 
-            # Import topological sort for dependency ordering
-            from agent_builder import topological_sort_agents, validate_agent_dependencies
-
-            # Validate dependencies first
-            dep_errors = validate_agent_dependencies(self.team_config.agents)
-            if dep_errors:
-                for error in dep_errors:
-                    print(f"⚠️  [AGENT] Dependency validation warning: {error}")
-
-            # Get build order (leaf agents first, then parents)
-            try:
-                build_order = topological_sort_agents(self.team_config.agents)
-                print(
-                    f"🔨 [AGENT] Build order (dependencies first): {build_order}"
-                )
-            except ValueError as e:
-                # Circular dependency detected, fall back to flat iteration
-                print(f"⚠️  [AGENT] {e}, falling back to flat agent registration")
-                build_order = [
-                    name
-                    for name, cfg in self.team_config.agents.items()
-                    if cfg.enabled and name != root_name
-                ]
-
-            # Build agents in dependency order
-            for name in build_order:
+            # Register all enabled subagents
+            for name, agent_cfg in self.team_config.agents.items():
                 if name == root_name:
                     continue  # Skip root agent
 
-                agent_cfg = self.team_config.agents[name]
                 if not agent_cfg.enabled or not agent_cfg.prompt.system:
                     continue
 
                 # Create AgentDefinition
-                # Note: Claude SDK doesn't support nested agents parameter in AgentDefinition
-                # So we register all agents flat at the root level, but the logical hierarchy
-                # is tracked via sub_agents config for potential future use
+                # All agents registered flat at root level
                 subagents[name] = AgentDefinition(
                     description=agent_cfg.prompt.prefix or f"{name} specialist",
                     prompt=agent_cfg.prompt.system,

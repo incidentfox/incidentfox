@@ -59,7 +59,6 @@ class AgentConfig:
         tools: Tool filtering configuration
         model: Model settings (temperature, max_tokens, top_p)
         max_turns: Maximum conversation turns (prevents infinite loops)
-        sub_agents: Nested subagent dependencies for hierarchical agents
     """
     enabled: bool = True
     name: str = ""
@@ -67,7 +66,6 @@ class AgentConfig:
     tools: ToolsConfig = field(default_factory=ToolsConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     max_turns: int | None = None
-    sub_agents: dict[str, bool] = field(default_factory=dict)
 
 
 @dataclass
@@ -135,7 +133,6 @@ def load_team_config() -> TeamConfig:
                 top_p=model_data.get("top_p"),
             ),
             max_turns=cfg.get("max_turns"),
-            sub_agents=cfg.get("sub_agents", {}),
         )
 
     return TeamConfig(
