@@ -103,9 +103,9 @@ def format_agent_list(agents_config: Dict[str, Any]) -> str:
 
         # Model name (short version)
         if "gpt" in model_name.lower():
-            parts.append(f"(GPT-4o")
+            parts.append("(GPT-4o")
         elif "claude" in model_name.lower():
-            parts.append(f"(Claude")
+            parts.append("(Claude")
         else:
             parts.append(f"({model_name}")
 

@@ -1,12 +1,14 @@
 """Tests for per-agent model settings via HTTP headers in credential-proxy."""
 
 import json
-from fastapi import Request
-from unittest.mock import AsyncMock, MagicMock
 
 # Import the router
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
+from fastapi import Request
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from credential_resolver.llm_proxy import router
@@ -129,6 +131,7 @@ if __name__ == "__main__":
         except AssertionError as e:
             print(f"❌ {test.__name__}: {e}")
             import traceback
+
             traceback.print_exc()
             exit(1)
 

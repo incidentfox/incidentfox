@@ -118,6 +118,7 @@ else:
 
 # Register agent config commands on the default app instance
 from agent_config_commands import register_agent_config_commands
+
 register_agent_config_commands(app)
 
 # SRE Agent configuration
@@ -6728,6 +6729,7 @@ def register_all_handlers(bolt_app):
     """
     # Register agent config commands (slash commands + modal handlers)
     from agent_config_commands import register_agent_config_commands
+
     register_agent_config_commands(bolt_app)
 
     # Event handlers
