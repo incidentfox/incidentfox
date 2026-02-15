@@ -116,6 +116,10 @@ else:
     )
     logger.info("Single-workspace mode (dev/testing)")
 
+# Register agent config commands on the default app instance
+from agent_config_commands import register_agent_config_commands
+register_agent_config_commands(app)
+
 # SRE Agent configuration
 SRE_AGENT_URL = os.environ.get("SRE_AGENT_URL", "http://localhost:8000")
 
@@ -6722,6 +6726,10 @@ def register_all_handlers(bolt_app):
     Bolt App instances (one per white-label Slack app). The handler
     functions are defined above as module-level functions.
     """
+    # Register agent config commands (slash commands + modal handlers)
+    from agent_config_commands import register_agent_config_commands
+    register_agent_config_commands(bolt_app)
+
     # Event handlers
     bolt_app.event("app_mention")(handle_mention)
     bolt_app.event("message")(handle_message)
