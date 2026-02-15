@@ -956,12 +956,71 @@ async def jaeger_proxy(path: str, request: Request):
     methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
 )
 async def github_proxy(path: str, request: Request):
-    """Reverse proxy for GitHub API requests (for GitHub Enterprise).
+    """Reverse proxy for GitHub API requests.
 
-    Note: For github.com, clients can use the fixed URL directly.
-    This proxy is for GitHub Enterprise with customer-specific URLs.
+    Defaults to api.github.com for standard GitHub.
+    Supports GitHub Enterprise via optional 'domain' field in credentials.
     """
-    return await generic_proxy("github", path, request)
+    import httpx
+
+    logger.info(f"GitHub proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get GitHub credentials
+    creds = await get_credentials(tenant_id, team_id, "github")
+    if not creds or not creds.get("api_key"):
+        logger.error(f"GitHub not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Github integration not configured",
+        )
+
+    # Build target URL (default to github.com, support GHE via domain field)
+    domain = creds.get("domain", "https://api.github.com")
+    if not domain.startswith(("http://", "https://")):
+        domain = f"https://{domain}"
+    target_url = f"{domain.rstrip('/')}/{path}"
+    logger.info(f"GitHub proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("github", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/vnd.github+json"),
+        **auth_headers,
+    }
+
+    # Get query params
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            resp = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            headers=dict(resp.headers),
+        )
+    except httpx.TimeoutException:
+        logger.error("GitHub request timed out")
+        raise HTTPException(status_code=504, detail="GitHub request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"GitHub request error: {e}")
+        raise HTTPException(status_code=502, detail=f"GitHub request failed: {e}")
 
 
 @app.api_route(
