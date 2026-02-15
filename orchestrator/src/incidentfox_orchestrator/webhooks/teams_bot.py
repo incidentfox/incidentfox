@@ -86,6 +86,33 @@ def _strip_mentions(activity: Activity) -> str:
     return text.strip()
 
 
+WELCOME_MESSAGE = (
+    "**Welcome to IncidentFox!**\n\n"
+    "IncidentFox is an AI-powered incident investigation assistant "
+    "for Microsoft Teams.\n\n"
+    "Get started by mentioning me with a question or issue:\n"
+    "- `@IncidentFox investigate high error rate on checkout service`\n"
+    "- `@IncidentFox why is pod X crashing in namespace Y?`\n"
+    "- `@IncidentFox help` \u2014 see all available commands\n\n"
+    "I\u2019ll analyze logs, metrics, and infrastructure to help you "
+    "triage incidents faster."
+)
+
+HELP_MESSAGE = (
+    "**IncidentFox Help**\n\n"
+    "I\u2019m an AI-powered incident investigation assistant. "
+    "Mention me with a description of the issue and I\u2019ll investigate.\n\n"
+    "**Example prompts:**\n"
+    "- `@IncidentFox investigate high latency on the payments service`\n"
+    "- `@IncidentFox why are pods restarting in the production namespace?`\n"
+    "- `@IncidentFox check the error logs for the auth service`\n"
+    "- `@IncidentFox triage this alert: <paste alert details>`\n"
+    "- `@IncidentFox help` \u2014 show this help message\n\n"
+    "I can access your team\u2019s Kubernetes clusters, logs, metrics, and more "
+    "to help you find the root cause faster."
+)
+
+
 class TeamsIntegration:
     """
     Manages MS Teams Bot Framework integration.
@@ -201,6 +228,16 @@ class TeamsIntegration:
             await turn_context.send_activity(
                 "Hey! What would you like me to investigate?"
             )
+            return
+
+        # Static help response — no LLM call
+        if text.lower() == "help":
+            _log(
+                "teams_help_requested",
+                correlation_id=correlation_id,
+                channel_id=channel_id,
+            )
+            await turn_context.send_activity(HELP_MESSAGE)
             return
 
         # Send typing indicator
@@ -491,10 +528,7 @@ class TeamsIntegration:
                     activity.conversation.id if activity.conversation else None
                 ),
             )
-            await turn_context.send_activity(
-                "Hi! I'm IncidentFox, your AI incident investigation assistant. "
-                "Mention me with a question or issue description, and I'll help investigate!"
-            )
+            await turn_context.send_activity(WELCOME_MESSAGE)
 
         if members_removed:
             _log(
