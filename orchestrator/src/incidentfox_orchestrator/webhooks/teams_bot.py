@@ -457,6 +457,7 @@ class TeamsIntegration:
                     ),
                     correlation_id=correlation_id,
                     agent_base_url=dedicated_agent_url,
+                    session_id=session_id,
                 )
             )
 

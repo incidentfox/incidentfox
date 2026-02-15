@@ -542,6 +542,7 @@ class AgentApiClient:
         trigger_source: Optional[str] = None,  # Source that triggered this run
         tenant_id: Optional[str] = None,  # Org ID for credential lookup
         team_id: Optional[str] = None,  # Team node ID for credential lookup
+        session_id: Optional[str] = None,  # Stable thread/session ID for sandbox reuse
     ) -> dict[str, Any]:
         """Call the agent service's /investigate endpoint and consume the SSE stream."""
         base = agent_base_url.rstrip("/") if agent_base_url else self.base_url
@@ -552,8 +553,11 @@ class AgentApiClient:
             "prompt": message,
             "team_token": team_token,
         }
-        # Use correlation_id as thread_id for traceability
-        if correlation_id:
+        # session_id = stable per thread (enables sandbox reuse for follow-ups)
+        # correlation_id = unique per request (for tracing only)
+        if session_id:
+            payload["thread_id"] = session_id
+        elif correlation_id:
             payload["thread_id"] = correlation_id
 
         if tenant_id:
