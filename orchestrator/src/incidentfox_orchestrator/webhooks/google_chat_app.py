@@ -172,11 +172,9 @@ class GoogleChatIntegration:
             )
         )
 
-        # Immediate "working on it" reply in the same thread
-        reply: Dict[str, Any] = {"text": "IncidentFox is working on it..."}
-        if thread_key:
-            reply["thread"] = {"name": thread_key}
-        return reply
+        # Return empty — sync createMessageAction can't reply in threads.
+        # The async handler sends a "working on it" + result via REST API.
+        return {}
 
     async def _process_message_async(
         self,
@@ -263,6 +261,15 @@ class GoogleChatIntegration:
                     correlation_id=correlation_id,
                     error=str(e),
                 )
+
+            # Send "working on it" in the thread via REST API
+            await self._send_message_to_space(
+                space_name=space_name,
+                text="IncidentFox is working on it...",
+                thread_key=thread_key,
+                effective_config=effective_config,
+                correlation_id=correlation_id,
+            )
 
             run_id = uuid.uuid4().hex
 
