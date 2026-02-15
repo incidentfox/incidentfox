@@ -45,10 +45,7 @@ def main():
     reviews = list_reviews(owner, repo, args.pr)
 
     # Find our previous reviews (by marker in body)
-    our_reviews = [
-        r for r in reviews
-        if args.bot_marker in (r.get("body") or "")
-    ]
+    our_reviews = [r for r in reviews if args.bot_marker in (r.get("body") or "")]
 
     # Get all inline comments
     inline_comments = list_review_comments(owner, repo, args.pr)
@@ -56,8 +53,7 @@ def main():
     # Find our inline comments (comments belonging to our reviews)
     our_review_ids = {r["id"] for r in our_reviews}
     our_comments = [
-        c for c in inline_comments
-        if c.get("pull_request_review_id") in our_review_ids
+        c for c in inline_comments if c.get("pull_request_review_id") in our_review_ids
     ]
 
     # Find the most recent review commit
@@ -76,14 +72,14 @@ def main():
         print(f"Last reviewed commit: {last_reviewed_sha[:12]}")
 
         if last_reviewed_sha == head_sha:
-            print("\nStatus: ALREADY REVIEWED at current HEAD — no new changes to review.")
+            print(
+                "\nStatus: ALREADY REVIEWED at current HEAD — no new changes to review."
+            )
             print("ACTION: Skip this PR.")
         else:
-            print(f"\nNew commits since last review:")
+            print("\nNew commits since last review:")
             try:
-                comparison = compare_commits(
-                    owner, repo, last_reviewed_sha, head_sha
-                )
+                comparison = compare_commits(owner, repo, last_reviewed_sha, head_sha)
                 new_files = comparison.get("files", [])
                 total_commits = comparison.get("total_commits", 0)
                 print(f"  Commits: {total_commits}")
@@ -112,7 +108,8 @@ def main():
 
     # Print other people's comments for awareness
     other_comments = [
-        c for c in inline_comments
+        c
+        for c in inline_comments
         if c.get("pull_request_review_id") not in our_review_ids
     ]
     if other_comments:
