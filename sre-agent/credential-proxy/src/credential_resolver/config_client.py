@@ -204,7 +204,6 @@ class ConfigServiceClient:
         is_trial = config.get("is_trial") if config.get("is_trial") is not None else anthropic_config.get("is_trial", False)
         trial_expires_at = config.get("trial_expires_at") if config.get("trial_expires_at") is not None else anthropic_config.get("trial_expires_at")
         subscription_status = config.get("subscription_status") if config.get("subscription_status") is not None else anthropic_config.get("subscription_status", "none")
->>>>>>> 53a2f360 (fix: Trial field falsy-value bug, remove stale LLM_PROVIDER/LLM_MODEL, clean up debug logs)
 
         # Step 1: Check if customer has valid access (trial OR subscription)
         has_valid_trial = False
