@@ -42,10 +42,11 @@ class ModelConfig:
     Supported by LiteLLM in credential-proxy (llm_proxy.py lines 460-470).
     These settings apply globally to the session (Claude SDK limitation).
     """
+
     name: str = "claude-sonnet-4-20250514"
     temperature: float | None = None  # 0.0-1.0, None = provider default
-    max_tokens: int | None = None     # Maximum response tokens
-    top_p: float | None = None        # Nucleus sampling parameter (0.0-1.0)
+    max_tokens: int | None = None  # Maximum response tokens
+    top_p: float | None = None  # Nucleus sampling parameter (0.0-1.0)
 
 
 @dataclass
@@ -60,6 +61,7 @@ class AgentConfig:
         model: Model settings (temperature, max_tokens, top_p)
         max_turns: Maximum conversation turns (prevents infinite loops)
     """
+
     enabled: bool = True
     name: str = ""
     prompt: PromptConfig = field(default_factory=PromptConfig)

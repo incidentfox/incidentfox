@@ -9,13 +9,14 @@ Tests the complete implementation:
 """
 
 import json
+import os
 import sys
 import tempfile
-import os
 from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
 
 def test_config_loading():
     """Test that config loads correctly with new fields."""
@@ -45,7 +46,7 @@ def test_backward_compatibility():
         name="old_agent",
         enabled=True,
         prompt=PromptConfig(system="Test prompt"),
-        tools=ToolsConfig(enabled=["*"])
+        tools=ToolsConfig(enabled=["*"]),
     )
 
     # New fields should have defaults
@@ -58,17 +59,13 @@ def test_backward_compatibility():
 
 def test_model_settings_environment():
     """Test that model settings are applied via environment variables."""
-    from config import AgentConfig, ModelConfig
     import os
+
+    from config import AgentConfig, ModelConfig
 
     # Create agent with model settings
     agent = AgentConfig(
-        name="test",
-        model=ModelConfig(
-            temperature=0.5,
-            max_tokens=3000,
-            top_p=0.95
-        )
+        name="test", model=ModelConfig(temperature=0.5, max_tokens=3000, top_p=0.95)
     )
 
     # Simulate what agent.py does
@@ -96,41 +93,36 @@ def test_complete_integration():
         "agents": {
             "planner": {
                 "enabled": True,
-                "model": {
-                    "temperature": 0.3,
-                    "max_tokens": 4000
-                },
+                "model": {"temperature": 0.3, "max_tokens": 4000},
                 "max_turns": 50,
                 "prompt": {
                     "system": "You are a planner agent",
-                    "prefix": "Planning and coordination"
+                    "prefix": "Planning and coordination",
                 },
-                "tools": {
-                    "enabled": ["*"]
-                }
+                "tools": {"enabled": ["*"]},
             },
             "investigation": {
                 "enabled": True,
                 "max_turns": 40,
                 "prompt": {
                     "system": "You are an investigator",
-                    "prefix": "Incident investigation"
-                }
+                    "prefix": "Incident investigation",
+                },
             },
             "k8s": {
                 "enabled": True,
                 "prompt": {
                     "system": "You are a k8s specialist",
-                    "prefix": "Kubernetes debugging"
-                }
+                    "prefix": "Kubernetes debugging",
+                },
             },
             "metrics": {
                 "enabled": True,
                 "prompt": {
                     "system": "You are a metrics analyst",
-                    "prefix": "Metrics analysis"
-                }
-            }
+                    "prefix": "Metrics analysis",
+                },
+            },
         }
     }
 
@@ -150,18 +142,18 @@ def test_complete_integration():
                 name=model_data.get("name", "claude-sonnet-4-20250514"),
                 temperature=model_data.get("temperature"),
                 max_tokens=model_data.get("max_tokens"),
-                top_p=model_data.get("top_p")
+                top_p=model_data.get("top_p"),
             ),
             max_turns=cfg.get("max_turns"),
             prompt=PromptConfig(
                 system=prompt_data.get("system", ""),
                 prefix=prompt_data.get("prefix", ""),
-                suffix=prompt_data.get("suffix", "")
+                suffix=prompt_data.get("suffix", ""),
             ),
             tools=ToolsConfig(
                 enabled=tools_data.get("enabled", ["*"]),
-                disabled=tools_data.get("disabled", [])
-            )
+                disabled=tools_data.get("disabled", []),
+            ),
         )
 
     # Verify agents were parsed correctly
@@ -197,5 +189,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         exit(1)
