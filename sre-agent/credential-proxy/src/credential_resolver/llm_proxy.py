@@ -166,16 +166,22 @@ async def llm_proxy(request: Request):
             body["temperature"] = temp
             logger.debug(f"Applied temperature={temp} from header (agent={agent_name})")
         except ValueError:
-            logger.warning(f"Invalid x-agent-temperature header: {request.headers['x-agent-temperature']}")
+            logger.warning(
+                f"Invalid x-agent-temperature header: {request.headers['x-agent-temperature']}"
+            )
 
     # Max tokens: positive integer
     if "x-agent-max-tokens" in request.headers:
         try:
             max_tok = int(request.headers["x-agent-max-tokens"])
             body["max_tokens"] = max_tok
-            logger.debug(f"Applied max_tokens={max_tok} from header (agent={agent_name})")
+            logger.debug(
+                f"Applied max_tokens={max_tok} from header (agent={agent_name})"
+            )
         except ValueError:
-            logger.warning(f"Invalid x-agent-max-tokens header: {request.headers['x-agent-max-tokens']}")
+            logger.warning(
+                f"Invalid x-agent-max-tokens header: {request.headers['x-agent-max-tokens']}"
+            )
 
     # Top-p: 0.0-1.0 (nucleus sampling)
     if "x-agent-top-p" in request.headers:
@@ -184,7 +190,9 @@ async def llm_proxy(request: Request):
             body["top_p"] = top_p
             logger.debug(f"Applied top_p={top_p} from header (agent={agent_name})")
         except ValueError:
-            logger.warning(f"Invalid x-agent-top-p header: {request.headers['x-agent-top-p']}")
+            logger.warning(
+                f"Invalid x-agent-top-p header: {request.headers['x-agent-top-p']}"
+            )
 
     # 3. Determine model with priority chain
     # Import here to avoid circular imports with main.py

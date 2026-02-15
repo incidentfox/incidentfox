@@ -59,8 +59,8 @@ def test_backward_compatibility():
 
 def test_model_settings_headers():
     """Test that model settings are applied via agent context headers."""
+    from agent_headers import clear_agent_context, get_agent_headers, set_agent_context
     from config import AgentConfig, ModelConfig
-    from agent_headers import set_agent_context, get_agent_headers, clear_agent_context
 
     # Create agent with model settings
     agent = AgentConfig(
@@ -74,7 +74,7 @@ def test_model_settings_headers():
             "temperature": agent.model.temperature,
             "max_tokens": agent.model.max_tokens,
             "top_p": agent.model.top_p,
-        }
+        },
     )
 
     # Verify headers are correctly generated

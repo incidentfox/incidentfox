@@ -6,7 +6,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agent_headers import set_agent_context, clear_agent_context, get_agent_headers
+from agent_headers import clear_agent_context, get_agent_headers, set_agent_context
 
 
 def test_agent_context_headers():
@@ -18,7 +18,7 @@ def test_agent_context_headers():
             "temperature": 0.7,
             "max_tokens": 2000,
             "top_p": 0.9,
-        }
+        },
     )
 
     headers = get_agent_headers()
@@ -41,7 +41,7 @@ def test_agent_context_partial_settings():
         model_config={
             "temperature": 0.5,
             # max_tokens and top_p not set
-        }
+        },
     )
 
     headers = get_agent_headers()
@@ -62,7 +62,7 @@ def test_agent_context_none_values():
             "temperature": None,
             "max_tokens": 1000,
             "top_p": None,
-        }
+        },
     )
 
     headers = get_agent_headers()

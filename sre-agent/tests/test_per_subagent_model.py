@@ -6,8 +6,8 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from agent_headers import clear_agent_context, get_agent_headers, set_agent_context
 from config import AgentConfig, ModelConfig, PromptConfig
-from agent_headers import set_agent_context, get_agent_headers, clear_agent_context
 
 
 def test_subagent_context_switching():
@@ -43,7 +43,7 @@ def test_subagent_context_switching():
                 "temperature": agent_cfg.model.temperature,
                 "max_tokens": agent_cfg.model.max_tokens,
                 "top_p": agent_cfg.model.top_p,
-            }
+            },
         )
 
         # Verify headers match this subagent's settings
@@ -76,7 +76,7 @@ def test_subagent_with_partial_config():
             "temperature": agent.model.temperature,
             "max_tokens": agent.model.max_tokens,  # None
             "top_p": agent.model.top_p,  # None
-        }
+        },
     )
 
     headers = get_agent_headers()
@@ -95,16 +95,14 @@ def test_subagent_context_isolation():
     """Test that context changes don't affect previous subagent calls."""
     # Set context for first subagent
     set_agent_context(
-        "subagent1",
-        {"temperature": 0.3, "max_tokens": 1000, "top_p": None}
+        "subagent1", {"temperature": 0.3, "max_tokens": 1000, "top_p": None}
     )
     headers1 = get_agent_headers()
     assert headers1["X-Agent-Temperature"] == "0.3"
 
     # Switch to second subagent (this is what happens on next PreToolUse)
     set_agent_context(
-        "subagent2",
-        {"temperature": 0.8, "max_tokens": 3000, "top_p": 0.95}
+        "subagent2", {"temperature": 0.8, "max_tokens": 3000, "top_p": 0.95}
     )
     headers2 = get_agent_headers()
     assert headers2["X-Agent-Temperature"] == "0.8"
@@ -129,8 +127,7 @@ def test_differentiated_agent_temperatures():
 
     for name, temp, description in agents_scenarios:
         set_agent_context(
-            name,
-            {"temperature": temp, "max_tokens": None, "top_p": None}
+            name, {"temperature": temp, "max_tokens": None, "top_p": None}
         )
 
         headers = get_agent_headers()
@@ -159,6 +156,7 @@ if __name__ == "__main__":
         except AssertionError as e:
             print(f"❌ {test.__name__}: {e}")
             import traceback
+
             traceback.print_exc()
             exit(1)
 

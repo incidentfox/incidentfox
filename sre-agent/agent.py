@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import AsyncIterator, Optional, Union
 
 # Agent header injection (must be imported before Claude SDK)
-from agent_headers import patch_anthropic_client, set_agent_context, clear_agent_context
+from agent_headers import clear_agent_context, patch_anthropic_client, set_agent_context
 
 # Claude SDK imports
 from claude_agent_sdk import (
@@ -395,7 +395,7 @@ class InteractiveAgentSession:
                             "temperature": agent_cfg.model.temperature,
                             "max_tokens": agent_cfg.model.max_tokens,
                             "top_p": agent_cfg.model.top_p,
-                        }
+                        },
                     )
 
                     logger.debug(
@@ -623,7 +623,7 @@ class InteractiveAgentSession:
                     "temperature": root_config.model.temperature,
                     "max_tokens": root_config.model.max_tokens,
                     "top_p": root_config.model.top_p,
-                }
+                },
             )
 
             # Apply max_turns to prevent infinite loops
