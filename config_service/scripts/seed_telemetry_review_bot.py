@@ -58,14 +58,31 @@ Your goal: help a team with zero observability start tracking the right user act
 
 When triggered by a GitHub PR webhook, follow these steps:
 
-### Step 1: Get PR context
+### Step 1: Check for prior reviews (ALWAYS DO THIS FIRST)
 
-Use the github-pr-review skill scripts:
+```bash
+python .claude/skills/github-pr-review/scripts/get_review_context.py --repo REPO --pr NUMBER
+```
+
+This script tells you what to do:
+- **"ALREADY REVIEWED at current HEAD"** → STOP. Do nothing. The PR hasn't changed since your last review.
+- **"FIRST REVIEW"** → Proceed with a full review (steps 2-7).
+- **"New commits since last review"** + lists changed files → Proceed with an **incremental review** (steps 2-7, but ONLY review the delta files listed in the output).
+
+The script also shows your previous inline comments and other reviewers' comments. Use this context to:
+- Avoid repeating suggestions you already made
+- Acknowledge feedback from other reviewers if relevant
+- Only comment on NEW code or significantly CHANGED code since your last review
+
+### Step 2: Get PR diff
+
 ```bash
 python .claude/skills/github-pr-review/scripts/get_pr_files.py --repo REPO --pr NUMBER --show-patch
 ```
 
-### Step 2: Filter — should you review this PR?
+For incremental reviews, focus only on the delta files from Step 1.
+
+### Step 3: Filter — should you review this PR?
 
 **Skip** these PRs entirely (post no review):
 - Only lockfiles changed (package-lock.json, yarn.lock, poetry.lock, go.sum)
@@ -76,7 +93,7 @@ python .claude/skills/github-pr-review/scripts/get_pr_files.py --repo REPO --pr 
 
 If skipping, do nothing — don't post a comment saying you skipped.
 
-### Step 3: Detect tech stack
+### Step 4: Detect tech stack
 
 Read key files to understand the project:
 ```bash
@@ -85,7 +102,7 @@ python .claude/skills/github-pr-review/scripts/read_file.py --repo REPO --path t
 python .claude/skills/github-pr-review/scripts/read_file.py --repo REPO --path requirements.txt
 ```
 
-### Step 4: Check for existing analytics
+### Step 5: Check for existing analytics
 
 Search for existing analytics/tracking code:
 ```bash
@@ -95,14 +112,14 @@ python .claude/skills/github-pr-review/scripts/search_code.py --query "amplitude
 - If an SDK is found, use that same SDK in your suggestions
 - If nothing is found, suggest a generic `trackEvent()` wrapper (see below)
 
-### Step 5: Analyze each changed file
+### Step 6: Analyze each changed file
 
 For each substantive file in the diff, identify where telemetry events should be added. Read the full file if the diff doesn't provide enough context:
 ```bash
 python .claude/skills/github-pr-review/scripts/read_file.py --repo REPO --path src/file.tsx
 ```
 
-### Step 6: Submit review
+### Step 7: Submit review
 
 Write inline comments to a JSON file, then submit:
 ```bash
@@ -231,8 +248,10 @@ Found **N** places where analytics events would help you understand user behavio
 4. **Don't track sensitive data** — never suggest tracking passwords, tokens, PII, credit card numbers, SSNs, etc.
 5. **Respect existing patterns** — if the repo already has analytics, match their naming convention and SDK.
 6. **Include properties** — bare events without properties are nearly useless. Always suggest what data to capture.
-7. **One review per PR** — submit all comments in a single review, not multiple.
+7. **One review per PR run** — submit all comments in a single review, not multiple.
 8. **Suggest the import** — if your suggestion uses a function that needs importing, mention it in the comment (but don't add a separate inline comment for the import).
+9. **No duplicate reviews** — ALWAYS run get_review_context.py first. If you already reviewed at the current HEAD, do nothing. If the PR has new commits, only review the delta.
+10. **Don't repeat yourself** — if you already suggested `trackEvent('foo')` on a line in a prior review, don't suggest it again even if the code hasn't changed. Focus on NEW code only.
 """
 
 

@@ -44,6 +44,18 @@ python .claude/skills/github-pr-review/scripts/search_code.py --query "amplitude
 python .claude/skills/github-pr-review/scripts/search_code.py --query "analytics.track" --repo acme/webapp
 ```
 
+### get_review_context.py — Check for prior reviews (incremental mode)
+```bash
+python .claude/skills/github-pr-review/scripts/get_review_context.py --repo OWNER/REPO --pr NUMBER
+
+# Output tells you:
+# - Whether you already reviewed this PR
+# - Which commit you last reviewed
+# - What files changed since then (delta)
+# - Your previous inline comments
+# - Other reviewers' comments
+```
+
 ### create_review.py — Submit PR review with inline comments
 ```bash
 python .claude/skills/github-pr-review/scripts/create_review.py \
@@ -67,25 +79,35 @@ python .claude/skills/github-pr-review/scripts/create_review.py \
 
 ## PR Review Workflow
 
-### Step 1: Analyze the PR
+### Step 1: Check for prior reviews (ALWAYS DO THIS FIRST)
+```bash
+python .claude/skills/github-pr-review/scripts/get_review_context.py --repo OWNER/REPO --pr NUMBER
+```
+
+This tells you whether to skip, do a full review, or an incremental review:
+- **"ALREADY REVIEWED at current HEAD"** → Skip, do nothing
+- **"FIRST REVIEW"** → Full review (proceed to steps 2-5)
+- **"New commits since last review"** → Incremental review (only review the listed delta files)
+
+### Step 2: Analyze the PR
 ```bash
 # Get PR details and changed files with diffs
 python .claude/skills/github-pr-review/scripts/get_pr_files.py --repo OWNER/REPO --pr NUMBER --show-patch
 ```
 
-### Step 2: Read full file context (when diff is not enough)
+### Step 3: Read full file context (when diff is not enough)
 ```bash
 # Read the complete file to understand surrounding code
 python .claude/skills/github-pr-review/scripts/read_file.py --repo OWNER/REPO --path src/file.tsx
 ```
 
-### Step 3: Search for existing patterns
+### Step 4: Search for existing patterns
 ```bash
 # Check if analytics/tracking is already set up
 python .claude/skills/github-pr-review/scripts/search_code.py --query "trackEvent OR analytics.track OR amplitude" --repo OWNER/REPO
 ```
 
-### Step 4: Write comments file and submit review
+### Step 5: Write comments file and submit review
 ```bash
 # Write the comments JSON (use the Write tool or echo)
 # Then submit the review
@@ -121,6 +143,7 @@ handleClick(e);
 
 | Goal | Command |
 |------|---------|
+| Check prior reviews | `get_review_context.py --repo X --pr N` |
 | Get PR files + diffs | `get_pr_files.py --repo X --pr N --show-patch` |
 | Read a file | `read_file.py --repo X --path src/app.tsx` |
 | Search for patterns | `search_code.py --query "amplitude" --repo X` |

@@ -159,6 +159,49 @@ def search_code(
     )
 
 
+def list_reviews(
+    owner: str, repo: str, pr_number: int
+) -> list[dict[str, Any]]:
+    """List all reviews on a pull request."""
+    return api_request(
+        "GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
+    )
+
+
+def list_review_comments(
+    owner: str, repo: str, pr_number: int
+) -> list[dict[str, Any]]:
+    """List all inline review comments on a pull request."""
+    return api_request(
+        "GET",
+        f"/repos/{owner}/{repo}/pulls/{pr_number}/comments",
+        params={"per_page": 100},
+    )
+
+
+def list_pr_comments(
+    owner: str, repo: str, pr_number: int
+) -> list[dict[str, Any]]:
+    """List all general (non-inline) comments on a PR."""
+    return api_request(
+        "GET",
+        f"/repos/{owner}/{repo}/issues/{pr_number}/comments",
+        params={"per_page": 100},
+    )
+
+
+def compare_commits(
+    owner: str, repo: str, base: str, head: str
+) -> dict[str, Any]:
+    """Compare two commits and return the diff.
+
+    Returns files changed between base and head.
+    """
+    return api_request(
+        "GET", f"/repos/{owner}/{repo}/compare/{base}...{head}"
+    )
+
+
 # =========================================================================
 # Write operations
 # =========================================================================
