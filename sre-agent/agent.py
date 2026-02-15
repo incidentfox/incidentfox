@@ -520,56 +520,21 @@ class InteractiveAgentSession:
                     f"from root agent '{root_config.name}'"
                 )
 
-            # Build subagents from config with topological sort for nested hierarchies
+            # Build subagents from config (non-root agents become subagents)
             root_name = root_config.name if root_config else None
-
-            # Import topological sort for dependency ordering
-            from agent_builder import topological_sort_agents, validate_agent_dependencies
-
-            # Validate dependencies first
-            dep_errors = validate_agent_dependencies(self.team_config.agents)
-            if dep_errors:
-                for error in dep_errors:
-                    print(f"⚠️  [AGENT] Dependency validation warning: {error}")
-
-            # Get build order (leaf agents first, then parents)
-            try:
-                build_order = topological_sort_agents(self.team_config.agents)
-                print(
-                    f"🔨 [AGENT] Build order (dependencies first): {build_order}"
-                )
-            except ValueError as e:
-                # Circular dependency detected, fall back to flat iteration
-                print(f"⚠️  [AGENT] {e}, falling back to flat agent registration")
-                build_order = [
-                    name
-                    for name, cfg in self.team_config.agents.items()
-                    if cfg.enabled and name != root_name
-                ]
-
-            # Build agents in dependency order
-            for name in build_order:
-                if name == root_name:
-                    continue  # Skip root agent
-
-                agent_cfg = self.team_config.agents[name]
-                if not agent_cfg.enabled or not agent_cfg.prompt.system:
+            for name, agent_cfg in self.team_config.agents.items():
+                if name == root_name or not agent_cfg.enabled:
                     continue
-
-                # Create AgentDefinition
-                # Note: Claude SDK doesn't support nested agents parameter in AgentDefinition
-                # So we register all agents flat at the root level, but the logical hierarchy
-                # is tracked via sub_agents config for potential future use
-                subagents[name] = AgentDefinition(
-                    description=agent_cfg.prompt.prefix or f"{name} specialist",
-                    prompt=agent_cfg.prompt.system,
-                    tools=(
-                        agent_cfg.tools.enabled
-                        if agent_cfg.tools.enabled != ["*"]
-                        else None
-                    ),
-                )
-
+                if agent_cfg.prompt.system:
+                    subagents[name] = AgentDefinition(
+                        description=agent_cfg.prompt.prefix or f"{name} specialist",
+                        prompt=agent_cfg.prompt.system,
+                        tools=(
+                            agent_cfg.tools.enabled
+                            if agent_cfg.tools.enabled != ["*"]
+                            else None
+                        ),
+                    )
             print(
                 f"🤖 [AGENT] Registered {len(subagents)} subagents: "
                 f"{', '.join(subagents.keys())}"
@@ -594,32 +559,6 @@ class InteractiveAgentSession:
             agents=subagents,
             hooks={"PostToolUse": [HookMatcher(hooks=[capture_tool_output])]},
         )
-
-        # Apply model settings and execution limits from root agent config
-        if root_config:
-            # Apply max_turns to prevent infinite loops
-            if root_config.max_turns:
-                options_kwargs["max_turns"] = root_config.max_turns
-                print(f"🔧 [AGENT] Max turns: {root_config.max_turns}")
-
-            # Apply model settings globally via environment variables
-            # credential-proxy forwards these to LiteLLM (llm_proxy.py lines 460-470)
-            # Note: These apply to all subagents (Claude SDK limitation)
-            if root_config.model.temperature is not None:
-                import os
-                os.environ["LLM_TEMPERATURE"] = str(root_config.model.temperature)
-                print(f"🔧 [AGENT] Temperature: {root_config.model.temperature}")
-
-            if root_config.model.max_tokens is not None:
-                import os
-                os.environ["LLM_MAX_TOKENS"] = str(root_config.model.max_tokens)
-                print(f"🔧 [AGENT] Max tokens: {root_config.model.max_tokens}")
-
-            if root_config.model.top_p is not None:
-                import os
-                os.environ["LLM_TOP_P"] = str(root_config.model.top_p)
-                print(f"🔧 [AGENT] Top-p: {root_config.model.top_p}")
-
         if system_prompt:
             # Method 3: Append custom prompt to claude_code preset
             # Preserves built-in tool instructions, safety, and env context
