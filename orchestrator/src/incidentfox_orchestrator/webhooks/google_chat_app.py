@@ -60,6 +60,33 @@ def generate_session_id(space_id: str, thread_key: str) -> str:
     return f"gchat-{space_id.lower()[:20]}-{sanitized}"
 
 
+WELCOME_MESSAGE = (
+    "*Welcome to IncidentFox!*\n\n"
+    "IncidentFox is an AI-powered incident investigation assistant "
+    "for Google Chat\u2122.\n\n"
+    "Get started by mentioning me with a question or issue:\n"
+    "- `@IncidentFox investigate high error rate on checkout service`\n"
+    "- `@IncidentFox why is pod X crashing in namespace Y?`\n"
+    "- `@IncidentFox help` \u2014 see all available commands\n\n"
+    "I\u2019ll analyze logs, metrics, and infrastructure to help you "
+    "triage incidents faster."
+)
+
+HELP_MESSAGE = (
+    "*IncidentFox Help*\n\n"
+    "I\u2019m an AI-powered incident investigation assistant. "
+    "Mention me with a description of the issue and I\u2019ll investigate.\n\n"
+    "*Example prompts:*\n"
+    "- `@IncidentFox investigate high latency on the payments service`\n"
+    "- `@IncidentFox why are pods restarting in the production namespace?`\n"
+    "- `@IncidentFox check the error logs for the auth service`\n"
+    "- `@IncidentFox triage this alert: <paste alert details>`\n"
+    "- `@IncidentFox help` \u2014 show this help message\n\n"
+    "I can access your team\u2019s Kubernetes clusters, logs, metrics, and more "
+    "to help you find the root cause faster."
+)
+
+
 class GoogleChatIntegration:
     """
     Manages Google Chat integration lifecycle.
@@ -151,6 +178,15 @@ class GoogleChatIntegration:
             session_id=session_id,
             text_length=len(text),
         )
+
+        # Static help response — no LLM call
+        if text.lower() == "help":
+            _log(
+                "gchat_help_requested",
+                correlation_id=correlation_id,
+                space_id=space_id,
+            )
+            return {"text": HELP_MESSAGE}
 
         if not text:
             return {
@@ -482,12 +518,7 @@ class GoogleChatIntegration:
             added_by=user_display_name,
         )
 
-        return {
-            "text": (
-                "Hi! I'm IncidentFox, your AI incident investigation assistant. "
-                "Mention me with a question or issue description, and I'll help investigate!"
-            ),
-        }
+        return {"text": WELCOME_MESSAGE}
 
     def _handle_removed_from_space(
         self,
