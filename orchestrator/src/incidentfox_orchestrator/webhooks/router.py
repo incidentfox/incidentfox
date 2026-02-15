@@ -288,6 +288,23 @@ async def github_webhook(
         )
         return JSONResponse(content={"ok": True})
 
+    # Only process actionable event types — ignore noisy CI/CD events
+    # (workflow_run, check_suite, check_run, status, deployment_status, etc.)
+    _ACTIONABLE_GITHUB_EVENTS = {
+        "pull_request",
+        "push",
+        "issues",
+        "issue_comment",
+    }
+    if x_github_event not in _ACTIONABLE_GITHUB_EVENTS:
+        _log(
+            "github_webhook_skipped",
+            event_type=x_github_event,
+            delivery_id=x_github_delivery,
+            reason="non_actionable_event_type",
+        )
+        return JSONResponse(content={"ok": True})
+
     # Extract repository for routing
     repo = payload.get("repository", {})
     repo_full_name = repo.get("full_name", "")  # e.g., "org/repo"
