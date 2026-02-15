@@ -595,9 +595,11 @@ async def _process_github_webhook(
                 session_id=(
                     f"github-{repo_full_name}-pr-{pr_number}"
                     if pr_number
-                    else f"github-{repo_full_name}-issue-{issue_number}"
-                    if issue_number
-                    else None
+                    else (
+                        f"github-{repo_full_name}-issue-{issue_number}"
+                        if issue_number
+                        else None
+                    )
                 ),
             )
         )
