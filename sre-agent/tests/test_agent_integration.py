@@ -57,31 +57,37 @@ def test_backward_compatibility():
     print("✅ Backward compatibility maintained!")
 
 
-def test_model_settings_environment():
-    """Test that model settings are applied via environment variables."""
-    import os
-
+def test_model_settings_headers():
+    """Test that model settings are applied via agent context headers."""
     from config import AgentConfig, ModelConfig
+    from agent_headers import set_agent_context, get_agent_headers, clear_agent_context
 
     # Create agent with model settings
     agent = AgentConfig(
         name="test", model=ModelConfig(temperature=0.5, max_tokens=3000, top_p=0.95)
     )
 
-    # Simulate what agent.py does
-    if agent.model.temperature is not None:
-        os.environ["LLM_TEMPERATURE"] = str(agent.model.temperature)
-    if agent.model.max_tokens is not None:
-        os.environ["LLM_MAX_TOKENS"] = str(agent.model.max_tokens)
-    if agent.model.top_p is not None:
-        os.environ["LLM_TOP_P"] = str(agent.model.top_p)
+    # Simulate what agent.py does - set agent context
+    set_agent_context(
+        agent_name=agent.name,
+        model_config={
+            "temperature": agent.model.temperature,
+            "max_tokens": agent.model.max_tokens,
+            "top_p": agent.model.top_p,
+        }
+    )
 
-    # Verify environment variables are set
-    assert os.environ.get("LLM_TEMPERATURE") == "0.5"
-    assert os.environ.get("LLM_MAX_TOKENS") == "3000"
-    assert os.environ.get("LLM_TOP_P") == "0.95"
+    # Verify headers are correctly generated
+    headers = get_agent_headers()
+    assert headers["X-Agent-Name"] == "test"
+    assert headers["X-Agent-Temperature"] == "0.5"
+    assert headers["X-Agent-Max-Tokens"] == "3000"
+    assert headers["X-Agent-Top-P"] == "0.95"
 
-    print("✅ Model settings environment variables work!")
+    # Clean up
+    clear_agent_context()
+
+    print("✅ Model settings via agent headers work!")
 
 
 def test_complete_integration():
@@ -179,7 +185,7 @@ if __name__ == "__main__":
     try:
         test_config_loading()
         test_backward_compatibility()
-        test_model_settings_environment()
+        test_model_settings_headers()
         test_complete_integration()
 
         print("\n" + "=" * 60)

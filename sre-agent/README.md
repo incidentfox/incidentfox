@@ -85,12 +85,21 @@ Each agent in your team config supports:
 
 ### Model Settings
 
-Model settings are applied **globally** to the session (Claude SDK limitation):
+Model settings are applied to API requests via HTTP headers:
 
-- Settings from the **root agent** apply to all subagents
-- credential-proxy forwards these to LiteLLM which passes them to the LLM API
+- Settings from the **root agent** are injected into HTTP requests as `X-Agent-*` headers
+- credential-proxy reads these headers and injects them into the request body
+- LiteLLM then applies these settings when calling the LLM provider
 - Supported by most models (temperature, max_tokens, top_p)
-- Future: per-agent model specification would require credential-proxy detection of subagent context
+
+**How it works:**
+1. Agent sets model config (temperature, max_tokens, top_p)
+2. `agent.py` sets agent context before making requests
+3. HTTP client wrapper injects `X-Agent-Temperature`, `X-Agent-Max-Tokens`, `X-Agent-Top-P` headers
+4. credential-proxy reads headers and injects into request body
+5. LiteLLM applies settings to provider API call
+
+**Current limitation:** Settings apply globally (root agent → all subagents) because the Claude SDK manages subagent calls internally. Future: per-subagent settings would require intercepting SDK's internal subagent delegation.
 
 ### Execution Limits
 

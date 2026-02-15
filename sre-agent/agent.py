@@ -33,6 +33,9 @@ import re
 from pathlib import Path
 from typing import AsyncIterator, Optional, Union
 
+# Agent header injection (must be imported before Claude SDK)
+from agent_headers import patch_anthropic_client, set_agent_context, clear_agent_context
+
 # Claude SDK imports
 from claude_agent_sdk import (
     AssistantMessage,
@@ -287,6 +290,10 @@ def _extract_files_from_text(text: str) -> tuple[str, list]:
 
 
 load_dotenv()
+
+# Patch Anthropic client for per-agent header injection
+# This must happen before any SDK clients are created
+patch_anthropic_client()
 
 # Initialize Laminar for tracing (if API key is set)
 # Note: This should be done ONCE per process, before any ClaudeSDKClient is created
@@ -568,32 +575,33 @@ class InteractiveAgentSession:
             hooks={"PostToolUse": [HookMatcher(hooks=[capture_tool_output])]},
         )
 
+        # Store agent configs for per-agent model settings
+        self.agent_configs = self.team_config.agents
+
         # Apply model settings and execution limits from root agent config
         if root_config:
+            # Set root agent context for header injection
+            # This applies the root agent's model settings globally
+            set_agent_context(
+                agent_name=root_config.name,
+                model_config={
+                    "temperature": root_config.model.temperature,
+                    "max_tokens": root_config.model.max_tokens,
+                    "top_p": root_config.model.top_p,
+                }
+            )
+
             # Apply max_turns to prevent infinite loops
             if root_config.max_turns:
                 options_kwargs["max_turns"] = root_config.max_turns
                 print(f"🔧 [AGENT] Max turns: {root_config.max_turns}")
 
-            # Apply model settings globally via environment variables
-            # credential-proxy forwards these to LiteLLM (llm_proxy.py lines 460-470)
-            # Note: These apply to all subagents (Claude SDK limitation)
+            # Log applied model settings
             if root_config.model.temperature is not None:
-                import os
-
-                os.environ["LLM_TEMPERATURE"] = str(root_config.model.temperature)
                 print(f"🔧 [AGENT] Temperature: {root_config.model.temperature}")
-
             if root_config.model.max_tokens is not None:
-                import os
-
-                os.environ["LLM_MAX_TOKENS"] = str(root_config.model.max_tokens)
                 print(f"🔧 [AGENT] Max tokens: {root_config.model.max_tokens}")
-
             if root_config.model.top_p is not None:
-                import os
-
-                os.environ["LLM_TOP_P"] = str(root_config.model.top_p)
                 print(f"🔧 [AGENT] Top-p: {root_config.model.top_p}")
 
         if system_prompt:
