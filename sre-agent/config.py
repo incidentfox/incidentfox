@@ -36,11 +36,38 @@ class ToolsConfig:
 
 
 @dataclass
+class ModelConfig:
+    """Model settings for LLM calls.
+
+    Supported by LiteLLM in credential-proxy (llm_proxy.py lines 460-470).
+    These settings apply globally to the session (Claude SDK limitation).
+    """
+
+    name: str = "claude-sonnet-4-20250514"
+    temperature: float | None = None  # 0.0-1.0, None = provider default
+    max_tokens: int | None = None  # Maximum response tokens
+    top_p: float | None = None  # Nucleus sampling parameter (0.0-1.0)
+
+
+@dataclass
 class AgentConfig:
+    """Agent configuration matching config_service schema.
+
+    Fields:
+        enabled: Whether this agent is active
+        name: Agent identifier
+        prompt: System prompt configuration
+        tools: Tool filtering configuration
+        model: Model settings (temperature, max_tokens, top_p)
+        max_turns: Maximum conversation turns (prevents infinite loops)
+    """
+
     enabled: bool = True
     name: str = ""
     prompt: PromptConfig = field(default_factory=PromptConfig)
     tools: ToolsConfig = field(default_factory=ToolsConfig)
+    model: ModelConfig = field(default_factory=ModelConfig)
+    max_turns: int | None = None
 
 
 @dataclass
@@ -87,6 +114,8 @@ def load_team_config() -> TeamConfig:
     for name, cfg in effective.get("agents", {}).items():
         prompt_data = cfg.get("prompt", {})
         tools_data = cfg.get("tools", {})
+        model_data = cfg.get("model", {})
+
         agents[name] = AgentConfig(
             enabled=cfg.get("enabled", True),
             name=name,
@@ -99,6 +128,13 @@ def load_team_config() -> TeamConfig:
                 enabled=tools_data.get("enabled", ["*"]),
                 disabled=tools_data.get("disabled", []),
             ),
+            model=ModelConfig(
+                name=model_data.get("name", "claude-sonnet-4-20250514"),
+                temperature=model_data.get("temperature"),
+                max_tokens=model_data.get("max_tokens"),
+                top_p=model_data.get("top_p"),
+            ),
+            max_turns=cfg.get("max_turns"),
         )
 
     return TeamConfig(

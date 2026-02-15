@@ -520,21 +520,29 @@ class InteractiveAgentSession:
                     f"from root agent '{root_config.name}'"
                 )
 
-            # Build subagents from config (non-root agents become subagents)
+            # Build subagents from config
             root_name = root_config.name if root_config else None
+
+            # Register all enabled subagents
             for name, agent_cfg in self.team_config.agents.items():
-                if name == root_name or not agent_cfg.enabled:
+                if name == root_name:
+                    continue  # Skip root agent
+
+                if not agent_cfg.enabled or not agent_cfg.prompt.system:
                     continue
-                if agent_cfg.prompt.system:
-                    subagents[name] = AgentDefinition(
-                        description=agent_cfg.prompt.prefix or f"{name} specialist",
-                        prompt=agent_cfg.prompt.system,
-                        tools=(
-                            agent_cfg.tools.enabled
-                            if agent_cfg.tools.enabled != ["*"]
-                            else None
-                        ),
-                    )
+
+                # Create AgentDefinition
+                # All agents registered flat at root level
+                subagents[name] = AgentDefinition(
+                    description=agent_cfg.prompt.prefix or f"{name} specialist",
+                    prompt=agent_cfg.prompt.system,
+                    tools=(
+                        agent_cfg.tools.enabled
+                        if agent_cfg.tools.enabled != ["*"]
+                        else None
+                    ),
+                )
+
             print(
                 f"🤖 [AGENT] Registered {len(subagents)} subagents: "
                 f"{', '.join(subagents.keys())}"
@@ -559,6 +567,35 @@ class InteractiveAgentSession:
             agents=subagents,
             hooks={"PostToolUse": [HookMatcher(hooks=[capture_tool_output])]},
         )
+
+        # Apply model settings and execution limits from root agent config
+        if root_config:
+            # Apply max_turns to prevent infinite loops
+            if root_config.max_turns:
+                options_kwargs["max_turns"] = root_config.max_turns
+                print(f"🔧 [AGENT] Max turns: {root_config.max_turns}")
+
+            # Apply model settings globally via environment variables
+            # credential-proxy forwards these to LiteLLM (llm_proxy.py lines 460-470)
+            # Note: These apply to all subagents (Claude SDK limitation)
+            if root_config.model.temperature is not None:
+                import os
+
+                os.environ["LLM_TEMPERATURE"] = str(root_config.model.temperature)
+                print(f"🔧 [AGENT] Temperature: {root_config.model.temperature}")
+
+            if root_config.model.max_tokens is not None:
+                import os
+
+                os.environ["LLM_MAX_TOKENS"] = str(root_config.model.max_tokens)
+                print(f"🔧 [AGENT] Max tokens: {root_config.model.max_tokens}")
+
+            if root_config.model.top_p is not None:
+                import os
+
+                os.environ["LLM_TOP_P"] = str(root_config.model.top_p)
+                print(f"🔧 [AGENT] Top-p: {root_config.model.top_p}")
+
         if system_prompt:
             # Method 3: Append custom prompt to claude_code preset
             # Preserves built-in tool instructions, safety, and env context

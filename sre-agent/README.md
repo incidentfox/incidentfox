@@ -22,6 +22,86 @@ python agent.py
 python server.py
 ```
 
+## Agent Configuration
+
+The agent supports rich configuration via config_service for team-specific behavior:
+
+### Agent Config Fields
+
+Each agent in your team config supports:
+
+- **`enabled`** (bool): Whether this agent is active
+- **`prompt.system`** (str): Agent's system prompt defining its role and behavior
+- **`prompt.prefix`** (str): Description shown when used as subagent
+- **`tools.enabled`** (list): Allowed tools (`["*"]` for all)
+- **`tools.disabled`** (list): Tools to exclude from enabled set
+- **`model`** (object): Model settings for LLM calls
+  - **`temperature`** (float, 0.0-1.0): Sampling temperature (None = provider default)
+  - **`max_tokens`** (int): Maximum response tokens
+  - **`top_p`** (float, 0.0-1.0): Nucleus sampling parameter
+- **`max_turns`** (int): Maximum conversation turns (prevents infinite loops)
+
+### Example Configuration
+
+```json
+{
+  "agents": {
+    "investigator": {
+      "enabled": true,
+      "model": {
+        "temperature": 0.3,
+        "max_tokens": 4000,
+        "top_p": 0.9
+      },
+      "max_turns": 50,
+      "prompt": {
+        "system": "You are an SRE investigator specialized in incident analysis...",
+        "prefix": "Use for incident investigation and root cause analysis"
+      },
+      "tools": {
+        "enabled": ["*"],
+        "disabled": ["Write", "Edit"]
+      }
+    },
+    "k8s-specialist": {
+      "enabled": true,
+      "max_turns": 30,
+      "prompt": {
+        "system": "You are a Kubernetes specialist...",
+        "prefix": "Use for pod crashes, deployments, resource issues"
+      }
+    },
+    "log-analyst": {
+      "enabled": true,
+      "max_turns": 20,
+      "prompt": {
+        "system": "You are a log analysis specialist...",
+        "prefix": "Use for analyzing application logs and error patterns"
+      }
+    }
+  }
+}
+```
+
+### Model Settings
+
+Model settings are applied **globally** to the session (Claude SDK limitation):
+
+- Settings from the **root agent** apply to all subagents
+- credential-proxy forwards these to LiteLLM which passes them to the LLM API
+- Supported by most models (temperature, max_tokens, top_p)
+- Future: per-agent model specification would require credential-proxy detection of subagent context
+
+### Execution Limits
+
+- **`max_turns`**: Prevents infinite loops by limiting conversation turns
+- Applied at the session level (affects main agent and all subagents)
+- When exceeded, investigation returns partial results with status="incomplete"
+
+### Subagent Delegation
+
+All subagents are registered flat at the root level. The root agent can delegate to any subagent based on their `prompt.prefix` descriptions. Claude's intelligence handles delegation patterns based on the agent descriptions and tool access.
+
 ## API
 
 ### Simple Investigation
