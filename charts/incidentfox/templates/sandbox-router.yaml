@@ -70,7 +70,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  # Static name expected by unified-agent/sre-agent code
+  # Static name expected by sre-agent code
   name: sandbox-router-svc
   namespace: {{ .Values.namespace }}
   labels:

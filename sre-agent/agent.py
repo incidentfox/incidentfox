@@ -15,10 +15,10 @@ No MCP tools - all integrations use skills with scripts for:
 - Progressive disclosure (syntax/methodology loaded when needed)
 - Clean main context (subagent output stays isolated)
 
-LLM Provider Support:
-- Claude SDK (default): Production-tested, full feature support
-- OpenHands SDK: Multi-LLM support (Claude, Gemini, OpenAI)
-- Set LLM_PROVIDER=openhands to use OpenHands, defaults to "claude"
+LLM Provider:
+- Claude SDK: Production-tested, full feature support
+- Multi-LLM support: Handled via credential-proxy which routes to different providers
+  (Claude, Gemini, OpenAI) based on configuration
 
 Laminar Tracing:
 - Sessions: Groups multi-turn conversations by thread_id
@@ -33,6 +33,16 @@ import re
 from pathlib import Path
 from typing import AsyncIterator, Optional, Union
 
+# Claude SDK imports
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    ClaudeSDKClient,
+    HookMatcher,
+    ResultMessage,
+    TextBlock,
+)
+from claude_agent_sdk.types import StreamEvent as SDKStreamEvent
 from dotenv import load_dotenv
 from events import (
     StreamEvent,
@@ -43,21 +53,6 @@ from events import (
     tool_start_event,
 )
 from lmnr import Laminar, observe
-
-# Conditional imports based on provider
-# Claude SDK imports are only needed if using Claude provider
-_LLM_PROVIDER = os.getenv("LLM_PROVIDER", "claude").lower()
-
-if _LLM_PROVIDER == "claude":
-    from claude_agent_sdk import (
-        AssistantMessage,
-        ClaudeAgentOptions,
-        ClaudeSDKClient,
-        HookMatcher,
-        ResultMessage,
-        TextBlock,
-    )
-    from claude_agent_sdk.types import StreamEvent as SDKStreamEvent
 
 # Max image size to embed (5MB)
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
@@ -346,8 +341,24 @@ class InteractiveAgentSession:
     Each sandbox maintains one session per thread_id.
     """
 
-    def __init__(self, thread_id: str):
+    # Default tools when no team config overrides
+    DEFAULT_TOOLS = [
+        "Skill",
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Glob",
+        "Grep",
+        "WebSearch",
+        "WebFetch",
+        "AskUserQuestion",
+        "Task",
+    ]
+
+    def __init__(self, thread_id: str, team_config=None):
         self.thread_id = thread_id
+        self.team_config = team_config
 
         self.client: ClaudeSDKClient | None = None
         self.is_running: bool = False
@@ -468,95 +479,7 @@ class InteractiveAgentSession:
         # Import AgentDefinition for subagent configuration
         from claude_agent_sdk import AgentDefinition
 
-        # Define specialized subagents for context isolation
-        # These subagents read skills and run scripts in isolated contexts
-        subagents = {
-            "log-analyst": AgentDefinition(
-                description="Log analysis specialist for Coralogix, Datadog, or CloudWatch. "
-                "Use for analyzing logs, finding error patterns, or correlating log events. "
-                "Keeps all intermediate log output in isolated context.",
-                prompt="""You are a log analysis expert specializing in observability platforms.
-
-## Your Methodology
-1. Identify which backend is configured (check env vars: CORALOGIX_API_KEY, DATADOG_API_KEY, AWS_REGION)
-2. Use available observability Skills to query logs and metrics
-
-## Core Principles
-- **Efficiency First**: If `get_statistics` reveals a dominant error pattern (>80%), skip signature extraction and go straight to root cause analysis.
-- **Be Concise**: Do not narrate every step. Only report significant findings or when you are stuck.
-- **Aggregations First**: ALWAYS get statistics before raw logs.
-
-## Output Format
-Return ONLY a structured summary:
-- Error patterns found (with counts and percentages)
-- Temporal correlation (when did it start, peak, trend)
-- Root cause hypothesis based on log evidence
-- Confidence level (high/medium/low with explanation)
-- Key evidence (2-3 specific log entries that support your hypothesis)
-
-Do NOT dump raw logs. Synthesize and summarize findings.""",
-                tools=["Skill", "Read", "Bash", "Glob", "Grep"],
-                model="sonnet",
-            ),
-            "k8s-debugger": AgentDefinition(
-                description="Kubernetes debugging specialist. Use for pod crashes, CrashLoopBackOff, "
-                "OOMKilled, deployment issues, resource problems, or container failures. "
-                "Keeps all kubectl output in isolated context.",
-                prompt="""You are a Kubernetes debugging expert.
-
-## Your Methodology
-1. ALWAYS check events BEFORE logs (events explain 80% of issues faster)
-2. Use available Kubernetes Skills for debugging
-
-## Core Principles
-- Events before logs
-- Use Skills for structured debugging workflows
-
-## Common Issue Patterns
-- OOMKilled → Memory limit exceeded (check resources)
-- ImagePullBackOff → Image not found or auth issue
-- CrashLoopBackOff → Container keeps crashing (check logs after events)
-- FailedScheduling → No nodes with capacity
-
-## Output Format
-Return a structured summary:
-- Pod/deployment status and recent restarts
-- Key events (with timestamps)
-- Resource analysis (if relevant)
-- Root cause hypothesis
-- Recommended action
-
-Do NOT dump full kubectl output. Synthesize findings.""",
-                tools=["Skill", "Read", "Bash", "Glob", "Grep"],
-                model="sonnet",
-            ),
-            "remediator": AgentDefinition(
-                description="Safe remediation specialist. Use when proposing or executing pod restarts, "
-                "deployment scaling, or rollbacks. ALWAYS does dry-run first.",
-                prompt="""You are a safe remediation specialist.
-
-## Safety Principles
-1. ALWAYS dry-run first (all scripts support --dry-run)
-2. Show what will happen before executing
-3. Document the action and reason
-
-## Workflow
-1. Propose the action with reasoning
-2. Run with --dry-run and show output
-3. Ask for confirmation before executing
-4. Execute only after confirmation
-5. Verify the result
-
-## Output Format
-- Action: [what you propose]
-- Reason: [why this will help]
-- Risk: [potential side effects]
-- Dry-run output: [show what would happen]
-- Status: [waiting for confirmation / executed / verified]""",
-                tools=["Skill", "Read", "Bash", "Glob", "Grep"],
-                model="sonnet",
-            ),
-        }
+        subagents = {}
 
         # Build options for streaming input mode
         # Determine working directory based on mode
@@ -581,31 +504,71 @@ Do NOT dump full kubectl output. Synthesize findings.""",
 
             cwd = thread_workspace
 
-        self.options = ClaudeAgentOptions(
+        # --- Dynamic config from team config service ---
+        system_prompt = None
+        root_config = None
+        if self.team_config:
+            from config import get_root_agent_config
+
+            root_config = get_root_agent_config(self.team_config)
+
+            # Set system prompt directly (Method 4 from SDK docs)
+            if root_config and root_config.prompt.system:
+                system_prompt = root_config.prompt.system
+                print(
+                    f"📝 [AGENT] System prompt ({len(system_prompt)} chars) "
+                    f"from root agent '{root_config.name}'"
+                )
+
+            # Build subagents from config (non-root agents become subagents)
+            root_name = root_config.name if root_config else None
+            for name, agent_cfg in self.team_config.agents.items():
+                if name == root_name or not agent_cfg.enabled:
+                    continue
+                if agent_cfg.prompt.system:
+                    subagents[name] = AgentDefinition(
+                        description=agent_cfg.prompt.prefix or f"{name} specialist",
+                        prompt=agent_cfg.prompt.system,
+                        tools=(
+                            agent_cfg.tools.enabled
+                            if agent_cfg.tools.enabled != ["*"]
+                            else None
+                        ),
+                    )
+            print(
+                f"🤖 [AGENT] Registered {len(subagents)} subagents: "
+                f"{', '.join(subagents.keys())}"
+            )
+
+        # Resolve allowed tools from config or defaults
+        allowed_tools = self.DEFAULT_TOOLS
+        if root_config:
+            tc = root_config.tools
+            if "*" in tc.enabled:
+                allowed_tools = [t for t in self.DEFAULT_TOOLS if t not in tc.disabled]
+            else:
+                allowed_tools = tc.enabled
+
+        options_kwargs = dict(
             cwd=cwd,
-            # Core tools for file operations and script execution
-            allowed_tools=[
-                "Skill",
-                "Read",
-                "Write",
-                "Edit",
-                "Bash",
-                "Glob",
-                "Grep",
-                "WebSearch",
-                "WebFetch",
-                "AskUserQuestion",
-                "Task",
-            ],
+            allowed_tools=allowed_tools,
             permission_mode="acceptEdits",
             can_use_tool=can_use_tool_handler,
             include_partial_messages=True,  # Needed to get parent_tool_use_id for subagent tracking
-            # Enable skill loading from .claude/ directories
-            setting_sources=["user", "project"],
-            # Register specialized subagents for context isolation
+            setting_sources=["user", "project"],  # Loads .claude/skills/
             agents=subagents,
             hooks={"PostToolUse": [HookMatcher(hooks=[capture_tool_output])]},
         )
+        if system_prompt:
+            # Method 3: Append custom prompt to claude_code preset
+            # Preserves built-in tool instructions, safety, and env context
+            options_kwargs["system_prompt"] = {
+                "type": "preset",
+                "preset": "claude_code",
+                "append": system_prompt,
+            }
+
+        self.options = ClaudeAgentOptions(**options_kwargs)
 
     async def start(self):
         """Initialize the Claude client session for streaming input mode."""
@@ -934,210 +897,20 @@ Do NOT dump full kubectl output. Synthesize findings.""",
             self._pending_answer_event.set()
 
 
-class OpenHandsAgentSession:
+def create_agent_session(thread_id: str, team_config=None):
     """
-    Agent session using OpenHands SDK for multi-LLM support.
+    Factory function to create agent session.
 
-    This class provides the same interface as InteractiveAgentSession but
-    uses OpenHands SDK internally, enabling support for multiple LLM providers:
-    - anthropic/claude-sonnet-4-20250514 (default)
-    - gemini/gemini-2.0-flash
-    - openai/gpt-5.2
-
-    Set LLM_MODEL environment variable to change the model.
-    """
-
-    def __init__(self, thread_id: str):
-        self.thread_id = thread_id
-        self.is_running: bool = False
-        self._was_interrupted: bool = False
-        self._provider = None
-
-    async def start(self):
-        """Initialize the OpenHands session."""
-        from providers import ProviderConfig, SubagentConfig, create_provider
-
-        # Build subagent configs (matching Claude SDK subagent definitions)
-        subagents = {
-            "log-analyst": SubagentConfig(
-                name="log-analyst",
-                description="Log analysis specialist for Coralogix, Datadog, or CloudWatch. "
-                "Use for analyzing logs, finding error patterns, or correlating log events. "
-                "Keeps all intermediate log output in isolated context.",
-                prompt="""You are a log analysis expert specializing in observability platforms.
-
-## Your Methodology
-1. Identify which backend is configured (check env vars: CORALOGIX_API_KEY, DATADOG_API_KEY, AWS_REGION)
-2. Use available observability Skills to query logs and metrics
-
-## Core Principles
-- **Efficiency First**: If statistics reveal a dominant error pattern (>80%), skip detailed extraction.
-- **Be Concise**: Do not narrate every step. Only report significant findings.
-- **Aggregations First**: ALWAYS get statistics before raw logs.
-
-## Output Format
-Return ONLY a structured summary:
-- Error patterns found (with counts and percentages)
-- Temporal correlation (when did it start, peak, trend)
-- Root cause hypothesis based on log evidence
-- Confidence level (high/medium/low with explanation)
-- Key evidence (2-3 specific log entries that support your hypothesis)
-
-Do NOT dump raw logs. Synthesize and summarize findings.""",
-                tools=["Skill", "Bash", "Read", "Glob", "Grep"],
-                model="sonnet",
-            ),
-            "k8s-debugger": SubagentConfig(
-                name="k8s-debugger",
-                description="Kubernetes debugging specialist. Use for pod crashes, CrashLoopBackOff, "
-                "OOMKilled, deployment issues, resource problems, or container failures. "
-                "Keeps all kubectl output in isolated context.",
-                prompt="""You are a Kubernetes debugging expert.
-
-## Your Methodology
-1. ALWAYS check events BEFORE logs (events explain 80% of issues faster)
-2. Use available Kubernetes Skills for debugging
-
-## Core Principles
-- Events before logs
-- Use Skills for structured debugging workflows
-
-## Common Issue Patterns
-- OOMKilled → Memory limit exceeded (check resources)
-- ImagePullBackOff → Image not found or auth issue
-- CrashLoopBackOff → Container keeps crashing (check logs after events)
-- FailedScheduling → No nodes with capacity
-
-## Output Format
-Return a structured summary:
-- Pod/deployment status and recent restarts
-- Key events (with timestamps)
-- Resource analysis (if relevant)
-- Root cause hypothesis
-- Recommended action
-
-Do NOT dump full kubectl output. Synthesize findings.""",
-                tools=["Skill", "Bash", "Read", "Glob", "Grep"],
-                model="sonnet",
-            ),
-            "remediator": SubagentConfig(
-                name="remediator",
-                description="Safe remediation specialist. Use when proposing or executing pod restarts, "
-                "deployment scaling, or rollbacks. ALWAYS does dry-run first.",
-                prompt="""You are a safe remediation specialist.
-
-## Safety Principles
-1. ALWAYS dry-run first (all scripts support --dry-run)
-2. Show what will happen before executing
-3. Document the action and reason
-
-## Workflow
-1. Propose the action with reasoning
-2. Run with --dry-run and show output
-3. Ask for confirmation before executing
-4. Execute only after confirmation
-5. Verify the result
-
-## Output Format
-- Action: [what you propose]
-- Reason: [why this will help]
-- Risk: [potential side effects]
-- Dry-run output: [show what would happen]
-- Status: [waiting for confirmation / executed / verified]""",
-                tools=["Skill", "Bash", "Read", "Glob", "Grep"],
-                model="sonnet",
-            ),
-        }
-
-        # Determine working directory
-        if os.path.exists("/workspace"):
-            cwd = "/app"
-        else:
-            thread_workspace = f"/tmp/sessions/{self.thread_id}"
-            os.makedirs(thread_workspace, exist_ok=True)
-            cwd = thread_workspace
-
-        config = ProviderConfig(
-            cwd=cwd,
-            thread_id=self.thread_id,
-            allowed_tools=[
-                "Skill",  # Domain-specific knowledge/methodologies
-                "Bash",
-                "Read",
-                "Write",
-                "Edit",
-                "Glob",
-                "Grep",
-                "WebSearch",
-                "WebFetch",
-                "Task",  # Subagent spawning
-            ],
-            subagents=subagents,
-        )
-
-        self._provider = create_provider("openhands", config)
-        await self._provider.start()
-
-    @observe()
-    async def execute(
-        self, prompt: str, images: list = None
-    ) -> AsyncIterator[StreamEvent]:
-        """Execute a query and stream events."""
-        if self._provider is None:
-            raise RuntimeError("Session not started. Call start() first.")
-
-        self.is_running = True
-        self._was_interrupted = False
-
-        try:
-            async for event in self._provider.execute(prompt, images):
-                yield event
-        finally:
-            self.is_running = False
-
-    async def interrupt(self) -> AsyncIterator[StreamEvent]:
-        """Interrupt current execution."""
-        if self._provider is None:
-            raise RuntimeError("Session not started. Call start() first.")
-
-        async for event in self._provider.interrupt():
-            yield event
-
-        self._was_interrupted = True
-        self.is_running = False
-
-    async def close(self):
-        """Clean up the session."""
-        if self._provider is not None:
-            await self._provider.close()
-            self._provider = None
-
-    async def provide_answer(self, answers: dict) -> None:
-        """Provide answer to pending question."""
-        if self._provider is not None:
-            await self._provider.provide_answer(answers)
-
-
-def create_agent_session(thread_id: str):
-    """
-    Factory function to create the appropriate agent session.
-
-    Returns InteractiveAgentSession (Claude SDK) by default.
-    Set LLM_PROVIDER=openhands to use OpenHands SDK for multi-LLM support.
+    Returns InteractiveAgentSession (Claude SDK).
+    Multi-LLM support is handled via the credential-proxy which translates
+    requests to different providers (Claude, Gemini, OpenAI) based on routing.
 
     Args:
         thread_id: Unique identifier for the session
+        team_config: Optional TeamConfig from config_service
 
     Returns:
-        Either InteractiveAgentSession or OpenHandsAgentSession
+        InteractiveAgentSession
     """
-    provider = os.getenv("LLM_PROVIDER", "claude").lower()
-
-    if provider == "openhands":
-        print(
-            f"🔄 [AGENT] Using OpenHands provider (LLM_MODEL={os.getenv('LLM_MODEL', 'default')})"
-        )
-        return OpenHandsAgentSession(thread_id)
-    else:
-        print("🔄 [AGENT] Using Claude provider")
-        return InteractiveAgentSession(thread_id)
+    print("🔄 [AGENT] Using Claude SDK with credential-proxy for multi-LLM support")
+    return InteractiveAgentSession(thread_id, team_config)

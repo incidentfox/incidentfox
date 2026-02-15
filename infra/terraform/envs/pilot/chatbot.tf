@@ -111,7 +111,7 @@ resource "aws_chatbot_slack_channel_configuration" "incidentfox_alerts" {
 
   # AWS provider uses slack_team_id for the workspace/team identifier.
   slack_team_id    = var.slack_team_id
-  slack_channel_id   = var.slack_channel_id
+  slack_channel_id = var.slack_channel_id
 
   sns_topic_arns = [aws_sns_topic.incidentfox_alerts.arn]
 

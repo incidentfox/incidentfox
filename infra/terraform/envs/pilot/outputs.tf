@@ -42,13 +42,26 @@ output "rds_endpoint" {
   value = try(module.rds[0].db_endpoint, null)
 }
 
+# Karpenter outputs (null when disabled)
+output "karpenter_irsa_role_arn" {
+  value = try(module.eks[0].karpenter_irsa_role_arn, null)
+}
+
+output "karpenter_node_role_name" {
+  value = try(module.eks[0].karpenter_node_role_name, null)
+}
+
+output "karpenter_queue_name" {
+  value = try(module.eks[0].karpenter_queue_name, null)
+}
+
 output "pilot_secrets" {
   value = {
-    database_url                         = "incidentfox/pilot/database_url"
-    config_service_admin_token           = "incidentfox/pilot/config_service_admin_token"
-    config_service_token_pepper          = "incidentfox/pilot/config_service_token_pepper"
+    database_url                            = "incidentfox/pilot/database_url"
+    config_service_admin_token              = "incidentfox/pilot/config_service_admin_token"
+    config_service_token_pepper             = "incidentfox/pilot/config_service_token_pepper"
     config_service_impersonation_jwt_secret = "incidentfox/pilot/config_service_impersonation_jwt_secret"
-    openai_api_key                       = "incidentfox/pilot/openai_api_key"
+    openai_api_key                          = "incidentfox/pilot/openai_api_key"
   }
 }
 

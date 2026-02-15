@@ -13,6 +13,7 @@ services:
     restart: unless-stopped
     environment:
       - CREDENTIAL_SOURCE=environment
+      - JWT_MODE=permissive
     env_file:
       - .env
     healthcheck:
@@ -23,6 +24,7 @@ services:
       start_period: 10s
     networks:
       - app_network
+      - default  # Needs external access for LLM proxy to reach upstream APIs
 
   # Envoy proxy - routes requests, calls credential-resolver for auth headers
   envoy:
@@ -30,6 +32,7 @@ services:
     container_name: incidentfox-envoy
     restart: unless-stopped
     ports:
+      - "8001:8001"  # Proxy endpoint (for local testing)
       - "9901:9901"  # Admin interface
     volumes:
       - ./sre-agent/credential-proxy/envoy/envoy-local.yaml:/etc/envoy/envoy.yaml:ro

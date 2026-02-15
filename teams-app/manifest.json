@@ -1,0 +1,69 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "c3cf5e9c-5f3d-43f3-a20a-e1312c4357b2",
+  "developer": {
+    "name": "IncidentFox",
+    "websiteUrl": "https://www.incidentfox.ai",
+    "privacyUrl": "https://www.incidentfox.ai/privacy.html",
+    "termsOfUseUrl": "https://www.incidentfox.ai/terms.html"
+  },
+  "name": {
+    "short": "IncidentFox",
+    "full": "IncidentFox - AI Incident Investigation Assistant"
+  },
+  "description": {
+    "short": "AI-powered incident investigation assistant for SRE and DevOps teams",
+    "full": "IncidentFox is an AI-powered SRE assistant that helps your team investigate and resolve incidents faster.\n\nKey Features:\n- Instant incident triage: Ask questions about alerts, metrics, and logs\n- Multi-source correlation: Connects to Datadog, PagerDuty, AWS, Kubernetes, and more\n- Knowledge base: Learns from past incidents to suggest solutions\n- Collaborative: Works in Microsoft Teams channels where your team already communicates\n\nHow it works:\n1. Add IncidentFox to a Teams channel\n2. @mention it with your question or paste an alert\n3. Get AI-powered analysis with actionable insights"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#FF6A00",
+  "bots": [
+    {
+      "botId": "c3cf5e9c-5f3d-43f3-a20a-e1312c4357b2",
+      "scopes": [
+        "personal",
+        "team",
+        "groupChat"
+      ],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": [
+            "personal",
+            "team",
+            "groupChat"
+          ],
+          "commands": [
+            {
+              "title": "investigate",
+              "description": "Investigate an incident or alert"
+            },
+            {
+              "title": "status",
+              "description": "Check the status of a service or system"
+            },
+            {
+              "title": "help",
+              "description": "Show available commands and how to use IncidentFox"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "orchestrator.incidentfox.ai",
+    "staging-orchestrator.incidentfox.ai",
+    "www.incidentfox.ai"
+  ]
+}

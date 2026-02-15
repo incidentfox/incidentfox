@@ -37,7 +37,7 @@ module "eks" {
     var.memory_intensive_nodegroup_enabled ? {
       memory_intensive = {
         instance_types = var.memory_intensive_instance_types
-        ami_type       = "AL2_x86_64"  # x86 for AWS CLI compatibility
+        ami_type       = "AL2_x86_64" # x86 for AWS CLI compatibility
         disk_size      = var.memory_intensive_disk_size
         min_size       = var.memory_intensive_min_size
         max_size       = var.memory_intensive_max_size
@@ -49,7 +49,28 @@ module "eks" {
     } : {}
   )
 
+  # Tag node security group for Karpenter subnet/SG discovery
+  node_security_group_tags = var.karpenter_enabled ? {
+    "karpenter.sh/discovery" = var.cluster_name
+  } : {}
+
   tags = var.tags
 }
 
+# Karpenter — dynamic node provisioning for burst workloads (production only)
+module "karpenter" {
+  count   = var.karpenter_enabled ? 1 : 0
+  source  = "terraform-aws-modules/eks/aws//modules/karpenter"
+  version = "~> 20.0"
 
+  cluster_name = module.eks.cluster_name
+
+  enable_v1_permissions         = true
+  enable_pod_identity           = false
+  enable_irsa                   = true
+  irsa_oidc_provider_arn        = module.eks.oidc_provider_arn
+  node_iam_role_use_name_prefix = false
+  node_iam_role_name            = "${var.cluster_name}-karpenter-node"
+
+  tags = var.tags
+}

@@ -39,4 +39,8 @@ variable "tags" {
   default     = {}
 }
 
-
+variable "private_subnet_tags" {
+  type        = map(string)
+  description = "Additional tags for private subnets (e.g. Karpenter discovery)"
+  default     = {}
+}

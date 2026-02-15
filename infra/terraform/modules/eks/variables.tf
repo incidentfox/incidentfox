@@ -47,7 +47,7 @@ variable "node_ami_type" {
   type        = string
   description = "EKS managed node group AMI type (must match instance architecture)"
   # Default aligns with Graviton instances (m7g.*).
-  default     = "AL2023_ARM_64_STANDARD"
+  default = "AL2023_ARM_64_STANDARD"
 }
 
 variable "node_min_size" {
@@ -105,4 +105,9 @@ variable "memory_intensive_desired_size" {
   default = 1
 }
 
-
+# Karpenter dynamic node provisioning
+variable "karpenter_enabled" {
+  type        = bool
+  default     = false
+  description = "Enable Karpenter for dynamic node provisioning (burst workloads)"
+}

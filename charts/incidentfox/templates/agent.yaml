@@ -1,15 +1,11 @@
 {{- if .Values.services.agent.enabled }}
 # =============================================================================
-# Unified Agent - Investigation agent with sandbox isolation support
+# Agent - SRE investigation agent with sandbox isolation support
 # =============================================================================
-# Two operation modes:
-# 1. Direct mode (sandbox.enabled=false): Agent runs investigations directly
-# 2. Sandbox mode (sandbox.enabled=true): Agent creates gVisor sandbox pods
-#
 # In sandbox mode, this deployment acts as a "sandbox manager" that:
-# - Receives investigation requests from orchestrator
+# - Receives investigation requests from slack-bot
 # - Creates isolated sandbox pods for each investigation
-# - Sandboxes run the same image in server mode (port 8888)
+# - Sandboxes run the same image with default CMD (sandbox server)
 # - Sandboxes connect to credential-resolver for credentials
 # =============================================================================
 {{- if .Values.services.agent.serviceAccount.create }}
@@ -69,7 +65,9 @@ metadata:
   name: incidentfox-agent
   namespace: {{ .Values.namespace }}
 spec:
+  {{- if not .Values.services.agent.hpa.enabled }}
   replicas: {{ .Values.services.agent.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       app: incidentfox-agent
@@ -77,6 +75,7 @@ spec:
     metadata:
       labels:
         app: incidentfox-agent
+        component: server
     spec:
       {{- if .Values.services.agent.serviceAccount.name }}
       serviceAccountName: {{ .Values.services.agent.serviceAccount.name | quote }}
@@ -87,42 +86,34 @@ spec:
       {{- end }}
       # Allow enough time for graceful shutdown to mark in-flight runs as failed
       terminationGracePeriodSeconds: {{ .Values.services.agent.terminationGracePeriodSeconds | default 60 }}
+      {{- with .Values.services.agent.podSecurityContext }}
+      securityContext:
+{{ toYaml . | indent 8 }}
+      {{- end }}
       containers:
         - name: agent
           image: {{ required "services.agent.image is required" .Values.services.agent.image }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-          # Run unified-agent sandbox server (FastAPI on port 8888 or configured port)
-          command: ["python", "-m", "unified_agent.sandbox.server"]
+          {{- if .Values.services.agent.command }}
+          command:
+{{ toYaml .Values.services.agent.command | indent 12 }}
+          {{- end }}
           workingDir: /app
           ports:
             - containerPort: {{ .Values.services.agent.servicePort }}
               name: http
+            - containerPort: {{ .Values.services.agent.healthServer.port | default 8081 }}
+              name: health
           resources:
 {{ toYaml .Values.services.agent.resources | indent 12 }}
           env:
-            - name: USE_CONFIG_SERVICE
-              value: "true"
-            - name: CONFIG_BASE_URL
-              value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
-            - name: CONFIG_SERVICE_URL
-              value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
-            # Dedicated health server port
+            # =================================================================
+            # Health server (dedicated liveness endpoint, isolated from event loop)
+            # =================================================================
             - name: HEALTH_SERVER_PORT
               value: {{ .Values.services.agent.healthServer.port | default 8081 | quote }}
-            # K8s tools configuration
-            {{- if .Values.services.agent.kubernetes.enabled }}
-            - name: K8S_ENABLED
-              value: "true"
-            - name: K8S_NAMESPACE
-              value: {{ .Values.services.agent.kubernetes.namespace | default .Values.namespace | quote }}
-            {{- else }}
-            - name: K8S_ENABLED
-              value: "true"
-            - name: K8S_NAMESPACE
-              value: {{ .Values.namespace | quote }}
-            {{- end }}
             # =================================================================
-            # Sandbox Mode Configuration (unified-agent sandbox manager)
+            # Sandbox Mode Configuration
             # =================================================================
             {{- if .Values.services.agent.sandbox.enabled }}
             # Sandbox image (same image, runs in sandbox server mode)
@@ -150,6 +141,30 @@ spec:
                   name: {{ .Values.externalSecrets.contract.jwtSecret.secretName | default "incidentfox-jwt-secret" }}
                   key: {{ .Values.externalSecrets.contract.jwtSecret.secretKey | default "JWT_SECRET" }}
             {{- end }}
+            # =================================================================
+            # Warm Pool Configuration
+            # =================================================================
+            {{- if and .Values.services.agent.sandbox.enabled .Values.services.agent.warmPool.enabled }}
+            - name: USE_WARM_POOL
+              value: "true"
+            - name: WARMPOOL_TEMPLATE_NAME
+              value: {{ .Values.services.agent.warmPool.templateName | quote }}
+            - name: WARMPOOL_TEMPLATE_NAMESPACE
+              value: {{ .Values.services.agent.sandbox.namespace | default .Values.namespace | quote }}
+            - name: WARMPOOL_NAME
+              value: {{ .Values.services.agent.warmPool.poolName | quote }}
+            - name: WARMPOOL_NAMESPACE
+              value: {{ .Values.services.agent.sandbox.namespace | default .Values.namespace | quote }}
+            {{- if .Values.services.agent.warmPool.autoscaler.enabled }}
+            - name: WARMPOOL_BUFFER
+              value: {{ .Values.services.agent.warmPool.autoscaler.buffer | default 3 | quote }}
+            {{- end }}
+            {{- end }}
+            # =================================================================
+            # Concurrency limit (applies regardless of warm pool)
+            # =================================================================
+            - name: MAX_CONCURRENT_INVESTIGATIONS
+              value: {{ .Values.services.agent.maxConcurrentInvestigations | default 8 | quote }}
             # =================================================================
             # Tracing configuration (Langfuse / OTEL)
             # =================================================================
@@ -183,22 +198,23 @@ spec:
                   name: {{ .Values.services.agent.staticTeamToken.secretName }}
                   key: {{ .Values.services.agent.staticTeamToken.secretKey }}
             {{- end }}
-            # LLM API keys (for direct mode, sandbox mode uses credential-resolver)
-            {{- if not .Values.services.agent.sandbox.enabled }}
-            - name: OPENAI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecrets.contract.agentOpenAI.secretName }}
-                  key: {{ .Values.externalSecrets.contract.agentOpenAI.apiKeyKey }}
+            # =================================================================
+            # Extra env vars (from values)
+            # =================================================================
+            {{- with .Values.services.agent.extraEnv }}
+{{ toYaml . | indent 12 }}
             {{- end }}
-            # Anthropic API key (needed for unified-agent with Claude)
-            {{- if .Values.externalSecrets.contract.sharedAnthropicKey.enabled }}
-            - name: ANTHROPIC_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecrets.contract.sharedAnthropicKey.secretName }}
-                  key: {{ .Values.externalSecrets.contract.sharedAnthropicKey.secretKey }}
-            {{- end }}
+          # Startup probe (optional)
+          {{- if .Values.services.agent.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.services.agent.startupProbe.path | default "/health" }}
+              port: {{ .Values.services.agent.servicePort }}
+            initialDelaySeconds: {{ .Values.services.agent.startupProbe.initialDelaySeconds | default 5 }}
+            periodSeconds: {{ .Values.services.agent.startupProbe.periodSeconds | default 5 }}
+            timeoutSeconds: {{ .Values.services.agent.startupProbe.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.services.agent.startupProbe.failureThreshold | default 12 }}
+          {{- end }}
           # Readiness probe (uses /health on main port since server.py doesn't have separate health server)
           readinessProbe:
             httpGet:
@@ -208,12 +224,12 @@ spec:
             periodSeconds: {{ .Values.services.agent.readinessProbe.periodSeconds | default 10 }}
             timeoutSeconds: {{ .Values.services.agent.readinessProbe.timeoutSeconds | default 5 }}
             failureThreshold: {{ .Values.services.agent.readinessProbe.failureThreshold | default 3 }}
-          # Liveness probe
+          # Liveness probe — targets dedicated health server (separate thread, always responsive)
           {{- if .Values.services.agent.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
               path: {{ .Values.services.agent.livenessProbe.path | default "/health" }}
-              port: {{ .Values.services.agent.servicePort }}
+              port: {{ .Values.services.agent.healthServer.port | default 8081 }}
             initialDelaySeconds: {{ .Values.services.agent.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.services.agent.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.services.agent.livenessProbe.timeoutSeconds | default 5 }}
@@ -228,8 +244,10 @@ metadata:
 spec:
   selector:
     app: incidentfox-agent
+    component: server
   ports:
     - port: {{ .Values.services.agent.servicePort }}
       targetPort: {{ .Values.services.agent.servicePort }}
       protocol: TCP
+      name: http
 {{- end }}

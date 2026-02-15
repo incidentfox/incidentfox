@@ -7,7 +7,7 @@ This guide walks you through setting up IncidentFox in your Slack workspace with
 **Prerequisites:**
 - Docker installed
 - Slack workspace (admin access to install apps)
-- Anthropic API key
+- An LLM API key (Anthropic recommended, or any [supported provider](DEPLOYMENT.md#using-a-different-ai-model))
 
 ---
 
@@ -49,9 +49,11 @@ This guide walks you through setting up IncidentFox in your Slack workspace with
 
 <img width="697" alt="App token" src="https://github.com/user-attachments/assets/620bb92b-db49-4d50-8c22-70682ba008d2" />
 
-### Anthropic API Key (`ANTHROPIC_API_KEY`)
+### LLM API Key (`ANTHROPIC_API_KEY`)
 
 Get your API key from the [Anthropic Console](https://console.anthropic.com).
+
+To use a different model (OpenAI, Gemini, DeepSeek, etc.), see [Using a Different AI Model](DEPLOYMENT.md#using-a-different-ai-model).
 
 ---
 
@@ -71,6 +73,10 @@ Edit `.env` and add your tokens:
 SLACK_BOT_TOKEN=xoxb-your-bot-token
 SLACK_APP_TOKEN=xapp-your-app-token
 ANTHROPIC_API_KEY=sk-ant-your-api-key
+
+# Optional: use a different model (see .env.example for all options)
+#LLM_MODEL=openai/gpt-4o-mini
+#OPENAI_API_KEY=sk-your-openai-key
 ```
 
 Start IncidentFox:

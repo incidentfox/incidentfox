@@ -170,6 +170,8 @@ data:
                       uri: http://credential-resolver-svc.incidentfox-prod.svc.cluster.local:8002/check
                       cluster: ext_authz
                       timeout: 2s
+                    # Prepend /extauthz to avoid hitting LLM proxy routes
+                    path_prefix: "/extauthz"
                     authorization_request:
                       # Forward tenant context headers to ext_authz
                       allowed_headers:

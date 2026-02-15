@@ -1,6 +1,9 @@
 ---
 name: remediation
 description: Safe remediation actions for Kubernetes. Use when proposing or executing pod restarts, deployment scaling, or rollbacks. Always use dry-run first.
+category: infrastructure
+required_integrations:
+  - kubernetes
 ---
 
 # Remediation Actions

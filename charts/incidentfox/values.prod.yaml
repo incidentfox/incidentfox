@@ -15,6 +15,7 @@ global:
   configService:
     url: "http://incidentfox-config-service.incidentfox-prod.svc.cluster.local:8080"
     orgId: "prod"
+  webUiUrl: "https://ui.incidentfox.ai"
   database:
     databaseUrlSecretName: incidentfox-database-url
     databaseUrlSecretKey: DATABASE_URL
@@ -186,6 +187,7 @@ services:
       days: 7
     service:
       type: LoadBalancer
+      loadBalancerClass: "service.k8s.aws/nlb"
       annotations:
         service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
         service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
@@ -194,26 +196,49 @@ services:
         service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
         service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
 
-  # Unified Agent with gVisor sandbox isolation
+  # SRE Agent with gVisor sandbox isolation
   agent:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
-    servicePort: 8888
+    servicePort: 8000  # sre-agent server.py listens on 8000
+    command: ["python", "/app/server.py"]  # sre-agent orchestrator
     serviceAccount:
       create: true
       name: incidentfox-agent
       annotations:
         eks.amazonaws.com/role-arn: "arn:aws:iam::103002841599:role/incidentfox-prod-agent"
-    # K8s tools - agent can access customer namespaces via k8s-gateway
-    kubernetes:
-      enabled: true
-      namespace: "incidentfox-prod"
     # Enable sandbox mode with gVisor isolation
     sandbox:
       enabled: true
       image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
       namespace: ""  # Same namespace as agent
       useGvisor: true
+    # Warm pool for instant sandbox provisioning (<2s)
+    warmPool:
+      enabled: true
+      replicas: 2
+      autoscaler:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 5
+        buffer: 2
+    startupProbe:
+      enabled: true
+      path: "/health"
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 5
+      failureThreshold: 12
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    extraEnv:
+      - name: CONFIG_SERVICE_URL
+        value: "http://incidentfox-config-service.incidentfox-prod.svc.cluster.local:8080"
+      - name: K8S_GATEWAY_URL
+        value: "http://incidentfox-k8s-gateway.incidentfox-prod.svc.cluster.local:8085"
+      - name: SANDBOX_TTL_MINUTES
+        value: "20"
     # Disable tracing in production (using OpenAI tracing UI)
     tracing:
       enabled: false
@@ -243,7 +268,7 @@ services:
   credentialResolver:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:latest"
-    replicas: 2
+    replicas: 1
     credentialSource: config_service
     jwtMode: strict
     sharedAnthropicKey:
@@ -293,3 +318,15 @@ services:
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:latest"
     replicas: 2
     logLevel: "INFO"
+
+# Karpenter — auto-provisions AMD64 nodes for sandbox burst traffic
+karpenter:
+  enabled: true
+  clusterName: "incidentfox-prod"
+  nodeRoleName: "incidentfox-prod-karpenter-node"
+  capacityTypes: ["on-demand", "spot"]
+  limits:
+    cpu: "16"
+    memory: "64Gi"
+  consolidateAfter: "5m"
+  rootVolumeSize: "40Gi"

@@ -72,7 +72,8 @@ spec:
             - name: FREE_TRIAL_DAYS
               value: {{ .Values.services.slackBot.freeTrial.days | default 7 | quote }}
             {{- if .Values.externalSecrets.contract.slackBot.enabled }}
-            # Slack OAuth credentials (for public distribution)
+            # Slack OAuth credentials (DEPRECATED: migrate to slack_apps DB table)
+            # Kept as fallback when no apps are configured in config service
             - name: SLACK_CLIENT_ID
               valueFrom:
                 secretKeyRef:
@@ -93,6 +94,11 @@ spec:
             {{- if .Values.services.slackBot.baseUrl }}
             - name: SLACK_BASE_URL
               value: {{ .Values.services.slackBot.baseUrl | quote }}
+            {{- end }}
+            # Web UI URL for links in Slack messages
+            {{- if .Values.global.webUiUrl }}
+            - name: WEB_UI_URL
+              value: {{ .Values.global.webUiUrl | quote }}
             {{- end }}
           readinessProbe:
             httpGet:

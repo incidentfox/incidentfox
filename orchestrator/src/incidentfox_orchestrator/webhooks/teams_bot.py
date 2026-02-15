@@ -103,6 +103,7 @@ class TeamsIntegration:
         audit_api: AuditApiClient | None,
         app_id: str,
         app_password: str,
+        tenant_id: str = "",
     ):
         self.config_service = config_service
         self.agent_api = agent_api
@@ -111,9 +112,11 @@ class TeamsIntegration:
         self.app_password = app_password
 
         # Create adapter with credentials
+        # channel_auth_tenant is required for single-tenant Azure Bots
         settings = BotFrameworkAdapterSettings(
             app_id=app_id,
             app_password=app_password,
+            channel_auth_tenant=tenant_id or None,
         )
         self.adapter = BotFrameworkAdapter(settings)
 
@@ -256,8 +259,9 @@ class TeamsIntegration:
                 _log(
                     "teams_no_routing",
                     correlation_id=correlation_id,
+                    routing_id=routing_id,
                     channel_id=channel_id,
-                    conversation_id=conversation_id[:50],
+                    conversation_id=conversation_id,
                     tried=routing.get("tried", []),
                 )
                 return
@@ -402,36 +406,53 @@ class TeamsIntegration:
                 destinations=[d.get("type") for d in output_destinations],
             )
 
-            # Run agent in thread pool
+            # Run agent in thread pool — calls /investigate and streams SSE
             result = await asyncio.to_thread(
                 partial(
                     agent_api.run_agent,
                     team_token=team_token,
                     agent_name=entrance_agent_name,
                     message=text,
-                    context={
-                        "user_id": user_id,
-                        "session_id": session_id,
-                        "metadata": {
-                            "teams": {
-                                "channel_id": channel_id,
-                                "conversation_id": conversation_id[:100],
-                            },
-                            "trigger": "teams",
-                        },
-                    },
+                    tenant_id=org_id,
+                    team_id=team_node_id,
                     timeout=int(
                         os.getenv("ORCHESTRATOR_TEAMS_AGENT_TIMEOUT_SECONDS", "300")
                     ),
-                    max_turns=int(
-                        os.getenv("ORCHESTRATOR_TEAMS_AGENT_MAX_TURNS", "50")
-                    ),
                     correlation_id=correlation_id,
                     agent_base_url=dedicated_agent_url,
-                    output_destinations=output_destinations,
-                    trigger_source="teams",
                 )
             )
+
+            # Send agent result back to Teams conversation
+            result_text = result.get("result", "")
+
+            if result_text:
+                try:
+
+                    async def _send_result(turn_context: TurnContext):
+                        reply = Activity(
+                            type=ActivityTypes.message,
+                            text=result_text,
+                            reply_to_id=initial_message_id,
+                        )
+                        await turn_context.send_activity(reply)
+
+                    await self.adapter.continue_conversation(
+                        conversation_ref,
+                        _send_result,
+                        self.app_id,
+                    )
+                    _log(
+                        "teams_result_sent",
+                        correlation_id=correlation_id,
+                        result_length=len(result_text),
+                    )
+                except Exception as send_err:
+                    _log(
+                        "teams_result_send_failed",
+                        correlation_id=correlation_id,
+                        error=str(send_err),
+                    )
 
             _log(
                 "teams_message_completed",

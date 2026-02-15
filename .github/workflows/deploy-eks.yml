@@ -53,8 +53,8 @@ jobs:
         service: [agent, config-service, credential-resolver, k8s-gateway, orchestrator, sandbox-router, slack-bot, ultimate-rag, web-ui, ai-pipeline]
         include:
           - service: agent
-            context: ./unified-agent
-            dockerfile: ./unified-agent/Dockerfile
+            context: ./sre-agent
+            dockerfile: ./sre-agent/Dockerfile
             image: incidentfox-agent
           - service: config-service
             context: ./config_service
@@ -199,6 +199,16 @@ jobs:
         with:
           version: 'v3.14.0'
 
+      - name: Install cluster dependencies
+        if: ${{ github.event.inputs.environment == 'production' }}
+        env:
+          KARPENTER_ROLE_ARN: ${{ secrets.KARPENTER_ROLE_ARN }}
+          KARPENTER_QUEUE_NAME: ${{ secrets.KARPENTER_QUEUE_NAME }}
+          CLUSTER_NAME: ${{ env.EKS_CLUSTER }}
+        run: |
+          chmod +x scripts/setup-cluster-deps.sh
+          ./scripts/setup-cluster-deps.sh
+
       - name: Adopt orphaned resources for Helm
         run: |
           # Fix resources that exist but weren't created by this Helm release
@@ -235,10 +245,8 @@ jobs:
           echo "Deploying with: incidentfox/${{ env.VALUES_FILE }}"
           helm upgrade --install incidentfox ./incidentfox \
             -n ${{ env.HELM_NAMESPACE }} \
-            --create-namespace \
             -f incidentfox/${{ env.VALUES_FILE }} \
             --no-hooks \
-            --force \
             --timeout 5m
 
       - name: Restart deployments to pull latest images
@@ -268,6 +276,7 @@ jobs:
             restart_deployment "incidentfox-k8s-gateway"
             restart_deployment "incidentfox-ultimate-rag"
             restart_deployment "incidentfox-ai-pipeline"
+            restart_deployment "incidentfox-slack-bot"
           else
             # Restart only the specific service
             case "$SERVICES" in
@@ -276,6 +285,7 @@ jobs:
               config-service) restart_deployment "incidentfox-config-service" ;;
               k8s-gateway) restart_deployment "incidentfox-k8s-gateway" ;;
               orchestrator) restart_deployment "incidentfox-orchestrator" ;;
+              slack-bot) restart_deployment "incidentfox-slack-bot" ;;
               ultimate-rag) restart_deployment "incidentfox-ultimate-rag" ;;
               web-ui) restart_deployment "incidentfox-web-ui" ;;
             esac
@@ -302,6 +312,7 @@ jobs:
           wait_for_deployment "incidentfox-agent"
           wait_for_deployment "incidentfox-web-ui"
           wait_for_deployment "incidentfox-k8s-gateway"
+          wait_for_deployment "incidentfox-slack-bot"
 
       - name: Wait for RAG services (slow startup)
         run: |
@@ -343,6 +354,30 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           kubectl get pods -n ${{ env.HELM_NAMESPACE }} -o jsonpath='{range .items[*]}{.metadata.name}: {.status.containerStatuses[0].imageID}{"\n"}{end}' | grep -E "(agent|config-service|orchestrator|web-ui|ultimate-rag)" >> $GITHUB_STEP_SUMMARY || true
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verify Karpenter (production)
+        if: ${{ github.event.inputs.environment == 'production' }}
+        run: |
+          echo "### Karpenter Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check controller
+          if kubectl get pods -n karpenter -l app.kubernetes.io/name=karpenter --no-headers 2>/dev/null | grep -q Running; then
+            echo "- Karpenter controller: Running" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::warning::Karpenter controller not running"
+            echo "- Karpenter controller: **NOT RUNNING**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check NodePool
+          if kubectl get nodepool sandbox-burst --no-headers 2>/dev/null; then
+            echo "- NodePool sandbox-burst: Created" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::warning::NodePool sandbox-burst not found"
+            echo "- NodePool sandbox-burst: **NOT FOUND**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
 
       - name: Summary
         run: |

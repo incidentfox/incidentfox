@@ -139,11 +139,11 @@ class UltimateRAGStorageBackend:
         # Teach the content
         try:
             result = await self.teaching.teach(
-                knowledge=content,
+                content=content,
                 knowledge_type=kt,
                 source=source,
-                entity_ids=entity_ids,
-                importance=analysis.importance.overall_importance,
+                related_entities=entity_ids,
+                confidence=analysis.importance.overall_importance,
             )
 
             node_id = str(result.node_id) if result.node_id else analysis.chunk_id
@@ -213,11 +213,11 @@ class UltimateRAGStorageBackend:
         # Re-teach with updated content (teaching interface handles updates)
         try:
             result = await self.teaching.teach(
-                knowledge=content,
+                content=content,
                 knowledge_type=kt,
                 source=f"{source} (updated)",
-                entity_ids=[e.canonical_name for e in analysis.entities],
-                importance=adjusted_importance,
+                related_entities=[e.canonical_name for e in analysis.entities],
+                confidence=adjusted_importance,
             )
 
             # Update graph entities/relationships

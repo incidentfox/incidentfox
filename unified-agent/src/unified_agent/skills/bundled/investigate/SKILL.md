@@ -1,6 +1,7 @@
 ---
 name: investigate
 description: Systematic incident investigation methodology. Use when investigating production issues, service degradation, errors, latency spikes, or outages. Provides 5-phase framework for evidence-based root cause analysis.
+category: methodology
 ---
 
 # 5-Phase Investigation Methodology

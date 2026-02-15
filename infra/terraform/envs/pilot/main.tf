@@ -42,13 +42,14 @@ module "vpc" {
   count  = var.create_vpc ? 1 : 0
   source = "../../modules/vpc"
 
-  name               = "incidentfox-${var.environment}"
-  cidr               = var.vpc_cidr
-  azs                = var.vpc_azs
-  public_subnets     = var.vpc_public_subnets
-  private_subnets    = var.vpc_private_subnets
-  single_nat_gateway = var.vpc_single_nat_gateway
-  tags               = local.tags
+  name                = "incidentfox-${var.environment}"
+  cidr                = var.vpc_cidr
+  azs                 = var.vpc_azs
+  public_subnets      = var.vpc_public_subnets
+  private_subnets     = var.vpc_private_subnets
+  single_nat_gateway  = var.vpc_single_nat_gateway
+  private_subnet_tags = var.karpenter_enabled ? { "karpenter.sh/discovery" = var.cluster_name } : {}
+  tags                = local.tags
 }
 
 locals {
@@ -61,18 +62,18 @@ module "eks" {
   count  = var.create_eks ? 1 : 0
   source = "../../modules/eks"
 
-  cluster_name        = var.cluster_name
-  cluster_version     = var.cluster_version
+  cluster_name                         = var.cluster_name
+  cluster_version                      = var.cluster_version
   cluster_endpoint_public_access       = var.cluster_endpoint_public_access
   cluster_endpoint_private_access      = var.cluster_endpoint_private_access
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
-  vpc_id              = local.effective_vpc_id
-  private_subnet_ids  = local.effective_private_subnet_ids
-  node_instance_types = var.node_instance_types
-  node_ami_type       = var.node_ami_type
-  node_min_size       = var.node_min_size
-  node_max_size       = var.node_max_size
-  node_desired_size   = var.node_desired_size
+  vpc_id                               = local.effective_vpc_id
+  private_subnet_ids                   = local.effective_private_subnet_ids
+  node_instance_types                  = var.node_instance_types
+  node_ami_type                        = var.node_ami_type
+  node_min_size                        = var.node_min_size
+  node_max_size                        = var.node_max_size
+  node_desired_size                    = var.node_desired_size
 
   # Memory-intensive node group for RAG workloads
   memory_intensive_nodegroup_enabled = var.memory_intensive_nodegroup_enabled
@@ -82,7 +83,10 @@ module "eks" {
   memory_intensive_max_size          = var.memory_intensive_max_size
   memory_intensive_desired_size      = var.memory_intensive_desired_size
 
-  tags                = local.tags
+  # Karpenter dynamic node provisioning
+  karpenter_enabled = var.karpenter_enabled
+
+  tags = local.tags
 }
 
 locals {
@@ -92,11 +96,11 @@ locals {
 
 # IAM/IRSA for controllers
 module "iam_irsa" {
-  source              = "../../modules/iam_irsa"
-  name_prefix         = "incidentfox-${var.environment}"
-  oidc_provider_arn   = local.oidc_provider_arn
+  source               = "../../modules/iam_irsa"
+  name_prefix          = "incidentfox-${var.environment}"
+  oidc_provider_arn    = local.oidc_provider_arn
   secrets_manager_arns = var.eso_allowed_secret_arns
-  tags                = local.tags
+  tags                 = local.tags
 }
 
 # IAM/IRSA for the IncidentFox agent (read-only AWS inspection tools)
@@ -115,9 +119,9 @@ resource "aws_iam_role" "agent" {
     Version = "2012-10-17",
     Statement = [
       {
-        Effect = "Allow",
+        Effect    = "Allow",
         Principal = { Federated = local.oidc_provider_arn },
-        Action = "sts:AssumeRoleWithWebIdentity",
+        Action    = "sts:AssumeRoleWithWebIdentity",
         Condition = {
           StringEquals = {
             "${replace(data.aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:${local.agent_namespace}:${local.agent_service_account_name}"
@@ -188,9 +192,9 @@ resource "aws_iam_role" "cloudwatch_observability" {
     Version = "2012-10-17",
     Statement = [
       {
-        Effect = "Allow",
+        Effect    = "Allow",
         Principal = { Federated = local.oidc_provider_arn },
-        Action = "sts:AssumeRoleWithWebIdentity",
+        Action    = "sts:AssumeRoleWithWebIdentity",
         Condition = {
           StringEquals = {
             "${replace(data.aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:${local.cloudwatch_namespace}:cloudwatch-agent"
@@ -198,9 +202,9 @@ resource "aws_iam_role" "cloudwatch_observability" {
         }
       },
       {
-        Effect = "Allow",
+        Effect    = "Allow",
         Principal = { Federated = local.oidc_provider_arn },
-        Action = "sts:AssumeRoleWithWebIdentity",
+        Action    = "sts:AssumeRoleWithWebIdentity",
         Condition = {
           StringEquals = {
             "${replace(data.aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:${local.cloudwatch_namespace}:fluent-bit"
@@ -255,7 +259,7 @@ module "rds" {
   count  = var.create_rds ? 1 : 0
   source = "../../modules/rds"
 
-  name                     = "incidentfox-${var.environment}"
+  name                      = "incidentfox-${var.environment}"
   vpc_id                    = local.effective_vpc_id
   subnet_ids                = local.effective_private_subnet_ids
   allowed_security_group_id = local.effective_node_sg
@@ -351,7 +355,7 @@ resource "aws_secretsmanager_secret" "openai_api_key" {
 }
 
 resource "aws_secretsmanager_secret_version" "openai_api_key" {
-  secret_id     = aws_secretsmanager_secret.openai_api_key.id
+  secret_id = aws_secretsmanager_secret.openai_api_key.id
   # Placeholder so ESO can sync a value. Replace via Secrets Manager before using the agent.
   secret_string = "REPLACE_ME"
 }

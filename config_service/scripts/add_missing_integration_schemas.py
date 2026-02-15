@@ -17,6 +17,14 @@ This script adds schemas for integrations that have tools defined but no schema:
 - Confluence
 - Blameless
 - FireHydrant
+- Honeycomb
+- Loki
+- ClickUp
+- Jaeger
+- Prometheus
+- New Relic
+- CloudWatch
+- OpenSearch
 """
 
 import os
@@ -113,12 +121,12 @@ INTEGRATION_SCHEMAS = [
                 "placeholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
             },
             {
-                "name": "region",
+                "name": "domain",
                 "type": "string",
                 "required": True,
                 "level": "org",
-                "description": "Coralogix region (e.g., coralogix.com, app.eu2.coralogix.com, app.coralogix.us)",
-                "placeholder": "coralogix.com",
+                "description": "Coralogix dashboard URL or domain (e.g., https://myteam.app.cx498.coralogix.com)",
+                "placeholder": "https://myteam.app.cx498.coralogix.com",
             },
             {
                 "name": "application",
@@ -193,7 +201,7 @@ INTEGRATION_SCHEMAS = [
         "featured": False,
         "fields": [
             {
-                "name": "auth_token",
+                "name": "api_key",
                 "type": "secret",
                 "required": True,
                 "level": "org",
@@ -214,12 +222,12 @@ INTEGRATION_SCHEMAS = [
                 "description": "Default project slug (team can override)",
             },
             {
-                "name": "base_url",
+                "name": "domain",
                 "type": "string",
                 "required": False,
                 "level": "org",
-                "description": "Sentry API base URL (for self-hosted)",
-                "default_value": "https://sentry.io/api/0",
+                "description": "Sentry base URL (for self-hosted instances)",
+                "default_value": "https://sentry.io",
             },
         ],
     },
@@ -233,23 +241,15 @@ INTEGRATION_SCHEMAS = [
         "featured": False,
         "fields": [
             {
-                "name": "host",
+                "name": "domain",
                 "type": "string",
                 "required": True,
                 "level": "org",
-                "description": "Splunk server hostname",
-                "placeholder": "splunk.company.com",
+                "description": "Splunk instance URL (include port if non-standard)",
+                "placeholder": "https://splunk.company.com:8089",
             },
             {
-                "name": "port",
-                "type": "integer",
-                "required": False,
-                "level": "org",
-                "description": "Splunk REST API port",
-                "default_value": 8089,
-            },
-            {
-                "name": "token",
+                "name": "api_key",
                 "type": "secret",
                 "required": True,
                 "level": "org",
@@ -282,7 +282,7 @@ INTEGRATION_SCHEMAS = [
         "featured": False,
         "fields": [
             {
-                "name": "url",
+                "name": "domain",
                 "type": "string",
                 "required": True,
                 "level": "org",
@@ -297,7 +297,7 @@ INTEGRATION_SCHEMAS = [
                 "description": "Jira account email",
             },
             {
-                "name": "api_token",
+                "name": "api_key",
                 "type": "secret",
                 "required": True,
                 "level": "org",
@@ -322,15 +322,15 @@ INTEGRATION_SCHEMAS = [
         "featured": False,
         "fields": [
             {
-                "name": "url",
+                "name": "domain",
                 "type": "string",
                 "required": False,
                 "level": "org",
-                "description": "GitLab instance URL",
+                "description": "GitLab instance URL (leave blank for gitlab.com)",
                 "default_value": "https://gitlab.com",
             },
             {
-                "name": "token",
+                "name": "api_key",
                 "type": "secret",
                 "required": True,
                 "level": "org",
@@ -452,7 +452,7 @@ INTEGRATION_SCHEMAS = [
         "featured": False,
         "fields": [
             {
-                "name": "url",
+                "name": "domain",
                 "type": "string",
                 "required": True,
                 "level": "org",
@@ -508,7 +508,7 @@ INTEGRATION_SCHEMAS = [
         "featured": False,
         "fields": [
             {
-                "name": "url",
+                "name": "domain",
                 "type": "string",
                 "required": True,
                 "level": "org",
@@ -523,7 +523,7 @@ INTEGRATION_SCHEMAS = [
                 "description": "Confluence account email",
             },
             {
-                "name": "api_token",
+                "name": "api_key",
                 "type": "secret",
                 "required": True,
                 "level": "org",
@@ -593,6 +593,245 @@ INTEGRATION_SCHEMAS = [
                 "required": False,
                 "level": "team",
                 "description": "Default service for this team",
+            },
+        ],
+    },
+    {
+        "id": "honeycomb",
+        "name": "Honeycomb",
+        "category": "observability",
+        "description": "Honeycomb observability platform for distributed tracing and log analysis",
+        "docs_url": "https://docs.honeycomb.io/",
+        "display_order": 23,
+        "featured": False,
+        "fields": [
+            {
+                "name": "api_key",
+                "type": "secret",
+                "required": True,
+                "level": "org",
+                "description": "Honeycomb API key (Configuration Keys)",
+                "placeholder": "hcaik_...",
+            },
+            {
+                "name": "domain",
+                "type": "string",
+                "required": False,
+                "level": "org",
+                "description": "Honeycomb API URL (leave blank for default)",
+                "default_value": "https://api.honeycomb.io",
+            },
+            {
+                "name": "dataset",
+                "type": "string",
+                "required": False,
+                "level": "team",
+                "description": "Default dataset name",
+            },
+        ],
+    },
+    {
+        "id": "loki",
+        "name": "Loki",
+        "category": "observability",
+        "description": "Grafana Loki for log aggregation and querying with LogQL",
+        "docs_url": "https://grafana.com/docs/loki/latest/",
+        "display_order": 24,
+        "featured": False,
+        "fields": [
+            {
+                "name": "domain",
+                "type": "string",
+                "required": True,
+                "level": "org",
+                "description": "Loki instance URL",
+                "placeholder": "https://loki.company.com:3100",
+            },
+            {
+                "name": "api_key",
+                "type": "secret",
+                "required": False,
+                "level": "org",
+                "description": "Loki API key or Bearer token (optional for unauthenticated instances)",
+            },
+        ],
+    },
+    {
+        "id": "clickup",
+        "name": "ClickUp",
+        "category": "project-management",
+        "description": "ClickUp project management for task tracking and incident tickets",
+        "docs_url": "https://clickup.com/api",
+        "display_order": 56,
+        "featured": False,
+        "fields": [
+            {
+                "name": "api_key",
+                "type": "secret",
+                "required": True,
+                "level": "org",
+                "description": "ClickUp personal API token",
+                "placeholder": "pk_...",
+            },
+            {
+                "name": "team_id",
+                "type": "string",
+                "required": False,
+                "level": "team",
+                "description": "ClickUp Workspace (Team) ID",
+            },
+        ],
+    },
+    {
+        "id": "jaeger",
+        "name": "Jaeger",
+        "category": "observability",
+        "description": "Jaeger distributed tracing for request flow analysis",
+        "docs_url": "https://www.jaegertracing.io/docs/",
+        "display_order": 26,
+        "featured": False,
+        "fields": [
+            {
+                "name": "domain",
+                "type": "string",
+                "required": True,
+                "level": "org",
+                "description": "Jaeger Query API URL",
+                "placeholder": "https://jaeger.company.com:16686",
+            },
+            {
+                "name": "api_key",
+                "type": "secret",
+                "required": False,
+                "level": "org",
+                "description": "Jaeger API key or Bearer token (optional for unauthenticated instances)",
+            },
+        ],
+    },
+    {
+        "id": "prometheus",
+        "name": "Prometheus",
+        "category": "observability",
+        "description": "Prometheus for metrics querying with PromQL",
+        "docs_url": "https://prometheus.io/docs/",
+        "display_order": 18,
+        "featured": False,
+        "fields": [
+            {
+                "name": "domain",
+                "type": "string",
+                "required": True,
+                "level": "org",
+                "description": "Prometheus server URL",
+                "placeholder": "https://prometheus.company.com:9090",
+            },
+            {
+                "name": "api_key",
+                "type": "secret",
+                "required": False,
+                "level": "org",
+                "description": "Prometheus API key or Bearer token (optional for unauthenticated instances)",
+            },
+        ],
+    },
+    {
+        "id": "newrelic",
+        "name": "New Relic",
+        "category": "observability",
+        "description": "New Relic APM for application performance monitoring, NRQL queries, and infrastructure metrics",
+        "docs_url": "https://docs.newrelic.com/docs/apis/intro-apis/new-relic-api-keys/",
+        "display_order": 21,
+        "featured": False,
+        "fields": [
+            {
+                "name": "api_key",
+                "type": "secret",
+                "required": True,
+                "level": "org",
+                "description": "New Relic User API key (starts with NRAK-)",
+                "placeholder": "NRAK-...",
+            },
+            {
+                "name": "account_id",
+                "type": "string",
+                "required": True,
+                "level": "org",
+                "description": "New Relic account ID",
+                "placeholder": "1234567",
+            },
+        ],
+    },
+    {
+        "id": "cloudwatch",
+        "name": "CloudWatch",
+        "category": "observability",
+        "description": "AWS CloudWatch for log querying and infrastructure metrics",
+        "docs_url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/",
+        "display_order": 19,
+        "featured": False,
+        "fields": [
+            {
+                "name": "aws_access_key_id",
+                "type": "secret",
+                "required": True,
+                "level": "org",
+                "description": "AWS Access Key ID with CloudWatch read permissions",
+            },
+            {
+                "name": "aws_secret_access_key",
+                "type": "secret",
+                "required": True,
+                "level": "org",
+                "description": "AWS Secret Access Key",
+            },
+            {
+                "name": "region",
+                "type": "string",
+                "required": False,
+                "level": "org",
+                "description": "Default AWS region",
+                "default_value": "us-east-1",
+            },
+        ],
+    },
+    {
+        "id": "opensearch",
+        "name": "OpenSearch",
+        "category": "observability",
+        "description": "Amazon OpenSearch / AWS OpenSearch Service for log search and analytics",
+        "docs_url": "https://docs.aws.amazon.com/opensearch-service/latest/developerguide/",
+        "display_order": 21,
+        "featured": False,
+        "fields": [
+            {
+                "name": "domain",
+                "type": "string",
+                "required": True,
+                "level": "org",
+                "description": "OpenSearch endpoint URL",
+                "placeholder": "https://search-my-domain-abc123.us-east-1.es.amazonaws.com",
+            },
+            {
+                "name": "username",
+                "type": "string",
+                "required": False,
+                "level": "org",
+                "description": "Master user name (for fine-grained access control)",
+            },
+            {
+                "name": "password",
+                "type": "secret",
+                "required": False,
+                "level": "org",
+                "description": "Master user password",
+            },
+            {
+                "name": "index_pattern",
+                "type": "string",
+                "required": False,
+                "level": "team",
+                "description": "Default index pattern",
+                "default_value": "logs-*",
             },
         ],
     },

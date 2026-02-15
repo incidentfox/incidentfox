@@ -1,0 +1,26 @@
+# SandboxWarmPool - Maintains pre-warmed sandbox pods
+#
+# This resource ensures N warm pods are always available for instant binding.
+# When a SandboxClaim is created, it binds to a warm pod instead of waiting
+# for pod creation (~30-60 seconds reduced to <1 second).
+#
+# The warm pool controller:
+# 1. Creates warm pods from the template
+# 2. Monitors pool size and replenishes as pods are claimed
+# 3. Handles pod failures/evictions by creating replacements
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxWarmPool
+metadata:
+  name: incidentfox-warmpool
+  namespace: incidentfox-prod
+  labels:
+    app: incidentfox
+    component: warmpool
+spec:
+  # Reference to SandboxTemplate
+  sandboxTemplateRef:
+    name: incidentfox-warmpool-template
+  # Number of warm pods to maintain
+  # 3 provides good coverage for burst traffic while limiting resource usage
+  # Adjust based on expected concurrent investigations
+  replicas: 3

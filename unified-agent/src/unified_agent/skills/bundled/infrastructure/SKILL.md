@@ -1,6 +1,7 @@
 ---
 name: infrastructure
 description: Infrastructure debugging for Kubernetes and AWS. Use when investigating pod crashes, deployment issues, resource problems, container failures, or cloud infrastructure issues.
+category: methodology
 ---
 
 # Infrastructure Debugging

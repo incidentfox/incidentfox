@@ -30,7 +30,6 @@ dependencies = [
 
     # Monitoring & Observability Backends
     "datadog-api-client>=2.20.0",
-    "elasticsearch>=8.0.0",
 
     # VCS & Collaboration
     "PyGithub>=2.1.0",

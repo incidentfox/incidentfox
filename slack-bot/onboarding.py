@@ -9,6 +9,7 @@ Handles:
 
 import json
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from assets_config import get_integration_logo_url
@@ -26,7 +27,123 @@ CATEGORIES = {
     "cloud": {"name": "Cloud", "emoji": ":cloud:"},
     "scm": {"name": "Dev Tools", "emoji": ":hammer_and_wrench:"},
     "infra": {"name": "Infra", "emoji": ":wrench:"},
+    "llm": {"name": "AI Models", "emoji": ":robot_face:"},
 }
+
+# Provider definitions for the AI Model selector dropdown.
+# (provider_id, display_name, default_model_placeholder, short_description)
+LLM_PROVIDERS = [
+    # --- Tier 1: Major providers ---
+    (
+        "anthropic",
+        "Anthropic (Claude)",
+        "claude-sonnet-4-20250514",
+        "Default — uses IncidentFox key or your own",
+    ),
+    ("openai", "OpenAI", "openai/gpt-4o", "GPT-4o, o3, o1 models"),
+    ("gemini", "Google Gemini", "gemini/gemini-2.5-flash", "Direct Gemini API"),
+    # --- Tier 2: Cloud / enterprise ---
+    (
+        "bedrock",
+        "Amazon Bedrock",
+        "bedrock/anthropic.claude-sonnet-4-20250514-v1:0",
+        "AWS managed models",
+    ),
+    (
+        "vertex_ai",
+        "Google Vertex AI",
+        "vertex_ai/gemini-2.5-flash",
+        "GCP managed models",
+    ),
+    ("azure", "Azure OpenAI", "azure/my-gpt4o-deployment", "Azure-hosted OpenAI"),
+    ("azure_ai", "Azure AI Foundry", "azure_ai/my-model", "Serverless deployments"),
+    # --- Tier 3: Aggregators & specialty ---
+    ("openrouter", "OpenRouter", "openrouter/openai/gpt-4o", "200+ models via one key"),
+    ("deepseek", "DeepSeek", "deepseek/deepseek-chat", "DeepSeek models"),
+    ("qwen", "Qwen (Alibaba)", "qwen/qwen3-max", "Qwen3 models"),
+    ("xai", "xAI (Grok)", "xai/grok-3", "Grok models"),
+    ("mistral", "Mistral AI", "mistral/mistral-large-latest", "Mistral models"),
+    ("cohere", "Cohere", "cohere/command-r-plus", "Command R+ models"),
+    # --- Gateways ---
+    (
+        "cloudflare_ai",
+        "Cloudflare AI Gateway",
+        "openai/gpt-4o",
+        "Route through Cloudflare AI Gateway",
+    ),
+    # --- Tier 4: Inference platforms (host other providers' models) ---
+    ("groq", "Groq", "groq/llama-3.3-70b-versatile", "Ultra-fast inference"),
+    (
+        "together_ai",
+        "Together AI",
+        "together_ai/meta-llama/Llama-3-70b",
+        "Open-source model hosting",
+    ),
+    (
+        "fireworks_ai",
+        "Fireworks AI",
+        "fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct",
+        "Fast open-source hosting",
+    ),
+    ("moonshot", "Moonshot AI (Kimi)", "moonshot/moonshot-v1-8k", "Kimi models"),
+    ("minimax", "MiniMax", "minimax/MiniMax-Text-01", "MiniMax models"),
+    ("zai", "Z.ai (GLM)", "zai/glm-4.7", "GLM models"),
+    ("arcee", "Arcee AI", "arcee/virtuoso-large", "Trinity, Maestro, Virtuoso"),
+    # --- Self-hosted ---
+    ("ollama", "Ollama (Local)", "ollama/llama3", "Local models"),
+    # --- Custom ---
+    (
+        "custom_endpoint",
+        "Custom Endpoint",
+        "my-model",
+        "Any OpenAI-compatible endpoint",
+    ),
+]
+
+# Additional model-prefix → provider aliases for models that don't use
+# the standard "provider/" prefix (e.g. "claude-sonnet-..." → anthropic).
+_EXTRA_MODEL_PREFIX_ALIASES = {
+    "claude": "anthropic",
+    "gpt-": "openai",
+    "o1-": "openai",
+    "o3-": "openai",
+    "command-r": "cohere",
+    "or:": "openrouter",
+}
+
+
+def _strip_provider_prefix(name: str) -> str:
+    """Strip 'Provider: ' prefix from OpenRouter model names for single-provider views."""
+    if ": " in name:
+        return name.split(": ", 1)[1]
+    return name
+
+
+def _md_to_slack(text: str) -> str:
+    """Convert markdown links [text](url) to Slack mrkdwn <url|text>."""
+    import re
+
+    return re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"<\2|\1>", text)
+
+
+# Built from LLM_PROVIDERS + extra aliases — single source of truth.
+_MODEL_PREFIX_TO_PROVIDER = {
+    **{pid + "/": pid for pid, _, _, _ in LLM_PROVIDERS if pid != "anthropic"},
+    **_EXTRA_MODEL_PREFIX_ALIASES,
+}
+
+
+def detect_provider_from_model(model: str) -> Optional[str]:
+    """Detect provider ID from a LiteLLM model string.
+
+    Uses the prefix mapping derived from LLM_PROVIDERS.
+    """
+    m = model.lower()
+    for prefix, provider in _MODEL_PREFIX_TO_PROVIDER.items():
+        if m.startswith(prefix):
+            return provider
+    return None
+
 
 # All supported integrations
 # status: "active" = can configure now, "coming_soon" = show but not configurable
@@ -558,15 +675,748 @@ INTEGRATIONS: List[Dict[str, Any]] = [
             },
         ],
     },
+    # LLM MODEL INTEGRATIONS
+    {
+        "id": "llm",
+        "name": "AI Model",
+        "category": "llm",
+        "status": "active",
+        "icon": ":brain:",
+        "icon_fallback": ":robot_face:",
+        "description": "Choose which LLM model the agent uses (GPT-4o, Gemini, DeepSeek, etc.)",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Choose a model from the supported list\n"
+            "2. Make sure you have an API key for the provider configured\n"
+            "3. The agent will use this model for all interactions"
+        ),
+        "fields": [
+            {
+                "id": "model",
+                "name": "Model ID",
+                "type": "string",
+                "required": True,
+                "placeholder": "openrouter/openai/gpt-4o",
+                "hint": (
+                    "LiteLLM-compatible model ID. Examples: "
+                    "openai/gpt-4o, gemini/gemini-2.5-flash, "
+                    "openrouter/anthropic/claude-sonnet-4, "
+                    "deepseek/deepseek-chat, ollama/llama3"
+                ),
+            },
+        ],
+    },
+    {
+        "id": "anthropic",
+        "name": "Anthropic (Claude)",
+        "category": "llm",
+        "status": "active",
+        "icon": ":robot_face:",
+        "icon_fallback": ":robot_face:",
+        "description": "Claude models from Anthropic — the default provider.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to https://console.anthropic.com/\n"
+            "2. Create an API key\n"
+            "3. Enter the key below (or leave blank to use IncidentFox default)"
+        ),
+        "docs_url": "https://docs.anthropic.com",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": False,
+                "placeholder": "sk-ant-...",
+                "hint": "Your Anthropic API key. Leave blank to use IncidentFox default.",
+            },
+        ],
+    },
+    {
+        "id": "openai",
+        "name": "OpenAI",
+        "category": "llm",
+        "status": "active",
+        "icon": ":brain:",
+        "icon_fallback": ":brain:",
+        "description": "GPT-5.2 and other OpenAI models.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to https://platform.openai.com/api-keys\n"
+            "2. Create an API key\n"
+            "3. Enter the key below"
+        ),
+        "docs_url": "https://platform.openai.com/docs",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "sk-...",
+                "hint": "Your OpenAI API key from platform.openai.com",
+            },
+        ],
+    },
+    {
+        "id": "openrouter",
+        "name": "OpenRouter",
+        "category": "llm",
+        "status": "active",
+        "icon": ":electric_plug:",
+        "icon_fallback": ":electric_plug:",
+        "description": "Access 200+ models (GPT-4o, Gemini, Llama, etc.) via one API key.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Sign up at https://openrouter.ai/\n"
+            "2. Go to Keys and create an API key\n"
+            "3. Enter the key below"
+        ),
+        "docs_url": "https://openrouter.ai/docs",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "sk-or-v1-...",
+                "hint": "Your OpenRouter API key",
+            },
+        ],
+    },
+    {
+        "id": "gemini",
+        "name": "Google Gemini",
+        "category": "llm",
+        "status": "active",
+        "icon": ":google:",
+        "icon_fallback": ":sparkles:",
+        "description": "Google Gemini API for direct access to Gemini models.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to https://aistudio.google.com/apikey\n"
+            "2. Create an API key\n"
+            "3. Enter the key below"
+        ),
+        "docs_url": "https://ai.google.dev/docs",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "AIza...",
+                "hint": "Your Google AI / Gemini API key",
+            },
+        ],
+    },
+    {
+        "id": "deepseek",
+        "name": "DeepSeek",
+        "category": "llm",
+        "status": "active",
+        "icon": ":mag:",
+        "icon_fallback": ":mag:",
+        "description": "DeepSeek API for direct access to DeepSeek models.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to https://platform.deepseek.com/\n"
+            "2. Create an API key\n"
+            "3. Enter the key below"
+        ),
+        "docs_url": "https://platform.deepseek.com/docs",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "sk-...",
+                "hint": "Your DeepSeek API key",
+            },
+        ],
+    },
+    {
+        "id": "qwen",
+        "name": "Qwen (Alibaba)",
+        "category": "llm",
+        "status": "active",
+        "icon": ":globe_with_meridians:",
+        "icon_fallback": ":robot_face:",
+        "description": "Alibaba Cloud's Qwen models via DashScope API.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to https://dashscope.console.aliyun.com/\n"
+            "2. Create an API key\n"
+            "3. Enter the key below"
+        ),
+        "docs_url": "https://help.aliyun.com/en/model-studio/",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "sk-...",
+                "hint": "Your DashScope API key from Alibaba Cloud",
+            },
+        ],
+    },
+    {
+        "id": "xai",
+        "name": "xAI (Grok)",
+        "category": "llm",
+        "status": "active",
+        "icon": ":x:",
+        "icon_fallback": ":robot_face:",
+        "description": "xAI API for Grok models (Grok-3, Grok-3-mini).",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to https://console.x.ai/\n"
+            "2. Create an API key\n"
+            "3. Enter your API key below"
+        ),
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "xAI API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "xai-...",
+                "hint": "API key from console.x.ai",
+            },
+        ],
+    },
+    {
+        "id": "moonshot",
+        "name": "Moonshot AI (Kimi)",
+        "category": "llm",
+        "status": "active",
+        "icon": ":crescent_moon:",
+        "icon_fallback": ":robot_face:",
+        "description": "Moonshot AI API for Kimi models (moonshot-v1-8k, kimi-k2.5).",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to https://platform.moonshot.cn/\n"
+            "2. Create an API key\n"
+            "3. Enter your API key below"
+        ),
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "Moonshot API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "sk-...",
+                "hint": "API key from platform.moonshot.cn",
+            },
+        ],
+    },
+    {
+        "id": "minimax",
+        "name": "MiniMax",
+        "category": "llm",
+        "status": "active",
+        "icon": ":small_blue_diamond:",
+        "icon_fallback": ":robot_face:",
+        "description": "MiniMax API for MiniMax-Text models.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to https://www.minimax.chat/\n"
+            "2. Create an API key\n"
+            "3. Enter your API key below"
+        ),
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "MiniMax API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "sk-api-...",
+                "hint": "API key from api.minimax.chat",
+            },
+        ],
+    },
+    {
+        "id": "zai",
+        "name": "Z.ai (GLM)",
+        "category": "llm",
+        "status": "active",
+        "icon": ":zap:",
+        "icon_fallback": ":robot_face:",
+        "description": "Z.ai API for GLM models (GLM-4.5, GLM-4.6, GLM-4.7).",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to https://open.z.ai/\n"
+            "2. Create an API key\n"
+            "3. Enter the key below"
+        ),
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "...",
+                "hint": "Your Z.ai API key",
+            },
+        ],
+    },
+    {
+        "id": "arcee",
+        "name": "Arcee AI",
+        "category": "llm",
+        "status": "active",
+        "icon": ":sparkles:",
+        "icon_fallback": ":robot_face:",
+        "description": "Arcee AI models (Trinity, Maestro, Virtuoso, Spotlight).",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to https://models.arcee.ai/\n"
+            "2. Create an API key under Account > API Keys\n"
+            "3. Enter the key below"
+        ),
+        "docs_url": "https://docs.arcee.ai",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "...",
+                "hint": "Your Arcee AI API key",
+            },
+        ],
+    },
+    {
+        "id": "cloudflare_ai",
+        "name": "Cloudflare AI Gateway",
+        "category": "llm",
+        "status": "active",
+        "icon": ":cloud:",
+        "icon_fallback": ":cloud:",
+        "description": "Route LLM requests through Cloudflare AI Gateway for caching, rate limiting, and analytics.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to https://dash.cloudflare.com/ → AI → AI Gateway\n"
+            "2. Create a gateway and copy the Gateway URL\n"
+            "3. Create an API token with AI Gateway permissions\n"
+            "4. Enter the gateway URL, token, and model below"
+        ),
+        "fields": [
+            {
+                "id": "api_base",
+                "name": "Gateway URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}",
+                "hint": "Your Cloudflare AI Gateway endpoint URL",
+            },
+            {
+                "id": "api_key",
+                "name": "Cloudflare API Token",
+                "type": "secret",
+                "required": False,
+                "placeholder": "cf-...",
+                "hint": "API token with AI Gateway permissions. Leave blank if your gateway doesn't require it.",
+            },
+            {
+                "id": "provider_api_key",
+                "name": "Provider API Key (optional)",
+                "type": "secret",
+                "required": False,
+                "placeholder": "sk-...",
+                "hint": "Upstream provider key for pass-through mode. Leave blank if keys are stored in Cloudflare.",
+            },
+        ],
+    },
+    {
+        "id": "ollama",
+        "name": "Ollama",
+        "category": "llm",
+        "status": "active",
+        "icon": ":llama:",
+        "icon_fallback": ":computer:",
+        "description": "Run local LLM models via Ollama (Llama, Mistral, etc.)",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Install Ollama: https://ollama.ai/\n"
+            "2. Pull a model: `ollama pull llama3`\n"
+            "3. Enter your Ollama server URL below"
+        ),
+        "fields": [
+            {
+                "id": "host",
+                "name": "Ollama Host URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "http://localhost:11434",
+                "hint": "URL of your Ollama server",
+            },
+        ],
+    },
+    {
+        "id": "custom_endpoint",
+        "name": "Custom Endpoint",
+        "category": "llm",
+        "status": "active",
+        "icon": ":link:",
+        "icon_fallback": ":link:",
+        "description": "Connect to any OpenAI Chat Completions-compatible endpoint.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Enter the base URL of your OpenAI-compatible endpoint\n"
+            "2. Enter the model name your endpoint expects\n"
+            "3. Configure authentication (API key and/or custom headers)"
+        ),
+        "fields": [
+            {
+                "id": "api_base",
+                "name": "Endpoint URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "https://your-gateway.example.com/v1",
+                "hint": "Base URL of your OpenAI-compatible endpoint",
+            },
+            {
+                "id": "api_key",
+                "name": "API Key (optional)",
+                "type": "secret",
+                "required": False,
+                "placeholder": "sk-...",
+                "hint": "Sent as Authorization: Bearer {key}. Leave blank if not needed.",
+            },
+            {
+                "id": "custom_header_name",
+                "name": "Custom Header Name (optional)",
+                "type": "string",
+                "required": False,
+                "placeholder": "e.g. cf-aig-authorization, X-Api-Key",
+                "hint": "Name of an additional auth header",
+            },
+            {
+                "id": "custom_header_value",
+                "name": "Custom Header Value (optional)",
+                "type": "secret",
+                "required": False,
+                "placeholder": "e.g. Bearer your-token",
+                "hint": "Value for the custom header above",
+            },
+        ],
+    },
+    {
+        "id": "azure",
+        "name": "Azure OpenAI",
+        "category": "llm",
+        "status": "active",
+        "icon": ":azure:",
+        "icon_fallback": ":cloud:",
+        "description": "Azure-hosted OpenAI models with enterprise compliance.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to Azure Portal > Azure OpenAI\n"
+            "2. Create or select a resource\n"
+            "3. Deploy a model (e.g., gpt-4o)\n"
+            "4. Copy the endpoint URL and API key"
+        ),
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "hint": "Azure OpenAI API key",
+            },
+            {
+                "id": "api_base",
+                "name": "Endpoint URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "https://your-resource.openai.azure.com",
+                "hint": "Your Azure OpenAI resource endpoint",
+            },
+            {
+                "id": "api_version",
+                "name": "API Version",
+                "type": "string",
+                "required": False,
+                "placeholder": "2024-06-01",
+                "hint": "Azure API version (default: 2024-06-01)",
+            },
+        ],
+    },
+    {
+        "id": "azure_ai",
+        "name": "Azure AI Foundry",
+        "category": "llm",
+        "status": "active",
+        "icon": ":azure:",
+        "icon_fallback": ":cloud:",
+        "description": "Azure AI Foundry serverless deployments (GPT-4o, Phi, Llama, DeepSeek, etc.)",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Go to Azure AI Foundry > Models > Deploy a serverless model\n"
+            "2. Copy the endpoint URL and API key from the deployment\n"
+            "3. Enter them below"
+        ),
+        "docs_url": "https://learn.microsoft.com/en-us/azure/ai-foundry/",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "hint": "Azure AI Foundry deployment API key",
+            },
+            {
+                "id": "api_base",
+                "name": "Endpoint URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "https://your-model.eastus2.models.ai.azure.com",
+                "hint": "Serverless model deployment endpoint URL",
+            },
+        ],
+    },
+    {
+        "id": "bedrock",
+        "name": "Amazon Bedrock",
+        "category": "llm",
+        "status": "active",
+        "icon": ":aws:",
+        "icon_fallback": ":cloud:",
+        "description": "AWS Bedrock for managed LLM inference (Claude, Llama, Titan, etc.)",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "*Option A (recommended):* Bedrock API Key\n"
+            "1. Go to AWS Console → Amazon Bedrock → API keys\n"
+            "2. Generate a new API key\n"
+            "3. Paste the key (starts with ABSK) below\n\n"
+            "*Option B:* IAM Access Keys\n"
+            "1. Create an IAM user with `bedrock:InvokeModel` permission\n"
+            "2. Generate access keys and enter them below"
+        ),
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "Bedrock API Key",
+                "type": "secret",
+                "required": False,
+                "placeholder": "ABSK...",
+                "hint": "Bedrock API key (simplest option — just one key)",
+            },
+            {
+                "id": "aws_access_key_id",
+                "name": "AWS Access Key ID",
+                "type": "secret",
+                "required": False,
+                "placeholder": "AKIA...",
+                "hint": "IAM access key (alternative to Bedrock API key)",
+            },
+            {
+                "id": "aws_secret_access_key",
+                "name": "AWS Secret Access Key",
+                "type": "secret",
+                "required": False,
+                "hint": "IAM secret key (required with access key ID)",
+            },
+            {
+                "id": "aws_region_name",
+                "name": "AWS Region",
+                "type": "string",
+                "required": False,
+                "placeholder": "us-east-1",
+                "hint": "AWS region where Bedrock is enabled",
+            },
+        ],
+    },
+    {
+        "id": "vertex_ai",
+        "name": "Google Vertex AI",
+        "category": "llm",
+        "status": "active",
+        "icon": ":google:",
+        "icon_fallback": ":cloud:",
+        "description": "Google Cloud Vertex AI — Gemini, Claude, Llama, Mistral and more via GCP.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Enable Vertex AI in your GCP project\n"
+            "2. Request access for desired models in Model Garden\n"
+            "3. Create a service account with Vertex AI User role\n"
+            "4. Enter your project ID and (optionally) service account JSON"
+        ),
+        "fields": [
+            {
+                "id": "project",
+                "name": "GCP Project ID",
+                "type": "string",
+                "required": True,
+                "placeholder": "my-gcp-project",
+                "hint": "Your Google Cloud project ID",
+            },
+            {
+                "id": "location",
+                "name": "Region",
+                "type": "string",
+                "required": False,
+                "placeholder": "us-central1",
+                "hint": "GCP region (default: us-central1)",
+            },
+            {
+                "id": "service_account_json",
+                "name": "Service Account JSON",
+                "type": "secret",
+                "required": False,
+                "hint": "Service account key JSON (optional if using workload identity)",
+            },
+        ],
+    },
+    {
+        "id": "mistral",
+        "name": "Mistral AI",
+        "category": "llm",
+        "status": "active",
+        "icon": ":wind_blowing_face:",
+        "icon_fallback": ":wind_blowing_face:",
+        "description": "Mistral AI models (Mistral Large, Codestral, etc.)",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Sign up at https://console.mistral.ai/\n"
+            "2. Create an API key\n"
+            "3. Enter the key below"
+        ),
+        "docs_url": "https://docs.mistral.ai/",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "hint": "Your Mistral AI API key",
+            },
+        ],
+    },
+    {
+        "id": "cohere",
+        "name": "Cohere",
+        "category": "llm",
+        "status": "active",
+        "icon": ":dna:",
+        "icon_fallback": ":dna:",
+        "description": "Cohere models (Command R+, Embed, etc.)",
+        "docs_url": "https://docs.cohere.com/",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "hint": "Your Cohere API key",
+            },
+        ],
+    },
+    {
+        "id": "together_ai",
+        "name": "Together AI",
+        "category": "llm",
+        "status": "active",
+        "icon": ":handshake:",
+        "icon_fallback": ":handshake:",
+        "description": "Together AI — open-source models (Llama, Mixtral, etc.) with fast inference.",
+        "docs_url": "https://docs.together.ai/",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "hint": "Your Together AI API key",
+            },
+        ],
+    },
+    {
+        "id": "groq",
+        "name": "Groq",
+        "category": "llm",
+        "status": "active",
+        "icon": ":zap:",
+        "icon_fallback": ":zap:",
+        "description": "Groq ultra-fast inference for Llama, Mixtral, and other models.",
+        "docs_url": "https://console.groq.com/docs",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "hint": "Your Groq API key",
+            },
+        ],
+    },
+    {
+        "id": "fireworks_ai",
+        "name": "Fireworks AI",
+        "category": "llm",
+        "status": "active",
+        "icon": ":fireworks:",
+        "icon_fallback": ":sparkler:",
+        "description": "Fireworks AI for fast open-source model inference.",
+        "docs_url": "https://docs.fireworks.ai/",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "hint": "Your Fireworks AI API key",
+            },
+        ],
+    },
     # COMING SOON INTEGRATIONS
     {
         "id": "cloudwatch",
         "name": "CloudWatch",
         "category": "observability",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":cloudwatch:",
         "icon_fallback": ":cloud:",
         "description": "Query AWS CloudWatch logs and metrics.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your AWS console\n"
+            "2. Go to *IAM* > *Users* > select or create a user\n"
+            "3. Attach the *CloudWatchReadOnlyAccess* policy\n"
+            "4. Go to *Security credentials* tab > *Create access key*\n"
+            "5. Copy the Access Key ID and Secret Access Key below"
+        ),
+        "docs_url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/",
+        "context_prompt_placeholder": "e.g., 'Our Lambda logs are in /aws/lambda/api-handler. Production is in us-east-1. Error logs contain level=ERROR.'",
+        "fields": [
+            {
+                "id": "aws_access_key_id",
+                "name": "AWS Access Key ID",
+                "type": "secret",
+                "required": True,
+                "placeholder": "AKIA...",
+                "hint": "IAM access key with CloudWatch read permissions",
+            },
+            {
+                "id": "aws_secret_access_key",
+                "name": "AWS Secret Access Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "your-secret-key",
+                "hint": "IAM secret access key",
+            },
+            {
+                "id": "region",
+                "name": "AWS Region",
+                "type": "string",
+                "required": False,
+                "placeholder": "us-east-1",
+                "hint": "Default AWS region (leave blank for us-east-1)",
+            },
+        ],
     },
     {
         "id": "pagerduty",
@@ -656,19 +1506,83 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "opensearch",
         "name": "OpenSearch",
         "category": "observability",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":opensearch:",
         "icon_fallback": ":mag:",
         "description": "Query logs and search data from OpenSearch.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your AWS console or OpenSearch dashboard\n"
+            "2. Navigate to your OpenSearch domain\n"
+            "3. Copy the domain endpoint URL\n"
+            "4. Create or use an existing master user with read access\n"
+            "5. Enter the endpoint and credentials below"
+        ),
+        "docs_url": "https://docs.aws.amazon.com/opensearch-service/latest/developerguide/",
+        "context_prompt_placeholder": "e.g., 'Our application logs are in the app-logs-* index pattern. Error logs have level field set to ERROR. Timestamps are in @timestamp.'",
+        "fields": [
+            {
+                "id": "domain",
+                "name": "OpenSearch Endpoint URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "https://search-my-domain-abc123.us-east-1.es.amazonaws.com",
+                "hint": "Your OpenSearch domain endpoint URL",
+            },
+            {
+                "id": "username",
+                "name": "Username",
+                "type": "string",
+                "required": False,
+                "placeholder": "admin",
+                "hint": "Master user name (if using fine-grained access control)",
+            },
+            {
+                "id": "password",
+                "name": "Password",
+                "type": "secret",
+                "required": False,
+                "placeholder": "your-password",
+                "hint": "Master user password",
+            },
+        ],
     },
     {
         "id": "newrelic",
         "name": "New Relic",
         "category": "observability",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":newrelic:",
         "icon_fallback": ":chart:",
         "description": "Query APM, logs, and infrastructure metrics.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your New Relic account\n"
+            "2. Click your name (bottom-left) > *API Keys*\n"
+            "3. Click *Create a key*, select *User* key type\n"
+            "4. Give it a name (e.g., 'IncidentFox') and click *Create*\n"
+            "5. Copy the API key and your Account ID (found in *Administration* > *Access management*)"
+        ),
+        "docs_url": "https://docs.newrelic.com/docs/apis/intro-apis/new-relic-api-keys/",
+        "context_prompt_placeholder": "e.g., 'Our main app is called api-gateway in New Relic. Production transactions use appName=api-gateway-prod. Key metrics are response time and error rate.'",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "User API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "NRAK-...",
+                "hint": "New Relic User API key (starts with NRAK-)",
+            },
+            {
+                "id": "account_id",
+                "name": "Account ID",
+                "type": "string",
+                "required": True,
+                "placeholder": "1234567",
+                "hint": "Your New Relic account ID (found under Administration > Access management)",
+            },
+        ],
     },
     {
         "id": "honeycomb",
@@ -806,10 +1720,10 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "victoriametrics",
         "name": "VictoriaMetrics",
         "category": "observability",
-        "status": "coming_soon",
+        "status": "available",
         "icon": ":victoriametrics:",
         "icon_fallback": ":chart:",
-        "description": "Query time-series metrics.",
+        "description": "Query time-series metrics and logs.",
     },
     {
         "id": "kloudfuse",
@@ -896,10 +1810,45 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "jira",
         "name": "Jira",
         "category": "scm",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":jira:",
         "icon_fallback": ":ticket:",
-        "description": "Query issues and project data.",
+        "description": "Create, search, and manage Jira issues and epics.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your Atlassian account\n"
+            "2. Go to *https://id.atlassian.com/manage-profile/security/api-tokens*\n"
+            "3. Click *Create API token*, label it 'IncidentFox'\n"
+            "4. Copy the token, your Jira URL, and email below"
+        ),
+        "docs_url": "https://developer.atlassian.com/cloud/jira/platform/rest/v3/",
+        "context_prompt_placeholder": "e.g., 'Our incident project key is OPS. Bug tickets use type=Bug. Post-mortems are labeled with post-mortem tag.'",
+        "fields": [
+            {
+                "id": "domain",
+                "name": "Jira URL",
+                "type": "string",
+                "required": True,
+                "placeholder": "https://your-company.atlassian.net",
+                "hint": "Your Jira Cloud instance URL",
+            },
+            {
+                "id": "email",
+                "name": "Email",
+                "type": "string",
+                "required": True,
+                "placeholder": "you@company.com",
+                "hint": "Email associated with your Atlassian account",
+            },
+            {
+                "id": "api_key",
+                "name": "API Token",
+                "type": "secret",
+                "required": True,
+                "placeholder": "your-api-token",
+                "hint": "Atlassian API token from id.atlassian.com",
+            },
+        ],
     },
     {
         "id": "linear",
@@ -1297,6 +2246,218 @@ def validate_api_key(api_key: str) -> tuple[bool, str]:
         return False, "Invalid API key format. Anthropic keys start with sk-ant-"
 
     return True, ""
+
+
+def validate_provider_api_key(
+    provider_id: str, config: dict, model_id: str = ""
+) -> tuple[bool, str]:
+    """
+    Validate API credentials for a provider via a live 1-token test using LiteLLM.
+
+    Uses the same LiteLLM library as the backend proxy to ensure full parity —
+    correct endpoints, parameter names, and model routing.
+    Returns (is_valid, error_message).
+    """
+    import re as _re
+
+    import litellm
+
+    litellm.suppress_debug_info = True
+
+    def _sanitize(msg: str) -> str:
+        """Remove potential API key values from error messages."""
+        msg = _re.sub(r"sk-ant-[a-zA-Z0-9_-]+", "[REDACTED]", msg)
+        msg = _re.sub(r"sk-or-v1-[a-zA-Z0-9_-]+", "[REDACTED]", msg)
+        msg = _re.sub(r"sk-[a-zA-Z0-9_-]{20,}", "[REDACTED]", msg)
+        msg = _re.sub(r"AIza[a-zA-Z0-9_-]+", "[REDACTED]", msg)
+        msg = _re.sub(r"xai-[a-zA-Z0-9_-]+", "[REDACTED]", msg)
+        msg = _re.sub(r"ABSK[a-zA-Z0-9_-]+", "[REDACTED]", msg)
+        return msg
+
+    api_key = config.get("api_key", "")
+
+    # --- Format-check-only providers (complex auth, can't easily test via HTTP) ---
+    if provider_id == "bedrock":
+        has_auth = api_key or (
+            config.get("aws_access_key_id") and config.get("aws_secret_access_key")
+        )
+        if not has_auth:
+            return False, "Provide either a Bedrock API key or AWS access key + secret."
+        return True, ""
+
+    if provider_id == "vertex_ai":
+        if not config.get("project"):
+            return False, "GCP Project ID is required."
+        return True, ""
+
+    if provider_id == "cloudflare_ai":
+        import requests as _requests
+
+        api_base = config.get("api_base", "")
+        if not api_base:
+            return False, "Gateway URL is required."
+        if not api_base.startswith("https://"):
+            return False, "Gateway URL must start with https://"
+
+        # Build gateway URL — ensure /compat suffix
+        gateway_url = api_base.rstrip("/")
+        if not gateway_url.endswith("/compat"):
+            gateway_url += "/compat"
+
+        # Build headers based on provided credentials
+        headers = {"Content-Type": "application/json"}
+        cf_token = api_key  # Cloudflare API Token → cf-aig-authorization
+        provider_key = config.get("provider_api_key", "")
+        if cf_token:
+            headers["cf-aig-authorization"] = f"Bearer {cf_token}"
+        if provider_key:
+            headers["Authorization"] = f"Bearer {provider_key}"
+
+        # Use the model as-is — user types e.g. "openai/gpt-4o", not "cloudflare_ai/..."
+        test_model = model_id
+
+        try:
+            resp = _requests.post(
+                f"{gateway_url}/chat/completions",
+                headers=headers,
+                json={
+                    "model": test_model,
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                return True, ""
+            # Extract error message from response
+            try:
+                err = resp.json().get("error", {})
+                err_msg = err.get("message", "") if isinstance(err, dict) else str(err)
+            except Exception:
+                err_msg = resp.text[:300]
+            if resp.status_code in (401, 403):
+                return (
+                    False,
+                    f"Authentication failed: {_sanitize(err_msg or 'invalid credentials')}",
+                )
+            return (
+                False,
+                f"Gateway returned {resp.status_code}: {_sanitize(err_msg or 'unknown error')}",
+            )
+        except _requests.exceptions.ConnectionError:
+            return (
+                False,
+                "Could not connect to the gateway URL. Check the URL is correct.",
+            )
+        except _requests.exceptions.Timeout:
+            return False, "Gateway request timed out after 15 seconds."
+        except Exception as e:
+            return False, f"Gateway test failed: {_sanitize(str(e))}"
+
+    if provider_id == "custom_endpoint":
+        api_base = config.get("api_base", "")
+        if not api_base:
+            return False, "Endpoint URL is required."
+        if not api_base.startswith(("http://", "https://")):
+            return False, "Endpoint URL must start with http:// or https://"
+        return True, ""
+
+    # --- Anthropic: optional key (uses IncidentFox default) ---
+    if provider_id == "anthropic" and not api_key:
+        return True, ""
+
+    # --- All other providers: 1-token test via LiteLLM ---
+    if not api_key and provider_id != "ollama":
+        return False, f"API key is required for {provider_id}."
+
+    # Build LiteLLM kwargs — mirrors backend credential-resolver/llm_proxy.py
+    litellm_kwargs: dict = {
+        "model": model_id or f"{provider_id}/default",
+        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": 5,
+    }
+
+    if api_key:
+        litellm_kwargs["api_key"] = api_key
+
+    # Provider-specific overrides (same as backend llm_proxy.py)
+    if provider_id == "ollama":
+        host = config.get("host", "http://localhost:11434")
+        litellm_kwargs["api_base"] = host
+    elif provider_id == "azure":
+        api_base = config.get("api_base", "")
+        if not api_base:
+            return False, "Endpoint URL is required for Azure."
+        if not api_base.startswith("https://"):
+            return False, "Endpoint URL must start with https://"
+        litellm_kwargs["api_base"] = api_base
+        litellm_kwargs["api_version"] = config.get("api_version", "2024-06-01")
+    elif provider_id == "azure_ai":
+        api_base = config.get("api_base", "")
+        if not api_base:
+            return False, "Endpoint URL is required for Azure AI."
+        if not api_base.startswith("https://"):
+            return False, "Endpoint URL must start with https://"
+        litellm_kwargs["api_base"] = api_base
+    elif provider_id == "openrouter":
+        litellm_kwargs["api_base"] = "https://openrouter.ai/api/v1"
+        # model_id is "openrouter/anthropic/claude-sonnet-4.5" → use "anthropic/claude-sonnet-4.5"
+        raw = model_id.split("/", 1)[1] if model_id and "/" in model_id else model_id
+        litellm_kwargs["model"] = (
+            f"openrouter/{raw}" if raw else "openrouter/anthropic/claude-sonnet-4.5"
+        )
+    elif provider_id == "moonshot":
+        litellm_kwargs["api_base"] = "https://api.moonshot.ai/v1"
+        model_name = (
+            model_id.split("/", 1)[1] if model_id and "/" in model_id else model_id
+        )
+        litellm_kwargs["model"] = (
+            f"openai/{model_name}" if model_name else "openai/moonshot-v1-8k"
+        )
+    elif provider_id == "minimax":
+        litellm_kwargs["api_base"] = "https://api.minimax.io/v1"
+        model_name = (
+            model_id.split("/", 1)[1] if model_id and "/" in model_id else model_id
+        )
+        litellm_kwargs["model"] = (
+            f"openai/{model_name}" if model_name else "openai/MiniMax-Text-01"
+        )
+    elif provider_id == "arcee":
+        litellm_kwargs["api_base"] = "https://models.arcee.ai/v1"
+        model_name = (
+            model_id.split("/", 1)[1] if model_id and "/" in model_id else model_id
+        )
+        litellm_kwargs["model"] = (
+            f"openai/{model_name}" if model_name else "openai/virtuoso-large"
+        )
+
+    try:
+        litellm.completion(**litellm_kwargs)
+        return True, ""
+    except litellm.exceptions.AuthenticationError as e:
+        return False, f"Authentication failed: {_sanitize(str(e)[:200])}"
+    except litellm.exceptions.NotFoundError as e:
+        return False, f"Model not found: {_sanitize(str(e)[:200])}"
+    except litellm.exceptions.RateLimitError:
+        # Rate limited means the key is valid, just throttled
+        return True, ""
+    except litellm.exceptions.BadRequestError as e:
+        err_msg = str(e)
+        # "max_tokens or model output limit was reached" = call succeeded, key is valid
+        if "max_tokens" in err_msg.lower() or "output limit" in err_msg.lower():
+            return True, ""
+        # Some "bad request" errors are actually billing/quota issues — key is valid
+        if "billing" in err_msg.lower() or "quota" in err_msg.lower():
+            return False, f"Billing issue: {_sanitize(err_msg[:200])}"
+        return False, f"API error: {_sanitize(err_msg[:200])}"
+    except litellm.exceptions.APIConnectionError as e:
+        # LiteLLM crashes with APIConnectionError on models it doesn't recognize
+        # (bug: "argument of type 'NoneType' is not iterable"). Treat as unknown model.
+        err_msg = str(e)
+        if "NoneType" in err_msg:
+            return False, "Model not supported by validation. Save and test directly."
+        return False, f"Connection error: {_sanitize(err_msg[:200])}"
+    except Exception as e:
+        return False, f"Validation failed: {_sanitize(str(e)[:200])}"
 
 
 def extract_coralogix_domain(input_str: str) -> tuple[bool, str, str]:
@@ -1729,7 +2890,7 @@ def build_welcome_message(
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": ":bulb: Click *Configure* to connect integrations, set up a custom API endpoint, or bring your own Anthropic API key.",
+                    "text": ":bulb: Click *Configure* to connect integrations and set up your AI model.",
                 }
             ],
         }
@@ -1790,7 +2951,7 @@ def build_dm_welcome_message(trial_info: Optional[Dict] = None) -> list:
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": ":bulb: Click *Configure* to connect integrations, set up a custom API endpoint, or bring your own API key.",
+                    "text": ":bulb: Click *Configure* to connect integrations and set up your AI model.",
                 }
             ],
         },
@@ -1851,11 +3012,15 @@ def build_help_message() -> list:
 # =============================================================================
 
 
+INTEGRATIONS_PER_PAGE = 10
+
+
 def build_integrations_page(
     team_id: str,
     category_filter: str = "all",
     configured: Optional[Dict] = None,
     trial_info: Optional[Dict] = None,
+    page: int = 0,
 ) -> Dict[str, Any]:
     """
     Build the integrations page with category filters and integration cards.
@@ -1865,6 +3030,7 @@ def build_integrations_page(
         category_filter: Category to filter by (default: "all")
         configured: Dict of already configured integrations {id: config}
         trial_info: Trial status info
+        page: Page number for pagination (0-indexed)
 
     Returns:
         Slack modal view object
@@ -1938,14 +3104,35 @@ def build_integrations_page(
         i for i in integrations if i.get("status") == "coming_soon"
     ]
 
-    # Active integrations section
+    # Active integrations section with pagination
     if active_integrations:
-        blocks.append(
-            {
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": "*Available Now*"},
-            }
-        )
+        total_active = len(active_integrations)
+        total_pages = (
+            total_active + INTEGRATIONS_PER_PAGE - 1
+        ) // INTEGRATIONS_PER_PAGE
+        page = min(page, total_pages - 1)  # Clamp to valid range
+
+        start_idx = page * INTEGRATIONS_PER_PAGE
+        end_idx = min(start_idx + INTEGRATIONS_PER_PAGE, total_active)
+        page_integrations = active_integrations[start_idx:end_idx]
+
+        if total_pages > 1:
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*Available Now* — Page {page + 1}/{total_pages}",
+                    },
+                }
+            )
+        else:
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "*Available Now*"},
+                }
+            )
 
         # Get done.png URL for status indicator
         from assets_config import get_asset_url
@@ -1953,7 +3140,7 @@ def build_integrations_page(
         done_url = get_asset_url("done")
 
         # Create integration cards with logos
-        for idx, integration in enumerate(active_integrations):
+        for idx, integration in enumerate(page_integrations):
             int_id = integration["id"]
             name = integration["name"]
             icon = integration.get("icon_fallback", ":gear:")
@@ -2054,11 +3241,48 @@ def build_integrations_page(
                     del blocks[-1]["accessory"]["style"]
 
             # Add divider between integrations (not after the last one)
-            if idx < len(active_integrations) - 1:
+            if idx < len(page_integrations) - 1:
                 blocks.append({"type": "divider"})
 
-    # Coming soon integrations section
-    if coming_soon_integrations:
+        # Pagination buttons
+        if total_pages > 1:
+            pagination_elements = []
+            if page > 0:
+                pagination_elements.append(
+                    {
+                        "type": "button",
+                        "action_id": "integrations_prev_page",
+                        "text": {
+                            "type": "plain_text",
+                            "text": ":arrow_left: Previous",
+                            "emoji": True,
+                        },
+                    }
+                )
+            if page < total_pages - 1:
+                pagination_elements.append(
+                    {
+                        "type": "button",
+                        "action_id": "integrations_next_page",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Next :arrow_right:",
+                            "emoji": True,
+                        },
+                    }
+                )
+            if pagination_elements:
+                blocks.append({"type": "divider"})
+                blocks.append({"type": "actions", "elements": pagination_elements})
+
+    # Coming soon integrations section (only on last page of active integrations)
+    total_pages = (
+        (len(active_integrations) + INTEGRATIONS_PER_PAGE - 1) // INTEGRATIONS_PER_PAGE
+        if active_integrations
+        else 1
+    )
+    is_last_page = page >= total_pages - 1
+    if coming_soon_integrations and is_last_page:
         blocks.append({"type": "divider"})
         blocks.append(
             {
@@ -2112,47 +3336,24 @@ def build_integrations_page(
             }
         )
 
-    # Footer with Advanced Settings option
+    # Footer
     blocks.append({"type": "divider"})
+    web_ui_url = os.environ.get("WEB_UI_URL")
+    footer_lines = [
+        ":bulb: Add more integrations anytime: click on the IncidentFox avatar → *Open App*.",
+    ]
+    if web_ui_url:
+        footer_lines.append(
+            f":computer: Prefer a web UI? Configure integrations at <{web_ui_url}/team/tools|Web Dashboard>"
+        )
+    footer_lines.append(":lock: All credentials are encrypted and stored securely.")
     blocks.append(
         {
             "type": "context",
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": (
-                        ":bulb: Add more integrations anytime: click on the IncidentFox avatar → *Open App*.\n"
-                        ":lock: All credentials are encrypted and stored securely."
-                    ),
-                }
-            ],
-        }
-    )
-
-    # Advanced Settings button (BYOK, HTTP proxy)
-    blocks.append(
-        {
-            "type": "context",
-            "elements": [
-                {
-                    "type": "mrkdwn",
-                    "text": ":gear: *Advanced Settings* — Configure LLM proxy or bring your own API key",
-                }
-            ],
-        }
-    )
-    blocks.append(
-        {
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "action_id": "open_advanced_settings",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "Advanced Settings",
-                        "emoji": True,
-                    },
+                    "text": "\n".join(footer_lines),
                 }
             ],
         }
@@ -2163,6 +3364,7 @@ def build_integrations_page(
         {
             "team_id": team_id,
             "category_filter": category_filter,
+            "page": page,
         }
     )
 
@@ -2177,158 +3379,410 @@ def build_integrations_page(
     }
 
 
-def build_advanced_settings_modal(
+def build_ai_model_modal(
     team_id: str,
-    existing_api_key: bool = False,
-    existing_endpoint: str = None,
+    provider_id: str = None,
+    current_model: str = None,
+    existing_provider_config: Optional[Dict] = None,
+    model_description: str = "",
 ) -> Dict[str, Any]:
     """
-    Build Advanced Settings modal for BYOK API key and HTTP proxy settings.
+    Build unified AI model configuration modal.
 
-    Args:
-        team_id: Slack team ID
-        existing_api_key: Whether an API key is already configured
-        existing_endpoint: Existing API endpoint if configured
-
-    Returns:
-        Slack modal view object
+    Combines provider selection + model/API key config in a single modal.
+    When provider_id is set, shows model and API key fields below the provider dropdown.
+    Uses dispatch_action so changing the provider triggers a views.update.
     """
+    existing_provider_config = existing_provider_config or {}
     blocks = []
+    field_names = []
 
-    # Header
-    blocks.append(
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": (
-                    ":gear: *Advanced Settings*\n"
-                    "Configure your own Anthropic API key or custom API endpoint."
-                ),
-            },
-        }
-    )
-
-    blocks.append({"type": "divider"})
-
-    # BYOK Section
-    blocks.append(
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": (
-                    "*Bring Your Own Key (BYOK)*\n"
-                    "By default, IncidentFox uses our API key which includes a "
-                    "zero data retention agreement with Anthropic. You can optionally "
-                    "provide your own API key if you prefer to use your own account."
-                ),
-            },
-        }
-    )
-
-    # Status indicator
-    if existing_api_key:
+    # Current model display
+    if current_model:
         blocks.append(
             {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": ":white_check_mark: You have a custom API key configured.",
-                    }
-                ],
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":robot_face: *Current model:* `{current_model}`",
+                },
             }
         )
+        blocks.append({"type": "divider"})
 
-    # API Key input
+    # --- Provider dropdown (dispatch_action fires block_actions on change) ---
+    provider_options = []
+    initial_provider_option = None
+    for pid, display_name, _prefix, desc in LLM_PROVIDERS:
+        option = {
+            "text": {"type": "plain_text", "text": display_name},
+            "description": {"type": "plain_text", "text": desc[:75]},
+            "value": pid,
+        }
+        provider_options.append(option)
+        if provider_id and pid == provider_id:
+            initial_provider_option = option
+
+    provider_element = {
+        "type": "static_select",
+        "action_id": "ai_provider_select",
+        "placeholder": {"type": "plain_text", "text": "Select a provider..."},
+        "options": provider_options,
+    }
+    if initial_provider_option:
+        provider_element["initial_option"] = initial_provider_option
+
     blocks.append(
         {
             "type": "input",
-            "block_id": "api_key_block",
-            "optional": True,
-            "element": {
-                "type": "plain_text_input",
-                "action_id": "api_key_input",
-                "placeholder": {"type": "plain_text", "text": "sk-ant-api..."},
-            },
-            "label": {"type": "plain_text", "text": "Anthropic API Key"},
-            "hint": {
-                "type": "plain_text",
-                "text": "Leave blank to use IncidentFox's API key (recommended).",
-            },
+            "block_id": "provider_block",
+            "dispatch_action": True,
+            "element": provider_element,
+            "label": {"type": "plain_text", "text": "AI Provider"},
         }
     )
 
-    # Security note - close to API key section
     blocks.append(
         {
             "type": "context",
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": ":lock: Your API key is encrypted and stored securely. <https://console.anthropic.com/settings/keys|Get an API key>",
+                    "text": ":bulb: *Anthropic (Claude)* is the default and uses IncidentFox's API key. Choose another provider to use your own key.",
                 }
             ],
         }
     )
 
-    blocks.append({"type": "divider"})
+    # --- Provider-specific fields (only shown when a provider is selected) ---
+    if provider_id:
+        provider_schema = get_integration_by_id(provider_id)
+        if provider_schema:
+            provider_name = provider_schema.get("name", provider_id)
 
-    # HTTP Proxy / ML Gateway Section
-    blocks.append(
+            # Cloudflare: map per-upstream provider_api_key for display
+            if (
+                provider_id == "cloudflare_ai"
+                and current_model
+                and "/" in current_model
+            ):
+                upstream = current_model.split("/")[0]
+                stored = existing_provider_config.get(f"provider_api_key_{upstream}")
+                if stored:
+                    existing_provider_config["provider_api_key"] = stored
+
+            # Find model prefix hint
+            model_placeholder = ""
+            for pid, _name, prefix, _desc in LLM_PROVIDERS:
+                if pid == provider_id:
+                    model_placeholder = prefix
+                    break
+
+            blocks.append({"type": "divider"})
+
+            # Model selector — fetch from API, fall back to text input
+            # Text input for deployment-specific or large-catalog providers
+            _text_input_providers = {
+                "azure",
+                "azure_ai",
+                "bedrock",
+                "vertex_ai",
+                "ollama",
+                "cloudflare_ai",
+                "custom_endpoint",
+                "openrouter",
+                "groq",
+                "together_ai",
+                "fireworks_ai",  # inference platforms
+            }
+
+            if provider_id in _text_input_providers:
+                model_element = {
+                    "type": "plain_text_input",
+                    "action_id": "input_model_id",
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": f"e.g. {model_placeholder or 'model-name'}",
+                    },
+                }
+                if current_model:
+                    # Strip provider prefix for display — user doesn't need to see it
+                    display_model = current_model
+                    if current_model.startswith(f"{provider_id}/"):
+                        display_model = current_model[len(provider_id) + 1 :]
+                    model_element["initial_value"] = display_model
+                hint_text = f"Enter the full model ID. Example: {model_placeholder}"
+            else:
+                from model_catalog import get_models_for_provider
+
+                catalog_models = get_models_for_provider(provider_id, limit=100)
+                if catalog_models:
+                    options = [
+                        {
+                            "text": {
+                                "type": "plain_text",
+                                "text": _strip_provider_prefix(m["name"])[:75],
+                            },
+                            "value": m["id"],
+                        }
+                        for m in catalog_models
+                    ]
+                    model_element = {
+                        "type": "static_select",
+                        "action_id": "input_model_id",
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "Select a model",
+                        },
+                        "options": options,
+                    }
+                    if current_model:
+                        matching = next(
+                            (o for o in options if o["value"] == current_model),
+                            None,
+                        )
+                        if matching:
+                            model_element["initial_option"] = matching
+                    hint_text = "Select a model from the list"
+                else:
+                    model_element = {
+                        "type": "plain_text_input",
+                        "action_id": "input_model_id",
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": f"e.g. {model_placeholder or 'model-name'}",
+                        },
+                    }
+                    if current_model:
+                        model_element["initial_value"] = current_model
+                    hint_text = f"Enter the full model ID. Example: {model_placeholder}"
+
+            # Use provider-specific block_id so Slack resets form state on switch
+            model_block_id = f"field_model_id_{provider_id}"
+            model_input_block = {
+                "type": "input",
+                "block_id": model_block_id,
+                "element": model_element,
+                "label": {"type": "plain_text", "text": "Model"},
+                "hint": {
+                    "type": "plain_text",
+                    "text": hint_text,
+                },
+            }
+            # Enable dispatch_action for dropdown selects to show description on change
+            if model_element.get("type") == "static_select":
+                model_input_block["dispatch_action"] = True
+            blocks.append(model_input_block)
+
+            # Model description (shown after model is selected)
+            if model_description:
+                blocks.append(
+                    {
+                        "type": "context",
+                        "block_id": "model_description",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": _md_to_slack(model_description)[:3000],
+                            }
+                        ],
+                    }
+                )
+
+            # Console URLs for API key provisioning (used in hints)
+            _console_urls = {
+                "anthropic": "console.anthropic.com/settings/keys",
+                "openai": "platform.openai.com/api-keys",
+                "gemini": "aistudio.google.com/apikey",
+                "deepseek": "platform.deepseek.com/api_keys",
+                "qwen": "dashscope.console.aliyun.com/apiKey",
+                "xai": "console.x.ai/team/default/api-keys",
+                "mistral": "console.mistral.ai/api-keys",
+                "cohere": "dashboard.cohere.com/api-keys",
+                "openrouter": "openrouter.ai/settings/keys",
+                "groq": "console.groq.com/keys",
+                "together_ai": "api.together.xyz/settings/api-keys",
+                "fireworks_ai": "fireworks.ai/account/api-keys",
+                "zai": "open.z.ai",
+                "arcee": "models.arcee.ai",
+                "cloudflare_ai": "dash.cloudflare.com",
+            }
+
+            # Provider-specific fields (API key, endpoint, etc.)
+            if provider_id != "llm":
+                fields = provider_schema.get("fields", [])
+                for field_def in fields:
+                    field_id = field_def["id"]
+                    field_name = field_def.get("name", field_id)
+                    field_type = field_def.get("type", "string")
+                    field_hint = field_def.get("hint", "")
+                    field_required = field_def.get("required", False)
+                    field_placeholder = field_def.get("placeholder", "")
+
+                    field_names.append(field_id)
+                    field_has_value = bool(existing_provider_config.get(field_id))
+                    make_optional = field_has_value or not field_required
+
+                    if field_type == "secret":
+                        _SECRET_MASK = "**********"
+                        hint_text = field_hint
+                        element = {
+                            "type": "plain_text_input",
+                            "action_id": f"input_{field_id}",
+                            "placeholder": {
+                                "type": "plain_text",
+                                "text": field_placeholder or "Enter value...",
+                            },
+                        }
+                        if field_has_value:
+                            element["initial_value"] = _SECRET_MASK
+                            hint_text = (
+                                f"{field_hint} (saved — replace to update)"
+                                if field_hint
+                                else "Saved — replace to update"
+                            )
+                        input_block = {
+                            "type": "input",
+                            "block_id": f"field_{field_id}",
+                            "optional": make_optional,
+                            "element": element,
+                            "label": {"type": "plain_text", "text": field_name},
+                        }
+                        if hint_text:
+                            input_block["hint"] = {
+                                "type": "plain_text",
+                                "text": hint_text,
+                            }
+                        blocks.append(input_block)
+                        # Clickable console URL below the API key field
+                        console_url = _console_urls.get(provider_id, "")
+                        if console_url and "key" in field_id:
+                            blocks.append(
+                                {
+                                    "type": "context",
+                                    "block_id": f"console_url_{field_id}",
+                                    "elements": [
+                                        {
+                                            "type": "mrkdwn",
+                                            "text": f"Get your API key at <https://{console_url}|{console_url}>",
+                                        }
+                                    ],
+                                }
+                            )
+                    elif field_type == "boolean":
+                        default_val = field_def.get("default", False)
+                        current_val = existing_provider_config.get(
+                            field_id, default_val
+                        )
+                        initial_options = []
+                        if current_val:
+                            initial_options = [
+                                {
+                                    "text": {
+                                        "type": "plain_text",
+                                        "text": field_name,
+                                    },
+                                    "value": "true",
+                                }
+                            ]
+                        checkbox_block = {
+                            "type": "input",
+                            "block_id": f"field_{field_id}",
+                            "optional": True,
+                            "element": {
+                                "type": "checkboxes",
+                                "action_id": f"input_{field_id}",
+                                "options": [
+                                    {
+                                        "text": {
+                                            "type": "plain_text",
+                                            "text": field_name,
+                                        },
+                                        "value": "true",
+                                    }
+                                ],
+                            },
+                            "label": {"type": "plain_text", "text": field_name},
+                        }
+                        if initial_options:
+                            checkbox_block["element"][
+                                "initial_options"
+                            ] = initial_options
+                        blocks.append(checkbox_block)
+                    else:
+                        existing_value = existing_provider_config.get(field_id, "")
+                        element = {
+                            "type": "plain_text_input",
+                            "action_id": f"input_{field_id}",
+                            "placeholder": {
+                                "type": "plain_text",
+                                "text": field_placeholder or "Enter value...",
+                            },
+                        }
+                        if existing_value:
+                            element["initial_value"] = str(existing_value)
+                        input_block = {
+                            "type": "input",
+                            "block_id": f"field_{field_id}",
+                            "optional": make_optional,
+                            "element": element,
+                            "label": {"type": "plain_text", "text": field_name},
+                        }
+                        if field_hint:
+                            input_block["hint"] = {
+                                "type": "plain_text",
+                                "text": field_hint,
+                            }
+                        blocks.append(input_block)
+            else:
+                blocks.append(
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": ":lock: Using IncidentFox's Anthropic API key with zero data retention.",
+                            }
+                        ],
+                    }
+                )
+
+            # Security note
+            blocks.append({"type": "divider"})
+            blocks.append(
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": ":lock: Credentials are encrypted and stored securely.",
+                        }
+                    ],
+                }
+            )
+
+    private_metadata = json.dumps(
         {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": (
-                    "*Custom API Endpoint*\n"
-                    "If your company uses an internal ML gateway or HTTP proxy for API calls, "
-                    "configure your custom endpoint here. If your proxy requires an API key, "
-                    "set it in the field above."
-                ),
-            },
+            "team_id": team_id,
+            "provider_id": provider_id or "",
+            "field_names": field_names,
         }
     )
 
-    # API Endpoint input
-    endpoint_element = {
-        "type": "plain_text_input",
-        "action_id": "api_endpoint_input",
-        "placeholder": {
-            "type": "plain_text",
-            "text": "https://api.anthropic.com (default)",
-        },
-    }
-    if existing_endpoint:
-        endpoint_element["initial_value"] = existing_endpoint
-
-    blocks.append(
-        {
-            "type": "input",
-            "block_id": "api_endpoint_block",
-            "optional": True,
-            "element": endpoint_element,
-            "label": {"type": "plain_text", "text": "API Endpoint (Optional)"},
-            "hint": {
-                "type": "plain_text",
-                "text": "Leave blank to use the default Anthropic API endpoint.",
-            },
-        }
-    )
-
-    # Store metadata
-    private_metadata = json.dumps({"team_id": team_id})
-
-    return {
+    modal = {
         "type": "modal",
-        "callback_id": "advanced_settings_submission",
+        "callback_id": "ai_model_config_submission",
         "private_metadata": private_metadata,
-        "title": {"type": "plain_text", "text": "Advanced Settings"},
-        "submit": {"type": "plain_text", "text": "Save"},
-        "close": {"type": "plain_text", "text": "Back"},
+        "title": {"type": "plain_text", "text": "AI Model"},
+        "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": blocks,
     }
+
+    # Only show Save button when a provider is selected
+    if provider_id:
+        modal["submit"] = {"type": "plain_text", "text": "Save"}
+
+    return modal
 
 
 def build_integration_config_modal(
@@ -2338,6 +3792,7 @@ def build_integration_config_modal(
     integration_id: str = None,
     category_filter: str = "all",
     entry_point: str = "integrations",
+    include_video: bool = True,
 ) -> Dict[str, Any]:
     """
     Build integration configuration modal with video tutorial, instructions, and form fields.
@@ -2351,6 +3806,7 @@ def build_integration_config_modal(
         schema: Integration schema with fields definition (optional if integration_id provided)
         existing_config: Existing config values to pre-fill
         integration_id: Integration ID to look up from INTEGRATIONS
+        include_video: Whether to include the video tutorial block
 
     Returns:
         Slack modal view object
@@ -2491,7 +3947,7 @@ def build_integration_config_modal(
 
     # Video tutorial section (using Slack's video block for embedded player)
     video_config = schema.get("video")
-    if video_config:
+    if video_config and include_video:
         blocks.append(
             {
                 "type": "video",
@@ -2657,8 +4113,9 @@ def build_integration_config_modal(
             )
         blocks.append({"type": "divider"})
 
-    # Track field names for submission handler
+    # Track field names and secret field IDs for submission handler
     field_names = []
+    secret_fields = []
 
     # Generate form fields from schema
     fields = schema.get("fields", [])
@@ -2685,28 +4142,36 @@ def build_integration_config_modal(
         make_optional = field_has_value or not field_required
 
         if field_type == "secret":
-            # Secret fields: plain text input, don't pre-fill
-            # Always optional when editing (field_has_value) to avoid forcing re-entry
+            # Secret fields: show redacted value if configured, otherwise empty
+            secret_fields.append(field_id)
             hint_text = field_hint
-            if field_has_value:
+            existing_value = existing_config.get(field_id)
+            if field_has_value and existing_value:
+                redacted = "*" * len(str(existing_value))
                 hint_text = (
                     f"{field_hint} (already configured - leave blank to keep existing)"
                     if field_hint
                     else "Already configured - leave blank to keep existing value"
                 )
+            else:
+                redacted = None
+
+            element = {
+                "type": "plain_text_input",
+                "action_id": f"input_{field_id}",
+                "placeholder": {
+                    "type": "plain_text",
+                    "text": field_placeholder or "Enter value...",
+                },
+            }
+            if redacted:
+                element["initial_value"] = redacted
 
             input_block = {
                 "type": "input",
                 "block_id": f"field_{field_id}",
                 "optional": make_optional,
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": f"input_{field_id}",
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": field_placeholder or "Enter value...",
-                    },
-                },
+                "element": element,
                 "label": {"type": "plain_text", "text": field_name},
             }
             if hint_text:
@@ -2881,6 +4346,7 @@ def build_integration_config_modal(
             "team_id": team_id,
             "integration_id": int_id,
             "field_names": all_field_names,
+            "secret_fields": secret_fields,
             "category_filter": category_filter,
             "entry_point": entry_point,
         }

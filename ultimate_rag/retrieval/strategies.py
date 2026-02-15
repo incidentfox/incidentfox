@@ -154,7 +154,7 @@ class RetrievalStrategy(ABC):
             client = AsyncOpenAI()
 
             response = await client.chat.completions.create(
-                model="gpt-5.2-mini",
+                model="gpt-4o-mini",
                 temperature=0.0,
                 max_tokens=200,
                 messages=[
@@ -385,7 +385,7 @@ class MultiQueryStrategy(RetrievalStrategy):
     def __init__(
         self,
         num_variations: int = 3,
-        model: str = "gpt-5.2-mini",
+        model: str = "gpt-4o-mini",
     ):
         self.num_variations = num_variations
         self.model = model
@@ -543,7 +543,7 @@ Instructions:
 - Output 2-4 focused sub-questions, one per line
 - No numbering or bullets"""
 
-    def __init__(self, model: str = "gpt-5.2-mini", max_sub_queries: int = 4):
+    def __init__(self, model: str = "gpt-4o-mini", max_sub_queries: int = 4):
         self.model = model
         self.max_sub_queries = max_sub_queries
         self._client = None
@@ -644,7 +644,7 @@ class HyDEStrategy(RetrievalStrategy):
     def __init__(
         self,
         num_hypotheses: int = 2,
-        model: str = "gpt-5.2-mini",
+        model: str = "gpt-4o-mini",
     ):
         self.num_hypotheses = num_hypotheses
         self.model = model
@@ -1587,7 +1587,7 @@ class IncidentAwareStrategy(RetrievalStrategy):
             client = AsyncOpenAI()
 
             response = await client.chat.completions.create(
-                model="gpt-5.2-mini",
+                model="gpt-4o-mini",
                 temperature=0.0,
                 max_tokens=100,
                 messages=[

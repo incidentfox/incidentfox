@@ -1,7 +1,7 @@
 locals {
   cw_region        = var.aws_region
   cw_cluster_name  = var.cluster_name
-  cw_alarm_prefix  = "${var.cluster_name}"
+  cw_alarm_prefix  = var.cluster_name
   cw_log_namespace = "IncidentFox"
 
   # Container Insights log group where app logs land (JSON logs from pods)
