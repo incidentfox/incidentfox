@@ -573,6 +573,8 @@ async def _process_github_webhook(
                 agent_base_url=dedicated_agent_url,
                 output_destinations=output_destinations,
                 trigger_source="github",
+                tenant_id=org_id,
+                team_id=team_node_id,
             )
         )
 
@@ -1122,6 +1124,8 @@ async def _process_pagerduty_webhook(
             agent_base_url=dedicated_agent_url,
             output_destinations=output_destinations,
             trigger_source="pagerduty",
+            tenant_id=org_id,
+            team_id=team_node_id,
         )
 
         # Note: Agent service handles run completion recording
@@ -1540,6 +1544,8 @@ async def _process_incidentio_webhook(
                 agent_base_url=dedicated_agent_url,
                 output_destinations=output_destinations,
                 trigger_source="incidentio",
+                tenant_id=org_id,
+                team_id=team_node_id,
             )
         )
 
@@ -2455,6 +2461,8 @@ async def _process_blameless_webhook(
             agent_base_url=dedicated_agent_url,
             output_destinations=output_destinations,
             trigger_source="blameless",
+            tenant_id=org_id,
+            team_id=team_node_id,
         )
 
         _log(
@@ -2653,6 +2661,8 @@ async def _process_firehydrant_webhook(
             agent_base_url=dedicated_agent_url,
             output_destinations=output_destinations,
             trigger_source="firehydrant",
+            tenant_id=org_id,
+            team_id=team_node_id,
         )
 
         _log(
