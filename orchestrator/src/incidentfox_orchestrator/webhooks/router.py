@@ -592,6 +592,13 @@ async def _process_github_webhook(
                 trigger_source="github",
                 tenant_id=org_id,
                 team_id=team_node_id,
+                session_id=(
+                    f"github-{repo_full_name}-pr-{pr_number}"
+                    if pr_number
+                    else f"github-{repo_full_name}-issue-{issue_number}"
+                    if issue_number
+                    else None
+                ),
             )
         )
 
