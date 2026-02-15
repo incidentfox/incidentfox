@@ -1014,9 +1014,7 @@ async def github_proxy(path: str, request: Request):
             content=resp.content,
             status_code=resp.status_code,
             headers={
-                "Content-Type": resp.headers.get(
-                    "Content-Type", "application/json"
-                ),
+                "Content-Type": resp.headers.get("Content-Type", "application/json"),
             },
         )
     except httpx.TimeoutException:
