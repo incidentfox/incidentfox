@@ -172,8 +172,11 @@ class GoogleChatIntegration:
             )
         )
 
-        # Return empty — the async handler sends the result as a thread reply
-        return {}
+        # Immediate "working on it" reply in the same thread
+        reply: Dict[str, Any] = {"text": "IncidentFox is working on it..."}
+        if thread_key:
+            reply["thread"] = {"name": thread_key}
+        return reply
 
     async def _process_message_async(
         self,
