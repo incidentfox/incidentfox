@@ -17,7 +17,9 @@ def main():
     parser = argparse.ArgumentParser(description="Read a file from GitHub")
     parser.add_argument("--repo", required=True, help="Repository (OWNER/REPO)")
     parser.add_argument("--path", required=True, help="File path in the repo")
-    parser.add_argument("--ref", help="Branch, tag, or commit SHA (default: repo default branch)")
+    parser.add_argument(
+        "--ref", help="Branch, tag, or commit SHA (default: repo default branch)"
+    )
     args = parser.parse_args()
 
     owner, repo = args.repo.split("/", 1)

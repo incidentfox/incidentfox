@@ -2150,8 +2150,10 @@ async def google_chat_webhook(
     # Google Chat HTTP endpoints use the webhook URL as the JWT audience.
     # Behind TLS-terminating LB, request.url is http:// but the token uses https://
     url = str(request.url)
-    if request.headers.get("x-forwarded-proto") == "https" and url.startswith("http://"):
-        url = "https://" + url[len("http://"):]
+    if request.headers.get("x-forwarded-proto") == "https" and url.startswith(
+        "http://"
+    ):
+        url = "https://" + url[len("http://") :]
     expected_audience = os.getenv("GOOGLE_CHAT_AUDIENCE", "").strip() or url
     try:
         verify_google_chat_bearer_token(

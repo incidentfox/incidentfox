@@ -25,7 +25,9 @@ from github_client import create_review, format_pr_summary, get_pr
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Create a PR review with inline comments")
+    parser = argparse.ArgumentParser(
+        description="Create a PR review with inline comments"
+    )
     parser.add_argument("--repo", required=True, help="Repository (OWNER/REPO)")
     parser.add_argument("--pr", required=True, type=int, help="PR number")
     parser.add_argument("--body", required=True, help="Review summary body")
@@ -60,7 +62,7 @@ def main():
         event=args.event,
     )
 
-    print(f"\nReview created successfully!")
+    print("\nReview created successfully!")
     print(f"  Review ID: {result.get('id')}")
     print(f"  State: {result.get('state')}")
     print(f"  URL: {result.get('html_url')}")

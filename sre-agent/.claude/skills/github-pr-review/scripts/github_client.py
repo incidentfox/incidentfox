@@ -116,9 +116,7 @@ def get_pr_files(
     )
 
 
-def read_file(
-    owner: str, repo: str, path: str, ref: str | None = None
-) -> str:
+def read_file(owner: str, repo: str, path: str, ref: str | None = None) -> str:
     """Read a file's contents from the repository.
 
     Returns the decoded file content as a string.
@@ -127,9 +125,7 @@ def read_file(
     if ref:
         params["ref"] = ref
 
-    result = api_request(
-        "GET", f"/repos/{owner}/{repo}/contents/{path}", params=params
-    )
+    result = api_request("GET", f"/repos/{owner}/{repo}/contents/{path}", params=params)
 
     if isinstance(result, list):
         raise RuntimeError(f"{path} is a directory, not a file")
@@ -215,9 +211,7 @@ def create_review(
     )
 
 
-def add_pr_comment(
-    owner: str, repo: str, pr_number: int, body: str
-) -> dict[str, Any]:
+def add_pr_comment(owner: str, repo: str, pr_number: int, body: str) -> dict[str, Any]:
     """Add a general comment on a PR (not inline, not a review)."""
     return api_request(
         "POST",
