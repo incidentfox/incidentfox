@@ -1013,7 +1013,11 @@ async def github_proxy(path: str, request: Request):
         return Response(
             content=resp.content,
             status_code=resp.status_code,
-            headers=dict(resp.headers),
+            headers={
+                "Content-Type": resp.headers.get(
+                    "Content-Type", "application/json"
+                ),
+            },
         )
     except httpx.TimeoutException:
         logger.error("GitHub request timed out")

@@ -188,10 +188,16 @@ def create_review(
     Returns:
         Created review object
     """
+    # Fetch PR to get the head commit SHA — required for line-level comments
+    pr = get_pr(owner, repo, pr_number)
+    commit_id = pr.get("head", {}).get("sha")
+
     payload: dict[str, Any] = {
         "body": body,
         "event": event,
     }
+    if commit_id:
+        payload["commit_id"] = commit_id
 
     if comments:
         payload["comments"] = [
