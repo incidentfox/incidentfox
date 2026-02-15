@@ -375,6 +375,38 @@ class InteractiveAgentSession:
             {}
         )  # Map tool_use_id -> parent_tool_use_id for subagent tracking
 
+        # Hook to set agent context before subagent calls
+        async def set_subagent_context(input_data, tool_use_id, context):
+            import logging
+
+            logger = logging.getLogger(__name__)
+
+            if input_data["hook_event_name"] == "PreToolUse":
+                tool_name = input_data.get("tool_name", "")
+
+                # Check if this tool is a subagent (matches agent name in config)
+                if tool_name in self.agent_configs:
+                    agent_cfg = self.agent_configs[tool_name]
+
+                    # Update agent context with this subagent's model settings
+                    set_agent_context(
+                        agent_name=tool_name,
+                        model_config={
+                            "temperature": agent_cfg.model.temperature,
+                            "max_tokens": agent_cfg.model.max_tokens,
+                            "top_p": agent_cfg.model.top_p,
+                        }
+                    )
+
+                    logger.debug(
+                        f"[Hook] PreToolUse: Set context for subagent '{tool_name}' "
+                        f"(temp={agent_cfg.model.temperature}, "
+                        f"max_tokens={agent_cfg.model.max_tokens}, "
+                        f"top_p={agent_cfg.model.top_p})"
+                    )
+
+            return {}
+
         # Hook to capture tool outputs - queues tool_end event when tool completes
         async def capture_tool_output(input_data, tool_use_id, context):
             import logging
@@ -572,7 +604,10 @@ class InteractiveAgentSession:
             include_partial_messages=True,  # Needed to get parent_tool_use_id for subagent tracking
             setting_sources=["user", "project"],  # Loads .claude/skills/
             agents=subagents,
-            hooks={"PostToolUse": [HookMatcher(hooks=[capture_tool_output])]},
+            hooks={
+                "PreToolUse": [HookMatcher(hooks=[set_subagent_context])],
+                "PostToolUse": [HookMatcher(hooks=[capture_tool_output])],
+            },
         )
 
         # Store agent configs for per-agent model settings
