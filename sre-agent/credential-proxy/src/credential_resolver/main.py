@@ -52,10 +52,11 @@ def _get_github_app_token(creds: dict) -> str | None:
         return _github_app_token_cache[cache_key]
 
     try:
-        import time
-        import jwt
-        import urllib.request
         import json
+        import time
+        import urllib.request
+
+        import jwt
 
         # Generate JWT signed with app's private key
         now = int(time.time())
@@ -83,6 +84,7 @@ def _get_github_app_token(creds: dict) -> str | None:
     except Exception as e:
         logger.error(f"Failed to generate GitHub App token: {e}")
         return None
+
 
 # Credential source: "config_service" (SaaS) or "environment" (local/self-hosted)
 CREDENTIAL_SOURCE = os.getenv("CREDENTIAL_SOURCE", "environment")
