@@ -245,14 +245,25 @@ def register_agent_config_commands(app):
             current_config = config_client.get_team_config(team_id)
             agents_config = current_config.get("agents", {}) if current_config else {}
         except Exception as e:
-            logger.error(f"Failed to get config: {e}")
+            logger.error(f"Failed to get config: {e}", exc_info=True)
             agents_config = {}
 
         # Open agent config modal
-        await client.views_open(
-            trigger_id=body["trigger_id"],
-            view=create_config_agents_modal(agents_config),
-        )
+        try:
+            await client.views_open(
+                trigger_id=body["trigger_id"],
+                view=create_config_agents_modal(agents_config),
+            )
+        except Exception as e:
+            logger.error(f"Failed to open modal: {e}", exc_info=True)
+            # Try to send error message to user
+            try:
+                await client.chat_postMessage(
+                    channel=body["user"]["id"],
+                    text=f"❌ Failed to open agent config modal: {str(e)}"
+                )
+            except:
+                pass
 
     @app.action("open_json_editor")
     async def handle_open_json_editor(ack, body, client):
