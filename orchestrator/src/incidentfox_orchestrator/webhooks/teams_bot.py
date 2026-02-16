@@ -599,7 +599,16 @@ class TeamsIntegration:
                 admin_token,
                 org_id,
                 team_node_id,
-                {"routing": {"teams_channel_ids": existing_ids}},
+                {
+                    "routing": {"teams_channel_ids": existing_ids},
+                    "integrations": {
+                        "anthropic": {
+                            "is_trial": True,
+                            "trial_expires_at": "2030-12-31T23:59:59.000000",
+                            "subscription_status": "active",
+                        },
+                    },
+                },
             )
 
             _log(
