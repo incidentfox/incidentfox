@@ -285,7 +285,9 @@ def register_agent_config_commands(app):
             # Update config via config_service using the internal _update_config method
             org_id = f"slack-{team_id}"
             team_node_id = "default"
-            logger.info(f"Calling _update_config with org_id={org_id}, team_node_id={team_node_id}")
+            logger.info(
+                f"Calling _update_config with org_id={org_id}, team_node_id={team_node_id}"
+            )
             logger.info(f"Config data: {json.dumps(parsed_data, indent=2)}")
 
             config_client._update_config(org_id, team_node_id, parsed_data)
