@@ -248,6 +248,12 @@ class TeamsIntegration:
             "IncidentFox is working on it..."
         )
         initial_message_id = initial_response.id if initial_response else None
+        _log(
+            "teams_initial_response_sent",
+            correlation_id=correlation_id,
+            initial_message_id=initial_message_id,
+            service_url=getattr(activity, "service_url", "unknown"),
+        )
 
         # Extract tenant_id (Azure AD tenant) for auto-provisioning
         tenant_id = getattr(conversation, "tenant_id", "") or ""
@@ -493,14 +499,35 @@ class TeamsIntegration:
 
             if result_text:
                 try:
+                    _log(
+                        "teams_sending_result",
+                        correlation_id=correlation_id,
+                        result_length=len(result_text),
+                        service_url=getattr(conversation_ref, "service_url", "unknown"),
+                        conversation_id=(
+                            conversation_ref.conversation.id
+                            if conversation_ref.conversation
+                            else "unknown"
+                        ),
+                    )
+
+                    send_response = None
 
                     async def _send_result(turn_context: TurnContext):
+                        nonlocal send_response
                         reply = Activity(
                             type=ActivityTypes.message,
                             text=result_text,
                             reply_to_id=initial_message_id,
                         )
-                        await turn_context.send_activity(reply)
+                        send_response = await turn_context.send_activity(reply)
+                        _log(
+                            "teams_send_activity_response",
+                            correlation_id=correlation_id,
+                            response_id=(
+                                send_response.id if send_response else None
+                            ),
+                        )
 
                     await self.adapter.continue_conversation(
                         conversation_ref,
@@ -511,12 +538,16 @@ class TeamsIntegration:
                         "teams_result_sent",
                         correlation_id=correlation_id,
                         result_length=len(result_text),
+                        response_id=(
+                            send_response.id if send_response else None
+                        ),
                     )
                 except Exception as send_err:
                     _log(
                         "teams_result_send_failed",
                         correlation_id=correlation_id,
                         error=str(send_err),
+                        error_type=type(send_err).__name__,
                     )
 
             _log(
