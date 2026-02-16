@@ -78,6 +78,58 @@ class ConfigServiceClient:
         r.raise_for_status()
         return dict(r.json())
 
+    def create_org_node(
+        self, raw_token: str, org_id: str, name: str
+    ) -> dict[str, Any]:
+        """Create an org node. Returns ``{"exists": True}`` if it already exists."""
+        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/nodes"
+        payload = {
+            "node_id": org_id,
+            "node_type": "org",
+            "name": name,
+            "parent_id": None,
+        }
+        try:
+            if self._http is not None:
+                r = self._http.post(url, headers=self._headers(raw_token), json=payload)
+            else:
+                with httpx.Client(timeout=10.0) as c:
+                    r = c.post(url, headers=self._headers(raw_token), json=payload)
+            if r.status_code == 400 and "already exists" in r.text.lower():
+                return {"org_id": org_id, "exists": True}
+            r.raise_for_status()
+            return dict(r.json())
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400 and "already exists" in exc.response.text.lower():
+                return {"org_id": org_id, "exists": True}
+            raise
+
+    def create_team_node(
+        self, raw_token: str, org_id: str, team_node_id: str, name: str
+    ) -> dict[str, Any]:
+        """Create a team node under an org. Returns ``{"exists": True}`` if it already exists."""
+        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/nodes"
+        payload = {
+            "node_id": team_node_id,
+            "node_type": "team",
+            "name": name,
+            "parent_id": org_id,
+        }
+        try:
+            if self._http is not None:
+                r = self._http.post(url, headers=self._headers(raw_token), json=payload)
+            else:
+                with httpx.Client(timeout=10.0) as c:
+                    r = c.post(url, headers=self._headers(raw_token), json=payload)
+            if r.status_code == 400 and "already exists" in r.text.lower():
+                return {"team_node_id": team_node_id, "exists": True}
+            r.raise_for_status()
+            return dict(r.json())
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400 and "already exists" in exc.response.text.lower():
+                return {"team_node_id": team_node_id, "exists": True}
+            raise
+
     def patch_node_config(
         self, raw_token: str, org_id: str, node_id: str, patch: dict[str, Any]
     ) -> dict[str, Any]:

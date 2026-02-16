@@ -249,6 +249,9 @@ class TeamsIntegration:
         )
         initial_message_id = initial_response.id if initial_response else None
 
+        # Extract tenant_id (Azure AD tenant) for auto-provisioning
+        tenant_id = getattr(conversation, "tenant_id", "") or ""
+
         # Get conversation reference for proactive messaging
         conversation_ref = TurnContext.get_conversation_reference(activity)
 
@@ -264,6 +267,7 @@ class TeamsIntegration:
                 session_id=session_id,
                 correlation_id=correlation_id,
                 initial_message_id=initial_message_id,
+                tenant_id=tenant_id,
             )
         )
 
@@ -278,6 +282,7 @@ class TeamsIntegration:
         session_id: str,
         correlation_id: str,
         initial_message_id: Optional[str],
+        tenant_id: str = "",
     ) -> None:
         """Process message asynchronously."""
         try:
@@ -294,17 +299,38 @@ class TeamsIntegration:
 
             if not routing.get("found"):
                 _log(
-                    "teams_no_routing",
+                    "teams_no_routing_attempting_provision",
                     correlation_id=correlation_id,
                     routing_id=routing_id,
                     channel_id=channel_id,
                     conversation_id=conversation_id,
+                    tenant_id=tenant_id,
                     tried=routing.get("tried", []),
                 )
-                return
+                provision = await self._auto_provision(
+                    routing_id=routing_id,
+                    tenant_id=tenant_id,
+                    correlation_id=correlation_id,
+                )
+                if not provision:
+                    try:
+                        async def _send_error(tc: TurnContext):
+                            await tc.send_activity(
+                                "Sorry, I couldn't set up IncidentFox automatically. "
+                                "Please contact your administrator to configure the integration."
+                            )
 
-            org_id = routing["org_id"]
-            team_node_id = routing["team_node_id"]
+                        await self.adapter.continue_conversation(
+                            conversation_ref, _send_error, self.app_id
+                        )
+                    except Exception:
+                        pass
+                    return
+                org_id = provision["org_id"]
+                team_node_id = provision["team_node_id"]
+            else:
+                org_id = routing["org_id"]
+                team_node_id = routing["team_node_id"]
 
             _log(
                 "teams_routing_found",
@@ -509,6 +535,93 @@ class TeamsIntegration:
                 error=str(e),
             )
 
+    async def _auto_provision(
+        self,
+        routing_id: str,
+        tenant_id: str,
+        correlation_id: str,
+    ) -> Optional[Dict[str, str]]:
+        """Auto-provision an org + team for a new Teams channel/conversation.
+
+        Creates the org and default team in config-service, then registers
+        the routing identifier so subsequent messages are routed correctly.
+
+        Returns ``{"org_id": ..., "team_node_id": ...}`` on success, or None.
+        """
+        try:
+            admin_token = (
+                os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or ""
+            ).strip()
+            if not admin_token:
+                _log("teams_auto_provision_no_admin_token", correlation_id=correlation_id)
+                return None
+
+            cfg = self.config_service
+
+            # Derive org_id from tenant (Azure AD tenant groups all channels)
+            if tenant_id:
+                org_id = f"teams-{tenant_id}"
+                org_name = f"Teams Tenant {tenant_id[:8]}"
+            else:
+                org_id = f"teams-{routing_id[:40]}"
+                org_name = f"Teams {routing_id[:16]}"
+
+            team_node_id = "default"
+
+            # Step 1: Create org (idempotent — returns exists=True if already there)
+            await asyncio.to_thread(
+                cfg.create_org_node, admin_token, org_id, org_name
+            )
+
+            # Step 2: Create default team (idempotent)
+            await asyncio.to_thread(
+                cfg.create_team_node, admin_token, org_id, team_node_id, "Default Team"
+            )
+
+            # Step 3: Update routing to include this channel/conversation ID.
+            # Fetch current routing first so we don't clobber existing entries.
+            existing_ids: list[str] = []
+            try:
+                eff = await asyncio.to_thread(
+                    cfg.get_effective_config_for_node,
+                    admin_token,
+                    org_id,
+                    team_node_id,
+                )
+                existing_ids = list(
+                    eff.get("routing", {}).get("teams_channel_ids", [])
+                )
+            except Exception:
+                pass  # New team — no config yet
+
+            if routing_id not in existing_ids:
+                existing_ids.append(routing_id)
+
+            await asyncio.to_thread(
+                cfg.patch_node_config,
+                admin_token,
+                org_id,
+                team_node_id,
+                {"routing": {"teams_channel_ids": existing_ids}},
+            )
+
+            _log(
+                "teams_auto_provision_success",
+                correlation_id=correlation_id,
+                org_id=org_id,
+                team_node_id=team_node_id,
+                routing_id=routing_id,
+            )
+            return {"org_id": org_id, "team_node_id": team_node_id}
+
+        except Exception as e:
+            _log(
+                "teams_auto_provision_failed",
+                correlation_id=correlation_id,
+                error=str(e),
+            )
+            return None
+
     async def _handle_conversation_update(self, turn_context: TurnContext) -> None:
         """Handle conversation update (bot added/removed, members changed)."""
         activity = turn_context.activity
@@ -530,6 +643,22 @@ class TeamsIntegration:
                 ),
             )
             await turn_context.send_activity(WELCOME_MESSAGE)
+
+            # Proactively provision so first message routes correctly
+            channel_data = activity.channel_data or {}
+            ch_info = channel_data.get("channel", {})
+            ch_id = ch_info.get("id", "") if isinstance(ch_info, dict) else ""
+            conv_id = activity.conversation.id if activity.conversation else ""
+            t_id = getattr(activity.conversation, "tenant_id", "") or ""
+            routing_id = ch_id or conv_id
+            if routing_id:
+                asyncio.create_task(
+                    self._auto_provision(
+                        routing_id=routing_id,
+                        tenant_id=t_id,
+                        correlation_id=correlation_id,
+                    )
+                )
 
         if members_removed:
             _log(
