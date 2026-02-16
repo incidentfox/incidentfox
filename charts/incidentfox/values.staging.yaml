@@ -309,10 +309,9 @@ services:
   knowledgeBase:
     enabled: false  # Deprecated - use ultimateRag instead
 
-  # Ultimate RAG - Disabled in staging to save r6i.xlarge node cost (~$184/mo)
-  # Enable temporarily when testing RAG changes before prod deploy
+  # Ultimate RAG - Self-learning knowledge base
   ultimateRag:
-    enabled: false
+    enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ultimate-rag:latest"
     replicas: 1
     serviceAccountRoleArn: "arn:aws:iam::103002841599:role/incidentfox-raptor-kb-role"
