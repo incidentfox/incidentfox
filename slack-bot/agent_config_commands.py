@@ -231,8 +231,12 @@ def register_agent_config_commands(app):
             if current_config:
                 logger.info(f"Config keys: {list(current_config.keys())}")
                 if "agents" in current_config:
-                    logger.info(f"Agents in config: {list(current_config['agents'].keys())}")
-                    logger.info(f"Full agents config: {json.dumps(current_config['agents'], indent=2)}")
+                    logger.info(
+                        f"Agents in config: {list(current_config['agents'].keys())}"
+                    )
+                    logger.info(
+                        f"Full agents config: {json.dumps(current_config['agents'], indent=2)}"
+                    )
                 else:
                     logger.warning("No 'agents' key in current_config")
             else:
