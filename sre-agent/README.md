@@ -65,6 +65,9 @@ Each agent in your team config supports:
     },
     "k8s-specialist": {
       "enabled": true,
+      "model": {
+        "temperature": 0.0
+      },
       "max_turns": 30,
       "prompt": {
         "system": "You are a Kubernetes specialist...",
@@ -73,6 +76,10 @@ Each agent in your team config supports:
     },
     "log-analyst": {
       "enabled": true,
+      "model": {
+        "temperature": 0.5,
+        "max_tokens": 2000
+      },
       "max_turns": 20,
       "prompt": {
         "system": "You are a log analysis specialist...",
@@ -83,14 +90,33 @@ Each agent in your team config supports:
 }
 ```
 
+**Note:** Each agent can have different model settings:
+- `investigator`: temp=0.3 (balanced), max_tokens=4000 (detailed analysis)
+- `k8s-specialist`: temp=0.0 (deterministic), uses default max_tokens
+- `log-analyst`: temp=0.5 (moderate), max_tokens=2000 (concise)
+
 ### Model Settings
 
-Model settings are applied **globally** to the session (Claude SDK limitation):
+Model settings are applied **per-agent** via HTTP headers and PreToolUse hooks:
 
-- Settings from the **root agent** apply to all subagents
-- credential-proxy forwards these to LiteLLM which passes them to the LLM API
+- Each agent (root and subagents) can have its own temperature, max_tokens, top_p
+- When a subagent is invoked, its model settings are automatically applied
+- credential-proxy reads `X-Agent-*` headers and injects them into the request body
+- LiteLLM then applies these settings when calling the LLM provider
 - Supported by most models (temperature, max_tokens, top_p)
-- Future: per-agent model specification would require credential-proxy detection of subagent context
+
+**How it works:**
+1. Each agent in config specifies its `model` settings
+2. Root agent context is set on initialization
+3. **PreToolUse hook** detects subagent invocations and updates context
+4. HTTP client wrapper injects `X-Agent-Temperature`, `X-Agent-Max-Tokens`, `X-Agent-Top-P` headers
+5. credential-proxy reads headers and injects into request body
+6. LiteLLM applies settings to provider API call
+
+**Example use cases:**
+- **Deterministic analyzer** (temp=0.0): For code review, need consistent output
+- **Balanced investigator** (temp=0.5): For debugging, balance creativity and precision
+- **Creative brainstormer** (temp=0.9): For solution exploration, maximize creativity
 
 ### Execution Limits
 

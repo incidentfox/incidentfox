@@ -169,6 +169,34 @@ def build_home_tab_view(
 
     blocks.append({"type": "divider"})
 
+    # Agent Configuration section
+    blocks.append(
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": "Agent Configuration"},
+        }
+    )
+    blocks.append(
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": ":gear: Configure per-agent model settings (temperature, max_tokens, top_p)",
+            },
+            "accessory": {
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "text": "View Agents",
+                    "emoji": True,
+                },
+                "action_id": "view_agent_config",
+            },
+        }
+    )
+
+    blocks.append({"type": "divider"})
+
     # Connected integrations section
     blocks.append(
         {
