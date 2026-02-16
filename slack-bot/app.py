@@ -3434,7 +3434,9 @@ def handle_message(event, client, context):
                     )
                     return
             except Exception as e:
-                logger.warning(f"Failed to check trial status for alert (continuing): {e}")
+                logger.warning(
+                    f"Failed to check trial status for alert (continuing): {e}"
+                )
 
             logger.info("✅ Confirmed: NEW ALERT - triggering investigation")
             threading.Thread(
