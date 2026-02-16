@@ -600,6 +600,11 @@ static_resources:
                                         "name": "DATADOG_BASE_URL",
                                         "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/datadog",
                                     },
+                                    # RAPTOR knowledge base: internal K8s service (no auth needed)
+                                    {
+                                        "name": "RAPTOR_URL",
+                                        "value": f"http://incidentfox-rag.{self.namespace}.svc.cluster.local:8000",
+                                    },
                                     # flagd runtime config (for OTel Demo incident scenarios)
                                     {
                                         "name": "FLAGD_NAMESPACE",

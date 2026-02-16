@@ -81,6 +81,16 @@ This agent uses a **progressive disclosure architecture** for optimal context ef
 │       ├── get_page.py             # Read full page content
 │       └── search_cql.py           # Advanced CQL search
 │
+├── knowledge-raptor/
+│   ├── SKILL.md                    # RAPTOR knowledge base (learned knowledge, graphs)
+│   └── scripts/
+│       ├── raptor_client.py        # Shared HTTP client
+│       ├── search.py               # General semantic search
+│       ├── search_incident.py      # Incident-aware search (runbooks + past incidents)
+│       ├── query_graph.py          # Service dependency/blast radius graph
+│       ├── find_similar.py         # Find similar past incidents
+│       └── teach.py                # Teach new knowledge back to KB
+│
 └── remediation/
     ├── SKILL.md                    # Safe remediation methodology
     └── scripts/
