@@ -232,9 +232,9 @@ def register_agent_config_commands(app):
     """Register agent config slash commands and handlers with the Slack app."""
 
     @app.action("view_agent_config")
-    async def handle_view_agent_config(ack, body, client):
+    def handle_view_agent_config(ack, body, client):
         """Handle button click from home tab to view agent configuration."""
-        await ack()
+        ack()
 
         # Get current config
         try:
@@ -250,7 +250,7 @@ def register_agent_config_commands(app):
 
         # Open agent config modal
         try:
-            await client.views_open(
+            client.views_open(
                 trigger_id=body["trigger_id"],
                 view=create_config_agents_modal(agents_config),
             )
@@ -258,7 +258,7 @@ def register_agent_config_commands(app):
             logger.error(f"Failed to open modal: {e}", exc_info=True)
             # Try to send error message to user
             try:
-                await client.chat_postMessage(
+                client.chat_postMessage(
                     channel=body["user"]["id"],
                     text=f"❌ Failed to open agent config modal: {str(e)}",
                 )
@@ -266,9 +266,9 @@ def register_agent_config_commands(app):
                 pass
 
     @app.action("open_json_editor")
-    async def handle_open_json_editor(ack, body, client):
+    def handle_open_json_editor(ack, body, client):
         """Handle button click to open JSON editor."""
-        await ack()
+        ack()
 
         # Get current config
         try:
@@ -282,13 +282,13 @@ def register_agent_config_commands(app):
             current_config = None
 
         # Open JSON editor modal
-        await client.views_open(
+        client.views_open(
             trigger_id=body["trigger_id"],
             view=create_json_editor_modal(current_config),
         )
 
     @app.view("agent_config_update")
-    async def handle_agent_config_update(ack, body, view, client):
+    def handle_agent_config_update(ack, body, view, client):
         """Handle agent config update from JSON editor modal."""
         # Get the JSON input
         json_str = view["state"]["values"]["config_json"]["json_input"]["value"]
@@ -298,14 +298,14 @@ def register_agent_config_commands(app):
 
         if not is_valid:
             # Show validation error
-            await ack(
+            ack(
                 response_action="errors",
                 errors={"config_json": error_msg},
             )
             return
 
         # Validation passed, acknowledge
-        await ack()
+        ack()
 
         # Save configuration
         try:
@@ -318,7 +318,7 @@ def register_agent_config_commands(app):
             config_client.update_team_config(team_id, parsed_data)
 
             # Notify user of success
-            await client.chat_postMessage(
+            client.chat_postMessage(
                 channel=body["user"]["id"],
                 text=(
                     "✅ *Agent configuration updated!*\n\n"
@@ -329,7 +329,7 @@ def register_agent_config_commands(app):
 
         except Exception as e:
             logger.error(f"Failed to save config: {e}")
-            await client.chat_postMessage(
+            client.chat_postMessage(
                 channel=body["user"]["id"],
                 text=f"❌ Failed to save configuration: {str(e)}",
             )
