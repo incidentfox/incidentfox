@@ -17,10 +17,12 @@ _botbuilder_core = types.ModuleType("botbuilder.core")
 _botbuilder_schema = types.ModuleType("botbuilder.schema")
 _botbuilder = types.ModuleType("botbuilder")
 
+
 # Core classes — use plain classes to avoid Python 3.14 InvalidSpecError
 class _FakeAdapter:
     def __init__(self, *a, **kw):
         pass
+
 
 _botbuilder_core.BotFrameworkAdapter = _FakeAdapter
 _botbuilder_core.BotFrameworkAdapterSettings = lambda *a, **kw: None

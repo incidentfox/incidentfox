@@ -64,13 +64,17 @@ class TestHelpCommand:
     @pytest.mark.asyncio
     async def test_help_returns_help_message(self):
         integration = _make_integration()
-        result = await integration.handle_event("MESSAGE", _message_event("help"), "corr-3")
+        result = await integration.handle_event(
+            "MESSAGE", _message_event("help"), "corr-3"
+        )
         assert result["text"] == HELP_MESSAGE
 
     @pytest.mark.asyncio
     async def test_help_case_insensitive(self):
         integration = _make_integration()
-        result = await integration.handle_event("MESSAGE", _message_event("HELP"), "corr-4")
+        result = await integration.handle_event(
+            "MESSAGE", _message_event("HELP"), "corr-4"
+        )
         assert result["text"] == HELP_MESSAGE
 
     @pytest.mark.asyncio

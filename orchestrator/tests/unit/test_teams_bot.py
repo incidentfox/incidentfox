@@ -47,12 +47,19 @@ def _make_mention_entity(bot_id: str = "bot-1"):
     entity.type = "mention"
     entity.mentioned = MagicMock()
     entity.mentioned.id = bot_id
-    entity.additional_properties = {"text": "<at>IncidentFox</at>", "mentioned": {"id": bot_id}}
+    entity.additional_properties = {
+        "text": "<at>IncidentFox</at>",
+        "mentioned": {"id": bot_id},
+    }
     return entity
 
 
-def _make_activity(text: str = "", members_added=None, mention_bot: bool = True,
-                   conversation_id: str = "conv-123"):
+def _make_activity(
+    text: str = "",
+    members_added=None,
+    mention_bot: bool = True,
+    conversation_id: str = "conv-123",
+):
     """Build a minimal mock Activity.
 
     Args:
