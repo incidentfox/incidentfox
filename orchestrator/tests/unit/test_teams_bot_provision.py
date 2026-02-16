@@ -17,9 +17,13 @@ _botbuilder_core = types.ModuleType("botbuilder.core")
 _botbuilder_schema = types.ModuleType("botbuilder.schema")
 _botbuilder = types.ModuleType("botbuilder")
 
-# Core classes
-_botbuilder_core.BotFrameworkAdapter = MagicMock
-_botbuilder_core.BotFrameworkAdapterSettings = MagicMock
+# Core classes — use plain classes to avoid Python 3.14 InvalidSpecError
+class _FakeAdapter:
+    def __init__(self, *a, **kw):
+        pass
+
+_botbuilder_core.BotFrameworkAdapter = _FakeAdapter
+_botbuilder_core.BotFrameworkAdapterSettings = lambda *a, **kw: None
 _botbuilder_core.TurnContext = MagicMock
 
 # Schema classes
@@ -79,7 +83,16 @@ class TestAutoProvision:
             "tok",
             "teams-tenant123",
             "default",
-            {"routing": {"teams_channel_ids": ["19:abc@thread.tacv2"]}},
+            {
+                "routing": {"teams_channel_ids": ["19:abc@thread.tacv2"]},
+                "integrations": {
+                    "anthropic": {
+                        "is_trial": True,
+                        "trial_expires_at": "2030-12-31T23:59:59.000000",
+                        "subscription_status": "active",
+                    },
+                },
+            },
         )
 
     @pytest.mark.asyncio
@@ -107,7 +120,16 @@ class TestAutoProvision:
             "tok",
             "teams-t1",
             "default",
-            {"routing": {"teams_channel_ids": ["existing-id", "new-channel"]}},
+            {
+                "routing": {"teams_channel_ids": ["existing-id", "new-channel"]},
+                "integrations": {
+                    "anthropic": {
+                        "is_trial": True,
+                        "trial_expires_at": "2030-12-31T23:59:59.000000",
+                        "subscription_status": "active",
+                    },
+                },
+            },
         )
 
     @pytest.mark.asyncio
@@ -134,7 +156,16 @@ class TestAutoProvision:
             "tok",
             "teams-t1",
             "default",
-            {"routing": {"teams_channel_ids": ["ch1"]}},
+            {
+                "routing": {"teams_channel_ids": ["ch1"]},
+                "integrations": {
+                    "anthropic": {
+                        "is_trial": True,
+                        "trial_expires_at": "2030-12-31T23:59:59.000000",
+                        "subscription_status": "active",
+                    },
+                },
+            },
         )
 
     @pytest.mark.asyncio

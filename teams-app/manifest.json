@@ -57,6 +57,16 @@
       ]
     }
   ],
+  "authorization": {
+    "permissions": {
+      "resourceSpecific": [
+        {
+          "name": "ChannelMessage.Read.Group",
+          "type": "Application"
+        }
+      ]
+    }
+  },
   "permissions": [
     "identity",
     "messageTeamMembers"

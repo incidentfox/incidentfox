@@ -51,7 +51,16 @@ class TestAutoProvision:
             "tok",
             "gchat-ABC123",
             "default",
-            {"routing": {"google_chat_space_ids": ["ABC123"]}},
+            {
+                "routing": {"google_chat_space_ids": ["ABC123"]},
+                "integrations": {
+                    "anthropic": {
+                        "is_trial": True,
+                        "trial_expires_at": "2030-12-31T23:59:59.000000",
+                        "subscription_status": "active",
+                    },
+                },
+            },
         )
 
     @pytest.mark.asyncio
@@ -77,7 +86,16 @@ class TestAutoProvision:
             "tok",
             "gchat-new-space",
             "default",
-            {"routing": {"google_chat_space_ids": ["existing-space", "new-space"]}},
+            {
+                "routing": {"google_chat_space_ids": ["existing-space", "new-space"]},
+                "integrations": {
+                    "anthropic": {
+                        "is_trial": True,
+                        "trial_expires_at": "2030-12-31T23:59:59.000000",
+                        "subscription_status": "active",
+                    },
+                },
+            },
         )
 
     @pytest.mark.asyncio

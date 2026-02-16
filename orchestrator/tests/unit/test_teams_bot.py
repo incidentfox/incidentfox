@@ -1,42 +1,69 @@
 """Unit tests for MS Teams welcome message and help command."""
 
 import sys
+import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# Mock botbuilder modules before importing teams_bot
-_botbuilder_core = MagicMock()
-_botbuilder_schema = MagicMock()
-sys.modules.setdefault("botbuilder", MagicMock())
-sys.modules.setdefault("botbuilder.core", _botbuilder_core)
-sys.modules.setdefault("botbuilder.schema", _botbuilder_schema)
+# ---------------------------------------------------------------------------
+# Mock botbuilder before importing teams_bot
+# Use types.ModuleType + plain classes to avoid Python 3.14 InvalidSpecError
+# (Python 3.14 rejects Mock objects used as spec for other Mocks)
+# ---------------------------------------------------------------------------
+_botbuilder = types.ModuleType("botbuilder")
+_botbuilder_core = types.ModuleType("botbuilder.core")
+_botbuilder_schema = types.ModuleType("botbuilder.schema")
 
-# Provide minimal mocks for the classes teams_bot imports
-_botbuilder_core.BotFrameworkAdapter = MagicMock
-_botbuilder_core.BotFrameworkAdapterSettings = MagicMock
+
+class _FakeAdapter:
+    def __init__(self, *a, **kw):
+        pass
+
+
+_botbuilder_core.BotFrameworkAdapter = _FakeAdapter
+_botbuilder_core.BotFrameworkAdapterSettings = lambda *a, **kw: None
 _botbuilder_core.TurnContext = MagicMock()
 _botbuilder_schema.Activity = MagicMock
 _botbuilder_schema.ActivityTypes = MagicMock()
 _botbuilder_schema.ActivityTypes.typing = "typing"
 _botbuilder_schema.ConversationReference = MagicMock
 
+sys.modules.setdefault("botbuilder", _botbuilder)
+sys.modules.setdefault("botbuilder.core", _botbuilder_core)
+sys.modules.setdefault("botbuilder.schema", _botbuilder_schema)
+
 from incidentfox_orchestrator.webhooks.teams_bot import (  # noqa: E402
     HELP_MESSAGE,
     WELCOME_MESSAGE,
     TeamsIntegration,
+    generate_session_id,
 )
 
 
-def _make_activity(text: str = "", members_added=None):
-    """Build a minimal mock Activity."""
+def _make_mention_entity(bot_id: str = "bot-1"):
+    """Build a mock mention entity for the bot."""
+    entity = MagicMock()
+    entity.type = "mention"
+    entity.mentioned = MagicMock()
+    entity.mentioned.id = bot_id
+    entity.additional_properties = {"text": "<at>IncidentFox</at>", "mentioned": {"id": bot_id}}
+    return entity
+
+
+def _make_activity(text: str = "", members_added=None, mention_bot: bool = True,
+                   conversation_id: str = "conv-123"):
+    """Build a minimal mock Activity.
+
+    Args:
+        mention_bot: If True, includes a mention entity for the bot (default).
+    """
     activity = MagicMock()
     activity.type = "message"
     activity.text = text
-    activity.entities = []
     activity.channel_data = {}
     activity.conversation = MagicMock()
-    activity.conversation.id = "conv-123"
+    activity.conversation.id = conversation_id
     activity.from_property = MagicMock()
     activity.from_property.id = "user-1"
     activity.from_property.name = "Test User"
@@ -44,6 +71,12 @@ def _make_activity(text: str = "", members_added=None):
     activity.recipient.id = "bot-1"
     activity.members_added = members_added or []
     activity.members_removed = []
+
+    if mention_bot:
+        activity.entities = [_make_mention_entity("bot-1")]
+    else:
+        activity.entities = []
+
     return activity
 
 
@@ -130,3 +163,77 @@ class TestRegularMessage:
         await integration._handle_message(ctx)
 
         mock_create_task.assert_called_once()
+
+
+class TestThreadReplyHandling:
+    """Thread replies (without @mention) should be processed; random channel messages should not."""
+
+    @pytest.mark.asyncio
+    @patch("incidentfox_orchestrator.webhooks.teams_bot.asyncio.create_task")
+    async def test_thread_reply_without_mention_triggers_agent(self, mock_create_task):
+        """Thread reply (;messageid= in conv ID) should be processed even without @mention."""
+        integration = _make_integration()
+        activity = _make_activity(
+            text="please just choose one",
+            mention_bot=False,
+            conversation_id="19:abc@thread.tacv2;messageid=1234567890",
+        )
+        ctx = _make_turn_context(activity)
+
+        await integration._handle_message(ctx)
+
+        mock_create_task.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_non_mentioned_non_thread_message_ignored(self):
+        """Channel message without @mention and not a thread reply should be ignored."""
+        integration = _make_integration()
+        activity = _make_activity(
+            text="hey team let's have a meeting",
+            mention_bot=False,
+            conversation_id="19:abc@thread.tacv2",
+        )
+        ctx = _make_turn_context(activity)
+
+        await integration._handle_message(ctx)
+
+        # Should not send any response
+        ctx.send_activity.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("incidentfox_orchestrator.webhooks.teams_bot.asyncio.create_task")
+    async def test_mentioned_message_in_thread_works(self, mock_create_task):
+        """@mentioned message in a thread should still be processed."""
+        integration = _make_integration()
+        activity = _make_activity(
+            text="investigate this",
+            mention_bot=True,
+            conversation_id="19:abc@thread.tacv2;messageid=1234567890",
+        )
+        ctx = _make_turn_context(activity)
+
+        await integration._handle_message(ctx)
+
+        mock_create_task.assert_called_once()
+
+
+class TestSessionIdConsistency:
+    """Thread replies should produce the same session_id as the parent message."""
+
+    def test_thread_reply_same_session_as_parent(self):
+        """Base conv ID and thread conv ID should produce the same session_id."""
+        channel = "19:abc@thread.tacv2"
+        parent_conv = "19:abc@thread.tacv2"
+        thread_conv = "19:abc@thread.tacv2;messageid=1234567890"
+
+        parent_sid = generate_session_id(channel, parent_conv)
+        thread_sid = generate_session_id(channel, thread_conv.split(";")[0])
+
+        assert parent_sid == thread_sid
+
+    def test_different_threads_different_sessions(self):
+        """Different channels should produce different session_ids."""
+        sid1 = generate_session_id("19:abc@thread.tacv2", "conv-1")
+        sid2 = generate_session_id("19:def@thread.tacv2", "conv-2")
+
+        assert sid1 != sid2

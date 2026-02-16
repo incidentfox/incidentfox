@@ -205,6 +205,36 @@ class TeamsIntegration:
         conversation = activity.conversation
         conversation_id = conversation.id if conversation else ""
 
+        # Check if this is a thread reply (conversation_id includes ";messageid=")
+        is_thread_reply = ";messageid=" in conversation_id
+
+        # Check if the bot was @mentioned
+        bot_id = activity.recipient.id if activity.recipient else ""
+        is_mentioned = False
+        if activity.entities:
+            for entity in activity.entities:
+                if entity.type == "mention":
+                    mentioned = getattr(entity, "mentioned", None)
+                    mentioned_id = (
+                        getattr(mentioned, "id", None)
+                        if mentioned
+                        else entity.additional_properties.get("mentioned", {}).get("id")
+                    )
+                    if mentioned_id == bot_id:
+                        is_mentioned = True
+                        break
+
+        # With RSC ChannelMessage.Read.Group, the bot receives ALL channel
+        # messages.  Only process messages that either @mention the bot or are
+        # thread replies (follow-ups to a conversation the bot is likely in).
+        if not is_mentioned and not is_thread_reply:
+            _log(
+                "teams_message_ignored_no_mention",
+                correlation_id=correlation_id,
+                conversation_id=conversation_id[:50],
+            )
+            return
+
         # Strip @mention from text
         text = _strip_mentions(activity)
 
@@ -213,7 +243,10 @@ class TeamsIntegration:
         user_id = from_user.id if from_user else ""
         user_name = from_user.name if from_user else ""
 
-        session_id = generate_session_id(channel_id or team_id, conversation_id)
+        # For thread replies, conversation_id includes ";messageid=XXX".
+        # Strip it so all messages in the same thread share the same session.
+        base_conversation_id = conversation_id.split(";")[0]
+        session_id = generate_session_id(channel_id or team_id, base_conversation_id)
 
         _log(
             "teams_message_processing",
@@ -224,6 +257,8 @@ class TeamsIntegration:
             user_id=user_id,
             session_id=session_id,
             text_length=len(text),
+            is_mentioned=is_mentioned,
+            is_thread_reply=is_thread_reply,
         )
 
         if not text:
@@ -264,10 +299,12 @@ class TeamsIntegration:
         conversation_ref = TurnContext.get_conversation_reference(activity)
 
         # Fire off background processing
+        # Use base_conversation_id (without ;messageid=) for routing so
+        # thread replies match the same org/team as the parent message.
         asyncio.create_task(
             self._process_message_async(
                 channel_id=channel_id or team_id,
-                conversation_id=conversation_id,
+                conversation_id=base_conversation_id,
                 conversation_ref=conversation_ref,
                 text=text,
                 user_id=user_id,
