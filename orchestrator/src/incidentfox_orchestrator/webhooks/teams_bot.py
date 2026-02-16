@@ -524,9 +524,7 @@ class TeamsIntegration:
                         _log(
                             "teams_send_activity_response",
                             correlation_id=correlation_id,
-                            response_id=(
-                                send_response.id if send_response else None
-                            ),
+                            response_id=(send_response.id if send_response else None),
                         )
 
                     await self.adapter.continue_conversation(
@@ -538,9 +536,7 @@ class TeamsIntegration:
                         "teams_result_sent",
                         correlation_id=correlation_id,
                         result_length=len(result_text),
-                        response_id=(
-                            send_response.id if send_response else None
-                        ),
+                        response_id=(send_response.id if send_response else None),
                     )
                 except Exception as send_err:
                     _log(
