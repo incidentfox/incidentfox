@@ -66,11 +66,13 @@ Secrets: AWS Secrets Manager → ExternalSecrets Operator → K8s Secrets. Never
 
 ## Local development
 
-`docker compose up` runs sre-agent + slack-bot + credential-proxy + envoy. Requires `.env` with Slack tokens and API keys (see `.env.example`).
+`make dev` starts the full local stack: postgres, config-service, credential-resolver, envoy, sre-agent. Only `ANTHROPIC_API_KEY` is required in `.env` (see `.env.example`).
 
-**Known issue**: Local docker-compose may be broken — prod-specific configs were added that may not work locally. If it breaks, check Dockerfile.simple vs Dockerfile and environment variable requirements.
+`make dev-slack` adds the slack-bot (requires `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` in `.env`).
 
-sre-agent also has a Makefile: `make setup-local` (Kind cluster), `make dev`, `make test-local PROMPT='...'`.
+The local stack builds all services from source. Config-service auto-runs alembic migrations and seeds local dev data (org=local, team=default). sre-agent loads team config from config-service via header-based auth (`INCIDENTFOX_TENANT_ID=local`, `INCIDENTFOX_TEAM_ID=default`).
+
+**Note**: `local/docker-compose.yml` is deprecated — it runs the old agent/ (OpenAI SDK). Use the root docker-compose.yml instead.
 
 ## Key files
 

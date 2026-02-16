@@ -23,7 +23,7 @@ COPY pyproject.toml .
 RUN uv pip install --system -e .
 
 # Copy application code
-COPY agent.py events.py server_simple.py ./
+COPY agent.py config.py events.py server_simple.py ./
 COPY .claude/ .claude/
 
 # Create non-root user

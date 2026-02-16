@@ -7,11 +7,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 import os
+import uuid
 from datetime import datetime
 
 from sqlalchemy import select
 from src.core.dotenv import load_dotenv
-from src.db.models import NodeConfig, NodeType, OrgNode
+from src.db.config_models import NodeConfiguration
+from src.db.models import NodeType, OrgNode
 from src.db.session import db_session
 
 
@@ -59,15 +61,17 @@ def main() -> None:
 
         # Root config
         root_cfg = s.execute(
-            select(NodeConfig).where(
-                NodeConfig.org_id == org_id, NodeConfig.node_id == root_id
+            select(NodeConfiguration).where(
+                NodeConfiguration.org_id == org_id, NodeConfiguration.node_id == root_id
             )
         ).scalar_one_or_none()
         if root_cfg is None:
             s.add(
-                NodeConfig(
+                NodeConfiguration(
+                    id=f"cfg-{uuid.uuid4().hex[:12]}",
                     org_id=org_id,
                     node_id=root_id,
+                    node_type="org",
                     config_json={
                         "knowledge_source": {"grafana": ["dash/org-default"]},
                         "mcp_servers": ["mcps://grafana"],
@@ -81,18 +85,18 @@ def main() -> None:
 
         # Team overrides
         team_cfg = s.execute(
-            select(NodeConfig).where(
-                NodeConfig.org_id == org_id, NodeConfig.node_id == team_id
+            select(NodeConfiguration).where(
+                NodeConfiguration.org_id == org_id, NodeConfiguration.node_id == team_id
             )
         ).scalar_one_or_none()
         if team_cfg is None:
             s.add(
-                NodeConfig(
+                NodeConfiguration(
+                    id=f"cfg-{uuid.uuid4().hex[:12]}",
                     org_id=org_id,
                     node_id=team_id,
+                    node_type="team",
                     config_json={
-                        # NOTE: team_name is immutable and should generally not be set by team writes,
-                        # but for seed/demo it's useful to store/display it at the team node.
                         "team_name": team_name,
                         "knowledge_source": {"confluence": ["space:TEAM:runbooks"]},
                     },

@@ -1,7 +1,13 @@
 version: '3.8'
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# IncidentFox Local Trial Stack
+# DEPRECATED: Use the root docker-compose.yml instead.
+#   cd .. && make dev
+# This file uses the deprecated agent/ (OpenAI SDK) and will be removed.
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# IncidentFox Local Trial Stack (DEPRECATED)
 # ═══════════════════════════════════════════════════════════════════════════════
 #
 # Pulls pre-built images from Docker Hub (incidentfox/).

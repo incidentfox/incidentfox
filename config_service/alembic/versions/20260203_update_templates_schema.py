@@ -117,6 +117,10 @@ def upgrade():
         type_="foreignkey",
     )
 
+    # Drop indexes before dropping columns (PG auto-drops indexes when columns are removed)
+    op.drop_index("ix_template_applications_org_team", "template_applications")
+    op.drop_index("ix_template_applications_template_id", "template_applications")
+
     # Rename primary key column
     op.alter_column("template_applications", "application_id", new_column_name="id")
 
@@ -161,9 +165,7 @@ def upgrade():
         ondelete="CASCADE",
     )
 
-    # Update indexes
-    op.drop_index("ix_template_applications_org_team", "template_applications")
-    op.drop_index("ix_template_applications_template_id", "template_applications")
+    # Create new indexes (old ones already dropped above before column removal)
     op.create_index(
         "ix_template_applications_template", "template_applications", ["template_id"]
     )

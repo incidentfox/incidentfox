@@ -172,7 +172,21 @@ async def agent_background_task(thread_id: str):
 
     logger.info(f"[BG] Starting background agent task for thread {thread_id}")
 
-    session = InteractiveAgentSession(thread_id=thread_id)
+    # Optionally load team config from config-service
+    team_config = None
+    if os.getenv("CONFIG_SERVICE_URL"):
+        try:
+            from config import load_team_config
+
+            team_config = load_team_config()
+            logger.info(
+                f"[BG] Loaded team config: {len(team_config.agents)} agents, "
+                f"{len(team_config.business_context)} chars business context"
+            )
+        except Exception as e:
+            logger.warning(f"[BG] Failed to load team config (continuing without): {e}")
+
+    session = InteractiveAgentSession(thread_id=thread_id, team_config=team_config)
     await session.start()
     logger.info(f"[BG] Session started for thread {thread_id}")
 
