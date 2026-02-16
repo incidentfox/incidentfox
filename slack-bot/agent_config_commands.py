@@ -225,7 +225,18 @@ def register_agent_config_commands(app):
 
             config_client = get_config_client()
             team_id = body["team"]["id"]
+            logger.info(f"=== Loading config for team: {team_id} ===")
             current_config = config_client.get_workspace_config(team_id)
+            logger.info(f"Loaded config type: {type(current_config)}")
+            if current_config:
+                logger.info(f"Config keys: {list(current_config.keys())}")
+                if "agents" in current_config:
+                    logger.info(f"Agents in config: {list(current_config['agents'].keys())}")
+                    logger.info(f"Full agents config: {json.dumps(current_config['agents'], indent=2)}")
+                else:
+                    logger.warning("No 'agents' key in current_config")
+            else:
+                logger.warning("current_config is None")
         except Exception as e:
             logger.error(f"Failed to get config: {e}", exc_info=True)
             current_config = None
