@@ -329,8 +329,12 @@ def register_agent_config_commands(app):
             logger.info(
                 f"Calling _update_config with org_id={org_id}, team_node_id={team_node_id}"
             )
-            logger.info(f"Disabling {len([a for a, c in agents_to_save.items() if not c.get('enabled', True)])} old agents")
-            logger.info(f"Enabling {len([a for a, c in agents_to_save.items() if c.get('enabled', True)])} new agents")
+            logger.info(
+                f"Disabling {len([a for a, c in agents_to_save.items() if not c.get('enabled', True)])} old agents"
+            )
+            logger.info(
+                f"Enabling {len([a for a, c in agents_to_save.items() if c.get('enabled', True)])} new agents"
+            )
             logger.info(f"Final config data: {json.dumps(final_config, indent=2)}")
 
             config_client._update_config(org_id, team_node_id, final_config)
