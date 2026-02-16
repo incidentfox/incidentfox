@@ -90,12 +90,16 @@ class SelfLearningPipeline:
     async def _load_config(self) -> None:
         """Load team configuration from config service."""
         try:
-            # Get effective config (with inheritance)
+            # Get effective config via team-facing /me endpoint
             response = await self._config_client.get(
-                f"/api/v2/orgs/{self.org_id}/nodes/{self.team_node_id}/config/effective"
+                "/api/v1/config/me",
+                headers={
+                    "X-Org-Id": self.org_id,
+                    "X-Team-Node-Id": self.team_node_id,
+                },
             )
             response.raise_for_status()
-            data = response.json()
+            data = response.json().get("effective_config", {})
 
             # Extract self_learning config
             sl_config = data.get("self_learning", {})
@@ -156,7 +160,9 @@ class SelfLearningPipeline:
                     team_node_id=self.team_node_id,
                     config_client=self._config_client,
                     raptor_client=self._raptor_client,
-                    auto_approve_threshold=self.config.auto_approve_threshold,
+                    teaching_config={
+                        "auto_approve_threshold": self.config.auto_approve_threshold,
+                    },
                 )
                 await task.initialize()
                 results["teaching"] = await task.run()
@@ -175,9 +181,11 @@ class SelfLearningPipeline:
                     org_id=self.org_id,
                     team_node_id=self.team_node_id,
                     raptor_client=self._raptor_client,
-                    decay_enabled=self.config.decay_enabled,
-                    rebalance_enabled=self.config.rebalance_enabled,
-                    gap_detection_enabled=self.config.gap_detection_enabled,
+                    maintenance_config={
+                        "decay_enabled": self.config.decay_enabled,
+                        "rebalance_enabled": self.config.rebalance_enabled,
+                        "gap_detection_enabled": self.config.gap_detection_enabled,
+                    },
                 )
                 await task.initialize()
                 results["maintenance"] = await task.run()
