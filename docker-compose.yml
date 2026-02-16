@@ -110,6 +110,7 @@ services:
       - .env
     environment:
       - SRE_AGENT_URL=http://sre-agent:8000
+      - CONFIG_SERVICE_URL=${CONFIG_SERVICE_URL:-}
     depends_on:
       - sre-agent
     security_opt:

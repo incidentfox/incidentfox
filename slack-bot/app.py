@@ -1773,13 +1773,10 @@ def _handle_mention_impl(event, say, client, context):
             logger.info(f"Trial expired for team {team_id}, skipping investigation")
             return
     except Exception as e:
-        logger.error(f"Failed to check trial status: {e}")
-        client.chat_postMessage(
-            channel=channel_id,
-            thread_ts=event.get("thread_ts") or event["ts"],
-            text=":x: Unable to verify your account status. Please try again later.",
-        )
-        return
+        # Config service unreachable — log and continue.
+        # The credential-proxy enforces trial expiration at runtime,
+        # so this check is a UX guardrail, not a security gate.
+        logger.warning(f"Failed to check trial status (continuing): {e}")
 
     # Thread context: use existing thread or create new one
     thread_ts = event.get("thread_ts") or event["ts"]
@@ -2263,8 +2260,7 @@ def _run_auto_listen_investigation(event, client, context):
             )
             return
     except Exception as e:
-        logger.error(f"Failed to check trial status: {e}")
-        return
+        logger.warning(f"Failed to check trial status (continuing): {e}")
 
     # Generate thread_id for sre-agent
     sanitized_thread_ts = thread_ts.replace(".", "-")
@@ -3058,12 +3054,9 @@ def handle_message(event, client, context):
                 )
                 return
         except Exception as e:
-            logger.error(f"Failed to check trial status for DM: {e}")
-            client.chat_postMessage(
-                channel=channel_id,
-                text=":x: Unable to verify your account status. Please try again later.",
-            )
-            return
+            # Config service unreachable — log and continue.
+            # The credential-proxy enforces trial expiration at runtime.
+            logger.warning(f"Failed to check trial status for DM (continuing): {e}")
 
         # Continue to DM investigation below
         # (Extract images, build prompt, trigger investigation)
@@ -3441,8 +3434,7 @@ def handle_message(event, client, context):
                     )
                     return
             except Exception as e:
-                logger.error(f"Failed to check trial status for alert: {e}")
-                return  # Block if we can't verify trial status
+                logger.warning(f"Failed to check trial status for alert (continuing): {e}")
 
             logger.info("✅ Confirmed: NEW ALERT - triggering investigation")
             threading.Thread(
