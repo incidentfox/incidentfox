@@ -131,7 +131,9 @@ class TestAutoProvision:
 
         assert result is not None
         cfg.patch_node_config.assert_called_once_with(
-            "tok", "teams-t1", "default",
+            "tok",
+            "teams-t1",
+            "default",
             {"routing": {"teams_channel_ids": ["ch1"]}},
         )
 
@@ -142,6 +144,7 @@ class TestAutoProvision:
         with patch.dict("os.environ", {}, clear=True):
             # Also ensure ORCHESTRATOR_INTERNAL_ADMIN_TOKEN is not set
             import os
+
             os.environ.pop("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN", None)
             result = await bot._auto_provision(
                 routing_id="ch1",

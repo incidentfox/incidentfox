@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from incidentfox_orchestrator.webhooks.google_chat_app import GoogleChatIntegration
 
 
@@ -87,6 +86,7 @@ class TestAutoProvision:
         bot = _make_integration()
         with patch.dict("os.environ", {}, clear=True):
             import os
+
             os.environ.pop("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN", None)
             result = await bot._auto_provision(
                 space_id="ABC",

@@ -78,9 +78,7 @@ class ConfigServiceClient:
         r.raise_for_status()
         return dict(r.json())
 
-    def create_org_node(
-        self, raw_token: str, org_id: str, name: str
-    ) -> dict[str, Any]:
+    def create_org_node(self, raw_token: str, org_id: str, name: str) -> dict[str, Any]:
         """Create an org node. Returns ``{"exists": True}`` if it already exists."""
         url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/nodes"
         payload = {
@@ -100,7 +98,10 @@ class ConfigServiceClient:
             r.raise_for_status()
             return dict(r.json())
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 400 and "already exists" in exc.response.text.lower():
+            if (
+                exc.response.status_code == 400
+                and "already exists" in exc.response.text.lower()
+            ):
                 return {"org_id": org_id, "exists": True}
             raise
 
@@ -126,7 +127,10 @@ class ConfigServiceClient:
             r.raise_for_status()
             return dict(r.json())
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 400 and "already exists" in exc.response.text.lower():
+            if (
+                exc.response.status_code == 400
+                and "already exists" in exc.response.text.lower()
+            ):
                 return {"team_node_id": team_node_id, "exists": True}
             raise
 

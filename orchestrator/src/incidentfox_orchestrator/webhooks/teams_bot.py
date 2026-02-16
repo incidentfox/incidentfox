@@ -314,6 +314,7 @@ class TeamsIntegration:
                 )
                 if not provision:
                     try:
+
                         async def _send_error(tc: TurnContext):
                             await tc.send_activity(
                                 "Sorry, I couldn't set up IncidentFox automatically. "
@@ -549,11 +550,11 @@ class TeamsIntegration:
         Returns ``{"org_id": ..., "team_node_id": ...}`` on success, or None.
         """
         try:
-            admin_token = (
-                os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or ""
-            ).strip()
+            admin_token = (os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or "").strip()
             if not admin_token:
-                _log("teams_auto_provision_no_admin_token", correlation_id=correlation_id)
+                _log(
+                    "teams_auto_provision_no_admin_token", correlation_id=correlation_id
+                )
                 return None
 
             cfg = self.config_service
@@ -569,9 +570,7 @@ class TeamsIntegration:
             team_node_id = "default"
 
             # Step 1: Create org (idempotent — returns exists=True if already there)
-            await asyncio.to_thread(
-                cfg.create_org_node, admin_token, org_id, org_name
-            )
+            await asyncio.to_thread(cfg.create_org_node, admin_token, org_id, org_name)
 
             # Step 2: Create default team (idempotent)
             await asyncio.to_thread(
@@ -588,9 +587,7 @@ class TeamsIntegration:
                     org_id,
                     team_node_id,
                 )
-                existing_ids = list(
-                    eff.get("routing", {}).get("teams_channel_ids", [])
-                )
+                existing_ids = list(eff.get("routing", {}).get("teams_channel_ids", []))
             except Exception:
                 pass  # New team — no config yet
 
