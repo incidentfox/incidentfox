@@ -1,8 +1,22 @@
 apiVersion: v2
 name: incidentfox
-description: IncidentFox umbrella chart (config_service, agent, orchestrator, ai_pipeline_api, web_ui)
+description: AI-powered SRE platform for automated incident investigation and response
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
-
-
+home: https://incidentfox.ai
+icon: https://incidentfox-assets.s3.us-west-2.amazonaws.com/logo.png
+sources:
+  - https://github.com/incidentfox/incidentfox
+keywords:
+  - incidentfox
+  - sre
+  - incident-response
+  - observability
+  - ai
+  - kubernetes
+maintainers:
+  - name: IncidentFox
+    url: https://github.com/incidentfox
+annotations:
+  artifacthub.io/license: "proprietary"

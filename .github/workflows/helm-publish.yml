@@ -1,0 +1,89 @@
+name: Publish Helm Chart
+
+# Packages the Helm chart and pushes it to Docker Hub OCI registry.
+# Artifact Hub indexes the chart from there.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Chart version (e.g., 0.2.0). Leave empty to use Chart.yaml version.'
+        required: false
+        type: string
+
+env:
+  OCI_REGISTRY: oci://registry-1.docker.io/incidentfox
+
+jobs:
+  publish:
+    name: Package & Push Helm Chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Determine chart version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # Strip leading 'v' from tag (v1.0.0 -> 1.0.0)
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            # Fall back to version in Chart.yaml
+            VERSION=$(grep '^version:' charts/incidentfox/Chart.yaml | awk '{print $2}')
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Chart.yaml version
+        run: |
+          sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" charts/incidentfox/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.version }}\"/" charts/incidentfox/Chart.yaml
+          echo "Chart.yaml after version update:"
+          cat charts/incidentfox/Chart.yaml
+
+      - name: Lint chart
+        run: helm lint charts/incidentfox/
+
+      - name: Package chart
+        run: helm package charts/incidentfox/ --destination .helm-packages/
+
+      - name: Login to Docker Hub OCI registry
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | helm registry login registry-1.docker.io \
+            --username "${{ secrets.DOCKERHUB_USERNAME }}" \
+            --password-stdin
+
+      - name: Push chart to OCI registry
+        run: |
+          helm push .helm-packages/incidentfox-${{ steps.version.outputs.version }}.tgz ${{ env.OCI_REGISTRY }}
+
+      - name: Verify published chart
+        run: |
+          helm show chart ${{ env.OCI_REGISTRY }}/incidentfox --version ${{ steps.version.outputs.version }}
+
+      - name: Summary
+        run: |
+          echo "## Helm Chart Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Chart**: incidentfox" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry**: \`${{ env.OCI_REGISTRY }}/incidentfox\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Install with:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "helm install incidentfox ${{ env.OCI_REGISTRY }}/incidentfox --version ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

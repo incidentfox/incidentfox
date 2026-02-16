@@ -1,0 +1,9 @@
+# Artifact Hub repository metadata
+# https://artifacthub.io/docs/topics/repositories/
+#
+# After registering the repository on Artifact Hub, replace the
+# repositoryID below with the value assigned by Artifact Hub.
+repositoryID: # fill after registering on artifacthub.io
+owners:
+  - name: incidentfox
+    email: support@incidentfox.ai
