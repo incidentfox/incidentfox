@@ -297,15 +297,43 @@ def register_agent_config_commands(app):
             config_client = get_config_client()
             team_id = body["team"]["id"]
 
-            # Update config via config_service using the internal _update_config method
+            # Get current config to determine which agents to disable
+            current_config = config_client.get_workspace_config(team_id)
+
+            # Build a config update that:
+            # 1. Disables all existing agents not in the new config
+            # 2. Sets the new agents from user input
             org_id = f"slack-{team_id}"
             team_node_id = "default"
+
+            agents_to_save = {}
+
+            # First, disable all existing agents
+            if current_config and "agents" in current_config:
+                for agent_name in current_config["agents"].keys():
+                    agents_to_save[agent_name] = {"enabled": False}
+
+            # Then, enable/configure only the agents in the user's input
+            if "agents" in parsed_data:
+                for agent_name, agent_config in parsed_data["agents"].items():
+                    agents_to_save[agent_name] = agent_config
+
+            # Build final config update
+            final_config = {"agents": agents_to_save}
+
+            # Also preserve any other top-level keys from user input (like entrance_agent)
+            for key in parsed_data:
+                if key != "agents":
+                    final_config[key] = parsed_data[key]
+
             logger.info(
                 f"Calling _update_config with org_id={org_id}, team_node_id={team_node_id}"
             )
-            logger.info(f"Config data: {json.dumps(parsed_data, indent=2)}")
+            logger.info(f"Disabling {len([a for a, c in agents_to_save.items() if not c.get('enabled', True)])} old agents")
+            logger.info(f"Enabling {len([a for a, c in agents_to_save.items() if c.get('enabled', True)])} new agents")
+            logger.info(f"Final config data: {json.dumps(final_config, indent=2)}")
 
-            config_client._update_config(org_id, team_node_id, parsed_data)
+            config_client._update_config(org_id, team_node_id, final_config)
             logger.info("Config update completed successfully")
 
             # Notify user of success
