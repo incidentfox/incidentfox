@@ -260,7 +260,7 @@ def register_agent_config_commands(app):
             try:
                 await client.chat_postMessage(
                     channel=body["user"]["id"],
-                    text=f"❌ Failed to open agent config modal: {str(e)}"
+                    text=f"❌ Failed to open agent config modal: {str(e)}",
                 )
             except:
                 pass
