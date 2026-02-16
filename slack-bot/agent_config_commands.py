@@ -250,14 +250,21 @@ def register_agent_config_commands(app):
     @app.view("agent_config_update")
     def handle_agent_config_update(ack, body, view, client):
         """Handle agent config update from JSON editor modal."""
+        logger.info("=== handle_agent_config_update called ===")
+        logger.info(f"Team ID: {body.get('team', {}).get('id')}")
+        logger.info(f"User ID: {body.get('user', {}).get('id')}")
+
         # Get the JSON input
         json_str = view["state"]["values"]["config_json"]["json_input"]["value"]
+        logger.info(f"Received JSON (first 200 chars): {json_str[:200]}")
 
         # Validate
         is_valid, error_msg, parsed_data = validate_agent_config(json_str)
+        logger.info(f"Validation result: is_valid={is_valid}, error={error_msg}")
 
         if not is_valid:
             # Show validation error
+            logger.warning(f"Validation failed: {error_msg}")
             ack(
                 response_action="errors",
                 errors={"config_json": error_msg},
@@ -265,6 +272,7 @@ def register_agent_config_commands(app):
             return
 
         # Validation passed, acknowledge
+        logger.info("Validation passed, acknowledging modal submission")
         ack()
 
         # Save configuration
@@ -277,9 +285,14 @@ def register_agent_config_commands(app):
             # Update config via config_service using the internal _update_config method
             org_id = f"slack-{team_id}"
             team_node_id = "default"
+            logger.info(f"Calling _update_config with org_id={org_id}, team_node_id={team_node_id}")
+            logger.info(f"Config data: {json.dumps(parsed_data, indent=2)}")
+
             config_client._update_config(org_id, team_node_id, parsed_data)
+            logger.info("Config update completed successfully")
 
             # Notify user of success
+            logger.info(f"Sending success DM to user: {body['user']['id']}")
             client.chat_postMessage(
                 channel=body["user"]["id"],
                 text=(
@@ -288,6 +301,7 @@ def register_agent_config_commands(app):
                     "Changes will take effect on the next investigation."
                 ),
             )
+            logger.info("Success DM sent")
 
         except Exception as e:
             logger.error(f"Failed to save config: {e}", exc_info=True)
