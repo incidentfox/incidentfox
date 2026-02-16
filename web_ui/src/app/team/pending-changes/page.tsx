@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
+  Plug,
 } from 'lucide-react';
 
 interface Evidence {
@@ -28,7 +29,7 @@ interface Evidence {
 
 interface PendingChange {
   id: string;
-  changeType: 'prompt' | 'mcp' | 'knowledge' | 'tool';
+  changeType: 'prompt' | 'mcp' | 'knowledge' | 'tool' | 'integration_recommendation';
   status: 'pending' | 'approved' | 'rejected';
   title: string;
   description: string;
@@ -56,6 +57,8 @@ const getTypeIcon = (type: string) => {
       return <BookOpen className="w-4 h-4" />;
     case 'tool':
       return <Server className="w-4 h-4" />;
+    case 'integration_recommendation':
+      return <Plug className="w-4 h-4" />;
     default:
       return <GitPullRequest className="w-4 h-4" />;
   }
@@ -71,6 +74,8 @@ const getTypeLabel = (type: string) => {
       return 'Knowledge Base';
     case 'tool':
       return 'Tool / Integration';
+    case 'integration_recommendation':
+      return 'Integration Recommendation';
     default:
       return type;
   }
@@ -147,8 +152,9 @@ export default function TeamPendingChangesPage() {
       const res = await apiFetch(`/api/team/pending-changes/${changeId}/approve`, {
         method: 'POST',
       });
-      
+
       if (res.ok) {
+        const data = await res.json();
         setChanges((prev) =>
           prev.map((c) =>
             c.id === changeId
@@ -161,7 +167,16 @@ export default function TeamPendingChangesPage() {
               : c
           )
         );
-        setMessage({ type: 'success', text: 'Change approved!' });
+
+        // For integration recommendations, navigate to integration config
+        if (data.action === 'configure_integration' && data.integration_id) {
+          setMessage({
+            type: 'success',
+            text: `Recommendation accepted! Configure ${data.integration_id} in Settings.`,
+          });
+        } else {
+          setMessage({ type: 'success', text: 'Change approved!' });
+        }
       } else {
         const err = await res.json();
         setMessage({ type: 'error', text: err.detail || 'Failed to approve' });
@@ -453,19 +468,25 @@ export default function TeamPendingChangesPage() {
                         disabled={processing === change.id}
                         className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
                       >
-                        Reject
+                        {change.changeType === 'integration_recommendation' ? 'Not now' : 'Reject'}
                       </button>
                       <button
                         onClick={() => handleApprove(change.id)}
                         disabled={processing === change.id}
-                        className="flex items-center gap-2 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                        className={`flex items-center gap-2 px-4 py-2 text-sm text-white rounded-lg disabled:opacity-50 ${
+                          change.changeType === 'integration_recommendation'
+                            ? 'bg-blue-600 hover:bg-blue-700'
+                            : 'bg-green-600 hover:bg-green-700'
+                        }`}
                       >
                         {processing === change.id ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : change.changeType === 'integration_recommendation' ? (
+                          <Plug className="w-4 h-4" />
                         ) : (
                           <CheckCircle className="w-4 h-4" />
                         )}
-                        Approve
+                        {change.changeType === 'integration_recommendation' ? 'Connect' : 'Approve'}
                       </button>
                     </div>
                   )}

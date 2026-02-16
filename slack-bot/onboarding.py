@@ -2899,6 +2899,108 @@ def build_welcome_message(
     return blocks
 
 
+def build_scan_results_message(recommendations: list) -> list:
+    """
+    Build a Slack DM message showing onboarding scan results.
+
+    Sent to the installer after the initial Slack workspace scan discovers
+    which tools/integrations the team uses.
+
+    Args:
+        recommendations: List of dicts, each with:
+            - integration_id: str (e.g., "grafana")
+            - display_name: str (e.g., "Grafana")
+            - reasoning: str (why we recommend it)
+            - confidence: float (0-1)
+            - evidence: list of str (example Slack messages)
+
+    Returns:
+        Slack Block Kit blocks
+    """
+    if not recommendations:
+        return []
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": "Workspace Scan Complete",
+                "emoji": True,
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    ":mag: I scanned your Slack workspace and found some tools "
+                    "your team uses. Connecting them will let me query logs, "
+                    "metrics, and dashboards during investigations."
+                ),
+            },
+        },
+        {"type": "divider"},
+    ]
+
+    # Show top recommendations (max 5)
+    for rec in recommendations[:5]:
+        display_name = rec.get("display_name", rec.get("integration_id", "Unknown"))
+        reasoning = rec.get("reasoning", "Detected in your workspace messages.")
+        confidence = rec.get("confidence", 0)
+        evidence = rec.get("evidence", [])
+
+        # Confidence label
+        if confidence >= 0.8:
+            conf_label = ":large_green_circle: High confidence"
+        elif confidence >= 0.5:
+            conf_label = ":large_yellow_circle: Medium confidence"
+        else:
+            conf_label = ":white_circle: Low confidence"
+
+        text = f"*{display_name}*  ({conf_label})\n{reasoning}"
+        if evidence:
+            # Show first evidence snippet, truncated
+            snippet = evidence[0][:120]
+            text += f"\n> _{snippet}_"
+
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": text},
+                "accessory": {
+                    "type": "button",
+                    "action_id": f"configure_integration_{rec.get('integration_id', '')}",
+                    "text": {
+                        "type": "plain_text",
+                        "text": f"Connect {display_name}",
+                        "emoji": True,
+                    },
+                    "style": "primary",
+                },
+            }
+        )
+
+    blocks.append({"type": "divider"})
+
+    blocks.append(
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": (
+                        ":bulb: You can always configure integrations later from the "
+                        "*Configure IncidentFox* button in the App Home tab."
+                    ),
+                }
+            ],
+        }
+    )
+
+    return blocks
+
+
 def build_dm_welcome_message(trial_info: Optional[Dict] = None) -> list:
     """
     Welcome message shown when a user first opens DM with the app.

@@ -626,11 +626,24 @@ async def approve_pending_change(
                 "agent_prompts": prompts,
             }
 
+    elif change.change_type == "integration_recommendation":
+        # Don't auto-apply — user still needs to provide credentials.
+        # Just mark approved; the UI/slackbot will open the integration config modal.
+        pass
+
     change.status = "approved"
     change.reviewed_at = datetime.utcnow()
     change.reviewed_by = team.subject or "user"
 
     db.commit()
+
+    if change.change_type == "integration_recommendation":
+        integration_id = proposed.get("integration_id", "")
+        return {
+            "status": "approved",
+            "action": "configure_integration",
+            "integration_id": integration_id,
+        }
 
     return {"status": "approved"}
 

@@ -6125,6 +6125,25 @@ def handle_integration_config_submission(ack, body, client, view):
                 )
             logger.info(f"Saved {integration_id} config for team {team_id}")
 
+            # Trigger integration scan (fire-and-forget, never blocks save)
+            import threading
+
+            def _trigger_integration_scan(
+                _team_id=team_id, _integration_id=integration_id
+            ):
+                try:
+                    scan_client = get_config_client()
+                    scan_client.trigger_onboarding_scan(
+                        org_id=f"slack-{_team_id}",
+                        team_node_id="default",
+                        trigger="integration",
+                        integration_id=_integration_id,
+                    )
+                except Exception as scan_err:
+                    logger.warning(f"Integration scan trigger failed: {scan_err}")
+
+            threading.Thread(target=_trigger_integration_scan, daemon=True).start()
+
         except Exception as e:
             logger.error(f"Error saving integration config: {e}", exc_info=True)
 
@@ -7006,6 +7025,26 @@ if __name__ == "__main__":
                             )
                     except Exception as dm_error:
                         logger.warning(f"Failed to send welcome DM: {dm_error}")
+
+                # Trigger onboarding scan (fire-and-forget, never blocks OAuth)
+                if provision_result:
+                    import threading
+
+                    def _trigger_initial_scan():
+                        try:
+                            scan_client = get_config_client()
+                            scan_client.trigger_onboarding_scan(
+                                org_id=provision_result["org_id"],
+                                team_node_id=provision_result["team_node_id"],
+                                trigger="initial",
+                                slack_team_id=team_id,
+                            )
+                        except Exception as scan_err:
+                            logger.warning(
+                                f"Onboarding scan trigger failed: {scan_err}"
+                            )
+
+                    threading.Thread(target=_trigger_initial_scan, daemon=True).start()
 
                 return render_template(
                     "success.html",

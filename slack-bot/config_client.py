@@ -1006,6 +1006,60 @@ class ConfigServiceClient:
             )
             return None
 
+    def trigger_onboarding_scan(
+        self,
+        org_id: str,
+        team_node_id: str,
+        trigger: str,
+        slack_team_id: str = None,
+        integration_id: str = None,
+    ) -> None:
+        """
+        Trigger an onboarding environment scan via the AI Pipeline API.
+
+        Fire-and-forget: failures are logged but never propagated.
+
+        Args:
+            org_id: Organization ID (e.g., "slack-T12345")
+            team_node_id: Team node ID (e.g., "default")
+            trigger: "initial" or "integration"
+            slack_team_id: Slack team ID (required for initial trigger)
+            integration_id: Integration ID (required for integration trigger)
+        """
+        pipeline_url = os.environ.get(
+            "AI_PIPELINE_API_URL",
+            "http://ai-pipeline-api-svc.incidentfox-prod.svc.cluster.local:8085",
+        )
+
+        payload = {
+            "org_id": org_id,
+            "team_node_id": team_node_id,
+            "trigger": trigger,
+        }
+        if slack_team_id:
+            payload["slack_team_id"] = slack_team_id
+        if integration_id:
+            payload["integration_id"] = integration_id
+
+        try:
+            response = self._session.post(
+                f"{pipeline_url}/api/v1/scan/trigger",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+            if response.status_code == 200:
+                logger.info(
+                    f"Triggered onboarding scan: trigger={trigger}, org={org_id}"
+                )
+            else:
+                logger.warning(
+                    f"Onboarding scan trigger returned {response.status_code}: "
+                    f"{response.text[:200]}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to trigger onboarding scan: {e}")
+
     def link_github_installation(self, slack_team_id: str, github_org: str) -> dict:
         """
         Link a GitHub installation to this Slack workspace.

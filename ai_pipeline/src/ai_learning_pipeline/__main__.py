@@ -6,6 +6,9 @@ Usage:
     python -m ai_learning_pipeline run-ingestion --team-id TEAM --org-id ORG
     python -m ai_learning_pipeline run-teaching --team-id TEAM --org-id ORG
     python -m ai_learning_pipeline run-maintenance --team-id TEAM --org-id ORG
+    python -m ai_learning_pipeline run-onboarding-scan --org-id ORG --team-id TEAM --trigger initial --slack-team-id T12345
+    python -m ai_learning_pipeline run-onboarding-scan --org-id ORG --team-id TEAM --trigger integration --integration-id grafana
+    python -m ai_learning_pipeline serve  # Run the API server
 """
 
 import argparse
@@ -141,6 +144,64 @@ async def run_maintenance(org_id: str, team_node_id: str) -> int:
         return 1
 
 
+async def run_onboarding_scan(
+    org_id: str,
+    team_node_id: str,
+    trigger: str,
+    slack_team_id: str = None,
+    integration_id: str = None,
+) -> int:
+    """Run onboarding environment scan."""
+    from .tasks.onboarding_scan import OnboardingScanTask
+
+    _log(
+        "onboarding_scan_started",
+        org_id=org_id,
+        team_node_id=team_node_id,
+        trigger=trigger,
+    )
+
+    try:
+        task = OnboardingScanTask(org_id=org_id, team_node_id=team_node_id)
+
+        if trigger == "initial":
+            if not slack_team_id:
+                print("Error: --slack-team-id is required for initial trigger")
+                return 1
+
+            # For CLI usage, fetch bot token from env or config
+            bot_token = os.getenv("SLACK_BOT_TOKEN")
+            if not bot_token:
+                print("Error: SLACK_BOT_TOKEN env var required for CLI scan")
+                return 1
+
+            result = await task.run_initial_scan(slack_bot_token=bot_token)
+        else:
+            if not integration_id:
+                print("Error: --integration-id is required for integration trigger")
+                return 1
+            result = await task.run_integration_scan(integration_id=integration_id)
+
+        _log(
+            "onboarding_scan_completed",
+            org_id=org_id,
+            team_node_id=team_node_id,
+            trigger=trigger,
+            recommendations=len(result.get("recommendations", [])),
+        )
+
+        return 0
+
+    except Exception as e:
+        _log(
+            "onboarding_scan_failed",
+            org_id=org_id,
+            team_node_id=team_node_id,
+            error=str(e),
+        )
+        return 1
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="AI Learning Pipeline - Self-Learning System"
@@ -176,11 +237,39 @@ def main():
     )
     add_common_args(maintenance_parser)
 
+    # run-onboarding-scan command
+    scan_parser = subparsers.add_parser(
+        "run-onboarding-scan", help="Run onboarding environment scan"
+    )
+    add_common_args(scan_parser)
+    scan_parser.add_argument(
+        "--trigger",
+        required=True,
+        choices=["initial", "integration"],
+        help="Trigger type",
+    )
+    scan_parser.add_argument(
+        "--slack-team-id", help="Slack team ID (required for initial trigger)"
+    )
+    scan_parser.add_argument(
+        "--integration-id", help="Integration ID (required for integration trigger)"
+    )
+
+    # serve command
+    subparsers.add_parser("serve", help="Run the API server")
+
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
         sys.exit(1)
+
+    # serve doesn't need org/team args
+    if args.command == "serve":
+        from .api_server import run_server
+
+        run_server()
+        sys.exit(0)
 
     org_id = args.org_id or os.getenv("ORG_ID")
     team_node_id = args.team_id or os.getenv("TEAM_NODE_ID")
@@ -198,6 +287,16 @@ def main():
         exit_code = asyncio.run(run_teaching(org_id, team_node_id))
     elif args.command == "run-maintenance":
         exit_code = asyncio.run(run_maintenance(org_id, team_node_id))
+    elif args.command == "run-onboarding-scan":
+        exit_code = asyncio.run(
+            run_onboarding_scan(
+                org_id,
+                team_node_id,
+                args.trigger,
+                slack_team_id=args.slack_team_id,
+                integration_id=args.integration_id,
+            )
+        )
     else:
         parser.print_help()
         sys.exit(1)
