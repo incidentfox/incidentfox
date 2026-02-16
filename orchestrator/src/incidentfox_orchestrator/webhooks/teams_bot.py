@@ -52,16 +52,18 @@ def generate_session_id(channel_id: str, conversation_id: str) -> str:
     Generate session ID for conversation context.
 
     Uses channel + conversation ID for stable ID across follow-up messages.
-    Sanitized for use as K8s DNS names (RFC 1123).
+    Sanitized for use as K8s resource names (RFC 1123: lowercase alphanumeric
+    and hyphens only, max 63 chars for labels).
     """
-    # Sanitize the conversation_id (can be very long with special chars)
-    sanitized_conv = (
-        conversation_id.replace(":", "-")
-        .replace(";", "-")
-        .replace("@", "-")
-        .lower()[:40]
-    )
-    sanitized_channel = channel_id.lower()[:20] if channel_id else "dm"
+    import re
+
+    def _sanitize(value: str) -> str:
+        """Replace non-alphanumeric chars with hyphens, strip leading/trailing."""
+        return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+
+    sanitized_channel = _sanitize(channel_id)[:20] if channel_id else "dm"
+    sanitized_conv = _sanitize(conversation_id)[:30]
+    # "teams-" (6) + channel (≤20) + "-" (1) + conv (≤30) = ≤57, well under 63
     return f"teams-{sanitized_channel}-{sanitized_conv}"
 
 

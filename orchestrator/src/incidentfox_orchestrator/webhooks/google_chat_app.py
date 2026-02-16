@@ -48,16 +48,24 @@ def generate_session_id(space_id: str, thread_key: str) -> str:
     Generate session ID for thread-based conversational context.
 
     Uses space + thread key for stable ID across follow-up messages.
-    Sanitized for use as K8s DNS names (RFC 1123).
+    Sanitized for use as K8s resource names (RFC 1123: lowercase alphanumeric
+    and hyphens only, max 63 chars for labels).
 
     Example:
         space_id="ABC123", thread_key="spaces/ABC123/threads/xyz"
         -> "gchat-abc123-xyz"
     """
+    import re
+
+    def _sanitize(value: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+
     # Extract thread ID from full thread name
     thread_id = thread_key.split("/")[-1] if thread_key else "main"
-    sanitized = thread_id.replace("/", "-").replace(".", "-").lower()[:50]
-    return f"gchat-{space_id.lower()[:20]}-{sanitized}"
+    sanitized_space = _sanitize(space_id)[:20]
+    sanitized_thread = _sanitize(thread_id)[:30]
+    # "gchat-" (6) + space (≤20) + "-" (1) + thread (≤30) = ≤57, under 63
+    return f"gchat-{sanitized_space}-{sanitized_thread}"
 
 
 WELCOME_MESSAGE = (
