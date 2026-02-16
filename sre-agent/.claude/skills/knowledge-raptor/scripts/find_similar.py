@@ -17,9 +17,7 @@ from raptor_client import raptor_post
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Find similar past incidents"
-    )
+    parser = argparse.ArgumentParser(description="Find similar past incidents")
     parser.add_argument(
         "--symptoms",
         required=True,

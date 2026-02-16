@@ -29,9 +29,7 @@ QUERY_TYPES = [
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Query the service dependency graph"
-    )
+    parser = argparse.ArgumentParser(description="Query the service dependency graph")
     parser.add_argument(
         "--entity",
         required=True,
