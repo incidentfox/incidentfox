@@ -125,7 +125,8 @@ def format_agent_list(agents_config: Dict[str, Any]) -> str:
 
 
 def create_config_agents_modal(agents_config: Dict[str, Any]) -> Dict:
-    """Create modal showing current agent configuration."""
+    """Create modal showing current agent configuration (removed - now directly shows JSON editor)."""
+    # This function is kept for backward compatibility but not used
     agent_list = format_agent_list(agents_config)
 
     return {
@@ -139,24 +140,6 @@ def create_config_agents_modal(agents_config: Dict[str, Any]) -> Dict:
                     "type": "mrkdwn",
                     "text": "*Current Agent Configuration*\n\n" + agent_list,
                 },
-            },
-            {"type": "divider"},
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Edit in Web UI"},
-                        "url": "https://config.incidentfox.com",
-                        "action_id": "open_web_ui",
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Edit JSON"},
-                        "action_id": "open_json_editor",
-                        "style": "primary",
-                    },
-                ],
             },
         ],
     }
@@ -233,7 +216,7 @@ def register_agent_config_commands(app):
 
     @app.action("view_agent_config")
     def handle_view_agent_config(ack, body, client):
-        """Handle button click from home tab to view agent configuration."""
+        """Handle button click from home tab - directly opens JSON editor."""
         ack()
 
         # Get current config
@@ -242,17 +225,16 @@ def register_agent_config_commands(app):
 
             config_client = get_config_client()
             team_id = body["team"]["id"]
-            current_config = config_client.get_team_config(team_id)
-            agents_config = current_config.get("agents", {}) if current_config else {}
+            current_config = config_client.get_workspace_config(team_id)
         except Exception as e:
             logger.error(f"Failed to get config: {e}", exc_info=True)
-            agents_config = {}
+            current_config = None
 
-        # Open agent config modal
+        # Open JSON editor modal directly
         try:
             client.views_open(
                 trigger_id=body["trigger_id"],
-                view=create_config_agents_modal(agents_config),
+                view=create_json_editor_modal(current_config),
             )
         except Exception as e:
             logger.error(f"Failed to open modal: {e}", exc_info=True)
@@ -264,28 +246,6 @@ def register_agent_config_commands(app):
                 )
             except:
                 pass
-
-    @app.action("open_json_editor")
-    def handle_open_json_editor(ack, body, client):
-        """Handle button click to open JSON editor."""
-        ack()
-
-        # Get current config
-        try:
-            from config_client import get_config_client
-
-            config_client = get_config_client()
-            team_id = body["team"]["id"]
-            current_config = config_client.get_team_config(team_id)
-        except Exception as e:
-            logger.error(f"Failed to get config: {e}")
-            current_config = None
-
-        # Open JSON editor modal
-        client.views_open(
-            trigger_id=body["trigger_id"],
-            view=create_json_editor_modal(current_config),
-        )
 
     @app.view("agent_config_update")
     def handle_agent_config_update(ack, body, view, client):
@@ -314,8 +274,10 @@ def register_agent_config_commands(app):
             config_client = get_config_client()
             team_id = body["team"]["id"]
 
-            # Update config via config_service
-            config_client.update_team_config(team_id, parsed_data)
+            # Update config via config_service using the internal _update_config method
+            org_id = f"slack-{team_id}"
+            team_node_id = "default"
+            config_client._update_config(org_id, team_node_id, parsed_data)
 
             # Notify user of success
             client.chat_postMessage(
@@ -328,7 +290,7 @@ def register_agent_config_commands(app):
             )
 
         except Exception as e:
-            logger.error(f"Failed to save config: {e}")
+            logger.error(f"Failed to save config: {e}", exc_info=True)
             client.chat_postMessage(
                 channel=body["user"]["id"],
                 text=f"❌ Failed to save configuration: {str(e)}",
