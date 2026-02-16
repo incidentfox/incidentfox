@@ -579,20 +579,14 @@ class InteractiveAgentSession:
             # credential-proxy forwards these to LiteLLM (llm_proxy.py lines 460-470)
             # Note: These apply to all subagents (Claude SDK limitation)
             if root_config.model.temperature is not None:
-                import os
-
                 os.environ["LLM_TEMPERATURE"] = str(root_config.model.temperature)
                 print(f"🔧 [AGENT] Temperature: {root_config.model.temperature}")
 
             if root_config.model.max_tokens is not None:
-                import os
-
                 os.environ["LLM_MAX_TOKENS"] = str(root_config.model.max_tokens)
                 print(f"🔧 [AGENT] Max tokens: {root_config.model.max_tokens}")
 
             if root_config.model.top_p is not None:
-                import os
-
                 os.environ["LLM_TOP_P"] = str(root_config.model.top_p)
                 print(f"🔧 [AGENT] Top-p: {root_config.model.top_p}")
 
