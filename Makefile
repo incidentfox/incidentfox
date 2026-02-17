@@ -1,26 +1,23 @@
 # IncidentFox — Local Development
 #
 # Usage:
-#   make dev        Start core services (postgres, config-service, credential-proxy, sre-agent)
-#   make dev-slack  Start with Slack bot (requires SLACK_BOT_TOKEN + SLACK_APP_TOKEN in .env)
+#   make dev        Start all services (postgres, config-service, credential-proxy, sre-agent, slack-bot)
+#                   Note: slack-bot requires SLACK_BOT_TOKEN + SLACK_APP_TOKEN in .env
 #   make stop       Stop all services
 #   make logs       Follow all logs
 #   make clean      Remove containers, volumes, and images
 #   make db-shell   Open psql shell
 
-.PHONY: dev dev-slack stop logs logs-agent logs-config status clean db-shell
+.PHONY: dev stop logs logs-agent logs-config status clean db-shell
 
 dev:
 	docker compose up -d --build
 
-dev-slack:
-	docker compose --profile slack up -d --build
-
 stop:
-	docker compose --profile slack down
+	docker compose down
 
 logs:
-	docker compose --profile slack logs -f
+	docker compose logs -f
 
 logs-agent:
 	docker compose logs -f sre-agent

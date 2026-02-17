@@ -6814,6 +6814,28 @@ if __name__ == "__main__":
     logger.info(f"SRE Agent URL: {SRE_AGENT_URL}")
     logger.info("Starting...")
 
+    # Validate required Slack credentials
+    missing_tokens = []
+    if not os.environ.get("SLACK_BOT_TOKEN"):
+        missing_tokens.append("SLACK_BOT_TOKEN")
+    if SLACK_APP_MODE == "socket" and not os.environ.get("SLACK_APP_TOKEN"):
+        missing_tokens.append("SLACK_APP_TOKEN")
+
+    if missing_tokens:
+        logger.warning("=" * 70)
+        logger.warning("⚠️  Slack credentials not configured - slack-bot will not start")
+        logger.warning("=" * 70)
+        logger.warning("")
+        logger.warning(f"Missing environment variables: {', '.join(missing_tokens)}")
+        logger.warning("")
+        logger.warning("To enable Slack integration, add these to your .env file:")
+        logger.warning("  SLACK_BOT_TOKEN=xoxb-your-bot-token")
+        logger.warning("  SLACK_APP_TOKEN=xapp-your-app-token  (for Socket Mode)")
+        logger.warning("")
+        logger.warning("Then restart with: docker compose restart slack-bot")
+        logger.warning("=" * 70)
+        exit(0)  # Exit gracefully (not an error)
+
     if SLACK_APP_MODE == "http":
         # Production: HTTP mode with Flask
         # Configure Flask to find templates and assets
@@ -7104,8 +7126,5 @@ if __name__ == "__main__":
         flask_app.run(host="0.0.0.0", port=port)
     else:
         # Local dev: Socket Mode
-        if "SLACK_APP_TOKEN" not in os.environ:
-            logger.error("SLACK_APP_TOKEN not found. Set it in .env for Socket Mode.")
-            exit(1)
         handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
         handler.start()

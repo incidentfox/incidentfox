@@ -4,15 +4,14 @@ version: '3.8'
 # IncidentFox — Local Development Stack
 # ═══════════════════════════════════════════════════════════════════════════════
 #
-# Core services (always started):
-#   postgres, config-service, credential-resolver, envoy, sre-agent
+# Services:
+#   postgres, config-service, credential-resolver, envoy, sre-agent, slack-bot
 #
-# Optional services (via profiles):
-#   slack-bot  — Slack UI layer           (--profile slack)
+# Note: slack-bot requires SLACK_BOT_TOKEN and SLACK_APP_TOKEN in .env
+#       If not configured, it will exit gracefully with a warning message
 #
 # Usage:
-#   make dev        Start core services
-#   make dev-slack  Start with Slack bot
+#   make dev        Start all services
 #   make stop       Stop everything
 #   make logs       Follow logs
 #   make clean      Remove containers + volumes
@@ -181,7 +180,8 @@ services:
       start_period: 40s
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Slack Bot — connects Slack to SRE Agent (optional: --profile slack)
+  # Slack Bot — connects Slack to SRE Agent
+  # Will exit gracefully if SLACK_BOT_TOKEN and SLACK_APP_TOKEN are not configured
   # ─────────────────────────────────────────────────────────────────────────────
   slack-bot:
     build:
@@ -196,8 +196,6 @@ services:
       - CONFIG_SERVICE_URL=http://config-service:8080
     depends_on:
       - sre-agent
-    profiles:
-      - slack
     security_opt:
       - no-new-privileges:true
     cap_drop:
