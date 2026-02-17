@@ -25,11 +25,34 @@ from src.api.routes.ui import router as ui_router
 from src.api.routes.visitor import router as visitor_router
 from src.core.audit_log import app_logger, configure_logging, new_request_id
 from src.core.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
+from src.core.yaml_config import is_local_mode
+from src.core.yaml_seeder import seed_from_yaml
+from src.db.session import SessionLocal
 
 
 def create_app() -> FastAPI:
     configure_logging()
     app = FastAPI(title="IncidentFox Config Service", version="0.1.0")
+
+    @app.on_event("startup")
+    async def startup_event():
+        """Seed configuration from YAML in local development mode."""
+        if is_local_mode():
+            logger = app_logger().bind(component="startup")
+            logger.info("Running in local mode, seeding config from YAML...")
+
+            # Create database session
+            db = SessionLocal()
+            try:
+                seeded = seed_from_yaml(db, config_file_path="config/local.yaml")
+                if seeded:
+                    logger.info("✅ Configuration seeded from local.yaml")
+                else:
+                    logger.info("ℹ️  Configuration already exists, skipping seed")
+            except Exception as e:
+                logger.error(f"Failed to seed config from YAML: {e}")
+            finally:
+                db.close()
     app.include_router(ui_router)
     app.include_router(health_router)
     app.include_router(metrics_router)
