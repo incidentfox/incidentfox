@@ -20,9 +20,19 @@ def main():
     args = parser.parse_args()
 
     try:
-        data = jira_request("POST", f"/issue/{args.issue_key}/comment", json_body={"body": make_adf_text(args.comment)})
+        data = jira_request(
+            "POST",
+            f"/issue/{args.issue_key}/comment",
+            json_body={"body": make_adf_text(args.comment)},
+        )
         author = data.get("author", {})
-        result = {"ok": True, "id": data.get("id"), "issue_key": args.issue_key, "author": author.get("displayName"), "created": data.get("created")}
+        result = {
+            "ok": True,
+            "id": data.get("id"),
+            "issue_key": args.issue_key,
+            "author": author.get("displayName"),
+            "created": data.get("created"),
+        }
 
         if args.json:
             print(json.dumps(result, indent=2))

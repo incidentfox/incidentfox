@@ -25,10 +25,19 @@ def main():
         if args.search:
             params["search"] = args.search
 
-        data = gitlab_request("GET", f"projects/{encode_project(args.project)}/repository/branches", params=params)
+        data = gitlab_request(
+            "GET",
+            f"projects/{encode_project(args.project)}/repository/branches",
+            params=params,
+        )
         branches = [
-            {"name": b["name"], "protected": b.get("protected", False), "default": b.get("default", False),
-             "commit_sha": b.get("commit", {}).get("id"), "commit_message": b.get("commit", {}).get("title")}
+            {
+                "name": b["name"],
+                "protected": b.get("protected", False),
+                "default": b.get("default", False),
+                "commit_sha": b.get("commit", {}).get("id"),
+                "commit_message": b.get("commit", {}).get("title"),
+            }
             for b in data
         ]
         result = {"ok": True, "branches": branches, "count": len(branches)}

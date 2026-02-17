@@ -20,8 +20,13 @@ def main():
     try:
         data = grafana_request("GET", "api/alerts")
         alerts = [
-            {"id": a.get("id"), "name": a.get("name"), "state": a.get("state"),
-             "dashboard_uid": a.get("dashboardUid"), "panel_id": a.get("panelId")}
+            {
+                "id": a.get("id"),
+                "name": a.get("name"),
+                "state": a.get("state"),
+                "dashboard_uid": a.get("dashboardUid"),
+                "panel_id": a.get("panelId"),
+            }
             for a in data[:50]
         ]
         result = {"ok": True, "alerts": alerts, "count": len(alerts)}

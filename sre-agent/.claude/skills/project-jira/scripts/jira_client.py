@@ -91,7 +91,11 @@ def jira_request(
 
     with httpx.Client(timeout=30.0) as client:
         response = client.request(
-            method, url, headers=get_headers(), params=params, json=json_body,
+            method,
+            url,
+            headers=get_headers(),
+            params=params,
+            json=json_body,
         )
         response.raise_for_status()
         if response.status_code == 204:
@@ -104,9 +108,7 @@ def make_adf_text(text: str) -> dict:
     return {
         "type": "doc",
         "version": 1,
-        "content": [
-            {"type": "paragraph", "content": [{"type": "text", "text": text}]}
-        ],
+        "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
     }
 
 

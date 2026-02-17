@@ -17,7 +17,9 @@ def run_docker(
     """Run a docker command and return structured output."""
     cmd = ["docker"] + args
     try:
-        result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout_s)
+        result = subprocess.run(
+            cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout_s
+        )
         return {
             "ok": result.returncode == 0,
             "exit_code": result.returncode,

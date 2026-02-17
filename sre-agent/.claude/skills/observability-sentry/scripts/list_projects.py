@@ -22,10 +22,21 @@ def main():
         data = sentry_request("GET", f"organizations/{org}/projects/")
 
         projects = [
-            {"id": p["id"], "slug": p["slug"], "name": p["name"], "platform": p.get("platform"), "status": p.get("status")}
+            {
+                "id": p["id"],
+                "slug": p["slug"],
+                "name": p["name"],
+                "platform": p.get("platform"),
+                "status": p.get("status"),
+            }
             for p in data
         ]
-        result = {"ok": True, "organization": org, "projects": projects, "count": len(projects)}
+        result = {
+            "ok": True,
+            "organization": org,
+            "projects": projects,
+            "count": len(projects),
+        }
 
         if args.json:
             print(json.dumps(result, indent=2))

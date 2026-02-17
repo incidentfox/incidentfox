@@ -20,22 +20,43 @@ def main():
     args = parser.parse_args()
 
     try:
-        data = gitlab_request("GET", f"projects/{encode_project(args.project)}/merge_requests/{args.mr_iid}/changes")
+        data = gitlab_request(
+            "GET",
+            f"projects/{encode_project(args.project)}/merge_requests/{args.mr_iid}/changes",
+        )
 
         changes = [
-            {"old_path": c.get("old_path"), "new_path": c.get("new_path"),
-             "new_file": c.get("new_file"), "deleted_file": c.get("deleted_file"),
-             "renamed_file": c.get("renamed_file"), "diff": c.get("diff", "")[:2000]}
+            {
+                "old_path": c.get("old_path"),
+                "new_path": c.get("new_path"),
+                "new_file": c.get("new_file"),
+                "deleted_file": c.get("deleted_file"),
+                "renamed_file": c.get("renamed_file"),
+                "diff": c.get("diff", "")[:2000],
+            }
             for c in data.get("changes", [])
         ]
-        result = {"ok": True, "mr_iid": args.mr_iid, "changes": changes, "count": len(changes)}
+        result = {
+            "ok": True,
+            "mr_iid": args.mr_iid,
+            "changes": changes,
+            "count": len(changes),
+        }
 
         if args.json:
             print(json.dumps(result, indent=2))
         else:
             print(f"MR !{args.mr_iid} Changes ({len(changes)} files)")
             for c in changes:
-                action = "ADD" if c.get("new_file") else "DEL" if c.get("deleted_file") else "REN" if c.get("renamed_file") else "MOD"
+                action = (
+                    "ADD"
+                    if c.get("new_file")
+                    else (
+                        "DEL"
+                        if c.get("deleted_file")
+                        else "REN" if c.get("renamed_file") else "MOD"
+                    )
+                )
                 print(f"  [{action}] {c.get('new_path', c.get('old_path', '?'))}")
 
     except Exception as e:

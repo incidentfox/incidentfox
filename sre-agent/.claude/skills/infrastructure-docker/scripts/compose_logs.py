@@ -14,9 +14,13 @@ from docker_runner import run_docker
 
 def main():
     parser = argparse.ArgumentParser(description="Get Docker Compose logs")
-    parser.add_argument("--file", default="docker-compose.yml", help="Compose file path")
+    parser.add_argument(
+        "--file", default="docker-compose.yml", help="Compose file path"
+    )
     parser.add_argument("--services", default="", help="Comma-separated service names")
-    parser.add_argument("--tail", type=int, default=100, help="Lines from end (default: 100)")
+    parser.add_argument(
+        "--tail", type=int, default=100, help="Lines from end (default: 100)"
+    )
     parser.add_argument("--cwd", default=".", help="Working directory")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
@@ -33,7 +37,10 @@ def main():
         print(json.dumps(result, indent=2))
     else:
         if not result.get("ok"):
-            print(f"Error: {result.get('error', result.get('stderr', 'Unknown'))}", file=sys.stderr)
+            print(
+                f"Error: {result.get('error', result.get('stderr', 'Unknown'))}",
+                file=sys.stderr,
+            )
             sys.exit(1)
         print(result.get("logs", ""))
 

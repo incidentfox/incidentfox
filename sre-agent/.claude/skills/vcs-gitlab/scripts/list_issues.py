@@ -26,11 +26,18 @@ def main():
         if args.labels:
             params["labels"] = args.labels
 
-        data = gitlab_request("GET", f"projects/{encode_project(args.project)}/issues", params=params)
+        data = gitlab_request(
+            "GET", f"projects/{encode_project(args.project)}/issues", params=params
+        )
         issues = [
-            {"iid": i["iid"], "title": i["title"], "state": i["state"],
-             "author": i.get("author", {}).get("name") if i.get("author") else None,
-             "labels": i.get("labels", []), "web_url": i.get("web_url")}
+            {
+                "iid": i["iid"],
+                "title": i["title"],
+                "state": i["state"],
+                "author": i.get("author", {}).get("name") if i.get("author") else None,
+                "labels": i.get("labels", []),
+                "web_url": i.get("web_url"),
+            }
             for i in data
         ]
         result = {"ok": True, "issues": issues, "count": len(issues)}
@@ -40,7 +47,11 @@ def main():
         else:
             print(f"Issues ({len(issues)} {args.state})")
             for issue in issues:
-                labels = f" [{', '.join(issue.get('labels', []))}]" if issue.get("labels") else ""
+                labels = (
+                    f" [{', '.join(issue.get('labels', []))}]"
+                    if issue.get("labels")
+                    else ""
+                )
                 print(f"  #{issue['iid']} [{issue['state']}] {issue['title']}{labels}")
 
     except Exception as e:

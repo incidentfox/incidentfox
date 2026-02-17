@@ -18,19 +18,29 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
-    docker_args = ["stats", "--no-stream", "--format", "{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.NetIO}}|{{.BlockIO}}"]
+    docker_args = [
+        "stats",
+        "--no-stream",
+        "--format",
+        "{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.NetIO}}|{{.BlockIO}}",
+    ]
     if args.container:
         docker_args.append(args.container)
 
     result = run_docker(docker_args, timeout_s=30.0)
     if result.get("ok"):
-        result["stats"] = parse_pipe_delimited(result.get("stdout", ""), ["name", "cpu", "memory", "net_io", "block_io"])
+        result["stats"] = parse_pipe_delimited(
+            result.get("stdout", ""), ["name", "cpu", "memory", "net_io", "block_io"]
+        )
 
     if args.json:
         print(json.dumps(result, indent=2))
     else:
         if not result.get("ok"):
-            print(f"Error: {result.get('error', result.get('stderr', 'Unknown'))}", file=sys.stderr)
+            print(
+                f"Error: {result.get('error', result.get('stderr', 'Unknown'))}",
+                file=sys.stderr,
+            )
             sys.exit(1)
         print(f"{'NAME':30s} {'CPU':10s} {'MEMORY':25s} {'NET I/O':20s}")
         print("-" * 85)

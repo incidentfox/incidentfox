@@ -34,10 +34,20 @@ def main():
         if args.until:
             params["until"] = args.until
 
-        data = gitlab_request("GET", f"projects/{encode_project(args.project)}/repository/commits", params=params)
+        data = gitlab_request(
+            "GET",
+            f"projects/{encode_project(args.project)}/repository/commits",
+            params=params,
+        )
         commits = [
-            {"id": c["id"], "short_id": c["short_id"], "title": c["title"],
-             "author_name": c["author_name"], "created_at": c["created_at"], "web_url": c.get("web_url")}
+            {
+                "id": c["id"],
+                "short_id": c["short_id"],
+                "title": c["title"],
+                "author_name": c["author_name"],
+                "created_at": c["created_at"],
+                "web_url": c.get("web_url"),
+            }
             for c in data
         ]
         result = {"ok": True, "commits": commits, "count": len(commits)}

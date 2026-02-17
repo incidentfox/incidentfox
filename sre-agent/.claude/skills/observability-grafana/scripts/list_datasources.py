@@ -20,8 +20,13 @@ def main():
     try:
         data = grafana_request("GET", "api/datasources")
         datasources = [
-            {"id": ds.get("id"), "name": ds.get("name"), "type": ds.get("type"),
-             "url": ds.get("url"), "is_default": ds.get("isDefault")}
+            {
+                "id": ds.get("id"),
+                "name": ds.get("name"),
+                "type": ds.get("type"),
+                "url": ds.get("url"),
+                "is_default": ds.get("isDefault"),
+            }
             for ds in data
         ]
         result = {"ok": True, "datasources": datasources, "count": len(datasources)}
@@ -32,7 +37,9 @@ def main():
             print(f"Grafana Datasources ({len(datasources)})")
             for ds in datasources:
                 default = " (default)" if ds.get("is_default") else ""
-                print(f"  [{ds.get('id', '?')}] {ds.get('name', '?'):30s} ({ds.get('type', '?')}){default}")
+                print(
+                    f"  [{ds.get('id', '?')}] {ds.get('name', '?'):30s} ({ds.get('type', '?')}){default}"
+                )
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

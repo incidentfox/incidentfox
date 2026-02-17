@@ -16,13 +16,16 @@ from jira_client import extract_adf_text, get_browse_url, jira_request
 def main():
     parser = argparse.ArgumentParser(description="Search Jira issues using JQL")
     parser.add_argument("--jql", required=True, help="JQL query string")
-    parser.add_argument("--max-results", type=int, default=50, help="Maximum results (default: 50)")
+    parser.add_argument(
+        "--max-results", type=int, default=50, help="Maximum results (default: 50)"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
     try:
         data = jira_request(
-            "GET", "/search",
+            "GET",
+            "/search",
             params={
                 "jql": args.jql,
                 "maxResults": args.max_results,
@@ -42,9 +45,17 @@ def main():
                 "key": item["key"],
                 "summary": f.get("summary"),
                 "status": f.get("status", {}).get("name") if f.get("status") else None,
-                "type": f.get("issuetype", {}).get("name") if f.get("issuetype") else None,
-                "priority": f.get("priority", {}).get("name") if f.get("priority") else None,
-                "assignee": f.get("assignee", {}).get("displayName") if f.get("assignee") else None,
+                "type": (
+                    f.get("issuetype", {}).get("name") if f.get("issuetype") else None
+                ),
+                "priority": (
+                    f.get("priority", {}).get("name") if f.get("priority") else None
+                ),
+                "assignee": (
+                    f.get("assignee", {}).get("displayName")
+                    if f.get("assignee")
+                    else None
+                ),
                 "created": f.get("created"),
                 "updated": f.get("updated"),
                 "labels": f.get("labels", []),
@@ -78,13 +89,21 @@ def main():
             print(json.dumps(result, indent=2))
         else:
             print(f"JQL: {args.jql}")
-            print(f"Found: {data.get('total', len(issues))} issues (showing {len(issues)})")
+            print(
+                f"Found: {data.get('total', len(issues))} issues (showing {len(issues)})"
+            )
             if status_counts:
-                print(f"By status: {', '.join(f'{k}: {v}' for k, v in status_counts.items())}")
+                print(
+                    f"By status: {', '.join(f'{k}: {v}' for k, v in status_counts.items())}"
+                )
             print()
             for issue in issues:
-                print(f"  [{issue.get('status', '?')}] {issue['key']} - {issue.get('summary', '')}")
-                print(f"    Priority: {issue.get('priority', '?')} | Assignee: {issue.get('assignee', 'Unassigned')}")
+                print(
+                    f"  [{issue.get('status', '?')}] {issue['key']} - {issue.get('summary', '')}"
+                )
+                print(
+                    f"    Priority: {issue.get('priority', '?')} | Assignee: {issue.get('assignee', 'Unassigned')}"
+                )
                 if issue.get("labels"):
                     print(f"    Labels: {', '.join(issue['labels'])}")
                 print()

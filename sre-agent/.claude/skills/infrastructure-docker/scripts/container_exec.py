@@ -16,7 +16,9 @@ def main():
     parser = argparse.ArgumentParser(description="Execute command in container")
     parser.add_argument("--container", required=True, help="Container name or ID")
     parser.add_argument("--command", required=True, help="Command to run")
-    parser.add_argument("--workdir", default="", help="Working directory inside container")
+    parser.add_argument(
+        "--workdir", default="", help="Working directory inside container"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -31,7 +33,10 @@ def main():
         print(json.dumps(result, indent=2))
     else:
         if not result.get("ok"):
-            print(f"Error (exit {result.get('exit_code', '?')}): {result.get('stderr', '')}", file=sys.stderr)
+            print(
+                f"Error (exit {result.get('exit_code', '?')}): {result.get('stderr', '')}",
+                file=sys.stderr,
+            )
             sys.exit(1)
         print(result.get("stdout", ""))
 

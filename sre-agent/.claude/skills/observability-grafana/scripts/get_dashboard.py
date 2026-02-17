@@ -22,17 +22,30 @@ def main():
         data = grafana_request("GET", f"api/dashboards/uid/{args.uid}")
         dashboard = data.get("dashboard", {})
         panels = [
-            {"id": p.get("id"), "title": p.get("title"), "type": p.get("type"), "datasource": p.get("datasource")}
+            {
+                "id": p.get("id"),
+                "title": p.get("title"),
+                "type": p.get("type"),
+                "datasource": p.get("datasource"),
+            }
             for p in dashboard.get("panels", [])
         ]
 
-        result = {"ok": True, "uid": dashboard.get("uid"), "title": dashboard.get("title"),
-                  "tags": dashboard.get("tags", []), "panel_count": len(panels), "panels": panels}
+        result = {
+            "ok": True,
+            "uid": dashboard.get("uid"),
+            "title": dashboard.get("title"),
+            "tags": dashboard.get("tags", []),
+            "panel_count": len(panels),
+            "panels": panels,
+        }
 
         if args.json:
             print(json.dumps(result, indent=2))
         else:
-            print(f"Dashboard: {result.get('title', '?')} (UID: {result.get('uid', '?')})")
+            print(
+                f"Dashboard: {result.get('title', '?')} (UID: {result.get('uid', '?')})"
+            )
             print(f"\nPanels ({len(panels)}):")
             for p in panels:
                 print(f"  {p.get('title', '?'):40s} ({p.get('type', '?')})")

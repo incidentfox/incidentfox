@@ -34,20 +34,33 @@ def main():
             fields["priority"] = {"name": args.priority}
 
         if fields:
-            jira_request("PUT", f"/issue/{args.issue_key}", json_body={"fields": fields})
+            jira_request(
+                "PUT", f"/issue/{args.issue_key}", json_body={"fields": fields}
+            )
 
         if args.assignee:
-            jira_request("PUT", f"/issue/{args.issue_key}/assignee", json_body={"accountId": args.assignee})
+            jira_request(
+                "PUT",
+                f"/issue/{args.issue_key}/assignee",
+                json_body={"accountId": args.assignee},
+            )
 
         if args.status:
             transitions = jira_request("GET", f"/issue/{args.issue_key}/transitions")
             for transition in transitions.get("transitions", []):
                 if transition["name"].lower() == args.status.lower():
-                    jira_request("POST", f"/issue/{args.issue_key}/transitions", json_body={"transition": {"id": transition["id"]}})
+                    jira_request(
+                        "POST",
+                        f"/issue/{args.issue_key}/transitions",
+                        json_body={"transition": {"id": transition["id"]}},
+                    )
                     break
             else:
                 available = [t["name"] for t in transitions.get("transitions", [])]
-                print(f"Warning: Status '{args.status}' not found. Available: {', '.join(available)}", file=sys.stderr)
+                print(
+                    f"Warning: Status '{args.status}' not found. Available: {', '.join(available)}",
+                    file=sys.stderr,
+                )
 
         result = {"ok": True, "key": args.issue_key, "updated": True}
         if args.json:

@@ -22,12 +22,19 @@ def main():
         issue = sentry_request("GET", f"issues/{args.issue_id}/")
 
         result = {
-            "ok": True, "id": issue["id"], "title": issue["title"],
-            "short_id": issue["shortId"], "status": issue["status"],
-            "level": issue["level"], "count": issue["count"],
-            "user_count": issue["userCount"], "first_seen": issue["firstSeen"],
-            "last_seen": issue["lastSeen"], "permalink": issue["permalink"],
-            "metadata": issue.get("metadata", {}), "tags": issue.get("tags", []),
+            "ok": True,
+            "id": issue["id"],
+            "title": issue["title"],
+            "short_id": issue["shortId"],
+            "status": issue["status"],
+            "level": issue["level"],
+            "count": issue["count"],
+            "user_count": issue["userCount"],
+            "first_seen": issue["firstSeen"],
+            "last_seen": issue["lastSeen"],
+            "permalink": issue["permalink"],
+            "metadata": issue.get("metadata", {}),
+            "tags": issue.get("tags", []),
         }
 
         if args.json:

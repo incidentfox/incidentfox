@@ -15,20 +15,35 @@ from gitlab_client import encode_project, gitlab_request
 def main():
     parser = argparse.ArgumentParser(description="List merge requests")
     parser.add_argument("--project", required=True, help="Project ID or path")
-    parser.add_argument("--state", default="opened", help="State: opened, closed, merged, all")
+    parser.add_argument(
+        "--state", default="opened", help="State: opened, closed, merged, all"
+    )
     parser.add_argument("--max-results", type=int, default=20, help="Max results")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
     try:
         params = {"state": args.state, "per_page": args.max_results}
-        data = gitlab_request("GET", f"projects/{encode_project(args.project)}/merge_requests", params=params)
+        data = gitlab_request(
+            "GET",
+            f"projects/{encode_project(args.project)}/merge_requests",
+            params=params,
+        )
 
         mrs = [
-            {"iid": mr["iid"], "title": mr["title"], "state": mr["state"],
-             "source_branch": mr["source_branch"], "target_branch": mr["target_branch"],
-             "author": mr.get("author", {}).get("name") if mr.get("author") else None,
-             "web_url": mr["web_url"], "merged_at": mr.get("merged_at"), "labels": mr.get("labels", [])}
+            {
+                "iid": mr["iid"],
+                "title": mr["title"],
+                "state": mr["state"],
+                "source_branch": mr["source_branch"],
+                "target_branch": mr["target_branch"],
+                "author": (
+                    mr.get("author", {}).get("name") if mr.get("author") else None
+                ),
+                "web_url": mr["web_url"],
+                "merged_at": mr.get("merged_at"),
+                "labels": mr.get("labels", []),
+            }
             for mr in data
         ]
         result = {"ok": True, "merge_requests": mrs, "count": len(mrs)}

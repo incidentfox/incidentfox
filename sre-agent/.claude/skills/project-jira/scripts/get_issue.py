@@ -30,11 +30,29 @@ def main():
             "id": data["id"],
             "summary": fields.get("summary"),
             "description": desc,
-            "status": fields.get("status", {}).get("name") if fields.get("status") else None,
-            "type": fields.get("issuetype", {}).get("name") if fields.get("issuetype") else None,
-            "priority": fields.get("priority", {}).get("name") if fields.get("priority") else None,
-            "assignee": fields.get("assignee", {}).get("displayName") if fields.get("assignee") else None,
-            "reporter": fields.get("reporter", {}).get("displayName") if fields.get("reporter") else None,
+            "status": (
+                fields.get("status", {}).get("name") if fields.get("status") else None
+            ),
+            "type": (
+                fields.get("issuetype", {}).get("name")
+                if fields.get("issuetype")
+                else None
+            ),
+            "priority": (
+                fields.get("priority", {}).get("name")
+                if fields.get("priority")
+                else None
+            ),
+            "assignee": (
+                fields.get("assignee", {}).get("displayName")
+                if fields.get("assignee")
+                else None
+            ),
+            "reporter": (
+                fields.get("reporter", {}).get("displayName")
+                if fields.get("reporter")
+                else None
+            ),
             "created": fields.get("created"),
             "updated": fields.get("updated"),
             "labels": fields.get("labels", []),
@@ -48,8 +66,12 @@ def main():
             print(f"Issue: {result['key']} - {result.get('summary', '')}")
             if result.get("url"):
                 print(f"URL: {result['url']}")
-            print(f"Status: {result.get('status', '?')} | Type: {result.get('type', '?')} | Priority: {result.get('priority', '?')}")
-            print(f"Assignee: {result.get('assignee', 'Unassigned')} | Reporter: {result.get('reporter', '?')}")
+            print(
+                f"Status: {result.get('status', '?')} | Type: {result.get('type', '?')} | Priority: {result.get('priority', '?')}"
+            )
+            print(
+                f"Assignee: {result.get('assignee', 'Unassigned')} | Reporter: {result.get('reporter', '?')}"
+            )
             if result.get("labels"):
                 print(f"Labels: {', '.join(result['labels'])}")
             if desc:

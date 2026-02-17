@@ -25,8 +25,13 @@ def main():
 
         data = grafana_request("GET", "api/search", params=params)
         dashboards = [
-            {"uid": d.get("uid"), "title": d.get("title"), "folder": d.get("folderTitle", "General"),
-             "url": d.get("url"), "tags": d.get("tags", [])}
+            {
+                "uid": d.get("uid"),
+                "title": d.get("title"),
+                "folder": d.get("folderTitle", "General"),
+                "url": d.get("url"),
+                "tags": d.get("tags", []),
+            }
             for d in data[:50]
         ]
         result = {"ok": True, "dashboards": dashboards, "count": len(dashboards)}

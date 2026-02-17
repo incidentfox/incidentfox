@@ -18,7 +18,9 @@ def main():
     parser.add_argument("--project", required=True, help="Project key (e.g., PROJ)")
     parser.add_argument("--summary", required=True, help="Issue summary/title")
     parser.add_argument("--description", default="", help="Issue description")
-    parser.add_argument("--type", default="Task", help="Issue type (Task, Bug, Story, Epic)")
+    parser.add_argument(
+        "--type", default="Task", help="Issue type (Task, Bug, Story, Epic)"
+    )
     parser.add_argument("--priority", default="", help="Priority (High, Medium, Low)")
     parser.add_argument("--labels", default="", help="Comma-separated labels")
     parser.add_argument("--assignee", default="", help="Assignee account ID")
@@ -43,12 +45,22 @@ def main():
 
         if args.assignee:
             try:
-                jira_request("PUT", f"/issue/{issue_key}/assignee", json_body={"accountId": args.assignee})
+                jira_request(
+                    "PUT",
+                    f"/issue/{issue_key}/assignee",
+                    json_body={"accountId": args.assignee},
+                )
             except Exception:
                 pass
 
         browse_url = get_browse_url()
-        result = {"ok": True, "key": issue_key, "id": data.get("id"), "summary": args.summary, "type": args.type}
+        result = {
+            "ok": True,
+            "key": issue_key,
+            "id": data.get("id"),
+            "summary": args.summary,
+            "type": args.type,
+        }
         if browse_url:
             result["url"] = f"{browse_url}/browse/{issue_key}"
 

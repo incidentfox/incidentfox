@@ -21,14 +21,30 @@ def main():
 
     try:
         proj = encode_project(args.project)
-        data = gitlab_request("GET", f"projects/{proj}/pipelines/{args.pipeline_id}/jobs", params={"per_page": 100})
+        data = gitlab_request(
+            "GET",
+            f"projects/{proj}/pipelines/{args.pipeline_id}/jobs",
+            params={"per_page": 100},
+        )
 
         jobs = [
-            {"id": j["id"], "name": j["name"], "stage": j["stage"], "status": j["status"],
-             "web_url": j["web_url"], "duration": j.get("duration"), "failure_reason": j.get("failure_reason")}
+            {
+                "id": j["id"],
+                "name": j["name"],
+                "stage": j["stage"],
+                "status": j["status"],
+                "web_url": j["web_url"],
+                "duration": j.get("duration"),
+                "failure_reason": j.get("failure_reason"),
+            }
             for j in data
         ]
-        result = {"ok": True, "pipeline_id": args.pipeline_id, "jobs": jobs, "count": len(jobs)}
+        result = {
+            "ok": True,
+            "pipeline_id": args.pipeline_id,
+            "jobs": jobs,
+            "count": len(jobs),
+        }
 
         if args.json:
             print(json.dumps(result, indent=2))
@@ -36,7 +52,9 @@ def main():
             print(f"Pipeline #{args.pipeline_id} Jobs ({len(jobs)})")
             for job in jobs:
                 duration = f"{job['duration']:.0f}s" if job.get("duration") else "?"
-                print(f"  [{job['status'].upper():8s}] {job['stage']:15s} -> {job['name']} ({duration})")
+                print(
+                    f"  [{job['status'].upper():8s}] {job['stage']:15s} -> {job['name']} ({duration})"
+                )
                 if job.get("failure_reason"):
                     print(f"    Failure: {job['failure_reason']}")
 

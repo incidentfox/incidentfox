@@ -29,7 +29,10 @@ def main():
         print(json.dumps(result, indent=2))
     else:
         if not result.get("ok"):
-            print(f"Error: {result.get('error', result.get('stderr', 'Unknown'))}", file=sys.stderr)
+            print(
+                f"Error: {result.get('error', result.get('stderr', 'Unknown'))}",
+                file=sys.stderr,
+            )
             sys.exit(1)
         inspection = result.get("inspection", [{}])
         if inspection:
@@ -38,14 +41,18 @@ def main():
             config = info.get("Config", {})
             print(f"Container: {info.get('Name', '?').lstrip('/')}")
             print(f"Image: {config.get('Image', '?')}")
-            print(f"Status: {state.get('Status', '?')} (Running: {state.get('Running', '?')})")
+            print(
+                f"Status: {state.get('Status', '?')} (Running: {state.get('Running', '?')})"
+            )
             print(f"Started: {state.get('StartedAt', '?')}")
             env = config.get("Env", [])
             if env:
                 print(f"\nEnvironment ({len(env)} vars):")
                 for e in env[:20]:
                     key = e.split("=")[0] if "=" in e else e
-                    if any(s in key.lower() for s in ["password", "secret", "token", "key"]):
+                    if any(
+                        s in key.lower() for s in ["password", "secret", "token", "key"]
+                    ):
                         print(f"  {key}=***REDACTED***")
                     else:
                         print(f"  {e}")
