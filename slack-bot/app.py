@@ -7126,5 +7126,8 @@ if __name__ == "__main__":
         flask_app.run(host="0.0.0.0", port=port)
     else:
         # Local dev: Socket Mode
+        # Register all handlers on the app instance (in HTTP mode, this is done by SlackAppRegistry)
+        register_all_handlers(app)
+
         handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
         handler.start()
