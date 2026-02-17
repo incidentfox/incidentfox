@@ -300,9 +300,7 @@ Intent definitions:
             from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError as e:
             logger.error(f"Failed to import RAPTOR modules: {e}")
-            logger.error(
-                "Ensure RAPTOR dependencies are installed"
-            )
+            logger.error("Ensure RAPTOR dependencies are installed")
             return []
 
         chunks = []

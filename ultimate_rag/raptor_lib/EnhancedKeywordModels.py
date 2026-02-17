@@ -14,15 +14,14 @@ import re
 from typing import Dict, List, Optional, Set
 
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
 from raptor.EmbeddingModels import BaseEmbeddingModel
 from raptor.KeywordModels import (
     BaseKeywordModel,
     OpenAIKeywordModel,
     _normalize_keywords,
 )
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 class EnhancedKeywordModel(BaseKeywordModel):

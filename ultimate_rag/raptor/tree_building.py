@@ -152,9 +152,7 @@ class RaptorTreeBuilder:
 
         except ImportError as e:
             logger.error(f"Failed to import ClusterTreeBuilder: {e}")
-            raise RuntimeError(
-                "ClusterTreeBuilder not available in raptor_lib"
-            ) from e
+            raise RuntimeError("ClusterTreeBuilder not available in raptor_lib") from e
 
     def build_from_texts(
         self,
