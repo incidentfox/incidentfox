@@ -47,11 +47,15 @@ def main():
                 break
 
             for inc in incidents:
-                created_at = datetime.fromisoformat(inc["created_at"].replace("Z", "+00:00"))
+                created_at = datetime.fromisoformat(
+                    inc["created_at"].replace("Z", "+00:00")
+                )
                 mttr_minutes = None
                 resolved_at = inc.get("resolved_at")
                 if resolved_at:
-                    resolved_dt = datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
+                    resolved_dt = datetime.fromisoformat(
+                        resolved_at.replace("Z", "+00:00")
+                    )
                     mttr_minutes = (resolved_dt - created_at).total_seconds() / 60
 
                 all_incidents.append(
@@ -63,7 +67,9 @@ def main():
                         "severity": inc.get("severity", {}).get("name"),
                         "created_at": inc["created_at"],
                         "resolved_at": resolved_at,
-                        "mttr_minutes": round(mttr_minutes, 2) if mttr_minutes else None,
+                        "mttr_minutes": (
+                            round(mttr_minutes, 2) if mttr_minutes else None
+                        ),
                         "incident_lead": inc.get("incident_lead", {}).get("name"),
                         "url": inc.get("permalink"),
                     }
@@ -89,12 +95,16 @@ def main():
             "total_incidents": len(all_incidents),
             "summary": {
                 "resolved_count": len(resolved),
-                "avg_mttr_minutes": round(sum(mttr_values) / len(mttr_values), 2)
-                if mttr_values
-                else None,
-                "median_mttr_minutes": round(sorted(mttr_values)[len(mttr_values) // 2], 2)
-                if mttr_values
-                else None,
+                "avg_mttr_minutes": (
+                    round(sum(mttr_values) / len(mttr_values), 2)
+                    if mttr_values
+                    else None
+                ),
+                "median_mttr_minutes": (
+                    round(sorted(mttr_values)[len(mttr_values) // 2], 2)
+                    if mttr_values
+                    else None
+                ),
             },
             "by_severity": by_severity,
             "incidents": all_incidents,
@@ -109,7 +119,9 @@ def main():
             if mttr_values:
                 print(f"Avg MTTR: {result['summary']['avg_mttr_minutes']} min")
                 print(f"Median MTTR: {result['summary']['median_mttr_minutes']} min")
-            print(f"By severity: {', '.join(f'{k}: {v}' for k, v in by_severity.items())}")
+            print(
+                f"By severity: {', '.join(f'{k}: {v}' for k, v in by_severity.items())}"
+            )
             print()
             for inc in all_incidents[:20]:
                 mttr = f" (MTTR: {inc['mttr_minutes']}m)" if inc["mttr_minutes"] else ""

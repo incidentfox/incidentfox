@@ -57,12 +57,14 @@ def _build_base_config() -> dict:
 def get_admin_client():
     """Get Kafka AdminClient."""
     from confluent_kafka.admin import AdminClient
+
     return AdminClient(_build_base_config())
 
 
 def get_consumer(group_id: str = "incidentfox-admin"):
     """Get Kafka Consumer for offset queries."""
     from confluent_kafka import Consumer
+
     cfg = _build_base_config()
     cfg["group.id"] = group_id
     cfg["auto.offset.reset"] = "earliest"

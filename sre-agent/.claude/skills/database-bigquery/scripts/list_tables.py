@@ -21,21 +21,27 @@ def main():
 
         for table in client.list_tables(dataset_ref):
             table_ref = client.get_table(f"{dataset_ref}.{table.table_id}")
-            tables.append({
-                "table_id": table.table_id,
-                "full_name": f"{dataset_ref}.{table.table_id}",
-                "table_type": table.table_type,
-                "num_rows": table_ref.num_rows,
-                "num_bytes": table_ref.num_bytes,
-                "created": str(table_ref.created),
-                "modified": str(table_ref.modified),
-            })
+            tables.append(
+                {
+                    "table_id": table.table_id,
+                    "full_name": f"{dataset_ref}.{table.table_id}",
+                    "table_type": table.table_type,
+                    "num_rows": table_ref.num_rows,
+                    "num_bytes": table_ref.num_bytes,
+                    "created": str(table_ref.created),
+                    "modified": str(table_ref.modified),
+                }
+            )
 
-        print(format_output({
-            "dataset": args.dataset,
-            "table_count": len(tables),
-            "tables": tables,
-        }))
+        print(
+            format_output(
+                {
+                    "dataset": args.dataset,
+                    "table_count": len(tables),
+                    "tables": tables,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e), "dataset": args.dataset}))

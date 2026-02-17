@@ -26,21 +26,27 @@ def main():
 
         vm_list = []
         for vm in vms:
-            vm_list.append({
-                "name": vm.name,
-                "id": vm.id,
-                "location": vm.location,
-                "vm_size": vm.hardware_profile.vm_size,
-                "provisioning_state": vm.provisioning_state,
-                "tags": vm.tags or {},
-            })
+            vm_list.append(
+                {
+                    "name": vm.name,
+                    "id": vm.id,
+                    "location": vm.location,
+                    "vm_size": vm.hardware_profile.vm_size,
+                    "provisioning_state": vm.provisioning_state,
+                    "tags": vm.tags or {},
+                }
+            )
 
-        print(format_output({
-            "subscription_id": subscription_id,
-            "resource_group": args.resource_group,
-            "vm_count": len(vm_list),
-            "vms": vm_list,
-        }))
+        print(
+            format_output(
+                {
+                    "subscription_id": subscription_id,
+                    "resource_group": args.resource_group,
+                    "vm_count": len(vm_list),
+                    "vms": vm_list,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

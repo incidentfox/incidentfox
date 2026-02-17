@@ -15,20 +15,28 @@ def main():
 
         instances = []
         for instance in result.get("items", []):
-            instances.append({
-                "name": instance["name"],
-                "database_version": instance.get("databaseVersion"),
-                "state": instance.get("state"),
-                "region": instance.get("region"),
-                "tier": instance["settings"].get("tier"),
-                "ip_addresses": [ip["ipAddress"] for ip in instance.get("ipAddresses", [])],
-            })
+            instances.append(
+                {
+                    "name": instance["name"],
+                    "database_version": instance.get("databaseVersion"),
+                    "state": instance.get("state"),
+                    "region": instance.get("region"),
+                    "tier": instance["settings"].get("tier"),
+                    "ip_addresses": [
+                        ip["ipAddress"] for ip in instance.get("ipAddresses", [])
+                    ],
+                }
+            )
 
-        print(format_output({
-            "project_id": project_id,
-            "instance_count": len(instances),
-            "instances": instances,
-        }))
+        print(
+            format_output(
+                {
+                    "project_id": project_id,
+                    "instance_count": len(instances),
+                    "instances": instances,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

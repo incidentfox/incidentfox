@@ -22,23 +22,33 @@ def main():
         conn.close()
 
         if not status:
-            print(format_output({
-                "is_replica": False,
-                "message": "This server is not configured as a replica",
-            }))
+            print(
+                format_output(
+                    {
+                        "is_replica": False,
+                        "message": "This server is not configured as a replica",
+                    }
+                )
+            )
             return
 
         result = {
             "is_replica": True,
             "master_host": status.get("Master_Host") or status.get("Source_Host"),
             "master_port": status.get("Master_Port") or status.get("Source_Port"),
-            "io_running": status.get("Slave_IO_Running") or status.get("Replica_IO_Running"),
-            "sql_running": status.get("Slave_SQL_Running") or status.get("Replica_SQL_Running"),
-            "seconds_behind_master": status.get("Seconds_Behind_Master") or status.get("Seconds_Behind_Source"),
-            "master_log_file": status.get("Master_Log_File") or status.get("Source_Log_File"),
+            "io_running": status.get("Slave_IO_Running")
+            or status.get("Replica_IO_Running"),
+            "sql_running": status.get("Slave_SQL_Running")
+            or status.get("Replica_SQL_Running"),
+            "seconds_behind_master": status.get("Seconds_Behind_Master")
+            or status.get("Seconds_Behind_Source"),
+            "master_log_file": status.get("Master_Log_File")
+            or status.get("Source_Log_File"),
             "relay_log_file": status.get("Relay_Log_File"),
-            "last_io_error": status.get("Last_IO_Error") or status.get("Last_IO_Error_Message"),
-            "last_sql_error": status.get("Last_SQL_Error") or status.get("Last_SQL_Error_Message"),
+            "last_io_error": status.get("Last_IO_Error")
+            or status.get("Last_IO_Error_Message"),
+            "last_sql_error": status.get("Last_SQL_Error")
+            or status.get("Last_SQL_Error_Message"),
             "gtid_mode": status.get("Retrieved_Gtid_Set") is not None,
             "retrieved_gtid_set": status.get("Retrieved_Gtid_Set"),
             "executed_gtid_set": status.get("Executed_Gtid_Set"),

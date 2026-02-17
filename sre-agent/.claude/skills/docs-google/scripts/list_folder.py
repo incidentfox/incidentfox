@@ -18,14 +18,25 @@ def main():
         q = f"'{args.folder_id}' in parents"
         if _is_proxy_mode():
             data = drive_request(
-                "GET", "/files", params={"q": q, "fields": "files(id,name,mimeType,webViewLink)"}
+                "GET",
+                "/files",
+                params={"q": q, "fields": "files(id,name,mimeType,webViewLink)"},
             )
         else:
             service = get_drive_service(readonly=True)
-            data = service.files().list(q=q, fields="files(id,name,mimeType,webViewLink)").execute()
+            data = (
+                service.files()
+                .list(q=q, fields="files(id,name,mimeType,webViewLink)")
+                .execute()
+            )
 
         files = [
-            {"id": f["id"], "name": f["name"], "type": f["mimeType"], "url": f.get("webViewLink")}
+            {
+                "id": f["id"],
+                "name": f["name"],
+                "type": f["mimeType"],
+                "url": f.get("webViewLink"),
+            }
             for f in data.get("files", [])
         ]
 

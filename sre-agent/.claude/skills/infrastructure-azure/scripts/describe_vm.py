@@ -38,7 +38,8 @@ def main():
             "vm_size": vm.hardware_profile.vm_size,
             "os_type": (
                 vm.storage_profile.os_disk.os_type.value
-                if vm.storage_profile.os_disk.os_type else None
+                if vm.storage_profile.os_disk.os_type
+                else None
             ),
             "provisioning_state": vm.provisioning_state,
             "statuses": statuses,
@@ -46,7 +47,8 @@ def main():
             "zones": vm.zones,
             "network_interfaces": (
                 [ni.id for ni in vm.network_profile.network_interfaces]
-                if vm.network_profile else []
+                if vm.network_profile
+                else []
             ),
         }
 

@@ -12,7 +12,9 @@ def main():
     parser = argparse.ArgumentParser(description="Write to Notion page")
     parser.add_argument("--page-id", required=True)
     parser.add_argument("--content", required=True)
-    parser.add_argument("--replace", action="store_true", help="Replace content (default: append)")
+    parser.add_argument(
+        "--replace", action="store_true", help="Replace content (default: append)"
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
@@ -25,7 +27,9 @@ def main():
                         "object": "block",
                         "type": "paragraph",
                         "paragraph": {
-                            "rich_text": [{"type": "text", "text": {"content": para.strip()}}]
+                            "rich_text": [
+                                {"type": "text", "text": {"content": para.strip()}}
+                            ]
                         },
                     }
                 )
@@ -39,10 +43,16 @@ def main():
                     pass
 
         notion_request(
-            "PATCH", f"/blocks/{args.page_id}/children", json_body={"children": children}
+            "PATCH",
+            f"/blocks/{args.page_id}/children",
+            json_body={"children": children},
         )
 
-        result = {"page_id": args.page_id, "success": True, "blocks_added": len(children)}
+        result = {
+            "page_id": args.page_id,
+            "success": True,
+            "blocks_added": len(children),
+        }
         if args.json:
             print(json.dumps(result, indent=2))
         else:

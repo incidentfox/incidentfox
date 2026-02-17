@@ -26,19 +26,21 @@ def main():
 
         locks = []
         for row in cursor.fetchall():
-            locks.append({
-                "lock_type": row[0],
-                "table_name": str(row[1]) if row[1] else None,
-                "mode": row[2],
-                "granted": row[3],
-                "pid": row[4],
-                "user": row[5],
-                "query": row[6][:200] if row[6] else None,
-                "state": row[7],
-                "duration": str(row[8]) if row[8] else None,
-                "wait_event_type": row[9],
-                "wait_event": row[10],
-            })
+            locks.append(
+                {
+                    "lock_type": row[0],
+                    "table_name": str(row[1]) if row[1] else None,
+                    "mode": row[2],
+                    "granted": row[3],
+                    "pid": row[4],
+                    "user": row[5],
+                    "query": row[6][:200] if row[6] else None,
+                    "state": row[7],
+                    "duration": str(row[8]) if row[8] else None,
+                    "wait_event_type": row[9],
+                    "wait_event": row[10],
+                }
+            )
 
         # Get blocking queries
         cursor.execute("""
@@ -70,29 +72,35 @@ def main():
 
         blocking = []
         for row in cursor.fetchall():
-            blocking.append({
-                "blocked_pid": row[0],
-                "blocked_user": row[1],
-                "blocked_query": row[2][:200] if row[2] else None,
-                "blocking_pid": row[3],
-                "blocking_user": row[4],
-                "blocking_query": row[5][:200] if row[5] else None,
-                "blocked_duration": str(row[6]) if row[6] else None,
-            })
+            blocking.append(
+                {
+                    "blocked_pid": row[0],
+                    "blocked_user": row[1],
+                    "blocked_query": row[2][:200] if row[2] else None,
+                    "blocking_pid": row[3],
+                    "blocking_user": row[4],
+                    "blocking_query": row[5][:200] if row[5] else None,
+                    "blocked_duration": str(row[6]) if row[6] else None,
+                }
+            )
 
         cursor.close()
         conn.close()
 
         waiting_locks = [l for l in locks if not l["granted"]]
 
-        print(format_output({
-            "total_locks": len(locks),
-            "waiting_locks": len(waiting_locks),
-            "blocking_relationships": len(blocking),
-            "has_contention": len(blocking) > 0,
-            "locks": locks,
-            "blocking": blocking,
-        }))
+        print(
+            format_output(
+                {
+                    "total_locks": len(locks),
+                    "waiting_locks": len(waiting_locks),
+                    "blocking_relationships": len(blocking),
+                    "has_contention": len(blocking) > 0,
+                    "locks": locks,
+                    "blocking": blocking,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

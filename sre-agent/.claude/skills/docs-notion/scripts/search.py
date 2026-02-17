@@ -17,7 +17,9 @@ def main():
 
     try:
         data = notion_request(
-            "POST", "/search", json_body={"query": args.query, "page_size": args.max_results}
+            "POST",
+            "/search",
+            json_body={"query": args.query, "page_size": args.max_results},
         )
         results = []
         for item in data.get("results", []):

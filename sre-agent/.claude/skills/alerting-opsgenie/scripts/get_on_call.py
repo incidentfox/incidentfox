@@ -74,7 +74,9 @@ def main():
                     or entry.get("schedule_id")
                     or entry.get("team_id", "")
                 )
-                print(f"  {schedule}: {entry.get('user', 'Unknown')} ({entry.get('type', '?')})")
+                print(
+                    f"  {schedule}: {entry.get('user', 'Unknown')} ({entry.get('type', '?')})"
+                )
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

@@ -10,7 +10,9 @@ from linear_client import graphql_request
 
 def main():
     parser = argparse.ArgumentParser(description="Get Linear issue")
-    parser.add_argument("--issue-id", required=True, help="Issue ID or identifier (e.g. TEAM-123)")
+    parser.add_argument(
+        "--issue-id", required=True, help="Issue ID or identifier (e.g. TEAM-123)"
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 

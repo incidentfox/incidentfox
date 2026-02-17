@@ -10,7 +10,9 @@ from snowflake_client import format_output, get_connection
 def main():
     parser = argparse.ArgumentParser(description="Execute Snowflake query")
     parser.add_argument("--query", required=True, help="SQL query to execute")
-    parser.add_argument("--limit", type=int, default=100, help="Max rows to return (default: 100)")
+    parser.add_argument(
+        "--limit", type=int, default=100, help="Max rows to return (default: 100)"
+    )
     args = parser.parse_args()
 
     try:
@@ -41,11 +43,15 @@ def main():
         cursor.close()
         conn.close()
 
-        print(format_output({
-            "row_count": len(results),
-            "columns": columns,
-            "rows": results,
-        }))
+        print(
+            format_output(
+                {
+                    "row_count": len(results),
+                    "columns": columns,
+                    "rows": results,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

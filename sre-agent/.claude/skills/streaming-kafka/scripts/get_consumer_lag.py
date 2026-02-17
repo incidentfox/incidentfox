@@ -33,11 +33,15 @@ def main():
                 pass
 
         if not committed_offsets:
-            print(format_output({
-                "group_id": args.group,
-                "message": "No committed offsets found",
-                "partitions": [],
-            }))
+            print(
+                format_output(
+                    {
+                        "group_id": args.group,
+                        "message": "No committed offsets found",
+                        "partitions": [],
+                    }
+                )
+            )
             return
 
         # Get high watermarks
@@ -54,14 +58,16 @@ def main():
 
                 lag = max(0, high - committed if committed >= 0 else high - low)
 
-                partitions.append({
-                    "topic": topic_name,
-                    "partition": partition,
-                    "committed_offset": committed,
-                    "high_watermark": high,
-                    "low_watermark": low,
-                    "lag": lag,
-                })
+                partitions.append(
+                    {
+                        "topic": topic_name,
+                        "partition": partition,
+                        "committed_offset": committed,
+                        "high_watermark": high,
+                        "low_watermark": low,
+                        "lag": lag,
+                    }
+                )
 
                 total_lag += lag
                 topics_set.add(topic_name)
@@ -84,15 +90,19 @@ def main():
         else:
             health = "severely_lagging"
 
-        print(format_output({
-            "group_id": args.group,
-            "topic_filter": args.topic,
-            "topics_subscribed": list(topics_set),
-            "partition_count": len(partitions),
-            "total_lag": total_lag,
-            "health": health,
-            "partitions": partitions,
-        }))
+        print(
+            format_output(
+                {
+                    "group_id": args.group,
+                    "topic_filter": args.topic,
+                    "topics_subscribed": list(topics_set),
+                    "partition_count": len(partitions),
+                    "total_lag": total_lag,
+                    "health": health,
+                    "partitions": partitions,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e), "group": args.group}))

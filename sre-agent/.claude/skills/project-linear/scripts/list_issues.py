@@ -30,7 +30,9 @@ def main():
                     "identifier": issue["identifier"],
                     "title": issue["title"],
                     "state": state,
-                    "assignee": issue["assignee"]["name"] if issue.get("assignee") else None,
+                    "assignee": (
+                        issue["assignee"]["name"] if issue.get("assignee") else None
+                    ),
                     "priority": issue.get("priority"),
                     "created_at": issue.get("createdAt"),
                     "url": issue["url"],

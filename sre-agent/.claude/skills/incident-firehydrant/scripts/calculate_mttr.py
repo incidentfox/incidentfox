@@ -70,9 +70,11 @@ def main():
                 "mttr_minutes": round(avg, 2),
                 "mttr_hours": round(avg / 60, 2),
                 "median_minutes": round(mttr_values[count // 2], 2),
-                "p95_minutes": round(mttr_values[int(count * 0.95)], 2)
-                if count > 1
-                else round(mttr_values[0], 2),
+                "p95_minutes": (
+                    round(mttr_values[int(count * 0.95)], 2)
+                    if count > 1
+                    else round(mttr_values[0], 2)
+                ),
                 "fastest_resolution_minutes": round(min(mttr_values), 2),
                 "slowest_resolution_minutes": round(max(mttr_values), 2),
             }
@@ -80,7 +82,9 @@ def main():
         if args.json:
             print(json.dumps(result, indent=2))
         else:
-            print(f"MTTR (last {args.days} days): {result.get('incident_count', 0)} incidents")
+            print(
+                f"MTTR (last {args.days} days): {result.get('incident_count', 0)} incidents"
+            )
             if result.get("mttr_minutes"):
                 print(
                     f"Avg: {result['mttr_minutes']} min | Median: {result['median_minutes']} min | P95: {result['p95_minutes']} min"

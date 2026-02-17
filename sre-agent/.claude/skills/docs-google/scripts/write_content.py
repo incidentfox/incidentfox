@@ -12,7 +12,9 @@ def main():
     parser = argparse.ArgumentParser(description="Write to Google Doc")
     parser.add_argument("--document-id", required=True)
     parser.add_argument("--content", required=True)
-    parser.add_argument("--replace", action="store_true", help="Replace (default: append)")
+    parser.add_argument(
+        "--replace", action="store_true", help="Replace (default: append)"
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
@@ -28,10 +30,16 @@ def main():
             end_index = doc["body"]["content"][-1]["endIndex"] - 1
             if end_index > 1:
                 requests.append(
-                    {"deleteContentRange": {"range": {"startIndex": 1, "endIndex": end_index}}}
+                    {
+                        "deleteContentRange": {
+                            "range": {"startIndex": 1, "endIndex": end_index}
+                        }
+                    }
                 )
 
-        requests.append({"insertText": {"location": {"index": 1}, "text": args.content}})
+        requests.append(
+            {"insertText": {"location": {"index": 1}, "text": args.content}}
+        )
 
         lines = args.content.split("\n")
         idx = 1
@@ -48,7 +56,10 @@ def main():
                 requests.append(
                     {
                         "updateParagraphStyle": {
-                            "range": {"startIndex": idx, "endIndex": idx + line_len - 1},
+                            "range": {
+                                "startIndex": idx,
+                                "endIndex": idx + line_len - 1,
+                            },
                             "paragraphStyle": {"namedStyleType": style},
                             "fields": "namedStyleType",
                         }

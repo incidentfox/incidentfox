@@ -22,7 +22,9 @@ def main():
         offset = 0
 
         while True:
-            data = opsgenie_request("GET", "/v1/services", params={"limit": 100, "offset": offset})
+            data = opsgenie_request(
+                "GET", "/v1/services", params={"limit": 100, "offset": offset}
+            )
             services = data.get("data", [])
 
             if not services:

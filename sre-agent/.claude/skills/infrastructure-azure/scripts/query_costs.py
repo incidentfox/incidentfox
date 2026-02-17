@@ -11,16 +11,27 @@ def main():
     parser = argparse.ArgumentParser(description="Query Azure Cost Management")
     parser.add_argument("--start", required=True, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end", required=True, help="End date (YYYY-MM-DD)")
-    parser.add_argument("--granularity", default="Monthly", choices=["Daily", "Monthly"], help="Granularity")
-    parser.add_argument("--group-by", help="Comma-separated dimensions (e.g., ResourceGroup,ServiceName)")
+    parser.add_argument(
+        "--granularity",
+        default="Monthly",
+        choices=["Daily", "Monthly"],
+        help="Granularity",
+    )
+    parser.add_argument(
+        "--group-by",
+        help="Comma-separated dimensions (e.g., ResourceGroup,ServiceName)",
+    )
     parser.add_argument("--scope", help="Scope (default: /subscriptions/<sub-id>)")
     args = parser.parse_args()
 
     try:
         from azure.mgmt.costmanagement import CostManagementClient
         from azure.mgmt.costmanagement.models import (
-            QueryAggregation, QueryDataset, QueryDefinition,
-            QueryGrouping, QueryTimePeriod,
+            QueryAggregation,
+            QueryDataset,
+            QueryDefinition,
+            QueryGrouping,
+            QueryTimePeriod,
         )
 
         credential = get_credentials()
@@ -59,15 +70,19 @@ def main():
 
         total_cost = sum(float(row.get("Cost", 0)) for row in rows)
 
-        print(format_output({
-            "scope": scope,
-            "time_period": {"start": args.start, "end": args.end},
-            "granularity": args.granularity,
-            "total_cost": round(total_cost, 2),
-            "currency": "USD",
-            "row_count": len(rows),
-            "rows": rows,
-        }))
+        print(
+            format_output(
+                {
+                    "scope": scope,
+                    "time_period": {"start": args.start, "end": args.end},
+                    "granularity": args.granularity,
+                    "total_cost": round(total_cost, 2),
+                    "currency": "USD",
+                    "row_count": len(rows),
+                    "rows": rows,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

@@ -17,18 +17,24 @@ def main():
 
     try:
         data = blameless_request(
-            "GET", f"/incidents/{args.incident_id}/events", params={"limit": args.max_results}
+            "GET",
+            f"/incidents/{args.incident_id}/events",
+            params={"limit": args.max_results},
         )
         events = data.get("events", data.get("data", []))
         result = [
             {
                 "id": e.get("id"),
                 "type": e.get("type") or e.get("event_type"),
-                "description": e.get("description") or e.get("message") or e.get("summary"),
+                "description": e.get("description")
+                or e.get("message")
+                or e.get("summary"),
                 "created_at": e.get("created_at") or e.get("timestamp"),
-                "user": e.get("user", {}).get("name")
-                if isinstance(e.get("user"), dict)
-                else e.get("user"),
+                "user": (
+                    e.get("user", {}).get("name")
+                    if isinstance(e.get("user"), dict)
+                    else e.get("user")
+                ),
             }
             for e in events
         ]

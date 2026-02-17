@@ -12,25 +12,33 @@ def main():
         container = build_service("container", "v1")
 
         parent = f"projects/{project_id}/locations/-"
-        result = container.projects().locations().clusters().list(parent=parent).execute()
+        result = (
+            container.projects().locations().clusters().list(parent=parent).execute()
+        )
 
         clusters = []
         for cluster in result.get("clusters", []):
-            clusters.append({
-                "name": cluster["name"],
-                "location": cluster["location"],
-                "status": cluster["status"],
-                "current_master_version": cluster.get("currentMasterVersion"),
-                "current_node_version": cluster.get("currentNodeVersion"),
-                "current_node_count": cluster.get("currentNodeCount"),
-                "endpoint": cluster.get("endpoint"),
-            })
+            clusters.append(
+                {
+                    "name": cluster["name"],
+                    "location": cluster["location"],
+                    "status": cluster["status"],
+                    "current_master_version": cluster.get("currentMasterVersion"),
+                    "current_node_version": cluster.get("currentNodeVersion"),
+                    "current_node_count": cluster.get("currentNodeCount"),
+                    "endpoint": cluster.get("endpoint"),
+                }
+            )
 
-        print(format_output({
-            "project_id": project_id,
-            "cluster_count": len(clusters),
-            "clusters": clusters,
-        }))
+        print(
+            format_output(
+                {
+                    "project_id": project_id,
+                    "cluster_count": len(clusters),
+                    "clusters": clusters,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

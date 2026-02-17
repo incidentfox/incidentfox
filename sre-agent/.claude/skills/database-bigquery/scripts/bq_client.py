@@ -33,8 +33,11 @@ def get_client():
     sa_key = os.getenv("BIGQUERY_SERVICE_ACCOUNT_KEY")
     if sa_key:
         from google.oauth2 import service_account
+
         credentials_dict = json.loads(sa_key)
-        credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+        credentials = service_account.Credentials.from_service_account_info(
+            credentials_dict
+        )
         return bigquery.Client(credentials=credentials, project=get_project_id())
 
     return bigquery.Client(project=get_project_id())

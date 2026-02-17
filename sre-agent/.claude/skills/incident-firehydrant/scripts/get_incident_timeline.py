@@ -17,17 +17,23 @@ def main():
 
     try:
         data = firehydrant_request(
-            "GET", f"/incidents/{args.incident_id}/events", params={"per_page": args.max_results}
+            "GET",
+            f"/incidents/{args.incident_id}/events",
+            params={"per_page": args.max_results},
         )
         events = [
             {
                 "id": e.get("id"),
                 "type": e.get("type"),
                 "occurred_at": e.get("occurred_at") or e.get("created_at"),
-                "description": e.get("description") or e.get("body") or e.get("summary"),
-                "author": e.get("author", {}).get("name")
-                if isinstance(e.get("author"), dict)
-                else e.get("author"),
+                "description": e.get("description")
+                or e.get("body")
+                or e.get("summary"),
+                "author": (
+                    e.get("author", {}).get("name")
+                    if isinstance(e.get("author"), dict)
+                    else e.get("author")
+                ),
                 "visibility": e.get("visibility"),
             }
             for e in data.get("data", [])

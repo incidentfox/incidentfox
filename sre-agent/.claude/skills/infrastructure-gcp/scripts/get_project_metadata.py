@@ -13,13 +13,17 @@ def main():
 
         project = crm.projects().get(projectId=project_id).execute()
 
-        print(format_output({
-            "project_id": project["projectId"],
-            "project_number": project["projectNumber"],
-            "name": project.get("name"),
-            "lifecycle_state": project.get("lifecycleState"),
-            "create_time": project.get("createTime"),
-        }))
+        print(
+            format_output(
+                {
+                    "project_id": project["projectId"],
+                    "project_number": project["projectNumber"],
+                    "name": project.get("name"),
+                    "lifecycle_state": project.get("lifecycleState"),
+                    "create_time": project.get("createTime"),
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

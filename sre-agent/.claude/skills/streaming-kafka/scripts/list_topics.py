@@ -9,7 +9,9 @@ from kafka_client import format_output, get_admin_client
 
 def main():
     parser = argparse.ArgumentParser(description="List Kafka topics")
-    parser.add_argument("--include-internal", action="store_true", help="Include internal topics (__*)")
+    parser.add_argument(
+        "--include-internal", action="store_true", help="Include internal topics (__*)"
+    )
     args = parser.parse_args()
 
     try:
@@ -23,27 +25,35 @@ def main():
 
             partitions = []
             for partition_id, partition_metadata in topic_metadata.partitions.items():
-                partitions.append({
-                    "id": partition_id,
-                    "leader": partition_metadata.leader,
-                    "replicas": list(partition_metadata.replicas),
-                    "isrs": list(partition_metadata.isrs),
-                })
+                partitions.append(
+                    {
+                        "id": partition_id,
+                        "leader": partition_metadata.leader,
+                        "replicas": list(partition_metadata.replicas),
+                        "isrs": list(partition_metadata.isrs),
+                    }
+                )
 
-            topics.append({
-                "name": topic_name,
-                "partition_count": len(topic_metadata.partitions),
-                "partitions": partitions,
-            })
+            topics.append(
+                {
+                    "name": topic_name,
+                    "partition_count": len(topic_metadata.partitions),
+                    "partitions": partitions,
+                }
+            )
 
         topics.sort(key=lambda t: t["name"])
 
-        print(format_output({
-            "cluster_id": metadata.cluster_id,
-            "broker_count": len(metadata.brokers),
-            "topic_count": len(topics),
-            "topics": topics,
-        }))
+        print(
+            format_output(
+                {
+                    "cluster_id": metadata.cluster_id,
+                    "broker_count": len(metadata.brokers),
+                    "topic_count": len(topics),
+                    "topics": topics,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

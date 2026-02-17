@@ -26,7 +26,9 @@ def main():
             doc = docs_request("POST", "/documents", json_body={"title": args.title})
             doc_id = doc["documentId"]
             if args.folder_id:
-                f = drive_request("GET", f"/files/{doc_id}", params={"fields": "parents"})
+                f = drive_request(
+                    "GET", f"/files/{doc_id}", params={"fields": "parents"}
+                )
                 prev = ",".join(f.get("parents", []))
                 drive_request(
                     "PATCH",

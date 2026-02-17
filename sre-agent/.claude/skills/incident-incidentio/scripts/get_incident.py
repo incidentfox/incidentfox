@@ -34,7 +34,8 @@ def main():
         custom_fields = [
             {
                 "name": cf.get("custom_field", {}).get("name"),
-                "value": cf.get("value_text") or cf.get("value_option", {}).get("value"),
+                "value": cf.get("value_text")
+                or cf.get("value_option", {}).get("value"),
             }
             for cf in incident.get("custom_field_entries", [])
         ]

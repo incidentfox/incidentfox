@@ -22,7 +22,11 @@ def main():
         retro = data.get("retrospective", data)
 
         contributing_factors = [
-            {"id": f.get("id"), "description": f.get("description"), "category": f.get("category")}
+            {
+                "id": f.get("id"),
+                "description": f.get("description"),
+                "category": f.get("category"),
+            }
             for f in retro.get("contributing_factors", [])
         ]
         action_items = [
@@ -32,9 +36,11 @@ def main():
                 "status": a.get("status"),
                 "priority": a.get("priority"),
                 "due_date": a.get("due_date"),
-                "assignee": a.get("assignee", {}).get("name")
-                if isinstance(a.get("assignee"), dict)
-                else a.get("assignee"),
+                "assignee": (
+                    a.get("assignee", {}).get("name")
+                    if isinstance(a.get("assignee"), dict)
+                    else a.get("assignee")
+                ),
             }
             for a in retro.get("action_items", [])
         ]

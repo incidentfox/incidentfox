@@ -17,7 +17,9 @@ def main():
     parser = argparse.ArgumentParser(description="Calculate MTTR")
     parser.add_argument("--team-id", help="Optional team ID filter")
     parser.add_argument("--priority", help="Optional priority filter (P1-P5)")
-    parser.add_argument("--days", type=int, default=30, help="Days to analyze (default: 30)")
+    parser.add_argument(
+        "--days", type=int, default=30, help="Days to analyze (default: 30)"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -25,7 +27,10 @@ def main():
         since = (datetime.now(timezone.utc) - timedelta(days=args.days)).isoformat()
         until = datetime.now(timezone.utc).isoformat()
 
-        query_parts = [f"createdAt >= {since} AND createdAt <= {until}", "status=closed"]
+        query_parts = [
+            f"createdAt >= {since} AND createdAt <= {until}",
+            "status=closed",
+        ]
         if args.team_id:
             query_parts.append(f"responders:{args.team_id}")
         if args.priority:
@@ -76,9 +81,11 @@ def main():
                 "mttr_minutes": round(avg, 2),
                 "mttr_hours": round(avg / 60, 2),
                 "median_minutes": round(mttr_values[count // 2], 2),
-                "p95_minutes": round(mttr_values[int(count * 0.95)], 2)
-                if count > 1
-                else round(mttr_values[0], 2),
+                "p95_minutes": (
+                    round(mttr_values[int(count * 0.95)], 2)
+                    if count > 1
+                    else round(mttr_values[0], 2)
+                ),
                 "fastest_resolution_minutes": round(min(mttr_values), 2),
                 "slowest_resolution_minutes": round(max(mttr_values), 2),
             }
@@ -93,7 +100,9 @@ def main():
                 print(f"Priority: {args.priority}")
             print(f"Alerts analyzed: {result.get('alert_count', 0)}")
             if result.get("mttr_minutes"):
-                print(f"Average MTTR: {result['mttr_minutes']} min ({result['mttr_hours']} hrs)")
+                print(
+                    f"Average MTTR: {result['mttr_minutes']} min ({result['mttr_hours']} hrs)"
+                )
                 print(f"Median: {result['median_minutes']} min")
                 print(f"P95: {result['p95_minutes']} min")
                 print(f"Fastest: {result['fastest_resolution_minutes']} min")

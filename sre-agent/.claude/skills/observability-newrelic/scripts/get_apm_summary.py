@@ -37,8 +37,12 @@ def _run_nrql(account_id: str, query: str):
 def main():
     parser = argparse.ArgumentParser(description="Get APM summary")
     parser.add_argument("--account-id", required=True, help="New Relic account ID")
-    parser.add_argument("--app-name", required=True, help="Application name in New Relic")
-    parser.add_argument("--time-range", default="30m", help="Time range (e.g., 30m, 1h)")
+    parser.add_argument(
+        "--app-name", required=True, help="Application name in New Relic"
+    )
+    parser.add_argument(
+        "--time-range", default="30m", help="Time range (e.g., 30m, 1h)"
+    )
     args = parser.parse_args()
 
     try:
@@ -56,12 +60,16 @@ def main():
             except Exception:
                 summary[metric_name] = None
 
-        print(format_output({
-            "app_name": args.app_name,
-            "account_id": args.account_id,
-            "time_range": args.time_range,
-            "summary": summary,
-        }))
+        print(
+            format_output(
+                {
+                    "app_name": args.app_name,
+                    "account_id": args.account_id,
+                    "time_range": args.time_range,
+                    "summary": summary,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e), "app_name": args.app_name}))

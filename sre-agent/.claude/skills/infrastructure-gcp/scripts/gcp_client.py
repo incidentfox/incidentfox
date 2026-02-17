@@ -35,10 +35,12 @@ def get_credentials():
     sa_key = os.getenv("GCP_SERVICE_ACCOUNT_KEY")
     if sa_key:
         from google.oauth2 import service_account
+
         credentials_dict = json.loads(sa_key)
         return service_account.Credentials.from_service_account_info(credentials_dict)
 
     from google.auth import default
+
     credentials, _ = default()
     return credentials
 
@@ -46,6 +48,7 @@ def get_credentials():
 def build_service(service_name: str, version: str):
     """Build a Google API service client."""
     from googleapiclient import discovery
+
     return discovery.build(service_name, version, credentials=get_credentials())
 
 

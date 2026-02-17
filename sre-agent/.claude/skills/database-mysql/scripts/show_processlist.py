@@ -23,32 +23,40 @@ def main():
 
         processes = []
         for proc in cursor.fetchall():
-            processes.append({
-                "id": proc["Id"],
-                "user": proc["User"],
-                "host": proc["Host"],
-                "database": proc["db"],
-                "command": proc["Command"],
-                "time_seconds": proc["Time"],
-                "state": proc["State"],
-                "info": proc["Info"],
-            })
+            processes.append(
+                {
+                    "id": proc["Id"],
+                    "user": proc["User"],
+                    "host": proc["Host"],
+                    "database": proc["db"],
+                    "command": proc["Command"],
+                    "time_seconds": proc["Time"],
+                    "state": proc["State"],
+                    "info": proc["Info"],
+                }
+            )
 
         active_queries = [p for p in processes if p["command"] == "Query" and p["info"]]
         sleeping = [p for p in processes if p["command"] == "Sleep"]
-        long_running = [p for p in processes if p["time_seconds"] and p["time_seconds"] > 60]
+        long_running = [
+            p for p in processes if p["time_seconds"] and p["time_seconds"] > 60
+        ]
 
         cursor.close()
         conn.close()
 
-        print(format_output({
-            "total_connections": len(processes),
-            "active_queries": len(active_queries),
-            "sleeping_connections": len(sleeping),
-            "long_running_queries": len(long_running),
-            "processes": processes,
-            "long_running": long_running,
-        }))
+        print(
+            format_output(
+                {
+                    "total_connections": len(processes),
+                    "active_queries": len(active_queries),
+                    "sleeping_connections": len(sleeping),
+                    "long_running_queries": len(long_running),
+                    "processes": processes,
+                    "long_running": long_running,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

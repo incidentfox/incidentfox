@@ -13,7 +13,9 @@ def main():
     parser.add_argument("--document-id", required=True)
     parser.add_argument("--email", help="Email to share with")
     parser.add_argument("--role", default="reader", help="reader, writer, or commenter")
-    parser.add_argument("--anyone", action="store_true", help="Share with anyone with link")
+    parser.add_argument(
+        "--anyone", action="store_true", help="Share with anyone with link"
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
@@ -28,10 +30,14 @@ def main():
             perm = {"type": "user", "role": args.role, "emailAddress": args.email}
 
         if _is_proxy_mode():
-            drive_request("POST", f"/files/{args.document_id}/permissions", json_body=perm)
+            drive_request(
+                "POST", f"/files/{args.document_id}/permissions", json_body=perm
+            )
         else:
             service = get_drive_service()
-            service.permissions().create(fileId=args.document_id, body=perm, fields="id").execute()
+            service.permissions().create(
+                fileId=args.document_id, body=perm, fields="id"
+            ).execute()
 
         shared_with = "anyone" if args.anyone else args.email
         result = {

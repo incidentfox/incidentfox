@@ -9,7 +9,9 @@ from mysql_client import format_output, get_config, get_connection
 
 def main():
     parser = argparse.ArgumentParser(description="List MySQL tables")
-    parser.add_argument("--database", help="Database name (uses default if not specified)")
+    parser.add_argument(
+        "--database", help="Database name (uses default if not specified)"
+    )
     args = parser.parse_args()
 
     config = get_config()
@@ -19,7 +21,8 @@ def main():
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT
                 TABLE_NAME as table_name, ENGINE as engine,
                 TABLE_ROWS as estimated_rows,
@@ -29,29 +32,41 @@ def main():
             FROM information_schema.TABLES
             WHERE TABLE_SCHEMA = %s AND TABLE_TYPE = 'BASE TABLE'
             ORDER BY TABLE_NAME
-        """, (database,))
+        """,
+            (database,),
+        )
 
         tables = []
         for row in cursor.fetchall():
-            tables.append({
-                "table_name": row["table_name"],
-                "engine": row["engine"],
-                "estimated_rows": row["estimated_rows"],
-                "data_mb": round((row["data_bytes"] or 0) / (1024 * 1024), 2),
-                "index_mb": round((row["index_bytes"] or 0) / (1024 * 1024), 2),
-                "total_mb": round((row["total_bytes"] or 0) / (1024 * 1024), 2),
-                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-                "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
-            })
+            tables.append(
+                {
+                    "table_name": row["table_name"],
+                    "engine": row["engine"],
+                    "estimated_rows": row["estimated_rows"],
+                    "data_mb": round((row["data_bytes"] or 0) / (1024 * 1024), 2),
+                    "index_mb": round((row["index_bytes"] or 0) / (1024 * 1024), 2),
+                    "total_mb": round((row["total_bytes"] or 0) / (1024 * 1024), 2),
+                    "created_at": (
+                        row["created_at"].isoformat() if row["created_at"] else None
+                    ),
+                    "updated_at": (
+                        row["updated_at"].isoformat() if row["updated_at"] else None
+                    ),
+                }
+            )
 
         cursor.close()
         conn.close()
 
-        print(format_output({
-            "database": database,
-            "table_count": len(tables),
-            "tables": tables,
-        }))
+        print(
+            format_output(
+                {
+                    "database": database,
+                    "table_count": len(tables),
+                    "tables": tables,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

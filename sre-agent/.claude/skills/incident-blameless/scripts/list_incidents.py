@@ -10,7 +10,9 @@ from blameless_client import blameless_request
 
 def main():
     parser = argparse.ArgumentParser(description="List Blameless incidents")
-    parser.add_argument("--status", help="Filter: investigating, identified, monitoring, resolved")
+    parser.add_argument(
+        "--status", help="Filter: investigating, identified, monitoring, resolved"
+    )
     parser.add_argument("--severity", help="Filter: SEV0-SEV4")
     parser.add_argument("--incident-type", help="Filter by incident type")
     parser.add_argument("--max-results", type=int, default=100)
@@ -42,9 +44,11 @@ def main():
                         "severity": inc.get("severity"),
                         "created_at": inc.get("created_at"),
                         "resolved_at": inc.get("resolved_at"),
-                        "commander": inc.get("commander", {}).get("name")
-                        if isinstance(inc.get("commander"), dict)
-                        else inc.get("commander"),
+                        "commander": (
+                            inc.get("commander", {}).get("name")
+                            if isinstance(inc.get("commander"), dict)
+                            else inc.get("commander")
+                        ),
                         "url": inc.get("url") or inc.get("permalink"),
                     }
                 )
@@ -54,7 +58,9 @@ def main():
 
         by_status, by_severity = {}, {}
         for i in all_incidents:
-            by_status[i["status"] or "unknown"] = by_status.get(i["status"] or "unknown", 0) + 1
+            by_status[i["status"] or "unknown"] = (
+                by_status.get(i["status"] or "unknown", 0) + 1
+            )
             by_severity[i["severity"] or "unknown"] = (
                 by_severity.get(i["severity"] or "unknown", 0) + 1
             )
@@ -70,7 +76,9 @@ def main():
         else:
             print(f"Found: {len(all_incidents)} incidents")
             for i in all_incidents:
-                print(f"  [{i.get('severity', '?')}] {i.get('title', '')} - {i.get('status', '?')}")
+                print(
+                    f"  [{i.get('severity', '?')}] {i.get('title', '')} - {i.get('status', '?')}"
+                )
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

@@ -18,7 +18,10 @@ def main():
     args = parser.parse_args()
 
     if not args.parent_page_id and not args.parent_database_id:
-        print("Error: Must provide --parent-page-id or --parent-database-id", file=sys.stderr)
+        print(
+            "Error: Must provide --parent-page-id or --parent-database-id",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     try:
@@ -37,7 +40,9 @@ def main():
                             "object": "block",
                             "type": "paragraph",
                             "paragraph": {
-                                "rich_text": [{"type": "text", "text": {"content": para.strip()}}]
+                                "rich_text": [
+                                    {"type": "text", "text": {"content": para.strip()}}
+                                ]
                             },
                         }
                     )
@@ -47,7 +52,12 @@ def main():
             body["children"] = children
         page = notion_request("POST", "/pages", json_body=body)
 
-        result = {"id": page["id"], "url": page.get("url"), "title": args.title, "success": True}
+        result = {
+            "id": page["id"],
+            "url": page.get("url"),
+            "title": args.title,
+            "success": True,
+        }
         if args.json:
             print(json.dumps(result, indent=2))
         else:

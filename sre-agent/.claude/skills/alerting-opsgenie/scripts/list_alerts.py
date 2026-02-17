@@ -85,9 +85,13 @@ def main():
         else:
             print(f"Found: {len(all_alerts)} alerts")
             if by_status:
-                print(f"By status: {', '.join(f'{k}: {v}' for k, v in by_status.items())}")
+                print(
+                    f"By status: {', '.join(f'{k}: {v}' for k, v in by_status.items())}"
+                )
             if by_priority:
-                print(f"By priority: {', '.join(f'{k}: {v}' for k, v in by_priority.items())}")
+                print(
+                    f"By priority: {', '.join(f'{k}: {v}' for k, v in by_priority.items())}"
+                )
             print()
             for a in all_alerts:
                 ack = " [ACK]" if a["acknowledged"] else ""

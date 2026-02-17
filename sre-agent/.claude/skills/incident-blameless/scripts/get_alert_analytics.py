@@ -19,7 +19,11 @@ def main():
     args = parser.parse_args()
 
     try:
-        params = {"limit": 100, "created_after": args.since, "created_before": args.until}
+        params = {
+            "limit": 100,
+            "created_after": args.since,
+            "created_before": args.until,
+        }
         if args.severity:
             params["severity"] = args.severity
 
@@ -78,7 +82,9 @@ def main():
             if inc["created_at"]:
                 try:
                     s["hours"][
-                        datetime.fromisoformat(inc["created_at"].replace("Z", "+00:00")).hour
+                        datetime.fromisoformat(
+                            inc["created_at"].replace("Z", "+00:00")
+                        ).hour
                     ] += 1
                 except:
                     pass
@@ -104,9 +110,11 @@ def main():
                     "classification": {
                         "is_noisy": is_noisy,
                         "is_flapping": is_flapping,
-                        "reason": "High frequency"
-                        if is_noisy
-                        else ("Quick auto-resolve" if is_flapping else None),
+                        "reason": (
+                            "High frequency"
+                            if is_noisy
+                            else ("Quick auto-resolve" if is_flapping else None)
+                        ),
                     },
                 }
             )
@@ -119,7 +127,9 @@ def main():
                 "total_unique": len(analytics),
                 "total_count": len(all_incidents),
                 "noisy": sum(1 for a in analytics if a["classification"]["is_noisy"]),
-                "flapping": sum(1 for a in analytics if a["classification"]["is_flapping"]),
+                "flapping": sum(
+                    1 for a in analytics if a["classification"]["is_flapping"]
+                ),
             },
             "alert_analytics": analytics[:50],
         }

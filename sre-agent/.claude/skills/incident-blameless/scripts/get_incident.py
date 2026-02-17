@@ -20,9 +20,11 @@ def main():
         roles = [
             {
                 "role": r.get("role") or r.get("name"),
-                "assignee": r.get("user", {}).get("name")
-                if isinstance(r.get("user"), dict)
-                else r.get("assignee"),
+                "assignee": (
+                    r.get("user", {}).get("name")
+                    if isinstance(r.get("user"), dict)
+                    else r.get("assignee")
+                ),
             }
             for r in inc.get("roles", [])
         ]
@@ -35,12 +37,16 @@ def main():
             "severity": inc.get("severity"),
             "created_at": inc.get("created_at"),
             "resolved_at": inc.get("resolved_at"),
-            "commander": inc.get("commander", {}).get("name")
-            if isinstance(inc.get("commander"), dict)
-            else inc.get("commander"),
-            "communication_lead": inc.get("communication_lead", {}).get("name")
-            if isinstance(inc.get("communication_lead"), dict)
-            else inc.get("communication_lead"),
+            "commander": (
+                inc.get("commander", {}).get("name")
+                if isinstance(inc.get("commander"), dict)
+                else inc.get("commander")
+            ),
+            "communication_lead": (
+                inc.get("communication_lead", {}).get("name")
+                if isinstance(inc.get("communication_lead"), dict)
+                else inc.get("communication_lead")
+            ),
             "roles": roles,
             "slack_channel": inc.get("slack_channel") or inc.get("slack_channel_name"),
             "postmortem_url": inc.get("postmortem_url") or inc.get("retrospective_url"),

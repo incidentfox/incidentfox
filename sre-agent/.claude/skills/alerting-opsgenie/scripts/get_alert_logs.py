@@ -21,7 +21,9 @@ def main():
 
     try:
         data = opsgenie_request(
-            "GET", f"/v2/alerts/{args.alert_id}/logs", params={"limit": args.max_results}
+            "GET",
+            f"/v2/alerts/{args.alert_id}/logs",
+            params={"limit": args.max_results},
         )
         logs = []
         for log in data.get("data", []):

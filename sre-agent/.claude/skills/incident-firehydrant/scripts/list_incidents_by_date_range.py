@@ -41,7 +41,9 @@ def main():
                     try:
                         mttr = round(
                             (
-                                datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
+                                datetime.fromisoformat(
+                                    resolved_at.replace("Z", "+00:00")
+                                )
                                 - datetime.fromisoformat(start.replace("Z", "+00:00"))
                             ).total_seconds()
                             / 60,
@@ -65,7 +67,9 @@ def main():
             if len(incidents) < params["per_page"]:
                 break
 
-        mttr_values = sorted([i["mttr_minutes"] for i in all_incidents if i["mttr_minutes"]])
+        mttr_values = sorted(
+            [i["mttr_minutes"] for i in all_incidents if i["mttr_minutes"]]
+        )
         by_severity, by_service = {}, {}
         for i in all_incidents:
             s = i["severity"] or "Unknown"
@@ -80,15 +84,21 @@ def main():
             "total_incidents": len(all_incidents),
             "summary": {
                 "resolved_count": len(mttr_values),
-                "avg_mttr_minutes": round(sum(mttr_values) / len(mttr_values), 2)
-                if mttr_values
-                else None,
-                "median_mttr_minutes": round(mttr_values[len(mttr_values) // 2], 2)
-                if mttr_values
-                else None,
+                "avg_mttr_minutes": (
+                    round(sum(mttr_values) / len(mttr_values), 2)
+                    if mttr_values
+                    else None
+                ),
+                "median_mttr_minutes": (
+                    round(mttr_values[len(mttr_values) // 2], 2)
+                    if mttr_values
+                    else None
+                ),
             },
             "by_severity": by_severity,
-            "by_service": dict(sorted(by_service.items(), key=lambda x: x[1], reverse=True)[:10]),
+            "by_service": dict(
+                sorted(by_service.items(), key=lambda x: x[1], reverse=True)[:10]
+            ),
             "incidents": all_incidents,
         }
 

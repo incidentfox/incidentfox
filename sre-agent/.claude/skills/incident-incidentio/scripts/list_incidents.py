@@ -14,7 +14,9 @@ from incidentio_client import incidentio_request
 
 def main():
     parser = argparse.ArgumentParser(description="List Incident.io incidents")
-    parser.add_argument("--status", help="Filter by status (triage, active, resolved, closed)")
+    parser.add_argument(
+        "--status", help="Filter by status (triage, active, resolved, closed)"
+    )
     parser.add_argument("--severity-id", help="Filter by severity ID")
     parser.add_argument(
         "--max-results", type=int, default=100, help="Maximum results (default: 100)"
@@ -84,9 +86,13 @@ def main():
         else:
             print(f"Found: {len(all_incidents)} incidents")
             if by_status:
-                print(f"By status: {', '.join(f'{k}: {v}' for k, v in by_status.items())}")
+                print(
+                    f"By status: {', '.join(f'{k}: {v}' for k, v in by_status.items())}"
+                )
             if by_severity:
-                print(f"By severity: {', '.join(f'{k}: {v}' for k, v in by_severity.items())}")
+                print(
+                    f"By severity: {', '.join(f'{k}: {v}' for k, v in by_severity.items())}"
+                )
             print()
             for inc in all_incidents:
                 print(

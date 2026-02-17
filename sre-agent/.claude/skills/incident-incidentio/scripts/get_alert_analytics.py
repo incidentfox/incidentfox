@@ -73,8 +73,12 @@ def main():
             ack_rate = round(ack_count / fire_count * 100, 1) if fire_count > 0 else 0
 
             hours_dist = dict(stats["hours_distribution"])
-            off_hours_count = sum(hours_dist.get(h, 0) for h in [0, 1, 2, 3, 4, 5, 22, 23])
-            off_hours_rate = round(off_hours_count / fire_count * 100, 1) if fire_count > 0 else 0
+            off_hours_count = sum(
+                hours_dist.get(h, 0) for h in [0, 1, 2, 3, 4, 5, 22, 23]
+            )
+            off_hours_rate = (
+                round(off_hours_count / fire_count * 100, 1) if fire_count > 0 else 0
+            )
 
             is_noisy = fire_count > 10 and ack_rate < 50
 
@@ -92,7 +96,9 @@ def main():
             )
 
         route_analytics.sort(key=lambda x: x["fire_count"], reverse=True)
-        noisy_routes = sum(1 for r in route_analytics if r["classification"]["is_noisy"])
+        noisy_routes = sum(
+            1 for r in route_analytics if r["classification"]["is_noisy"]
+        )
 
         result = {
             "ok": True,

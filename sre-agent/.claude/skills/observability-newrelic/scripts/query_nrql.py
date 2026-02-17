@@ -39,12 +39,16 @@ def main():
             .get("results", [])
         )
 
-        print(format_output({
-            "account_id": args.account_id,
-            "query": args.query,
-            "result_count": len(results),
-            "results": results,
-        }))
+        print(
+            format_output(
+                {
+                    "account_id": args.account_id,
+                    "query": args.query,
+                    "result_count": len(results),
+                    "results": results,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e), "query": args.query}))

@@ -44,13 +44,16 @@ def main():
             "milestones": milestones,
             "role_assignments": roles,
             "services": [
-                {"id": s.get("id"), "name": s.get("name")} for s in inc.get("services", [])
+                {"id": s.get("id"), "name": s.get("name")}
+                for s in inc.get("services", [])
             ],
             "environments": [
-                {"id": e.get("id"), "name": e.get("name")} for e in inc.get("environments", [])
+                {"id": e.get("id"), "name": e.get("name")}
+                for e in inc.get("environments", [])
             ],
             "functionalities": [
-                {"id": f.get("id"), "name": f.get("name")} for f in inc.get("functionalities", [])
+                {"id": f.get("id"), "name": f.get("name")}
+                for f in inc.get("functionalities", [])
             ],
             "slack_channel_name": inc.get("slack_channel_name"),
             "incident_url": inc.get("incident_url"),

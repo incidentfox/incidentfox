@@ -19,7 +19,11 @@ def main():
     args = parser.parse_args()
 
     try:
-        params = {"limit": 100, "created_after": args.since, "created_before": args.until}
+        params = {
+            "limit": 100,
+            "created_after": args.since,
+            "created_before": args.until,
+        }
         if args.severity:
             params["severity"] = args.severity
 
@@ -49,16 +53,20 @@ def main():
                         "created_at": created,
                         "resolved_at": resolved,
                         "mttr_minutes": mttr,
-                        "commander": inc.get("commander", {}).get("name")
-                        if isinstance(inc.get("commander"), dict)
-                        else inc.get("commander"),
+                        "commander": (
+                            inc.get("commander", {}).get("name")
+                            if isinstance(inc.get("commander"), dict)
+                            else inc.get("commander")
+                        ),
                     }
                 )
             page += 1
             if len(incidents) < params["limit"]:
                 break
 
-        mttr_values = sorted([i["mttr_minutes"] for i in all_incidents if i["mttr_minutes"]])
+        mttr_values = sorted(
+            [i["mttr_minutes"] for i in all_incidents if i["mttr_minutes"]]
+        )
         by_severity = {}
         for i in all_incidents:
             s = i["severity"] or "Unknown"
@@ -70,12 +78,16 @@ def main():
             "total_incidents": len(all_incidents),
             "summary": {
                 "resolved_count": len(mttr_values),
-                "avg_mttr_minutes": round(sum(mttr_values) / len(mttr_values), 2)
-                if mttr_values
-                else None,
-                "median_mttr_minutes": round(mttr_values[len(mttr_values) // 2], 2)
-                if mttr_values
-                else None,
+                "avg_mttr_minutes": (
+                    round(sum(mttr_values) / len(mttr_values), 2)
+                    if mttr_values
+                    else None
+                ),
+                "median_mttr_minutes": (
+                    round(mttr_values[len(mttr_values) // 2], 2)
+                    if mttr_values
+                    else None
+                ),
             },
             "by_severity": by_severity,
             "incidents": all_incidents,

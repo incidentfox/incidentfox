@@ -38,8 +38,12 @@ def _get_credentials(readonly=False):
             json_mod.loads(creds_json), scopes=scopes
         )
     elif creds_file:
-        return service_account.Credentials.from_service_account_file(creds_file, scopes=scopes)
-    raise RuntimeError("Neither GOOGLE_SERVICE_ACCOUNT_KEY nor GOOGLE_CREDENTIALS_FILE is set")
+        return service_account.Credentials.from_service_account_file(
+            creds_file, scopes=scopes
+        )
+    raise RuntimeError(
+        "Neither GOOGLE_SERVICE_ACCOUNT_KEY nor GOOGLE_CREDENTIALS_FILE is set"
+    )
 
 
 def get_docs_service(readonly=False):

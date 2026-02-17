@@ -53,7 +53,9 @@ def main():
             print(json.dumps(result, indent=2))
         else:
             print(f"Alert: [{result['priority']}] {result['message']}")
-            print(f"Status: {result['status']} | Acknowledged: {result['acknowledged']}")
+            print(
+                f"Status: {result['status']} | Acknowledged: {result['acknowledged']}"
+            )
             print(f"Source: {result.get('source', '?')}")
             print(f"Created: {result.get('created_at', '?')}")
             if result.get("description"):

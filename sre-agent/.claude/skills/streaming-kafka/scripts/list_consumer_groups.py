@@ -15,18 +15,24 @@ def main():
 
         groups = []
         for group in groups_result.valid:
-            groups.append({
-                "group_id": group.group_id,
-                "is_simple": group.is_simple_consumer_group,
-                "state": str(group.state) if hasattr(group, "state") else None,
-            })
+            groups.append(
+                {
+                    "group_id": group.group_id,
+                    "is_simple": group.is_simple_consumer_group,
+                    "state": str(group.state) if hasattr(group, "state") else None,
+                }
+            )
 
         groups.sort(key=lambda g: g["group_id"])
 
-        print(format_output({
-            "group_count": len(groups),
-            "groups": groups,
-        }))
+        print(
+            format_output(
+                {
+                    "group_count": len(groups),
+                    "groups": groups,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

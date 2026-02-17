@@ -27,7 +27,12 @@ def main():
         if args.query:
             date_query = f"({date_query}) AND ({args.query})"
 
-        params = {"query": date_query, "limit": 100, "sort": "createdAt", "order": "desc"}
+        params = {
+            "query": date_query,
+            "limit": 100,
+            "sort": "createdAt",
+            "order": "desc",
+        }
 
         all_alerts = []
         offset = 0
@@ -61,8 +66,12 @@ def main():
                         "priority": alert.get("priority"),
                         "source": alert.get("source"),
                         "created_at": alert["createdAt"],
-                        "mtta_minutes": round(mtta_minutes, 2) if mtta_minutes else None,
-                        "mttr_minutes": round(mttr_minutes, 2) if mttr_minutes else None,
+                        "mtta_minutes": (
+                            round(mtta_minutes, 2) if mtta_minutes else None
+                        ),
+                        "mttr_minutes": (
+                            round(mttr_minutes, 2) if mttr_minutes else None
+                        ),
                         "count": alert.get("count", 1),
                         "tags": alert.get("tags", []),
                         "teams": [t.get("name") for t in alert.get("teams", [])],
@@ -94,13 +103,19 @@ def main():
             "total_alerts": total,
             "summary": {
                 "acknowledged_count": ack_count,
-                "acknowledged_rate": round(ack_count / total * 100, 1) if total > 0 else 0,
-                "avg_mtta_minutes": round(sum(mtta_values) / len(mtta_values), 2)
-                if mtta_values
-                else None,
-                "avg_mttr_minutes": round(sum(mttr_values) / len(mttr_values), 2)
-                if mttr_values
-                else None,
+                "acknowledged_rate": (
+                    round(ack_count / total * 100, 1) if total > 0 else 0
+                ),
+                "avg_mtta_minutes": (
+                    round(sum(mtta_values) / len(mtta_values), 2)
+                    if mtta_values
+                    else None
+                ),
+                "avg_mttr_minutes": (
+                    round(sum(mttr_values) / len(mttr_values), 2)
+                    if mttr_values
+                    else None
+                ),
             },
             "by_priority": by_priority,
             "top_alerts": top_alerts,
@@ -117,7 +132,9 @@ def main():
                 print(f"Avg MTTA: {result['summary']['avg_mtta_minutes']} min")
             if result["summary"]["avg_mttr_minutes"]:
                 print(f"Avg MTTR: {result['summary']['avg_mttr_minutes']} min")
-            print(f"By priority: {', '.join(f'{k}: {v}' for k, v in by_priority.items())}")
+            print(
+                f"By priority: {', '.join(f'{k}: {v}' for k, v in by_priority.items())}"
+            )
             if top_alerts:
                 print("\nTop alerts by frequency:")
                 for msg, count in top_alerts[:10]:

@@ -26,20 +26,26 @@ def main():
 
         alert_list = []
         for alert in alerts:
-            alert_list.append({
-                "name": alert.name,
-                "id": alert.id,
-                "location": alert.location,
-                "enabled": alert.is_enabled,
-                "description": getattr(alert, "description", None),
-            })
+            alert_list.append(
+                {
+                    "name": alert.name,
+                    "id": alert.id,
+                    "location": alert.location,
+                    "enabled": alert.is_enabled,
+                    "description": getattr(alert, "description", None),
+                }
+            )
 
-        print(format_output({
-            "resource_group": args.resource_group,
-            "subscription_id": subscription_id,
-            "alert_count": len(alert_list),
-            "alerts": alert_list,
-        }))
+        print(
+            format_output(
+                {
+                    "resource_group": args.resource_group,
+                    "subscription_id": subscription_id,
+                    "alert_count": len(alert_list),
+                    "alerts": alert_list,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

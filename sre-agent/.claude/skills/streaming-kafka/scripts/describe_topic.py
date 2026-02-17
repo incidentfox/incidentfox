@@ -27,13 +27,16 @@ def main():
 
         partitions = []
         for partition_id, partition_metadata in topic_metadata.partitions.items():
-            partitions.append({
-                "id": partition_id,
-                "leader": partition_metadata.leader,
-                "replicas": list(partition_metadata.replicas),
-                "isrs": list(partition_metadata.isrs),
-                "in_sync": len(partition_metadata.isrs) == len(partition_metadata.replicas),
-            })
+            partitions.append(
+                {
+                    "id": partition_id,
+                    "leader": partition_metadata.leader,
+                    "replicas": list(partition_metadata.replicas),
+                    "isrs": list(partition_metadata.isrs),
+                    "in_sync": len(partition_metadata.isrs)
+                    == len(partition_metadata.replicas),
+                }
+            )
 
         # Get topic config
         config_resource = ConfigResource(ResourceType.TOPIC, args.topic)
@@ -59,12 +62,14 @@ def main():
             for partition in partitions:
                 tp = TopicPartition(args.topic, partition["id"])
                 low, high = consumer.get_watermark_offsets(tp, timeout=5)
-                partition_offsets.append({
-                    "partition": partition["id"],
-                    "low_offset": low,
-                    "high_offset": high,
-                    "message_count": high - low,
-                })
+                partition_offsets.append(
+                    {
+                        "partition": partition["id"],
+                        "low_offset": low,
+                        "high_offset": high,
+                        "message_count": high - low,
+                    }
+                )
             consumer.close()
         except Exception:
             try:
@@ -75,16 +80,22 @@ def main():
         total_messages = sum(p.get("message_count", 0) for p in partition_offsets)
         under_replicated = [p for p in partitions if not p["in_sync"]]
 
-        print(format_output({
-            "name": args.topic,
-            "partition_count": len(partitions),
-            "replication_factor": len(partitions[0]["replicas"]) if partitions else 0,
-            "total_messages": total_messages,
-            "under_replicated_partitions": len(under_replicated),
-            "partitions": partitions,
-            "partition_offsets": partition_offsets,
-            "config": topic_config,
-        }))
+        print(
+            format_output(
+                {
+                    "name": args.topic,
+                    "partition_count": len(partitions),
+                    "replication_factor": (
+                        len(partitions[0]["replicas"]) if partitions else 0
+                    ),
+                    "total_messages": total_messages,
+                    "under_replicated_partitions": len(under_replicated),
+                    "partitions": partitions,
+                    "partition_offsets": partition_offsets,
+                    "config": topic_config,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e), "topic": args.topic}))

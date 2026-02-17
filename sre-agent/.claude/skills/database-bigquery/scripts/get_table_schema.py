@@ -22,23 +22,33 @@ def main():
 
         schema = []
         for field in table_obj.schema:
-            schema.append({
-                "name": field.name,
-                "type": field.field_type,
-                "mode": field.mode,
-                "description": field.description or "",
-            })
+            schema.append(
+                {
+                    "name": field.name,
+                    "type": field.field_type,
+                    "mode": field.mode,
+                    "description": field.description or "",
+                }
+            )
 
-        print(format_output({
-            "dataset": args.dataset,
-            "table": args.table,
-            "num_rows": table_obj.num_rows,
-            "num_bytes": table_obj.num_bytes,
-            "schema": schema,
-        }))
+        print(
+            format_output(
+                {
+                    "dataset": args.dataset,
+                    "table": args.table,
+                    "num_rows": table_obj.num_rows,
+                    "num_bytes": table_obj.num_bytes,
+                    "schema": schema,
+                }
+            )
+        )
 
     except Exception as e:
-        print(format_output({"error": str(e), "dataset": args.dataset, "table": args.table}))
+        print(
+            format_output(
+                {"error": str(e), "dataset": args.dataset, "table": args.table}
+            )
+        )
         sys.exit(1)
 
 

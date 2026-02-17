@@ -9,7 +9,9 @@ from mysql_client import format_output, get_connection
 
 def main():
     parser = argparse.ArgumentParser(description="Show MySQL engine status")
-    parser.add_argument("--engine", default="innodb", help="Storage engine (default: innodb)")
+    parser.add_argument(
+        "--engine", default="innodb", help="Storage engine (default: innodb)"
+    )
     args = parser.parse_args()
 
     try:
@@ -23,10 +25,14 @@ def main():
         conn.close()
 
         if not status:
-            print(format_output({
-                "engine": args.engine,
-                "message": f"No status available for {args.engine}",
-            }))
+            print(
+                format_output(
+                    {
+                        "engine": args.engine,
+                        "message": f"No status available for {args.engine}",
+                    }
+                )
+            )
             return
 
         raw_status = status.get("Status", "")
@@ -39,7 +45,11 @@ def main():
         if "LATEST DETECTED DEADLOCK" in raw_status:
             start = raw_status.find("LATEST DETECTED DEADLOCK")
             end = raw_status.find("---", start + 100)
-            result["deadlock_info"] = raw_status[start:end] if end > start else raw_status[start:start + 2000]
+            result["deadlock_info"] = (
+                raw_status[start:end]
+                if end > start
+                else raw_status[start : start + 2000]
+            )
             result["has_recent_deadlock"] = True
         else:
             result["has_recent_deadlock"] = False

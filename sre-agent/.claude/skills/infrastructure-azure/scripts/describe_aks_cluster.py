@@ -20,18 +20,22 @@ def main():
         subscription_id = get_subscription_id()
         aks_client = ContainerServiceClient(credential, subscription_id)
 
-        cluster = aks_client.managed_clusters.get(args.resource_group, args.cluster_name)
+        cluster = aks_client.managed_clusters.get(
+            args.resource_group, args.cluster_name
+        )
 
         agent_pools = []
         if cluster.agent_pool_profiles:
             for pool in cluster.agent_pool_profiles:
-                agent_pools.append({
-                    "name": pool.name,
-                    "count": pool.count,
-                    "vm_size": pool.vm_size,
-                    "os_type": pool.os_type.value if pool.os_type else None,
-                    "mode": pool.mode.value if pool.mode else None,
-                })
+                agent_pools.append(
+                    {
+                        "name": pool.name,
+                        "count": pool.count,
+                        "vm_size": pool.vm_size,
+                        "os_type": pool.os_type.value if pool.os_type else None,
+                        "mode": pool.mode.value if pool.mode else None,
+                    }
+                )
 
         result = {
             "name": cluster.name,

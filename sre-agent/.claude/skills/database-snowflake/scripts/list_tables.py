@@ -28,23 +28,29 @@ def main():
 
         result = []
         for table in tables:
-            result.append({
-                "name": table[1],
-                "database": table[2],
-                "schema": table[3],
-                "owner": table[4],
-                "rows": table[5],
-                "bytes": table[6],
-                "created": str(table[0]),
-            })
+            result.append(
+                {
+                    "name": table[1],
+                    "database": table[2],
+                    "schema": table[3],
+                    "owner": table[4],
+                    "rows": table[5],
+                    "bytes": table[6],
+                    "created": str(table[0]),
+                }
+            )
 
         cursor.close()
         conn.close()
 
-        print(format_output({
-            "table_count": len(result),
-            "tables": result,
-        }))
+        print(
+            format_output(
+                {
+                    "table_count": len(result),
+                    "tables": result,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

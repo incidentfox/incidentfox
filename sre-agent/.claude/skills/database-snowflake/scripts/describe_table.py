@@ -29,24 +29,30 @@ def main():
 
         result = []
         for col in columns:
-            result.append({
-                "name": col[0],
-                "type": col[1],
-                "kind": col[2],
-                "null": col[3] == "Y",
-                "default": col[4],
-                "primary_key": col[5] == "Y",
-                "unique_key": col[6] == "Y",
-            })
+            result.append(
+                {
+                    "name": col[0],
+                    "type": col[1],
+                    "kind": col[2],
+                    "null": col[3] == "Y",
+                    "default": col[4],
+                    "primary_key": col[5] == "Y",
+                    "unique_key": col[6] == "Y",
+                }
+            )
 
         cursor.close()
         conn.close()
 
-        print(format_output({
-            "table": args.table,
-            "column_count": len(result),
-            "columns": result,
-        }))
+        print(
+            format_output(
+                {
+                    "table": args.table,
+                    "column_count": len(result),
+                    "columns": result,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e), "table": args.table}))

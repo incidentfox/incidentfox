@@ -18,10 +18,14 @@ def main():
         if not ps_enabled:
             cursor.close()
             conn.close()
-            print(format_output({
-                "message": "performance_schema is not enabled",
-                "locks": [],
-            }))
+            print(
+                format_output(
+                    {
+                        "message": "performance_schema is not enabled",
+                        "locks": [],
+                    }
+                )
+            )
             return
 
         # Get current locks
@@ -68,13 +72,17 @@ def main():
         cursor.close()
         conn.close()
 
-        print(format_output({
-            "lock_count": len(locks),
-            "wait_count": len(waits),
-            "locks": locks,
-            "lock_waits": waits,
-            "has_contention": len(waits) > 0,
-        }))
+        print(
+            format_output(
+                {
+                    "lock_count": len(locks),
+                    "wait_count": len(waits),
+                    "locks": locks,
+                    "lock_waits": waits,
+                    "has_contention": len(waits) > 0,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

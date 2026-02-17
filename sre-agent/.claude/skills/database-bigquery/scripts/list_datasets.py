@@ -12,16 +12,22 @@ def main():
 
         datasets = []
         for dataset in client.list_datasets():
-            datasets.append({
-                "dataset_id": dataset.dataset_id,
-                "full_name": dataset.full_dataset_id,
-                "location": dataset.location,
-            })
+            datasets.append(
+                {
+                    "dataset_id": dataset.dataset_id,
+                    "full_name": dataset.full_dataset_id,
+                    "location": dataset.location,
+                }
+            )
 
-        print(format_output({
-            "dataset_count": len(datasets),
-            "datasets": datasets,
-        }))
+        print(
+            format_output(
+                {
+                    "dataset_count": len(datasets),
+                    "datasets": datasets,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

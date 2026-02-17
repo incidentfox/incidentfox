@@ -15,7 +15,9 @@ from incidentio_client import incidentio_request
 def main():
     parser = argparse.ArgumentParser(description="Get incident timeline updates")
     parser.add_argument("--incident-id", required=True, help="Incident ID")
-    parser.add_argument("--max-results", type=int, default=50, help="Maximum results (default: 50)")
+    parser.add_argument(
+        "--max-results", type=int, default=50, help="Maximum results (default: 50)"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -42,7 +44,9 @@ def main():
         if args.json:
             print(json.dumps(updates, indent=2))
         else:
-            print(f"Timeline updates for incident {args.incident_id}: {len(updates)} entries")
+            print(
+                f"Timeline updates for incident {args.incident_id}: {len(updates)} entries"
+            )
             print()
             for u in updates:
                 print(f"  [{u.get('created_at', '?')}] {u.get('updater', 'Unknown')}")

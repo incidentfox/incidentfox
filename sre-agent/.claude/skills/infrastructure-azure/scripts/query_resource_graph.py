@@ -11,7 +11,9 @@ from azure_client import format_output, get_credentials, get_subscription_id
 def main():
     parser = argparse.ArgumentParser(description="Query Azure Resource Graph")
     parser.add_argument("--query", required=True, help="KQL query string")
-    parser.add_argument("--subscriptions", nargs="*", help="Subscription IDs (defaults to configured)")
+    parser.add_argument(
+        "--subscriptions", nargs="*", help="Subscription IDs (defaults to configured)"
+    )
     args = parser.parse_args()
 
     try:
@@ -33,12 +35,16 @@ def main():
                     item_dict[key] = value.isoformat()
             results.append(item_dict)
 
-        print(format_output({
-            "query": args.query,
-            "total_records": response.total_records,
-            "count": response.count,
-            "results": results,
-        }))
+        print(
+            format_output(
+                {
+                    "query": args.query,
+                    "total_records": response.total_records,
+                    "count": response.count,
+                    "results": results,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e), "query": args.query}))

@@ -38,7 +38,9 @@ def main():
                 for ms in inc.get("milestones", []):
                     ms_type = ms.get("type") or ms.get("slug")
                     if ms_type:
-                        milestones[ms_type] = ms.get("occurred_at") or ms.get("created_at")
+                        milestones[ms_type] = ms.get("occurred_at") or ms.get(
+                            "created_at"
+                        )
                 all_incidents.append(
                     {
                         "id": inc.get("id"),
@@ -48,7 +50,9 @@ def main():
                         "created_at": inc.get("created_at"),
                         "resolved_at": milestones.get("resolved"),
                         "services": [s.get("name") for s in inc.get("services", [])],
-                        "environments": [e.get("name") for e in inc.get("environments", [])],
+                        "environments": [
+                            e.get("name") for e in inc.get("environments", [])
+                        ],
                         "incident_url": inc.get("incident_url"),
                     }
                 )
@@ -56,7 +60,11 @@ def main():
             if len(incidents) < params["per_page"]:
                 break
 
-        result = {"ok": True, "total_count": len(all_incidents), "incidents": all_incidents}
+        result = {
+            "ok": True,
+            "total_count": len(all_incidents),
+            "incidents": all_incidents,
+        }
         if args.json:
             print(json.dumps(result, indent=2))
         else:

@@ -33,6 +33,8 @@ def get_headers() -> dict[str, str]:
 def notion_request(method, path, params=None, json_body=None):
     url = f"{get_base_url()}/{path.lstrip('/')}"
     with httpx.Client(timeout=30.0) as client:
-        response = client.request(method, url, headers=get_headers(), params=params, json=json_body)
+        response = client.request(
+            method, url, headers=get_headers(), params=params, json=json_body
+        )
         response.raise_for_status()
         return None if response.status_code == 204 else response.json()

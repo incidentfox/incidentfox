@@ -54,15 +54,17 @@ def main():
 
             replicas = []
             for row in cursor.fetchall():
-                replicas.append({
-                    "client_addr": str(row[0]) if row[0] else None,
-                    "state": row[1],
-                    "sent_lsn": str(row[2]) if row[2] else None,
-                    "replay_lsn": str(row[5]) if row[5] else None,
-                    "lag_bytes": row[6],
-                    "sync_state": row[7],
-                    "application_name": row[8],
-                })
+                replicas.append(
+                    {
+                        "client_addr": str(row[0]) if row[0] else None,
+                        "state": row[1],
+                        "sent_lsn": str(row[2]) if row[2] else None,
+                        "replay_lsn": str(row[5]) if row[5] else None,
+                        "lag_bytes": row[6],
+                        "sync_state": row[7],
+                        "application_name": row[8],
+                    }
+                )
 
             result["replicas"] = replicas
             result["replica_count"] = len(replicas)
@@ -76,12 +78,14 @@ def main():
 
             slots = []
             for row in cursor.fetchall():
-                slots.append({
-                    "slot_name": row[0],
-                    "slot_type": row[1],
-                    "active": row[2],
-                    "lag_bytes": row[3],
-                })
+                slots.append(
+                    {
+                        "slot_name": row[0],
+                        "slot_type": row[1],
+                        "active": row[2],
+                        "lag_bytes": row[3],
+                    }
+                )
 
             result["replication_slots"] = slots
 

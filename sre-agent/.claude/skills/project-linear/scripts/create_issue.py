@@ -14,7 +14,10 @@ def main():
     parser.add_argument("--description", default="")
     parser.add_argument("--team-id", help="Team ID")
     parser.add_argument(
-        "--priority", type=int, default=0, help="0=None, 1=Urgent, 2=High, 3=Medium, 4=Low"
+        "--priority",
+        type=int,
+        default=0,
+        help="0=None, 1=Urgent, 2=High, 3=Medium, 4=Low",
     )
     parser.add_argument("--assignee-id", help="Assignee user ID")
     parser.add_argument("--labels", help="Comma-separated label IDs")

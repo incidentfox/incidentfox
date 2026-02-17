@@ -70,12 +70,16 @@ def main():
 
         result = list(indexes.values())
 
-        print(format_output({
-            "schema": schema,
-            "table": args.table,
-            "index_count": len(result),
-            "indexes": result,
-        }))
+        print(
+            format_output(
+                {
+                    "schema": schema,
+                    "table": args.table,
+                    "index_count": len(result),
+                    "indexes": result,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

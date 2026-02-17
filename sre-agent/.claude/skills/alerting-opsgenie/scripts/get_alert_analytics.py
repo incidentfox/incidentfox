@@ -27,7 +27,12 @@ def main():
         if args.team_id:
             date_query += f" AND responders:{args.team_id}"
 
-        params = {"query": date_query, "limit": 100, "sort": "createdAt", "order": "desc"}
+        params = {
+            "query": date_query,
+            "limit": 100,
+            "sort": "createdAt",
+            "order": "desc",
+        }
         all_alerts = []
         offset = 0
 
@@ -90,7 +95,9 @@ def main():
             if alert["mttr_minutes"]:
                 stats["mttr_values"].append(alert["mttr_minutes"])
             try:
-                created = datetime.fromisoformat(alert["created_at"].replace("Z", "+00:00"))
+                created = datetime.fromisoformat(
+                    alert["created_at"].replace("Z", "+00:00")
+                )
                 stats["hours_distribution"][created.hour] += 1
             except (ValueError, TypeError):
                 pass
@@ -129,9 +136,11 @@ def main():
                     "classification": {
                         "is_noisy": is_noisy,
                         "is_flapping": is_flapping,
-                        "reason": "High frequency, low ack rate"
-                        if is_noisy
-                        else ("Quick auto-resolve" if is_flapping else None),
+                        "reason": (
+                            "High frequency, low ack rate"
+                            if is_noisy
+                            else ("Quick auto-resolve" if is_flapping else None)
+                        ),
                     },
                 }
             )
@@ -167,7 +176,9 @@ def main():
                     flags.append("FLAPPING")
                 tag = f" [{', '.join(flags)}]" if flags else ""
                 print(f"  {a['fire_count']}x {a['alert_message']}{tag}")
-                print(f"    Ack: {a['acknowledgment_rate']}% | Off-hours: {a['off_hours_rate']}%")
+                print(
+                    f"    Ack: {a['acknowledgment_rate']}% | Off-hours: {a['off_hours_rate']}%"
+                )
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

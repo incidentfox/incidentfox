@@ -63,9 +63,11 @@ def main():
                 "mttr_minutes": round(avg, 2),
                 "mttr_hours": round(avg / 60, 2),
                 "median_minutes": round(mttr_values[count // 2], 2),
-                "p95_minutes": round(mttr_values[int(count * 0.95)], 2)
-                if count > 1
-                else round(mttr_values[0], 2),
+                "p95_minutes": (
+                    round(mttr_values[int(count * 0.95)], 2)
+                    if count > 1
+                    else round(mttr_values[0], 2)
+                ),
                 "fastest_resolution_minutes": round(min(mttr_values), 2),
                 "slowest_resolution_minutes": round(max(mttr_values), 2),
             }

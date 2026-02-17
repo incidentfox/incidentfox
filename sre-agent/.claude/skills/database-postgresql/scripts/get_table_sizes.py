@@ -48,28 +48,34 @@ def main():
         tables = []
         total_bytes = 0
         for row in rows:
-            tables.append({
-                "table_name": row[0],
-                "table_bytes": row[1],
-                "indexes_bytes": row[2],
-                "total_bytes": row[3],
-                "table_size": row[4],
-                "indexes_size": row[5],
-                "total_size": row[6],
-                "estimated_rows": row[7],
-            })
+            tables.append(
+                {
+                    "table_name": row[0],
+                    "table_bytes": row[1],
+                    "indexes_bytes": row[2],
+                    "total_bytes": row[3],
+                    "table_size": row[4],
+                    "indexes_size": row[5],
+                    "total_size": row[6],
+                    "estimated_rows": row[7],
+                }
+            )
             total_bytes += row[3] or 0
 
         cursor.close()
         conn.close()
 
-        print(format_output({
-            "schema": schema,
-            "table_count": len(tables),
-            "total_bytes": total_bytes,
-            "total_size_pretty": f"{total_bytes / (1024*1024*1024):.2f} GB",
-            "tables": tables,
-        }))
+        print(
+            format_output(
+                {
+                    "schema": schema,
+                    "table_count": len(tables),
+                    "total_bytes": total_bytes,
+                    "total_size_pretty": f"{total_bytes / (1024*1024*1024):.2f} GB",
+                    "tables": tables,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e)}))

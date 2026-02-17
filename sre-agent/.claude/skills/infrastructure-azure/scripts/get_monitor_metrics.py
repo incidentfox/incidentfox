@@ -13,8 +13,14 @@ def main():
     parser.add_argument("--resource-id", required=True, help="Full Azure resource ID")
     parser.add_argument("--metrics", required=True, help="Comma-separated metric names")
     parser.add_argument("--timespan", help="ISO 8601 duration (default: PT1H)")
-    parser.add_argument("--interval", default="PT5M", help="Aggregation interval (default: PT5M)")
-    parser.add_argument("--aggregations", default="Average", help="Comma-separated aggregations (default: Average)")
+    parser.add_argument(
+        "--interval", default="PT5M", help="Aggregation interval (default: PT5M)"
+    )
+    parser.add_argument(
+        "--aggregations",
+        default="Average",
+        help="Comma-separated aggregations (default: Average)",
+    )
     args = parser.parse_args()
 
     try:
@@ -37,7 +43,11 @@ def main():
 
         metrics_data = []
         for metric in response.metrics:
-            metric_dict = {"name": metric.name, "unit": str(metric.unit), "timeseries": []}
+            metric_dict = {
+                "name": metric.name,
+                "unit": str(metric.unit),
+                "timeseries": [],
+            }
             for timeseries in metric.timeseries:
                 ts_data = {"data": []}
                 for data_point in timeseries.data:
@@ -54,11 +64,15 @@ def main():
                 metric_dict["timeseries"].append(ts_data)
             metrics_data.append(metric_dict)
 
-        print(format_output({
-            "resource_id": args.resource_id,
-            "interval": args.interval,
-            "metrics": metrics_data,
-        }))
+        print(
+            format_output(
+                {
+                    "resource_id": args.resource_id,
+                    "interval": args.interval,
+                    "metrics": metrics_data,
+                }
+            )
+        )
 
     except Exception as e:
         print(format_output({"error": str(e), "resource_id": args.resource_id}))

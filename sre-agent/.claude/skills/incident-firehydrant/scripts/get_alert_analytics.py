@@ -38,7 +38,9 @@ def main():
                     try:
                         mttr = round(
                             (
-                                datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
+                                datetime.fromisoformat(
+                                    resolved_at.replace("Z", "+00:00")
+                                )
                                 - datetime.fromisoformat(start.replace("Z", "+00:00"))
                             ).total_seconds()
                             / 60,
@@ -81,7 +83,9 @@ def main():
             if inc["created_at"]:
                 try:
                     s["hours"][
-                        datetime.fromisoformat(inc["created_at"].replace("Z", "+00:00")).hour
+                        datetime.fromisoformat(
+                            inc["created_at"].replace("Z", "+00:00")
+                        ).hour
                     ] += 1
                 except:
                     pass
@@ -107,9 +111,11 @@ def main():
                     "classification": {
                         "is_noisy": is_noisy,
                         "is_flapping": is_flapping,
-                        "reason": "High frequency"
-                        if is_noisy
-                        else ("Quick auto-resolve" if is_flapping else None),
+                        "reason": (
+                            "High frequency"
+                            if is_noisy
+                            else ("Quick auto-resolve" if is_flapping else None)
+                        ),
                     },
                 }
             )
