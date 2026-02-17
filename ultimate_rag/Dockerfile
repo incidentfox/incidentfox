@@ -44,7 +44,7 @@ RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2" "jaraco.context>=6.1.0"
 # Copy the RAPTOR library to /app/raptor/ (required for pickle deserialization)
 # The pickle files contain objects like raptor.tree_structures.Node which need
 # the raptor module at the top level for Python to find during unpickling
-COPY knowledge_base/raptor/ ./raptor/
+COPY ultimate_rag/raptor_lib/ ./raptor/
 
 # Copy Ultimate RAG package
 COPY ultimate_rag/agents/ ./ultimate_rag/agents/
@@ -54,6 +54,7 @@ COPY ultimate_rag/graph/ ./ultimate_rag/graph/
 COPY ultimate_rag/ingestion/ ./ultimate_rag/ingestion/
 COPY ultimate_rag/intelligence/ ./ultimate_rag/intelligence/
 COPY ultimate_rag/raptor/ ./ultimate_rag/raptor/
+COPY ultimate_rag/raptor_lib/ ./ultimate_rag/raptor_lib/
 COPY ultimate_rag/retrieval/ ./ultimate_rag/retrieval/
 RUN echo "" > ./ultimate_rag/__init__.py
 
