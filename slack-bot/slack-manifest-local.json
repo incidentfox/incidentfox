@@ -50,7 +50,6 @@
     },
     "settings": {
         "event_subscriptions": {
-            "request_url": "https://slack-staging.incidentfox.ai/slack/events",
             "bot_events": [
                 "app_home_opened",
                 "app_mention",
@@ -62,7 +61,7 @@
             "request_url": "https://slack-staging.incidentfox.ai/slack/events"
         },
         "org_deploy_enabled": false,
-        "socket_mode_enabled": false,
+        "socket_mode_enabled": true,
         "token_rotation_enabled": false
     }
 }
