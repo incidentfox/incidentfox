@@ -19,9 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         service:
-          - agent
           - config_service
-          - knowledge_base
           - orchestrator
           - web_ui
 
