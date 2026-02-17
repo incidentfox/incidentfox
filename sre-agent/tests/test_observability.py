@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Helpers to reset module state between tests
 # ---------------------------------------------------------------------------
 
+
 def _reset_observability():
     """Reset the observability module state so each test starts clean."""
     import agent
@@ -38,6 +39,7 @@ def _reset_observability():
 # ---------------------------------------------------------------------------
 # Backend detection tests
 # ---------------------------------------------------------------------------
+
 
 class TestDetectBackend:
     """Tests for _detect_observability_backend()."""
@@ -140,6 +142,7 @@ class TestDetectBackend:
 # Initialization tests
 # ---------------------------------------------------------------------------
 
+
 class TestInitObservability:
     """Tests for init_observability()."""
 
@@ -161,11 +164,18 @@ class TestInitObservability:
         mock_laminar = MagicMock()
         mock_observe = MagicMock()
 
-        with patch.dict(os.environ, {
-            "OBSERVABILITY_BACKEND": "laminar",
-            "LMNR_PROJECT_API_KEY": "test-key",
-        }, clear=False):
-            with patch.dict("sys.modules", {"lmnr": MagicMock(Laminar=mock_laminar, observe=mock_observe)}):
+        with patch.dict(
+            os.environ,
+            {
+                "OBSERVABILITY_BACKEND": "laminar",
+                "LMNR_PROJECT_API_KEY": "test-key",
+            },
+            clear=False,
+        ):
+            with patch.dict(
+                "sys.modules",
+                {"lmnr": MagicMock(Laminar=mock_laminar, observe=mock_observe)},
+            ):
                 agent._observability_initialized = False
                 agent.init_observability()
                 assert agent._observability_backend == "laminar"
@@ -174,10 +184,14 @@ class TestInitObservability:
     def test_init_laminar_import_failure_falls_back_to_none(self):
         import agent
 
-        with patch.dict(os.environ, {
-            "OBSERVABILITY_BACKEND": "laminar",
-            "LMNR_PROJECT_API_KEY": "test-key",
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "OBSERVABILITY_BACKEND": "laminar",
+                "LMNR_PROJECT_API_KEY": "test-key",
+            },
+            clear=False,
+        ):
             # Force ImportError by removing lmnr from sys.modules and patching import
             with patch("builtins.__import__", side_effect=ImportError("no lmnr")):
                 agent._observability_initialized = False
@@ -189,13 +203,19 @@ class TestInitObservability:
 
         mock_langfuse_cls = MagicMock()
 
-        with patch.dict(os.environ, {
-            "OBSERVABILITY_BACKEND": "langfuse",
-            "LANGFUSE_PUBLIC_KEY": "pk-test",
-            "LANGFUSE_SECRET_KEY": "sk-test",
-            "LANGFUSE_HOST": "https://test.langfuse.com",
-        }, clear=False):
-            with patch.dict("sys.modules", {"langfuse": MagicMock(Langfuse=mock_langfuse_cls)}):
+        with patch.dict(
+            os.environ,
+            {
+                "OBSERVABILITY_BACKEND": "langfuse",
+                "LANGFUSE_PUBLIC_KEY": "pk-test",
+                "LANGFUSE_SECRET_KEY": "sk-test",
+                "LANGFUSE_HOST": "https://test.langfuse.com",
+            },
+            clear=False,
+        ):
+            with patch.dict(
+                "sys.modules", {"langfuse": MagicMock(Langfuse=mock_langfuse_cls)}
+            ):
                 agent._observability_initialized = False
                 agent.init_observability()
                 assert agent._observability_backend == "langfuse"
@@ -205,11 +225,15 @@ class TestInitObservability:
     def test_init_langfuse_import_failure_falls_back_to_none(self):
         import agent
 
-        with patch.dict(os.environ, {
-            "OBSERVABILITY_BACKEND": "langfuse",
-            "LANGFUSE_PUBLIC_KEY": "pk-test",
-            "LANGFUSE_SECRET_KEY": "sk-test",
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "OBSERVABILITY_BACKEND": "langfuse",
+                "LANGFUSE_PUBLIC_KEY": "pk-test",
+                "LANGFUSE_SECRET_KEY": "sk-test",
+            },
+            clear=False,
+        ):
             with patch("builtins.__import__", side_effect=ImportError("no langfuse")):
                 agent._observability_initialized = False
                 agent.init_observability()
@@ -225,7 +249,9 @@ class TestInitObservability:
             assert agent._observability_initialized is True
 
             # Change env, but init should be a no-op
-            with patch.dict(os.environ, {"OBSERVABILITY_BACKEND": "laminar"}, clear=False):
+            with patch.dict(
+                os.environ, {"OBSERVABILITY_BACKEND": "laminar"}, clear=False
+            ):
                 agent.init_observability()
                 assert agent._observability_backend == "none"  # Still none
 
@@ -233,6 +259,7 @@ class TestInitObservability:
 # ---------------------------------------------------------------------------
 # Helper function tests
 # ---------------------------------------------------------------------------
+
 
 class TestHelperFunctions:
     """Tests for observability_set_session, observability_set_tags, observability_observe."""
@@ -316,6 +343,7 @@ class TestHelperFunctions:
 # Helm template rendering test (requires helm CLI)
 # ---------------------------------------------------------------------------
 
+
 class TestHelmTemplate:
     """Test Helm chart renders correctly for each backend."""
 
@@ -331,11 +359,17 @@ class TestHelmTemplate:
 
         chart_path = str(Path(__file__).parent.parent.parent / "charts" / "incidentfox")
         cmd = [
-            "helm", "template", "test", chart_path,
-            "--show-only", "templates/agent.yaml",
+            "helm",
+            "template",
+            "test",
+            chart_path,
+            "--show-only",
+            "templates/agent.yaml",
             # Required globals to satisfy chart validation
-            "--set", "global.configService.url=http://test:8080",
-            "--set", "services.agent.image=test:latest",
+            "--set",
+            "global.configService.url=http://test:8080",
+            "--set",
+            "services.agent.image=test:latest",
         ]
         for sv in set_values:
             cmd.extend(["--set", sv])
@@ -349,25 +383,29 @@ class TestHelmTemplate:
         assert "OBSERVABILITY_BACKEND" not in output
 
     def test_backend_langfuse(self):
-        output = self._render([
-            "services.agent.agentObservability.backend=langfuse",
-            "services.agent.agentObservability.langfuse.secretName=my-secret",
-            "services.agent.agentObservability.langfuse.publicKeyKey=pk",
-            "services.agent.agentObservability.langfuse.secretKeyKey=sk",
-        ])
-        assert 'OBSERVABILITY_BACKEND' in output
-        assert 'langfuse' in output
-        assert 'LANGFUSE_HOST' in output
-        assert 'LANGFUSE_PUBLIC_KEY' in output
-        assert 'LANGFUSE_SECRET_KEY' in output
+        output = self._render(
+            [
+                "services.agent.agentObservability.backend=langfuse",
+                "services.agent.agentObservability.langfuse.secretName=my-secret",
+                "services.agent.agentObservability.langfuse.publicKeyKey=pk",
+                "services.agent.agentObservability.langfuse.secretKeyKey=sk",
+            ]
+        )
+        assert "OBSERVABILITY_BACKEND" in output
+        assert "langfuse" in output
+        assert "LANGFUSE_HOST" in output
+        assert "LANGFUSE_PUBLIC_KEY" in output
+        assert "LANGFUSE_SECRET_KEY" in output
 
     def test_backend_laminar(self):
-        output = self._render([
-            "services.agent.agentObservability.backend=laminar",
-            "services.agent.agentObservability.laminar.secretName=my-laminar",
-            "services.agent.agentObservability.laminar.apiKeyKey=key",
-        ])
-        assert 'OBSERVABILITY_BACKEND' in output
-        assert 'laminar' in output
-        assert 'LMNR_PROJECT_API_KEY' in output
-        assert 'LANGFUSE' not in output
+        output = self._render(
+            [
+                "services.agent.agentObservability.backend=laminar",
+                "services.agent.agentObservability.laminar.secretName=my-laminar",
+                "services.agent.agentObservability.laminar.apiKeyKey=key",
+            ]
+        )
+        assert "OBSERVABILITY_BACKEND" in output
+        assert "laminar" in output
+        assert "LMNR_PROJECT_API_KEY" in output
+        assert "LANGFUSE" not in output
