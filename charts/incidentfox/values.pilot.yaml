@@ -104,16 +104,14 @@ services:
       name: incidentfox-agent
       annotations:
         eks.amazonaws.com/role-arn: "arn:aws:iam::103002841599:role/incidentfox-pilot-agent"
-    tracing:
-      enabled: true
+    # Agent observability — LLM tracing for monitoring agent behavior
+    agentObservability:
+      backend: "langfuse"  # "langfuse" | "laminar" | "none"
       langfuse:
-        enabled: true
         host: "https://us.cloud.langfuse.com"
         secretName: incidentfox-langfuse
         publicKeyKey: public_key
         secretKeyKey: secret_key
-      otlp:
-        enabled: false
 
   aiPipelineApi:
     enabled: true

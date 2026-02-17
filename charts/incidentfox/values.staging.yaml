@@ -262,17 +262,14 @@ services:
         value: "http://incidentfox-k8s-gateway.incidentfox.svc.cluster.local:8085"
       - name: SANDBOX_TTL_MINUTES
         value: "15"
-    # Enable tracing in staging for debugging
-    tracing:
-      enabled: true
+    # Agent observability — Langfuse for staging debugging
+    agentObservability:
+      backend: "langfuse"
       langfuse:
-        enabled: true
         host: "https://us.cloud.langfuse.com"
         secretName: "incidentfox-langfuse"
         publicKeyKey: "LANGFUSE_PUBLIC_KEY"
         secretKeyKey: "LANGFUSE_SECRET_KEY"
-      otlp:
-        enabled: false
 
   # Sandbox Router for routing to sandbox pods
   sandboxRouter:
