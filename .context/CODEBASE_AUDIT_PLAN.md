@@ -117,21 +117,21 @@ This phase is highly parallelizable. Each tool port is independent:
 - [x] `dependency_service/` — Stub only (README.md). Placeholder for premium feature.
 - [x] `correlation_service/` — Stub only (README.md). Placeholder for premium feature.
 
-### 0B. Extract value before deletion — PARTIALLY COMPLETE
+### 0B. Extract value before deletion ✅ COMPLETE
 - [x] All 21 high-priority tools ported to sre-agent skills (PR #413)
 - [x] GitHub OutputHandler ported to orchestrator (PR #414)
-- [ ] Port `agent_builder.py` pattern for config-driven subagents
-- [ ] Port Teams & Google Chat output handlers
-- [ ] Migrate `ai_agent.prompts.*` to config-service (blocks agent/ deletion)
-- [ ] Decouple `ultimate_rag/` from `knowledge_base.raptor` (blocks knowledge_base/ deletion)
+- [x] Migrate `ai_agent.prompts.*` to `config_service/scripts/prompts/` (PR #415)
+- [x] Copy `knowledge_base/raptor/` to `ultimate_rag/raptor_lib/` and update all imports (PR #415)
+- [ ] Port `agent_builder.py` pattern for config-driven subagents (deferred — not blocking deletion)
+- [ ] Port Teams & Google Chat output handlers (deferred — not blocking deletion)
 
-### 0C. Remove dead code — IN PROGRESS
-- [x] Deleted `unified-agent/` directory
-- [ ] Remove `local/docker-compose.yml` (deprecated trial stack)
-- [x] Updated `CLAUDE.md` to reflect removals
-- [ ] Update CI workflows to stop building deprecated services
-- [ ] Delete `agent/` after golden_prompts migration
-- [ ] Delete `knowledge_base/` after ultimate_rag decoupling
+### 0C. Remove dead code ✅ COMPLETE
+- [x] Deleted `unified-agent/` directory (PR #415)
+- [x] Removed `local/docker-compose.yml` (deprecated trial stack) (PR #415)
+- [x] Updated CI workflows (removed agent/knowledge_base from Docker Hub publish, Trivy) (PR #415)
+- [x] Deleted `agent/` directory (PR #415)
+- [x] Deleted `knowledge_base/` directory (PR #415)
+- [x] Updated `CLAUDE.md` to reflect all removals (PR #415)
 
 ---
 

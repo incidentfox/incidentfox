@@ -30,21 +30,22 @@ Two entry points for running agents: **Slack** (via slack-bot) and **web_ui** (d
 
 ## Dead / deprecated code (do not extend)
 
-- **agent/** — Original OpenAI SDK agent. Deprecated. Tools have been ported to sre-agent skills. Do not add features here. Cannot be deleted yet because `config_service/scripts/generate_golden_prompts.py` imports from `ai_agent.prompts.*`.
-- **knowledge_base/** — Replaced by ultimate_rag/. Cannot be deleted yet because ultimate_rag/ has 21 direct imports from `knowledge_base.raptor` and its Dockerfile copies `knowledge_base/raptor/`.
 - **dependency_service/** — Stub only (README.md, no code). Placeholder for premium feature.
 - **correlation_service/** — Stub only (README.md, no code). Placeholder for premium feature.
 
-**Removed**: `unified-agent/` (OpenHands SDK attempt) was deleted after all valuable tools were ported to sre-agent skills.
+**Removed**:
+- `unified-agent/` — OpenHands SDK attempt. Deleted after all valuable tools were ported to sre-agent skills.
+- `agent/` — Original OpenAI SDK agent. Deleted after prompts were migrated to `config_service/scripts/prompts/` and all tools ported to sre-agent skills.
+- `knowledge_base/` — Original RAPTOR service. Deleted after raptor lib was copied to `ultimate_rag/raptor_lib/` and all imports updated. The Helm template (`knowledge-base.yaml`) remains but is disabled in all environments (`knowledgeBase.enabled: false`).
 
 **Not deprecated** (despite being disabled in staging/prod):
 - **ai_pipeline/** — Premium feature under active development. Disabled via `enabled: false` in all environments. Integrated with orchestrator, slack-bot, and web_ui.
 
-The history: agent/ (OpenAI SDK) → sre-agent (Claude SDK) → unified-agent (OpenHands SDK, now deleted) → back to sre-agent (Claude SDK). We standardized on sre-agent because its skills architecture is simpler and Claude SDK is better tested.
+The history: agent/ (OpenAI SDK) → sre-agent (Claude SDK) → unified-agent (OpenHands SDK, deleted) → back to sre-agent (Claude SDK). We standardized on sre-agent because its skills architecture is simpler and Claude SDK is better tested.
 
-## What still needs porting from agent/
+## Remaining work (agent/ and unified-agent/ are deleted)
 
-All high-priority tools have been ported to sre-agent skills (21 integrations across 5 batches). Remaining items:
+All tools have been ported to sre-agent skills. Prompts migrated to `config_service/scripts/prompts/`. Remaining items:
 
 - **Config-driven subagents**: Port `agent_builder.py` pattern (topological sort, agent-as-tool, model alias resolution) to sre-agent for per-team agent customization via config-service.
 - **Output handlers for Teams & Google Chat**: Port Adaptive Cards (Teams) and Card v2 (Google Chat) handlers. GitHub handler already ported to orchestrator.
@@ -121,7 +122,7 @@ The local stack builds all services from source. Config-service auto-runs alembi
 
 1. **Orchestrator integration**: sre-agent currently bypasses orchestrator and talks directly to slack-bot. This blocks non-Slack surfaces (MS Teams, Google Chat — secrets already in staging values). Need to abstract Slack-specific prompts and the file proxy server.
 2. **Config-driven agents**: Port agent_builder.py pattern to sre-agent so teams can customize agents via config-service.
-3. **Dead code cleanup**: agent/ needs golden_prompts migration before removal. knowledge_base/ needs ultimate_rag decoupling (21 imports from knowledge_base.raptor) before removal.
+3. **Helm cleanup**: `knowledge-base.yaml` template still exists (disabled in all envs). Remove once confirmed no customer uses it. Also remove `knowledgeBase` sections from values files.
 
 ## Scratchpad
 
