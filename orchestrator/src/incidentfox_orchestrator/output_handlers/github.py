@@ -113,7 +113,16 @@ def _try_parse_structured(text: str) -> dict | None:
         data = json.loads(text)
         if isinstance(data, dict):
             # Only treat as structured if it has known fields
-            known = {"summary", "result", "message", "root_cause", "cause", "recommendations", "next_steps", "confidence"}
+            known = {
+                "summary",
+                "result",
+                "message",
+                "root_cause",
+                "cause",
+                "recommendations",
+                "next_steps",
+                "confidence",
+            }
             if known & data.keys():
                 return data
     except (json.JSONDecodeError, TypeError, ValueError):
@@ -223,7 +232,9 @@ class GitHubPRCommentHandler(OutputHandler):
             )
 
         except Exception as e:
-            _log("github_pr_comment_failed", repo=repo, pr_number=pr_number, error=str(e))
+            _log(
+                "github_pr_comment_failed", repo=repo, pr_number=pr_number, error=str(e)
+            )
             return OutputResult(
                 success=False,
                 destination_type=self.destination_type,
@@ -292,7 +303,12 @@ class GitHubIssueCommentHandler(OutputHandler):
             )
 
         except Exception as e:
-            _log("github_issue_comment_failed", repo=repo, issue_number=issue_number, error=str(e))
+            _log(
+                "github_issue_comment_failed",
+                repo=repo,
+                issue_number=issue_number,
+                error=str(e),
+            )
             return OutputResult(
                 success=False,
                 destination_type=self.destination_type,

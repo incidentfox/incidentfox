@@ -97,12 +97,14 @@ class TestMarkdownFormatting:
         assert "_No output returned_" in md
 
     def test_structured_json_result(self):
-        structured = json.dumps({
-            "summary": "Service was down",
-            "root_cause": "OOM kill",
-            "recommendations": ["Increase memory", "Add alerts"],
-            "confidence": 85,
-        })
+        structured = json.dumps(
+            {
+                "summary": "Service was down",
+                "root_cause": "OOM kill",
+                "recommendations": ["Increase memory", "Add alerts"],
+                "confidence": 85,
+            }
+        )
         md = _format_markdown(structured, True, "Agent", 10.0, None, None)
         assert "### Summary" in md
         assert "Service was down" in md
@@ -134,12 +136,14 @@ class TestTryParseStructured:
 
 class TestFormatStructured:
     def test_all_fields(self):
-        lines = _format_structured({
-            "summary": "S",
-            "root_cause": "R",
-            "recommendations": ["A", "B"],
-            "confidence": 90,
-        })
+        lines = _format_structured(
+            {
+                "summary": "S",
+                "root_cause": "R",
+                "recommendations": ["A", "B"],
+                "confidence": 90,
+            }
+        )
         text = "\n".join(lines)
         assert "### Summary" in text
         assert "### Root Cause" in text
@@ -185,7 +189,9 @@ class TestPostToDestinations:
     async def test_github_pr_missing_token(self, monkeypatch):
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         results = await post_to_destinations(
-            destinations=[{"type": "github_pr_comment", "repo": "org/repo", "pr_number": 1}],
+            destinations=[
+                {"type": "github_pr_comment", "repo": "org/repo", "pr_number": 1}
+            ],
             result_text="test",
         )
         assert len(results) == 1
@@ -199,7 +205,9 @@ class TestPostToDestinations:
         mock_response.json.return_value = {"id": 12345}
         mock_response.raise_for_status.return_value = None
 
-        with patch("incidentfox_orchestrator.output_handlers.github.httpx.AsyncClient") as mock_client_cls:
+        with patch(
+            "incidentfox_orchestrator.output_handlers.github.httpx.AsyncClient"
+        ) as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -207,12 +215,14 @@ class TestPostToDestinations:
             mock_client_cls.return_value = mock_client
 
             results = await post_to_destinations(
-                destinations=[{
-                    "type": "github_pr_comment",
-                    "repo": "org/repo",
-                    "pr_number": 42,
-                    "token": "gh_test_token",
-                }],
+                destinations=[
+                    {
+                        "type": "github_pr_comment",
+                        "repo": "org/repo",
+                        "pr_number": 42,
+                        "token": "gh_test_token",
+                    }
+                ],
                 result_text="Investigation complete",
                 success=True,
                 agent_name="TestAgent",
@@ -238,7 +248,9 @@ class TestPostToDestinations:
         mock_response.json.return_value = {"id": 67890}
         mock_response.raise_for_status.return_value = None
 
-        with patch("incidentfox_orchestrator.output_handlers.github.httpx.AsyncClient") as mock_client_cls:
+        with patch(
+            "incidentfox_orchestrator.output_handlers.github.httpx.AsyncClient"
+        ) as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -246,12 +258,14 @@ class TestPostToDestinations:
             mock_client_cls.return_value = mock_client
 
             results = await post_to_destinations(
-                destinations=[{
-                    "type": "github_issue_comment",
-                    "repo": "org/repo",
-                    "issue_number": 99,
-                    "token": "gh_test_token",
-                }],
+                destinations=[
+                    {
+                        "type": "github_issue_comment",
+                        "repo": "org/repo",
+                        "issue_number": 99,
+                        "token": "gh_test_token",
+                    }
+                ],
                 result_text="Bug analyzed",
             )
 
@@ -277,7 +291,9 @@ class TestPostToDestinations:
 
     @pytest.mark.asyncio
     async def test_handler_exception_returns_error_result(self):
-        with patch("incidentfox_orchestrator.output_handlers.github.httpx.AsyncClient") as mock_client_cls:
+        with patch(
+            "incidentfox_orchestrator.output_handlers.github.httpx.AsyncClient"
+        ) as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.post.side_effect = Exception("Connection refused")
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -285,12 +301,14 @@ class TestPostToDestinations:
             mock_client_cls.return_value = mock_client
 
             results = await post_to_destinations(
-                destinations=[{
-                    "type": "github_pr_comment",
-                    "repo": "org/repo",
-                    "pr_number": 1,
-                    "token": "gh_token",
-                }],
+                destinations=[
+                    {
+                        "type": "github_pr_comment",
+                        "repo": "org/repo",
+                        "pr_number": 1,
+                        "token": "gh_token",
+                    }
+                ],
                 result_text="test",
             )
 

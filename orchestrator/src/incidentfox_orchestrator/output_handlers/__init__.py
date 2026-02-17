@@ -19,7 +19,12 @@ from typing import Any, Optional
 
 def _log(event: str, **fields: Any) -> None:
     try:
-        payload = {"service": "orchestrator", "component": "output_handlers", "event": event, **fields}
+        payload = {
+            "service": "orchestrator",
+            "component": "output_handlers",
+            "event": event,
+            **fields,
+        }
         print(json.dumps(payload, default=str))
     except Exception:
         print(f"{event} {fields}")
