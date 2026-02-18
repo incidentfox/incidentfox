@@ -13,13 +13,13 @@ from sqlalchemy.orm import Session
 
 from src.core.audit_log import app_logger
 from src.core.yaml_config import get_yaml_config_manager, is_local_mode
+from src.db.config_models import NodeConfiguration
 from src.db.config_repository import (
     get_node_configuration,
     get_or_create_node_configuration,
     initialize_org_config,
     update_node_configuration,
 )
-from src.db.config_models import NodeConfiguration
 
 logger = app_logger().bind(component="yaml_seeder")
 
@@ -210,7 +210,9 @@ def _extract_team_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return team_config
 
 
-def _replace_config_json(session: Session, node: "NodeConfiguration", new_config: Dict[str, Any]) -> None:
+def _replace_config_json(
+    session: Session, node: "NodeConfiguration", new_config: Dict[str, Any]
+) -> None:
     """Directly replace a node's config_json, bypassing deep merge.
 
     Used by seed_from_yaml(force=True) so that the YAML file is the complete

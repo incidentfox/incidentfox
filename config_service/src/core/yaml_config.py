@@ -108,12 +108,19 @@ class YAMLConfigManager:
                 # Integrity check: re-parse the temp file and verify top-level
                 # keys are still sane (catches ruamel.yaml comment-position bugs
                 # before they overwrite the live file).
-                with open(tmp_path, 'r') as verify_f:
+                with open(tmp_path, "r") as verify_f:
                     verified = self.yaml.load(verify_f)
                 if verified is None:
                     raise ValueError("Written YAML parsed as empty")
-                expected_top_level = {"org_id", "team_id", "ai_model", "integrations",
-                                      "prompts", "skills", "security"}
+                expected_top_level = {
+                    "org_id",
+                    "team_id",
+                    "ai_model",
+                    "integrations",
+                    "prompts",
+                    "skills",
+                    "security",
+                }
                 written_keys = set(verified.keys())
                 stray_keys = written_keys - expected_top_level
                 if stray_keys:
@@ -358,24 +365,28 @@ def write_config_to_yaml(
                     yaml_config["integrations"][int_name] = yaml_int_config
 
                 # Remove any stale "llm" key that may have been written by older code
-                if 'llm' in yaml_config.get('integrations', {}):
-                    del yaml_config['integrations']['llm']
+                if "llm" in yaml_config.get("integrations", {}):
+                    del yaml_config["integrations"]["llm"]
 
                 # Convert integrations.llm.model → ai_model (highest priority — overrides
                 # whatever ai_model was already in the YAML or config_json)
-                llm = config_json['integrations'].get('llm') or {}
-                model_string = llm.get('model', '')
+                llm = config_json["integrations"].get("llm") or {}
+                model_string = llm.get("model", "")
                 if model_string:
-                    if '/' in model_string:
-                        provider, model_id = model_string.split('/', 1)
+                    if "/" in model_string:
+                        provider, model_id = model_string.split("/", 1)
                     else:
-                        provider = 'anthropic' if 'claude' in model_string.lower() else 'unknown'
+                        provider = (
+                            "anthropic"
+                            if "claude" in model_string.lower()
+                            else "unknown"
+                        )
                         model_id = model_string
 
-                    if 'ai_model' not in yaml_config:
-                        yaml_config['ai_model'] = CommentedMap()
-                    yaml_config['ai_model']['provider'] = provider
-                    yaml_config['ai_model']['model_id'] = model_id
+                    if "ai_model" not in yaml_config:
+                        yaml_config["ai_model"] = CommentedMap()
+                    yaml_config["ai_model"]["provider"] = provider
+                    yaml_config["ai_model"]["model_id"] = model_id
 
             # Handle prompts
             if "prompts" in config_json:
