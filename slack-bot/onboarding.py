@@ -3845,10 +3845,10 @@ def build_ai_model_modal(
                             {
                                 "type": "mrkdwn",
                                 "text": (
-                        ":warning: Local mode requires your own key. Set *ANTHROPIC_API_KEY=sk-ant-...* in your .env file and restart."
-                        if os.getenv("CONFIG_MODE", "").lower() == "local"
-                        else ":lock: Using IncidentFox's Anthropic API key with zero data retention."
-                    ),
+                                    ":warning: Local mode requires your own key. Set *ANTHROPIC_API_KEY=sk-ant-...* in your .env file and restart."
+                                    if os.getenv("CONFIG_MODE", "").lower() == "local"
+                                    else ":lock: Using IncidentFox's Anthropic API key with zero data retention."
+                                ),
                             }
                         ],
                     }

@@ -303,9 +303,24 @@ async def lifespan(app: FastAPI):
     # isn't ready to query yet.  Credentials flow: .env → local.yaml → config-service
     # → here at runtime.  This catches the common "forgot to set API key" mistake early.
     _LLM_PROVIDER_IDS = {
-        "anthropic", "openai", "gemini", "deepseek", "xai", "groq", "mistral",
-        "cohere", "together_ai", "fireworks_ai", "openrouter", "bedrock",
-        "vertex_ai", "azure_ai", "azure", "ollama", "moonshot", "minimax",
+        "anthropic",
+        "openai",
+        "gemini",
+        "deepseek",
+        "xai",
+        "groq",
+        "mistral",
+        "cohere",
+        "together_ai",
+        "fireworks_ai",
+        "openrouter",
+        "bedrock",
+        "vertex_ai",
+        "azure_ai",
+        "azure",
+        "ollama",
+        "moonshot",
+        "minimax",
     }
     env_creds = load_env_credentials()
     any_llm = any(
@@ -313,6 +328,7 @@ async def lifespan(app: FastAPI):
     )
     if not any_llm:
         import sys
+
         logger.error("=" * 60)
         logger.error("STARTUP ERROR: No LLM API key configured.")
         logger.error("The agent cannot run without an LLM provider.")
@@ -328,7 +344,11 @@ async def lifespan(app: FastAPI):
         logger.error("=" * 60)
         sys.exit(1)
 
-    configured = [k for k in _LLM_PROVIDER_IDS if is_integration_configured(k, env_creds.get(k, {}))]
+    configured = [
+        k
+        for k in _LLM_PROVIDER_IDS
+        if is_integration_configured(k, env_creds.get(k, {}))
+    ]
     logger.info(f"LLM providers available in env: {configured}")
 
     yield
