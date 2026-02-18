@@ -20,10 +20,12 @@ LLM Provider:
 - Multi-LLM support: Handled via credential-proxy which routes to different providers
   (Claude, Gemini, OpenAI) based on configuration
 
-Laminar Tracing:
+Tracing (Langfuse + Laminar):
+- Langfuse: Auto-enabled in local dev (via OpenTelemetry + langsmith instrumentation)
+- Laminar: Optional, enabled when LMNR_PROJECT_API_KEY is set
 - Sessions: Groups multi-turn conversations by thread_id
 - Metadata: Environment, thread_id, sandbox_name for filtering/debugging
-- Tags: Success/error/incomplete outcome tags for analysis
+- Tags: Success/error/incomplete outcome tags for analysis (Laminar only)
 """
 
 import base64
@@ -297,19 +299,44 @@ _laminar_disabled = os.getenv("DISABLE_LAMINAR", "").lower() in ("true", "1", "y
 if _laminar_disabled:
     print("⚠️ [DEBUG] Laminar instrumentation DISABLED via DISABLE_LAMINAR env var")
 elif os.getenv("LMNR_PROJECT_API_KEY") and not _laminar_initialized:
-    # Debug: Log Laminar initialization
-    print(
-        f"🔍 [DEBUG] Initializing Laminar with API key: {os.getenv('LMNR_PROJECT_API_KEY')[:10]}..."
-    )
-    print(
-        f"🔍 [DEBUG] ANTHROPIC_BASE_URL: {os.getenv('ANTHROPIC_BASE_URL', 'not set')}"
-    )
-    print(
-        f"🔍 [DEBUG] ANTHROPIC_API_KEY: {os.getenv('ANTHROPIC_API_KEY', 'not set')[:20]}..."
-    )
-    Laminar.initialize()
-    _laminar_initialized = True
-    print("✅ [DEBUG] Laminar initialized successfully")
+    try:
+        print("🔍 [DEBUG] Initializing Laminar (managed cloud)...")
+        Laminar.initialize()
+        _laminar_initialized = True
+        print("✅ [DEBUG] Laminar initialized successfully")
+    except Exception as e:
+        print(f"⚠️ [DEBUG] Failed to initialize Laminar: {e}")
+
+# Initialize Langfuse for tracing (if API keys are set)
+# Uses OpenTelemetry via langsmith[claude-agent-sdk,otel] instrumentation
+# Docs: https://langfuse.com/integrations/claude-agent-sdk
+_langfuse_initialized = False
+_langfuse_disabled = os.getenv("DISABLE_LANGFUSE", "").lower() in ("true", "1", "yes")
+
+if _langfuse_disabled:
+    print("⚠️ [DEBUG] Langfuse instrumentation DISABLED via DISABLE_LANGFUSE env var")
+elif os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+    try:
+        # OTel env vars must be set before configure_claude_agent_sdk()
+        os.environ.setdefault("LANGSMITH_OTEL_ENABLED", "true")
+        os.environ.setdefault("LANGSMITH_OTEL_ONLY", "true")
+        os.environ.setdefault("LANGSMITH_TRACING", "true")
+
+        from langfuse import get_client as _get_langfuse_client
+        from langsmith.integrations.claude_agent_sdk import (
+            configure_claude_agent_sdk as _configure_claude_agent_sdk,
+        )
+
+        langfuse_base = os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
+        print(f"🔍 [DEBUG] Initializing Langfuse (base_url={langfuse_base})...")
+        _get_langfuse_client()
+        _configure_claude_agent_sdk()
+        _langfuse_initialized = True
+        print("✅ [DEBUG] Langfuse initialized via OpenTelemetry")
+    except ImportError as e:
+        print(f"⚠️ [DEBUG] Langfuse packages not available: {e}")
+    except Exception as e:
+        print(f"⚠️ [DEBUG] Failed to initialize Langfuse: {e}")
 
 
 def get_environment() -> str:

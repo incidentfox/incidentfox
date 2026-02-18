@@ -10,6 +10,8 @@ dependencies = [
     "fastapi==0.128.0",
     "uvicorn==0.40.0",
     "lmnr[claude-agent-sdk]==0.7.32",
+    "langfuse>=3.0.0",
+    "langsmith[claude-agent-sdk,otel]>=0.3.0",
 
     # Infrastructure integrations
     "kubernetes>=34.1.0",
