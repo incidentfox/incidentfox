@@ -2067,7 +2067,7 @@ async def extract_tenant_context(request: Request) -> tuple[str, str, str]:
     # Permissive mode: fall back to headers (for local dev only)
     logger.warning("JWT validation failed - falling back to headers (permissive mode)")
     tenant_id = request.headers.get("x-tenant-id", "local")
-    team_id = request.headers.get("x-team-id", "local")
+    team_id = request.headers.get("x-team-id", "default")
     return tenant_id, team_id, "unknown"
 
 
