@@ -305,9 +305,13 @@ async def lifespan(app: FastAPI):
         f"Starting credential-resolver with source={CREDENTIAL_SOURCE}, jwt_mode={JWT_MODE}"
     )
 
+    # Always init config_client when CONFIG_SERVICE_URL is reachable —
+    # even in environment mode we need it to look up the team's LLM model.
+    config_client = ConfigServiceClient()
+    logger.info("Config Service client initialized")
+
     if CREDENTIAL_SOURCE == "config_service":
-        config_client = ConfigServiceClient()
-        logger.info("Config Service client initialized")
+        pass  # credentials also come from config_service
     else:
         ENV_CREDENTIALS = load_env_credentials()
         # Check which integrations are configured using shared validation
@@ -1975,7 +1979,13 @@ async def ext_authz_check(request: Request, path: str = ""):
     # 3. LLM bypass: when integration is "anthropic" but the configured model is
     # non-Claude, skip anthropic credential check. The LLM proxy handles its own
     # credential lookup for the actual provider (OpenAI, Gemini, etc.).
+    #
+    # Model resolution priority:
+    #   1. LLM_MODEL env var (explicit override)
+    #   2. integrations.llm.model from config-service (set via local.yaml ai_model)
     llm_model = os.getenv("LLM_MODEL", "")
+    if not llm_model and config_client:
+        llm_model = await config_client.get_llm_model(tenant_id, team_id) or ""
     if integration_id == "anthropic" and llm_model:
         from .llm_proxy import is_claude_model
 

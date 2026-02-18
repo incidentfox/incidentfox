@@ -27,6 +27,10 @@ SHARED_ANTHROPIC_SECRET = os.getenv(
 _shared_key_cache: dict[str, tuple[str, datetime]] = {}
 SHARED_KEY_CACHE_TTL_SECONDS = 300  # 5 minutes
 
+# Cache for LLM model lookups (key: "tenant_id:team_id", value: (model_str, fetched_at))
+_llm_model_cache: dict[str, tuple[str, datetime]] = {}
+LLM_MODEL_CACHE_TTL_SECONDS = 30  # short TTL so local.yaml changes propagate quickly
+
 
 def get_shared_anthropic_key() -> Optional[str]:
     """Get shared Anthropic API key for free trials.
@@ -173,6 +177,44 @@ class ConfigServiceClient:
             return None
         except Exception as e:
             logger.error(f"Config Service error: {e}")
+            return None
+
+    async def get_llm_model(self, tenant_id: str, team_id: str) -> str | None:
+        """Get the configured LLM model string for a tenant/team.
+
+        Returns the value of integrations.llm.model from the effective config
+        (e.g. "openai/gpt-5.2"), or None if not configured.
+
+        Results are cached for LLM_MODEL_CACHE_TTL_SECONDS seconds so that
+        local.yaml changes hot-reload without requiring a container restart.
+        """
+        cache_key = f"{tenant_id}:{team_id}"
+        cached = _llm_model_cache.get(cache_key)
+        if cached:
+            model_str, fetched_at = cached
+            age = (datetime.utcnow() - fetched_at).total_seconds()
+            if age < LLM_MODEL_CACHE_TTL_SECONDS:
+                return model_str or None
+
+        try:
+            response = await self._client.get(
+                f"{self.base_url}/api/v1/config/me/effective",
+                headers={
+                    "Accept": "application/json",
+                    "X-Org-Id": tenant_id,
+                    "X-Team-Node-Id": team_id,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            effective = data.get("effective_config", data)
+            model_str = (
+                effective.get("integrations", {}).get("llm", {}).get("model", "") or ""
+            )
+            _llm_model_cache[cache_key] = (model_str, datetime.utcnow())
+            return model_str or None
+        except Exception as e:
+            logger.warning(f"Could not fetch LLM model for {tenant_id}/{team_id}: {e}")
             return None
 
     def _resolve_anthropic_credentials(
