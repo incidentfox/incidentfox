@@ -109,7 +109,7 @@ make dev
 **That's it.** IncidentFox starts Postgres, config-service, sre-agent, and slack-bot. Migrations run automatically. Configuration loads from `config_service/config/local.yaml` — edit that file to change models, integrations, or prompts (changes hot-reload, no restart needed).
 
 **Add Slack to test agent responses:**
-1. [Create a Slack app](https://api.slack.com/apps?new_app=1) using [the manifest](docs/slack-manifest.yaml)
+1. [Create a Slack app](https://api.slack.com/apps?new_app=1) using [the manifest](slack-bot/slack-manifest.json)
 2. Add tokens to `.env`:
    ```
    SLACK_BOT_TOKEN=xoxb-your-bot-token

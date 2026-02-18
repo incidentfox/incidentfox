@@ -14,7 +14,10 @@
         "bot_user": {
             "display_name": "IncidentFox(Demo)",
             "always_online": true
-        }
+        },
+        "unfurl_domains": [
+            "player.vimeo.com"
+        ]
     },
     "oauth_config": {
         "redirect_urls": [
@@ -27,6 +30,7 @@
                 "channels:join",
                 "channels:read",
                 "chat:write",
+                "chat:write.customize",
                 "files:read",
                 "files:write",
                 "groups:history",
@@ -34,26 +38,26 @@
                 "im:history",
                 "im:read",
                 "im:write",
-                "mpim:history",
-                "mpim:read",
-                "users:read",
-                "reactions:read",
-                "reactions:write",
                 "links:read",
                 "links:write",
-                "chat:write.customize",
-                "users:read.email",
+                "metadata.message:read",
+                "mpim:history",
+                "mpim:read",
+                "reactions:read",
+                "reactions:write",
                 "usergroups:read",
-                "metadata.message:read"
+                "users:read",
+                "users:read.email",
+                "links.embed:write"
             ]
         }
     },
     "settings": {
         "event_subscriptions": {
-            "request_url": "https://slack-staging.incidentfox.ai/slack/events",
             "bot_events": [
                 "app_home_opened",
                 "app_mention",
+                "link_shared",
                 "message.channels"
             ]
         },
@@ -62,7 +66,7 @@
             "request_url": "https://slack-staging.incidentfox.ai/slack/events"
         },
         "org_deploy_enabled": false,
-        "socket_mode_enabled": false,
+        "socket_mode_enabled": true,
         "token_rotation_enabled": false
     }
 }
