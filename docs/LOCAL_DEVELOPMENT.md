@@ -91,7 +91,7 @@ team_id: default
 # AI Model
 ai_model:
   provider: anthropic
-  model_id: claude-sonnet-4-20250514
+  model_id: claude-sonnet-4-6
 
 # Integrations (secrets reference .env)
 integrations:
@@ -201,19 +201,17 @@ org (local)
 #### Option 1: Edit YAML (Recommended)
 
 1. Edit `config_service/config/local.yaml`
-2. Restart config-service: `docker compose restart config-service`
-3. Config automatically reloads and updates database
+2. Changes are detected automatically — no restart needed
 
-**Soon:** File watcher will detect changes and auto-reload (no restart needed)
+The file watcher picks up changes within ~1 second and reseeds the database. The YAML file is the source of truth; the database reflects it.
 
 #### Option 2: Use Slack UI
 
 1. Open Slack home tab
 2. Click "Connect" or "Edit" on an integration
 3. Fill in the form
-4. Changes are saved to the database
 
-**Soon:** Changes via UI will write back to YAML automatically
+Changes via the Slack UI are written back to `local.yaml` automatically. Secrets are extracted to `.env` and referenced via `${VAR}` in the YAML file.
 
 ### Adding New Integrations
 

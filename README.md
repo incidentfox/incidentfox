@@ -95,33 +95,31 @@ IncidentFox is **open source** (Apache 2.0). Choose the option that fits your ne
 
 ### Quick Start: Run Locally
 
-Get IncidentFox running on your machine in 3 commands:
-
 ```bash
 # 1. Copy environment template
 cp .env.example .env
 
-# 2. Add your Anthropic API key (get one at https://console.anthropic.com/)
-echo "ANTHROPIC_API_KEY=sk-ant-your-api-key" >> .env
+# 2. Add your API key — edit .env and set ANTHROPIC_API_KEY
+#    (or any other provider — see .env.example for options)
 
 # 3. Start all services
 make dev
 ```
 
-**That's it!** IncidentFox will:
-- Start all services (Postgres, config-service, sre-agent, slack-bot)
-- Run database migrations automatically
-- Load configuration from `config_service/config/local.yaml`
+**That's it.** IncidentFox starts Postgres, config-service, sre-agent, and slack-bot. Migrations run automatically. Configuration loads from `config_service/config/local.yaml` — edit that file to change models, integrations, or prompts (changes hot-reload, no restart needed).
 
-**Optional:** Add Slack integration for testing:
-1. Create a Slack app at https://api.slack.com/apps (enable Socket Mode)
+**Add Slack to test agent responses:**
+1. [Create a Slack app](https://api.slack.com/apps?new_app=1) using [the manifest](docs/slack-manifest.yaml)
 2. Add tokens to `.env`:
-   ```bash
+   ```
    SLACK_BOT_TOKEN=xoxb-your-bot-token
    SLACK_APP_TOKEN=xapp-your-app-token
    ```
-3. Restart: `make restart`
+3. `make restart`
 
+The bot auto-connects and registers your workspace — no workspace ID setup needed.
+
+**→ [Slack setup guide with screenshots](docs/SLACK_SETUP.md)**
 **→ [Full local development guide](docs/LOCAL_DEVELOPMENT.md)**
 
 ---
