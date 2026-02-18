@@ -38,6 +38,10 @@ CONFIG_SERVICE_ADMIN_TOKEN = os.environ.get("CONFIG_SERVICE_ADMIN_TOKEN", "")
 FREE_TRIAL_DAYS = int(os.environ.get("FREE_TRIAL_DAYS", "7"))
 FREE_TRIAL_ENABLED = os.environ.get("FREE_TRIAL_ENABLED", "true").lower() == "true"
 
+# Local mode configuration
+# When CONFIG_MODE=local, use 'local' org instead of 'slack-{team_id}'
+CONFIG_MODE = os.environ.get("CONFIG_MODE", "")
+
 # NOTE: INCIDENTFOX_ANTHROPIC_API_KEY is no longer needed here.
 # The credential-resolver fetches the shared key from Secrets Manager at runtime.
 # We only store trial metadata (is_trial=True, expiration) during provisioning.
@@ -452,7 +456,11 @@ class ConfigServiceClient:
         Raises:
             ConfigServiceError: If the config service request fails (non-404 errors).
         """
-        org_id = f"slack-{slack_team_id}"
+        # In local mode, use 'local' org instead of per-workspace orgs
+        if CONFIG_MODE == "local":
+            org_id = "local"
+        else:
+            org_id = f"slack-{slack_team_id}"
         team_node_id = "default"
 
         url = f"{self.base_url}/api/v1/config/me"

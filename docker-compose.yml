@@ -52,6 +52,8 @@ services:
     container_name: incidentfox-config-service
     restart: unless-stopped
     entrypoint: ["/bin/bash", "/app/scripts/entrypoint-local.sh"]
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg2://incidentfox:localdev@postgres:5432/incidentfox?sslmode=disable
       TOKEN_PEPPER: ${TOKEN_PEPPER:-localdev-pepper-must-be-32-chars-minimum!!}
@@ -62,6 +64,9 @@ services:
       LOG_FORMAT: console
     ports:
       - "8080:8080"
+    volumes:
+      # Mount config directory for YAML config in local mode
+      - ./config_service/config:/app/config:rw
     depends_on:
       postgres:
         condition: service_healthy
@@ -194,6 +199,7 @@ services:
     environment:
       - SRE_AGENT_URL=http://sre-agent:8000
       - CONFIG_SERVICE_URL=http://config-service:8080
+      - CONFIG_MODE=${CONFIG_MODE:-}
     depends_on:
       - sre-agent
     security_opt:

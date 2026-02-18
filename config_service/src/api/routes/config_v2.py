@@ -22,6 +22,7 @@ from ...core.hierarchical_config import (
     get_full_default_config,
 )
 from ...core.security import get_token_pepper
+from ...core.yaml_config import write_config_to_yaml
 from ...db import config_repository as repo
 from ...db.models import OrgSettings
 from ...db.session import get_db
@@ -404,6 +405,14 @@ async def update_config(
         repo.invalidate_config_cache(db, org_id, node_id, cascade=True)
 
         db.commit()
+
+        # Write back to YAML in local mode
+        write_config_to_yaml(
+            org_id,
+            node_id,
+            updated_config.node_type,
+            updated_config.config_json
+        )
 
         return ConfigResponse(
             node_id=updated_config.node_id,
@@ -1062,6 +1071,14 @@ async def update_my_config(
 
         repo.invalidate_config_cache(db, org_id, team_node_id, cascade=False)
         db.commit()
+
+        # Write back to YAML in local mode
+        write_config_to_yaml(
+            org_id,
+            team_node_id,
+            updated_config.node_type,
+            updated_config.config_json
+        )
 
         return ConfigResponse(
             node_id=updated_config.node_id,

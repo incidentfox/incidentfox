@@ -79,16 +79,61 @@ Our agents run in sandboxed environments with filesystem access — enabling cod
 
 ## Get Started
 
-IncidentFox is **open source** (Apache 2.0). You can try it instantly in Slack, or deploy it yourself for full control. Pick the option that fits your needs:
+IncidentFox is **open source** (Apache 2.0). Choose the option that fits your needs:
 
-| Option | Best For | Setup Time | Cost | Privacy | |
-|--------|----------|------------|------|---------|---|
-| **Try Free** | See it in action | Instant | Free | Our playground environment | [![Join Slack](https://img.shields.io/badge/Join_Slack-4A154B?logo=slack&logoColor=white)](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ) |
-| **Local Docker** | Evaluate with your infra | 5 minutes | Free | Everything local | [Setup Guide →](docs/SLACK_SETUP.md) |
-| **Managed (premium features)** | Production, we handle ops | 30 minutes | [Contact us (7-day free trial)](mailto:founders@incidentfox.ai) | SaaS or on-prem, SOC2 | [![Add to Slack](https://img.shields.io/badge/Add_to_Slack-4A154B?logo=slack&logoColor=white)](https://slack.com/oauth/v2/authorize?client_id=9967324357443.10323403264580&scope=app_mentions:read,channels:history,channels:join,channels:read,chat:write,chat:write.customize,commands,files:read,files:write,groups:history,groups:read,im:history,im:read,im:write,links:read,links:write,metadata.message:read,mpim:history,mpim:read,reactions:read,reactions:write,usergroups:read,users:read&user_scope=) |
-| **Self-Host (Open Core)** | Production, full control | 30 minutes | Free | Everything local | [Deployment Guide →](docs/DEPLOYMENT.md) |
+| | Try Free in Slack | Run Locally | Self-Host for Production |
+|---|---|---|---|
+| **Best for** | See it in action | Evaluate with your infrastructure | Production deployment, full control |
+| **Setup time** | Instant | 3 commands | 30 minutes |
+| **Cost** | Free | Free | Free (open source) |
+| **Privacy** | Our playground environment | Everything local | Everything on your infrastructure |
+| | [![Join Slack](https://img.shields.io/badge/Join_Slack-4A154B?logo=slack&logoColor=white)](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ) | [See below ↓](#quick-start-run-locally) | [Deployment Guide →](docs/DEPLOYMENT.md) |
 
-**New to IncidentFox?** We recommend trying it in our Slack first — no setup required, see how it works instantly. [![Join Slack](https://img.shields.io/badge/Join_Slack-4A154B?logo=slack&logoColor=white)](https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ)
+**New to IncidentFox?** We recommend trying it in our Slack first — no setup required, see how it works instantly.
+
+---
+
+### Quick Start: Run Locally
+
+Get IncidentFox running on your machine in 3 commands:
+
+```bash
+# 1. Copy environment template
+cp .env.example .env
+
+# 2. Add your Anthropic API key (get one at https://console.anthropic.com/)
+echo "ANTHROPIC_API_KEY=sk-ant-your-api-key" >> .env
+
+# 3. Start all services
+make dev
+```
+
+**That's it!** IncidentFox will:
+- Start all services (Postgres, config-service, sre-agent, slack-bot)
+- Run database migrations automatically
+- Load configuration from `config_service/config/local.yaml`
+
+**Optional:** Add Slack integration for testing:
+1. Create a Slack app at https://api.slack.com/apps (enable Socket Mode)
+2. Add tokens to `.env`:
+   ```bash
+   SLACK_BOT_TOKEN=xoxb-your-bot-token
+   SLACK_APP_TOKEN=xapp-your-app-token
+   ```
+3. Restart: `make restart`
+
+**→ [Full local development guide](docs/LOCAL_DEVELOPMENT.md)**
+
+---
+
+### Managed Version (Premium Features)
+
+For teams that want production-ready IncidentFox with:
+- **Auto-learning**: We analyze your codebase, Slack history, and past incidents to build custom integrations automatically
+- **Team-specific agents**: Each team gets agents tuned to their stack
+- **SOC 2 compliance**, SSO/OIDC, on-premise options, and dedicated support
+
+[Contact us for a demo (7-day free trial)](mailto:founders@incidentfox.ai) or [![Add to Slack](https://img.shields.io/badge/Add_to_Slack-4A154B?logo=slack&logoColor=white)](https://slack.com/oauth/v2/authorize?client_id=9967324357443.10323403264580&scope=app_mentions:read,channels:history,channels:join,channels:read,chat:write,chat:write.customize,commands,files:read,files:write,groups:history,groups:read,im:history,im:read,im:write,links:read,links:write,metadata.message:read,mpim:history,mpim:read,reactions:read,reactions:write,usergroups:read,users:read&user_scope=)
 
 ---
 
@@ -242,9 +287,9 @@ Every team is different — different tech stacks, observability tools, incident
 
 | Getting Started | Reference | Development |
 |----------------|-----------|-------------|
-| [Quick Start](#quick-start) | [Features](docs/FEATURES.md) | [Dev Guide](DEVELOPMENT_KNOWLEDGE.md) |
-| [Deployment Guide](docs/DEPLOYMENT.md) | [Integrations](docs/INTEGRATIONS.md) | [Agent Architecture](agent/README.md) |
-| [Slack Setup (detailed)](docs/SLACK_SETUP.md) | [Architecture](docs/ARCHITECTURE.md) | [Tools Catalog](agent/docs/TOOLS_CATALOG.md) |
+| [Quick Start](#quick-start-run-locally) | [Features](docs/FEATURES.md) | [Local Development](docs/LOCAL_DEVELOPMENT.md) |
+| [Deployment Guide](docs/DEPLOYMENT.md) | [Integrations](docs/INTEGRATIONS.md) | [Contributing Guide](DEVELOPMENT_KNOWLEDGE.md) |
+| [Slack Setup](docs/SLACK_SETUP.md) | [Architecture](docs/ARCHITECTURE.md) | [Tools Catalog](agent/docs/TOOLS_CATALOG.md) |
 
 ---
 

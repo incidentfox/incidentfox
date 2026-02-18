@@ -226,3 +226,120 @@ def is_local_mode() -> bool:
         True if CONFIG_MODE=local
     """
     return os.getenv("CONFIG_MODE", "").lower() == "local"
+
+
+def write_config_to_yaml(
+    org_id: str,
+    node_id: str,
+    node_type: str,
+    config_json: Dict[str, Any],
+    config_file_path: str = "config/local.yaml"
+) -> bool:
+    """Write config changes back to YAML file in local mode.
+
+    This function is called after config updates to persist changes back to the
+    YAML file. Secrets are extracted to .env and referenced via ${VAR} in YAML.
+
+    Args:
+        org_id: Organization ID
+        node_id: Node ID
+        node_type: Node type ("org" or "team")
+        config_json: Full configuration JSON from database
+        config_file_path: Path to YAML config file
+
+    Returns:
+        True if write-back was performed, False if skipped
+    """
+    if not is_local_mode():
+        return False
+
+    if org_id != "local":
+        # Only write back for the local org in local mode
+        return False
+
+    try:
+        yaml_manager = get_yaml_config_manager(config_file_path)
+        env_manager = get_env_manager()
+
+        # Load current YAML
+        if yaml_manager.config_file_path.exists():
+            with open(yaml_manager.config_file_path, 'r') as f:
+                yaml_config = yaml_manager.yaml.load(f)
+            if yaml_config is None:
+                yaml_config = CommentedMap()
+        else:
+            yaml_config = CommentedMap()
+
+        # Ensure org_id and team_id are set
+        if 'org_id' not in yaml_config:
+            yaml_config['org_id'] = 'local'
+        if 'team_id' not in yaml_config:
+            yaml_config['team_id'] = 'default'
+
+        # Write back the changed sections
+        # For org-level: ai_model, security
+        # For team-level: integrations, prompts, skills
+
+        if node_type == "org":
+            # Write org-level config
+            if 'ai_model' in config_json:
+                yaml_config['ai_model'] = config_json['ai_model']
+            if 'security' in config_json:
+                yaml_config['security'] = config_json['security']
+
+        elif node_type == "team":
+            # Write team-level config
+
+            # Handle integrations specially (extract secrets to .env)
+            if 'integrations' in config_json:
+                if 'integrations' not in yaml_config:
+                    yaml_config['integrations'] = CommentedMap()
+
+                for int_name, int_config in config_json['integrations'].items():
+                    yaml_int_config = CommentedMap()
+
+                    for key, value in int_config.items():
+                        if yaml_manager._is_secret_field(key):
+                            # Write secret to .env
+                            env_var_name = f"{int_name.upper()}_{key.upper()}"
+                            env_manager.write_env_variable(
+                                env_var_name,
+                                value,
+                                comment=f"{int_name} {key}"
+                            )
+                            # Use reference in YAML
+                            yaml_int_config[key] = f"${{{env_var_name}}}"
+                        else:
+                            # Non-secret field
+                            yaml_int_config[key] = value
+
+                    yaml_config['integrations'][int_name] = yaml_int_config
+
+            # Handle prompts
+            if 'prompts' in config_json:
+                yaml_config['prompts'] = config_json['prompts']
+
+            # Handle skills
+            if 'skills' in config_json:
+                yaml_config['skills'] = config_json['skills']
+
+            # Handle ai_model override at team level
+            if 'ai_model' in config_json:
+                yaml_config['ai_model'] = config_json['ai_model']
+
+        # Write back to file (atomic operation)
+        yaml_manager.write_config(dict(yaml_config), preserve_formatting=True)
+
+        logger = app_logger().bind(component="yaml_writeback")
+        logger.info(
+            f"✅ Wrote config back to {config_file_path}",
+            org_id=org_id,
+            node_id=node_id,
+            node_type=node_type
+        )
+        return True
+
+    except Exception as e:
+        logger = app_logger().bind(component="yaml_writeback")
+        logger.error(f"Failed to write config back to YAML: {e}", exc_info=True)
+        return False

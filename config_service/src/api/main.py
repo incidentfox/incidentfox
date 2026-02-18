@@ -27,7 +27,8 @@ from src.core.audit_log import app_logger, configure_logging, new_request_id
 from src.core.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
 from src.core.yaml_config import is_local_mode
 from src.core.yaml_seeder import seed_from_yaml
-from src.db.session import SessionLocal
+from src.core.yaml_watcher import start_yaml_watcher_background
+from src.db.session import get_session_maker
 
 
 def create_app() -> FastAPI:
@@ -42,9 +43,11 @@ def create_app() -> FastAPI:
             logger.info("Running in local mode, seeding config from YAML...")
 
             # Create database session
+            SessionLocal = get_session_maker()
             db = SessionLocal()
             try:
-                seeded = seed_from_yaml(db, config_file_path="config/local.yaml")
+                # Use force=True to always update config from YAML in local mode
+                seeded = seed_from_yaml(db, config_file_path="config/local.yaml", force=True)
                 if seeded:
                     logger.info("✅ Configuration seeded from local.yaml")
                 else:
@@ -53,6 +56,12 @@ def create_app() -> FastAPI:
                 logger.error(f"Failed to seed config from YAML: {e}")
             finally:
                 db.close()
+
+            # Start file watcher for hot-reload
+            try:
+                start_yaml_watcher_background("config/local.yaml")
+            except Exception as e:
+                logger.error(f"Failed to start file watcher: {e}")
     app.include_router(ui_router)
     app.include_router(health_router)
     app.include_router(metrics_router)

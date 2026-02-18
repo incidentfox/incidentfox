@@ -25,11 +25,11 @@ ai_model:
 integrations:
   # Coralogix - Log management and observability
   # Uncomment and configure to enable:
-  # coralogix:
-  #   api_key: ${CORALOGIX_API_KEY}
-  #   region: eu2  # us1, us2, eu1, eu2, ap1, ap2
-  #   application_name: incidentfox-local
-  #   subsystem_name: sre-agent
+  coralogix:
+    api_key: ${CORALOGIX_API_KEY}
+    region: us2  # us1, us2, eu1, eu2, ap1, ap2
+    application_name: incidentfox-local
+    subsystem_name: sre-agent
 
   # AWS - Cloud infrastructure
   # Uncomment and configure to enable:

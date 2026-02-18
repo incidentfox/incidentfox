@@ -5,6 +5,8 @@ pydantic>=2.0.0
 pydantic-settings>=2.0.0
 email-validator>=2.0.0  # Required for pydantic EmailStr
 pyyaml>=6.0
+ruamel.yaml>=0.18.0  # For YAML config with comment preservation (local mode)
+watchdog>=3.0.0  # For file watching (local mode)
 structlog>=23.0.0
 
 # Database

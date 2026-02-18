@@ -12,11 +12,10 @@ from src.core.yaml_config import get_yaml_config_manager, is_local_mode
 from src.core.audit_log import app_logger
 from src.db.config_repository import (
     get_node_configuration,
-    create_node_configuration,
+    get_or_create_node_configuration,
     update_node_configuration,
+    initialize_org_config,
 )
-from src.db.models import Organization, Node
-from src.db.session import get_db
 
 
 logger = app_logger().bind(component="yaml_seeder")
@@ -62,11 +61,12 @@ def seed_from_yaml(
 
     logger.info(f"Seeding config for org={org_id}, team={team_id}")
 
-    # Ensure organization exists
-    _ensure_organization(session, org_id)
-
-    # Ensure team node exists
-    _ensure_team_node(session, org_id, team_id)
+    # Initialize org config (creates org node if it doesn't exist)
+    try:
+        initialize_org_config(session, org_id, org_node_id=org_id)
+    except Exception as e:
+        # Org might already exist, that's OK
+        logger.debug(f"Org initialization: {e}")
 
     # Check if config already exists
     org_config = get_node_configuration(session, org_id, org_id)
@@ -100,12 +100,21 @@ def seed_from_yaml(
             )
             logger.info(f"Updated org config for {org_id}")
         else:
-            create_node_configuration(
+            get_or_create_node_configuration(
+                session,
+                org_id,
+                org_id,
+                node_type="org"
+            )
+            # Now update it with our config
+            update_node_configuration(
                 session,
                 org_id,
                 org_id,
                 org_config_data,
-                created_by="yaml_seeder"
+                updated_by="yaml_seeder",
+                change_reason="Seeded from local.yaml",
+                skip_validation=True
             )
             logger.info(f"Created org config for {org_id}")
 
@@ -123,61 +132,27 @@ def seed_from_yaml(
             )
             logger.info(f"Updated team config for {org_id}/{team_id}")
         else:
-            create_node_configuration(
+            get_or_create_node_configuration(
+                session,
+                org_id,
+                team_id,
+                node_type="team"
+            )
+            # Now update it with our config
+            update_node_configuration(
                 session,
                 org_id,
                 team_id,
                 team_config_data,
-                created_by="yaml_seeder"
+                updated_by="yaml_seeder",
+                change_reason="Seeded from local.yaml",
+                skip_validation=True
             )
             logger.info(f"Created team config for {org_id}/{team_id}")
 
     session.commit()
     logger.info("✅ Config seeding completed successfully")
     return True
-
-
-def _ensure_organization(session: Session, org_id: str) -> None:
-    """Ensure organization exists in database."""
-    org = session.query(Organization).filter_by(id=org_id).first()
-    if not org:
-        org = Organization(
-            id=org_id,
-            name=org_id.title(),
-            slug=org_id
-        )
-        session.add(org)
-        session.flush()
-        logger.info(f"Created organization: {org_id}")
-
-
-def _ensure_team_node(session: Session, org_id: str, team_id: str) -> None:
-    """Ensure team node exists in database."""
-    node = session.query(Node).filter_by(org_id=org_id, id=team_id).first()
-    if not node:
-        # Also create root org node if it doesn't exist
-        org_node = session.query(Node).filter_by(org_id=org_id, id=org_id).first()
-        if not org_node:
-            org_node = Node(
-                org_id=org_id,
-                id=org_id,
-                name=org_id.title(),
-                type="org",
-                parent_id=None
-            )
-            session.add(org_node)
-            session.flush()
-
-        node = Node(
-            org_id=org_id,
-            id=team_id,
-            name=team_id.title(),
-            type="team",
-            parent_id=org_id
-        )
-        session.add(node)
-        session.flush()
-        logger.info(f"Created team node: {org_id}/{team_id}")
 
 
 def _extract_org_config(config: Dict[str, Any]) -> Dict[str, Any]:
