@@ -95,6 +95,7 @@ services:
     environment:
       - CREDENTIAL_SOURCE=environment
       - JWT_MODE=permissive
+      - CONFIG_SERVICE_URL=http://config-service:8080
     env_file:
       - .env
     healthcheck:
