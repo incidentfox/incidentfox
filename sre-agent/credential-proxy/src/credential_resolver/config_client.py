@@ -252,7 +252,8 @@ class ConfigServiceClient:
             if customer_api_key:
                 logger.info("Using BYOK Anthropic key (local mode)")
                 return {"api_key": customer_api_key}
-            logger.warning("Local mode: no Anthropic API key configured")
+            # No Anthropic key — fine if using a different LLM provider (OpenAI, Gemini,
+            # etc.); the LLM bypass in ext_authz_check handles that before reaching here.
             return None
 
         # ── SaaS ─────────────────────────────────────────────────────────────
