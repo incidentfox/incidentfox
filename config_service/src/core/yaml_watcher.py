@@ -14,7 +14,7 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from src.core.audit_log import app_logger
-from src.core.yaml_config import YAMLConfigManager, is_local_mode
+from src.core.yaml_config import YAMLConfigManager, is_local_mode, is_write_back_suppressed
 from src.core.yaml_seeder import seed_from_yaml
 from src.core.yaml_validator import validate_yaml_config
 from src.db.session import get_session_maker
@@ -38,6 +38,12 @@ class YAMLConfigHandler(FileSystemEventHandler):
         # Check if the modified file is our config file
         modified_path = Path(event.src_path).resolve()
         if modified_path != self.config_file_path:
+            return
+
+        # Skip events caused by the system's own write-back (DB → YAML).
+        # Seeding from those would undo the DB change that triggered the write.
+        if is_write_back_suppressed():
+            logger.debug("Skipping watcher event — triggered by system write-back")
             return
 
         # Debounce rapid changes (editors often write multiple times)

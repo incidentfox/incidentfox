@@ -11,6 +11,7 @@ Uses ruamel.yaml to preserve comments and formatting.
 import fcntl
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -19,6 +20,26 @@ from ruamel.yaml.comments import CommentedMap
 
 from src.core.audit_log import app_logger
 from src.core.env_manager import get_env_manager
+
+# ---------------------------------------------------------------------------
+# Write-back suppression
+# ---------------------------------------------------------------------------
+# When the system writes YAML (write-back from a DB change), the file watcher
+# must NOT re-seed the DB from that write — that would undo the change.
+# We record the timestamp of every system write so the watcher can skip events
+# that it caused itself.
+_last_write_back_time: float = 0.0
+_WRITE_BACK_SUPPRESS_SECONDS: float = 3.0  # generous window for fs event delivery
+
+
+def _mark_write_back() -> None:
+    global _last_write_back_time
+    _last_write_back_time = time.monotonic()
+
+
+def is_write_back_suppressed() -> bool:
+    """Return True if the watcher should ignore the current file-change event."""
+    return (time.monotonic() - _last_write_back_time) < _WRITE_BACK_SUPPRESS_SECONDS
 
 
 class YAMLConfigManager:
@@ -131,6 +152,9 @@ class YAMLConfigManager:
 
                 # Atomic rename
                 tmp_path.replace(self.config_file_path)
+                # Suppress the file watcher so it doesn't re-seed from this
+                # write-back and undo the DB change that triggered it.
+                _mark_write_back()
                 self.logger.info(f"Wrote config to {self.config_file_path}")
             except Exception as e:
                 # Clean up temp file on error
