@@ -168,6 +168,7 @@ services:
     volumes:
       - langfuse-clickhouse-data:/var/lib/clickhouse
       - langfuse-clickhouse-logs:/var/log/clickhouse-server
+      - ./local/langfuse-clickhouse-config.xml:/etc/clickhouse-server/config.d/langfuse.xml:ro
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
       interval: 5s
@@ -260,6 +261,7 @@ services:
       LANGFUSE_INIT_USER_PASSWORD: admin-local-dev
     networks:
       - app_network
+      - default  # Needs host access for port 3000 publishing
 
   langfuse-worker:
     image: langfuse/langfuse-worker:3
