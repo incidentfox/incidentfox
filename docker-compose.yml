@@ -256,7 +256,7 @@ services:
       LANGFUSE_INIT_PROJECT_ID: sre-agent-local
       LANGFUSE_INIT_PROJECT_PUBLIC_KEY: lf-pk-local-dev
       LANGFUSE_INIT_PROJECT_SECRET_KEY: lf-sk-local-dev
-      LANGFUSE_INIT_USER_EMAIL: admin@localhost
+      LANGFUSE_INIT_USER_EMAIL: admin@incidentfox.local
       LANGFUSE_INIT_USER_NAME: admin
       LANGFUSE_INIT_USER_PASSWORD: admin-local-dev
     networks:
