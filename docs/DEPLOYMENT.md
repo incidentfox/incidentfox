@@ -57,100 +57,38 @@ docker-compose ps
 
 ### Using a Different AI Model
 
-By default, IncidentFox uses Claude (Anthropic). You can use any model from any supported provider by setting two things in `.env`:
+Edit `config_service/config/local.yaml` — find the `ai_model` section and change `provider` and `model_id`. The file has a full catalog of supported providers and models as comments.
 
-1. `LLM_MODEL` — the model in `provider/model-name` format
-2. The provider's API key
+```yaml
+ai_model:
+  provider: openai       # anthropic, openai, gemini, deepseek, xai, groq, mistral, ollama, openrouter, ...
+  model_id: gpt-4o-mini  # any model the provider offers
+```
+
+Then add the provider's API key to `.env`:
 
 ```bash
-# Example: Use OpenAI GPT-4o Mini
-LLM_MODEL=openai/gpt-4o-mini
 OPENAI_API_KEY=sk-your-openai-key
 ```
 
-The model name always follows the format `provider/model-name`. You can use **any model** the provider offers — the examples below are just common starting points.
+Changes hot-reload — no restart needed. The Slack bot picks up the new model within a few seconds.
 
-#### Direct Providers
+#### Provider → API Key mapping
 
-These providers have their own API. Set the API key and use any model they offer.
-
-| Provider | Env Var | Example Models |
-|----------|---------|---------------|
-| **OpenAI** | `OPENAI_API_KEY` | `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/o1`, `openai/o3-mini` |
-| **Google Gemini** | `GEMINI_API_KEY` | `gemini/gemini-2.5-flash`, `gemini/gemini-2.5-pro`, `gemini/gemini-2.0-flash` |
-| **DeepSeek** | `DEEPSEEK_API_KEY` | `deepseek/deepseek-chat`, `deepseek/deepseek-reasoner` |
-| **Mistral** | `MISTRAL_API_KEY` | `mistral/mistral-small-latest`, `mistral/mistral-large-latest`, `mistral/codestral-latest` |
-| **xAI (Grok)** | `XAI_API_KEY` | `xai/grok-3-mini`, `xai/grok-3` |
-| **Moonshot (Kimi)** | `MOONSHOT_API_KEY` | `moonshot/kimi-k2-turbo-preview`, `moonshot/moonshot-v1-8k` |
-| **MiniMax** | `MINIMAX_API_KEY` | `minimax/MiniMax-Text-01` |
-
-#### Cloud Platforms
-
-These give you access to models from multiple providers (Claude, Llama, Mistral, etc.) through a single platform.
-
-**AWS Bedrock** — Access Claude, Llama, Mistral, and more through your AWS account.
-
-```bash
-# Use Claude on Bedrock
-LLM_MODEL=bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0
-
-# Use Llama on Bedrock
-LLM_MODEL=bedrock/meta.llama3-1-70b-instruct-v1:0
-
-# Auth option A: Bedrock API key (from Bedrock console → API keys)
-AWS_BEARER_TOKEN_BEDROCK=your-bearer-token
-
-# Auth option B: IAM credentials
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
-AWS_REGION=us-east-1
-```
-
-Bedrock model IDs follow AWS naming (e.g., `anthropic.claude-3-haiku-20240307-v1:0`). Find available models in the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/).
-
-**Azure AI Foundry** — Deploy and use models through Azure serverless endpoints.
-
-```bash
-# Use your deployed model (deployment name from Azure portal)
-LLM_MODEL=azure_ai/DeepSeek-V3
-AZURE_AI_API_KEY=your-key
-AZURE_AI_API_BASE=https://your-endpoint.services.ai.azure.com
-```
-
-The model name after `azure_ai/` must match your **deployment name** in Azure AI Foundry. Create deployments in the [Azure AI Foundry portal](https://ai.azure.com/).
-
-**OpenRouter** — Access 300+ models from dozens of providers with a single API key. Useful as a fallback for models without direct API support.
-
-```bash
-# Use any model on OpenRouter
-LLM_MODEL=openrouter/qwen/qwen-2.5-72b-instruct
-LLM_MODEL=openrouter/cohere/command-a
-LLM_MODEL=openrouter/meta-llama/llama-3.1-70b-instruct
-LLM_MODEL=openrouter/anthropic/claude-3.5-haiku
-OPENROUTER_API_KEY=sk-or-your-key
-```
-
-Model IDs follow the format `openrouter/org/model-name`. Browse available models at [openrouter.ai/models](https://openrouter.ai/models).
-
-#### After Changing Models
-
-Restart the services to pick up the new configuration:
-
-```bash
-docker compose up -d --build credential-resolver
-docker compose restart envoy
-```
-
-### Testing Models
-
-To verify your model configuration works end-to-end:
-
-```bash
-cd sre-agent/credential-proxy
-pip install httpx    # if not installed
-python test_models.py --proxy          # test all models through docker-compose
-python test_models.py --proxy openai   # test only OpenAI
-```
+| Provider | `.env` key | Notes |
+|----------|-----------|-------|
+| `anthropic` | `ANTHROPIC_API_KEY` | Default |
+| `openai` | `OPENAI_API_KEY` | gpt-4o, o1, o3, o4-mini, ... |
+| `gemini` | `GEMINI_API_KEY` | gemini-2.5-pro, gemini-2.5-flash, ... |
+| `deepseek` | `DEEPSEEK_API_KEY` | deepseek-chat, deepseek-reasoner |
+| `xai` | `XAI_API_KEY` | grok-3, grok-3-beta, ... |
+| `groq` | `GROQ_API_KEY` | llama-3.3-70b-versatile, llama-4-scout, ... |
+| `mistral` | `MISTRAL_API_KEY` | mistral-large-latest, codestral-latest, ... |
+| `cohere` | `COHERE_API_KEY` | command-a-03-2025, command-r-plus, ... |
+| `openrouter` | `OPENROUTER_API_KEY` | 300+ models via one key — [openrouter.ai/models](https://openrouter.ai/models) |
+| `ollama` | *(none)* | Set `base_url: http://host.docker.internal:11434` in local.yaml |
+| `bedrock` | `AWS_BEARER_TOKEN_BEDROCK` or IAM | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` + `AWS_REGION` |
+| `azure_ai` | `AZURE_AI_API_KEY` + `AZURE_AI_API_BASE` | Deployment name from Azure AI Foundry |
 
 ### Common Operations
 
