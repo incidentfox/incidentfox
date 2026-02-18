@@ -408,10 +408,7 @@ async def update_config(
 
         # Write back to YAML in local mode
         write_config_to_yaml(
-            org_id,
-            node_id,
-            updated_config.node_type,
-            updated_config.config_json
+            org_id, node_id, updated_config.node_type, updated_config.config_json
         )
 
         return ConfigResponse(
@@ -1074,10 +1071,7 @@ async def update_my_config(
 
         # Write back to YAML in local mode
         write_config_to_yaml(
-            org_id,
-            team_node_id,
-            updated_config.node_type,
-            updated_config.config_json
+            org_id, team_node_id, updated_config.node_type, updated_config.config_json
         )
 
         return ConfigResponse(

@@ -47,7 +47,9 @@ def create_app() -> FastAPI:
             db = SessionLocal()
             try:
                 # Use force=True to always update config from YAML in local mode
-                seeded = seed_from_yaml(db, config_file_path="config/local.yaml", force=True)
+                seeded = seed_from_yaml(
+                    db, config_file_path="config/local.yaml", force=True
+                )
                 if seeded:
                     logger.info("✅ Configuration seeded from local.yaml")
                 else:
@@ -62,6 +64,7 @@ def create_app() -> FastAPI:
                 start_yaml_watcher_background("config/local.yaml")
             except Exception as e:
                 logger.error(f"Failed to start file watcher: {e}")
+
     app.include_router(ui_router)
     app.include_router(health_router)
     app.include_router(metrics_router)

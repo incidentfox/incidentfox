@@ -6823,7 +6823,9 @@ if __name__ == "__main__":
 
     if missing_tokens:
         logger.warning("=" * 70)
-        logger.warning("⚠️  Slack credentials not configured - slack-bot will not start")
+        logger.warning(
+            "⚠️  Slack credentials not configured - slack-bot will not start"
+        )
         logger.warning("=" * 70)
         logger.warning("")
         logger.warning(f"Missing environment variables: {', '.join(missing_tokens)}")

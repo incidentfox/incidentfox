@@ -7,13 +7,13 @@ Handles reading and writing to .env files, with support for:
 - Thread-safe operations
 """
 
+import fcntl
 import os
 import re
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Dict, Optional
-import fcntl
-import tempfile
-import shutil
 
 
 class EnvManager:
@@ -37,26 +37,29 @@ class EnvManager:
             return {}
 
         env_vars = {}
-        with open(self.env_file_path, 'r') as f:
+        with open(self.env_file_path, "r") as f:
             for line in f:
                 line = line.strip()
                 # Skip comments and empty lines
-                if not line or line.startswith('#'):
+                if not line or line.startswith("#"):
                     continue
 
                 # Parse KEY=VALUE
-                match = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=(.*)$', line)
+                match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", line)
                 if match:
                     key, value = match.groups()
                     # Remove quotes if present
-                    if (value.startswith('"') and value.endswith('"')) or \
-                       (value.startswith("'") and value.endswith("'")):
+                    if (value.startswith('"') and value.endswith('"')) or (
+                        value.startswith("'") and value.endswith("'")
+                    ):
                         value = value[1:-1]
                     env_vars[key] = value
 
         return env_vars
 
-    def write_env_variable(self, key: str, value: str, comment: Optional[str] = None) -> None:
+    def write_env_variable(
+        self, key: str, value: str, comment: Optional[str] = None
+    ) -> None:
         """Write or update a single environment variable in the .env file.
 
         This operation is atomic and thread-safe using file locking.
@@ -72,11 +75,11 @@ class EnvManager:
         # Read existing content
         existing_lines = []
         if self.env_file_path.exists():
-            with open(self.env_file_path, 'r') as f:
+            with open(self.env_file_path, "r") as f:
                 existing_lines = f.readlines()
 
         # Find if the variable already exists
-        var_pattern = re.compile(f'^{re.escape(key)}=')
+        var_pattern = re.compile(f"^{re.escape(key)}=")
         found = False
         new_lines = []
 
@@ -85,7 +88,7 @@ class EnvManager:
                 # Replace existing variable
                 if comment:
                     new_lines.append(f"# {comment}\n")
-                new_lines.append(f'{key}={value}\n')
+                new_lines.append(f"{key}={value}\n")
                 found = True
             else:
                 new_lines.append(line)
@@ -93,18 +96,15 @@ class EnvManager:
         # If not found, append to end
         if not found:
             # Add a blank line before if file is not empty
-            if existing_lines and not existing_lines[-1].endswith('\n\n'):
-                new_lines.append('\n')
+            if existing_lines and not existing_lines[-1].endswith("\n\n"):
+                new_lines.append("\n")
             if comment:
                 new_lines.append(f"# {comment}\n")
-            new_lines.append(f'{key}={value}\n')
+            new_lines.append(f"{key}={value}\n")
 
         # Write atomically using temp file + rename
         with tempfile.NamedTemporaryFile(
-            mode='w',
-            dir=self.env_file_path.parent,
-            delete=False,
-            prefix='.env.tmp.'
+            mode="w", dir=self.env_file_path.parent, delete=False, prefix=".env.tmp."
         ) as tmp_file:
             tmp_path = Path(tmp_file.name)
             try:
@@ -140,8 +140,11 @@ class EnvManager:
                 # Replace ${VAR} with actual value
                 def replacer(match):
                     var_name = match.group(1)
-                    return env_vars.get(var_name, match.group(0))  # Keep ${VAR} if not found
-                return re.sub(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}', replacer, value)
+                    return env_vars.get(
+                        var_name, match.group(0)
+                    )  # Keep ${VAR} if not found
+
+                return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", replacer, value)
             elif isinstance(value, dict):
                 return {k: resolve_value(v) for k, v in value.items()}
             elif isinstance(value, list):
@@ -165,7 +168,7 @@ class EnvManager:
         def extract_from_value(value):
             """Recursively extract references from a value."""
             if isinstance(value, str):
-                matches = re.findall(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}', value)
+                matches = re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", value)
                 references.update(matches)
             elif isinstance(value, dict):
                 for v in value.values():

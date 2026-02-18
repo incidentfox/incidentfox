@@ -46,7 +46,9 @@ class YAMLConfigHandler(FileSystemEventHandler):
 
         self.last_reload_time = current_time
 
-        logger.info(f"Detected change in {self.config_file_path.name}, reloading config...")
+        logger.info(
+            f"Detected change in {self.config_file_path.name}, reloading config..."
+        )
 
         try:
             # Reload config from YAML and update database
@@ -79,7 +81,9 @@ class YAMLConfigWatcher:
             return
 
         if not self.config_file_path.exists():
-            logger.warning(f"Config file not found: {self.config_file_path}, file watcher disabled")
+            logger.warning(
+                f"Config file not found: {self.config_file_path}, file watcher disabled"
+            )
             return
 
         # Watch the directory containing the config file
@@ -90,7 +94,9 @@ class YAMLConfigWatcher:
         self.observer.schedule(self.handler, str(watch_dir), recursive=False)
         self.observer.start()
 
-        logger.info(f"🔍 Watching {self.config_file_path} for changes (auto-reload enabled)")
+        logger.info(
+            f"🔍 Watching {self.config_file_path} for changes (auto-reload enabled)"
+        )
 
     def stop(self):
         """Stop watching the config file."""

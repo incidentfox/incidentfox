@@ -5,26 +5,24 @@ Handles seeding the database from local.yaml on startup in local development mod
 """
 
 import os
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 from sqlalchemy.orm import Session
 
-from src.core.yaml_config import get_yaml_config_manager, is_local_mode
 from src.core.audit_log import app_logger
+from src.core.yaml_config import get_yaml_config_manager, is_local_mode
 from src.db.config_repository import (
     get_node_configuration,
     get_or_create_node_configuration,
-    update_node_configuration,
     initialize_org_config,
+    update_node_configuration,
 )
-
 
 logger = app_logger().bind(component="yaml_seeder")
 
 
 def seed_from_yaml(
-    session: Session,
-    config_file_path: str = "config/local.yaml",
-    force: bool = False
+    session: Session, config_file_path: str = "config/local.yaml", force: bool = False
 ) -> bool:
     """Seed database configuration from YAML file.
 
@@ -77,7 +75,9 @@ def seed_from_yaml(
     should_seed_team = force or not team_config or not team_config.config_json
 
     if not should_seed_org and not should_seed_team:
-        logger.info("Configs already exist, skipping seeding (use force=True to override)")
+        logger.info(
+            "Configs already exist, skipping seeding (use force=True to override)"
+        )
         return False
 
     # Prepare org-level config
@@ -96,16 +96,11 @@ def seed_from_yaml(
                 org_config_data,
                 updated_by="yaml_seeder",
                 change_reason="Seeded from local.yaml",
-                skip_validation=True
+                skip_validation=True,
             )
             logger.info(f"Updated org config for {org_id}")
         else:
-            get_or_create_node_configuration(
-                session,
-                org_id,
-                org_id,
-                node_type="org"
-            )
+            get_or_create_node_configuration(session, org_id, org_id, node_type="org")
             # Now update it with our config
             update_node_configuration(
                 session,
@@ -114,7 +109,7 @@ def seed_from_yaml(
                 org_config_data,
                 updated_by="yaml_seeder",
                 change_reason="Seeded from local.yaml",
-                skip_validation=True
+                skip_validation=True,
             )
             logger.info(f"Created org config for {org_id}")
 
@@ -128,16 +123,11 @@ def seed_from_yaml(
                 team_config_data,
                 updated_by="yaml_seeder",
                 change_reason="Seeded from local.yaml",
-                skip_validation=True
+                skip_validation=True,
             )
             logger.info(f"Updated team config for {org_id}/{team_id}")
         else:
-            get_or_create_node_configuration(
-                session,
-                org_id,
-                team_id,
-                node_type="team"
-            )
+            get_or_create_node_configuration(session, org_id, team_id, node_type="team")
             # Now update it with our config
             update_node_configuration(
                 session,
@@ -146,7 +136,7 @@ def seed_from_yaml(
                 team_config_data,
                 updated_by="yaml_seeder",
                 change_reason="Seeded from local.yaml",
-                skip_validation=True
+                skip_validation=True,
             )
             logger.info(f"Created team config for {org_id}/{team_id}")
 

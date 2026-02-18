@@ -8,16 +8,17 @@ Provides bidirectional sync between YAML config files and the database:
 Uses ruamel.yaml to preserve comments and formatting.
 """
 
+import fcntl
 import os
-from pathlib import Path
-from typing import Dict, Optional, Any
 import tempfile
+from pathlib import Path
+from typing import Any, Dict, Optional
+
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
-import fcntl
 
-from src.core.env_manager import get_env_manager
 from src.core.audit_log import app_logger
+from src.core.env_manager import get_env_manager
 
 
 class YAMLConfigManager:
@@ -51,7 +52,7 @@ class YAMLConfigManager:
             self.logger.warning(f"Config file not found: {self.config_file_path}")
             return {}
 
-        with open(self.config_file_path, 'r') as f:
+        with open(self.config_file_path, "r") as f:
             config = self.yaml.load(f)
 
         if config is None:
@@ -64,7 +65,9 @@ class YAMLConfigManager:
         self.logger.info(f"Loaded config from {self.config_file_path}")
         return resolved_config
 
-    def write_config(self, config: Dict[str, Any], preserve_formatting: bool = True) -> None:
+    def write_config(
+        self, config: Dict[str, Any], preserve_formatting: bool = True
+    ) -> None:
         """Write configuration back to YAML file.
 
         This operation is atomic using temp file + rename.
@@ -75,7 +78,7 @@ class YAMLConfigManager:
         """
         if preserve_formatting and self.config_file_path.exists():
             # Load existing YAML to preserve structure
-            with open(self.config_file_path, 'r') as f:
+            with open(self.config_file_path, "r") as f:
                 existing = self.yaml.load(f)
             if existing is None:
                 existing = CommentedMap()
@@ -91,10 +94,10 @@ class YAMLConfigManager:
 
         # Write atomically
         with tempfile.NamedTemporaryFile(
-            mode='w',
+            mode="w",
             dir=self.config_file_path.parent,
             delete=False,
-            prefix='.yaml.tmp.'
+            prefix=".yaml.tmp.",
         ) as tmp_file:
             tmp_path = Path(tmp_file.name)
             try:
@@ -116,7 +119,7 @@ class YAMLConfigManager:
         self,
         integration_name: str,
         integration_config: Dict[str, Any],
-        write_secrets_to_env: bool = True
+        write_secrets_to_env: bool = True,
     ) -> None:
         """Update a specific integration's configuration.
 
@@ -127,7 +130,7 @@ class YAMLConfigManager:
         """
         # Load current config
         if self.config_file_path.exists():
-            with open(self.config_file_path, 'r') as f:
+            with open(self.config_file_path, "r") as f:
                 config = self.yaml.load(f)
             if config is None:
                 config = CommentedMap()
@@ -135,8 +138,8 @@ class YAMLConfigManager:
             config = CommentedMap()
 
         # Ensure integrations section exists
-        if 'integrations' not in config:
-            config['integrations'] = CommentedMap()
+        if "integrations" not in config:
+            config["integrations"] = CommentedMap()
 
         # Handle secrets
         env_manager = get_env_manager()
@@ -147,9 +150,7 @@ class YAMLConfigManager:
                 # Write secret to .env
                 env_var_name = f"{integration_name.upper()}_{key.upper()}"
                 env_manager.write_env_variable(
-                    env_var_name,
-                    value,
-                    comment=f"{integration_name} {key}"
+                    env_var_name, value, comment=f"{integration_name} {key}"
                 )
                 # Use reference in YAML
                 yaml_config[key] = f"${{{env_var_name}}}"
@@ -159,7 +160,7 @@ class YAMLConfigManager:
                 yaml_config[key] = value
 
         # Update integration config
-        config['integrations'][integration_name] = yaml_config
+        config["integrations"][integration_name] = yaml_config
 
         # Write back to file
         self.write_config(dict(config), preserve_formatting=True)
@@ -179,7 +180,11 @@ class YAMLConfigManager:
             existing = CommentedMap()
 
         for key, value in new.items():
-            if isinstance(value, dict) and key in existing and isinstance(existing[key], dict):
+            if (
+                isinstance(value, dict)
+                and key in existing
+                and isinstance(existing[key], dict)
+            ):
                 # Recursively merge dictionaries
                 existing[key] = self._merge_preserving_structure(existing[key], value)
             else:
@@ -198,10 +203,19 @@ class YAMLConfigManager:
             True if field is likely a secret
         """
         secret_keywords = [
-            'api_key', 'apikey', 'api_token', 'token',
-            'secret', 'password', 'credentials', 'auth',
-            'access_key', 'private_key', 'client_secret',
-            'webhook_secret', 'signing_secret'
+            "api_key",
+            "apikey",
+            "api_token",
+            "token",
+            "secret",
+            "password",
+            "credentials",
+            "auth",
+            "access_key",
+            "private_key",
+            "client_secret",
+            "webhook_secret",
+            "signing_secret",
         ]
         field_lower = field_name.lower()
         return any(keyword in field_lower for keyword in secret_keywords)
@@ -211,10 +225,14 @@ class YAMLConfigManager:
 _yaml_config_manager: Optional[YAMLConfigManager] = None
 
 
-def get_yaml_config_manager(config_file_path: str = "config/local.yaml") -> YAMLConfigManager:
+def get_yaml_config_manager(
+    config_file_path: str = "config/local.yaml",
+) -> YAMLConfigManager:
     """Get or create the global YAMLConfigManager instance."""
     global _yaml_config_manager
-    if _yaml_config_manager is None or _yaml_config_manager.config_file_path != Path(config_file_path):
+    if _yaml_config_manager is None or _yaml_config_manager.config_file_path != Path(
+        config_file_path
+    ):
         _yaml_config_manager = YAMLConfigManager(config_file_path)
     return _yaml_config_manager
 
@@ -233,7 +251,7 @@ def write_config_to_yaml(
     node_id: str,
     node_type: str,
     config_json: Dict[str, Any],
-    config_file_path: str = "config/local.yaml"
+    config_file_path: str = "config/local.yaml",
 ) -> bool:
     """Write config changes back to YAML file in local mode.
 
@@ -263,7 +281,7 @@ def write_config_to_yaml(
 
         # Load current YAML
         if yaml_manager.config_file_path.exists():
-            with open(yaml_manager.config_file_path, 'r') as f:
+            with open(yaml_manager.config_file_path, "r") as f:
                 yaml_config = yaml_manager.yaml.load(f)
             if yaml_config is None:
                 yaml_config = CommentedMap()
@@ -271,10 +289,10 @@ def write_config_to_yaml(
             yaml_config = CommentedMap()
 
         # Ensure org_id and team_id are set
-        if 'org_id' not in yaml_config:
-            yaml_config['org_id'] = 'local'
-        if 'team_id' not in yaml_config:
-            yaml_config['team_id'] = 'default'
+        if "org_id" not in yaml_config:
+            yaml_config["org_id"] = "local"
+        if "team_id" not in yaml_config:
+            yaml_config["team_id"] = "default"
 
         # Write back the changed sections
         # For org-level: ai_model, security
@@ -282,20 +300,20 @@ def write_config_to_yaml(
 
         if node_type == "org":
             # Write org-level config
-            if 'ai_model' in config_json:
-                yaml_config['ai_model'] = config_json['ai_model']
-            if 'security' in config_json:
-                yaml_config['security'] = config_json['security']
+            if "ai_model" in config_json:
+                yaml_config["ai_model"] = config_json["ai_model"]
+            if "security" in config_json:
+                yaml_config["security"] = config_json["security"]
 
         elif node_type == "team":
             # Write team-level config
 
             # Handle integrations specially (extract secrets to .env)
-            if 'integrations' in config_json:
-                if 'integrations' not in yaml_config:
-                    yaml_config['integrations'] = CommentedMap()
+            if "integrations" in config_json:
+                if "integrations" not in yaml_config:
+                    yaml_config["integrations"] = CommentedMap()
 
-                for int_name, int_config in config_json['integrations'].items():
+                for int_name, int_config in config_json["integrations"].items():
                     yaml_int_config = CommentedMap()
 
                     for key, value in int_config.items():
@@ -303,9 +321,7 @@ def write_config_to_yaml(
                             # Write secret to .env
                             env_var_name = f"{int_name.upper()}_{key.upper()}"
                             env_manager.write_env_variable(
-                                env_var_name,
-                                value,
-                                comment=f"{int_name} {key}"
+                                env_var_name, value, comment=f"{int_name} {key}"
                             )
                             # Use reference in YAML
                             yaml_int_config[key] = f"${{{env_var_name}}}"
@@ -313,19 +329,19 @@ def write_config_to_yaml(
                             # Non-secret field
                             yaml_int_config[key] = value
 
-                    yaml_config['integrations'][int_name] = yaml_int_config
+                    yaml_config["integrations"][int_name] = yaml_int_config
 
             # Handle prompts
-            if 'prompts' in config_json:
-                yaml_config['prompts'] = config_json['prompts']
+            if "prompts" in config_json:
+                yaml_config["prompts"] = config_json["prompts"]
 
             # Handle skills
-            if 'skills' in config_json:
-                yaml_config['skills'] = config_json['skills']
+            if "skills" in config_json:
+                yaml_config["skills"] = config_json["skills"]
 
             # Handle ai_model override at team level
-            if 'ai_model' in config_json:
-                yaml_config['ai_model'] = config_json['ai_model']
+            if "ai_model" in config_json:
+                yaml_config["ai_model"] = config_json["ai_model"]
 
         # Write back to file (atomic operation)
         yaml_manager.write_config(dict(yaml_config), preserve_formatting=True)
@@ -335,7 +351,7 @@ def write_config_to_yaml(
             f"✅ Wrote config back to {config_file_path}",
             org_id=org_id,
             node_id=node_id,
-            node_type=node_type
+            node_type=node_type,
         )
         return True
 
