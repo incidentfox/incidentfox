@@ -37,6 +37,7 @@ from ..core.events import (
     result_event,
     thought_event,
 )
+from ..memory import format_memory_context, get_memory_manager
 from ..providers.base import LLMProvider, ProviderConfig, create_provider
 from .manager import SandboxExecutionError, SandboxManager
 
@@ -245,6 +246,8 @@ class ExecuteRequest(BaseModel):
     images: Optional[List[ImageData]] = None
     agent: Optional[str] = None  # Specific agent to use (default: root)
     max_turns: Optional[int] = None
+    tenant_id: Optional[str] = None  # For memory scoping
+    team_id: Optional[str] = None  # For memory scoping
 
 
 class InvestigateRequest(BaseModel):
@@ -376,6 +379,8 @@ async def execute(request: ExecuteRequest):
     Supports multi-LLM (Claude, Gemini, OpenAI) based on config.
     """
     thread_id = request.thread_id or os.getenv("THREAD_ID", "default")
+    tenant_id = request.tenant_id or os.getenv("INCIDENTFOX_TENANT_ID", "default")
+    team_id = request.team_id or os.getenv("INCIDENTFOX_TEAM_ID", "default")
 
     # Get or create session
     try:
@@ -394,6 +399,15 @@ async def execute(request: ExecuteRequest):
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    # Memory: search for relevant past findings
+    memory_manager = get_memory_manager()
+    augmented_prompt = request.prompt
+    if memory_manager:
+        memories = await memory_manager.search(request.prompt, tenant_id, team_id)
+        memory_context = format_memory_context(memories)
+        if memory_context:
+            augmented_prompt = memory_context + request.prompt
+
     # Reset interrupt flag
     session.reset_interrupt()
     session.is_running = True
@@ -411,13 +425,14 @@ async def execute(request: ExecuteRequest):
         ]
 
     async def stream():
+        captured_result_text = ""
         try:
             logger.info(f"Starting execution for thread {thread_id}")
             event_count = 0
 
             # Stream events from provider (maintains conversation history)
             async for event in session.provider.execute(
-                request.prompt,
+                augmented_prompt,
                 images=images_list,
             ):
                 if session.was_interrupted:
@@ -431,6 +446,11 @@ async def execute(request: ExecuteRequest):
                     break
 
                 event_count += 1
+
+                # Capture result text for memory save
+                if hasattr(event, "type") and event.type == "result":
+                    result_data = event.data if hasattr(event, "data") else {}
+                    captured_result_text = result_data.get("text", "")
 
                 if hasattr(event, "to_sse"):
                     yield event.to_sse()
@@ -449,6 +469,13 @@ async def execute(request: ExecuteRequest):
 
         finally:
             session.is_running = False
+            # Memory: save investigation results in background
+            if memory_manager and len(captured_result_text) > 50:
+                asyncio.create_task(
+                    memory_manager.save(
+                        request.prompt, captured_result_text, tenant_id, team_id, thread_id
+                    )
+                )
 
     return StreamingResponse(
         stream(),
@@ -488,11 +515,13 @@ async def _investigate_direct(request: InvestigateRequest):
         # Reload config to pick up new team token
         reload_config()
 
-    # Forward to execute with compatible fields
+    # Forward to execute with compatible fields (including tenant/team for memory)
     execute_request = ExecuteRequest(
         prompt=request.prompt,
         thread_id=request.thread_id,
         images=request.images,
+        tenant_id=request.tenant_id,
+        team_id=request.team_id,
     )
     return await execute(execute_request)
 
@@ -505,7 +534,17 @@ async def _investigate_via_sandbox(request: InvestigateRequest):
 
     manager = _get_sandbox_manager()
 
+    # Memory: search for relevant past findings
+    memory_manager = get_memory_manager()
+    augmented_prompt = request.prompt
+    if memory_manager:
+        memories = await memory_manager.search(request.prompt, tenant_id, team_id)
+        memory_context = format_memory_context(memories)
+        if memory_context:
+            augmented_prompt = memory_context + request.prompt
+
     async def stream():
+        captured_result_text = ""
         try:
             # Check for existing sandbox for this thread
             sandbox_info = await asyncio.to_thread(manager.get_sandbox, thread_id)
@@ -543,12 +582,16 @@ async def _investigate_via_sandbox(request: InvestigateRequest):
                 [img.model_dump() for img in request.images] if request.images else None
             )
             response = await asyncio.to_thread(
-                manager.execute_in_sandbox, sandbox_info, request.prompt, images
+                manager.execute_in_sandbox, sandbox_info, augmented_prompt, images
             )
 
-            # Forward SSE stream from sandbox pod
+            # Forward SSE stream from sandbox pod, capturing result for memory
             async for chunk in _async_stream_response(response):
                 yield chunk
+                # Try to extract result text from SSE chunks
+                result_text = _extract_result_from_sse_chunk(chunk)
+                if result_text:
+                    captured_result_text = result_text
 
         except SandboxExecutionError as e:
             logger.error(f"Sandbox execution failed: {e}", exc_info=True)
@@ -558,12 +601,43 @@ async def _investigate_via_sandbox(request: InvestigateRequest):
             yield error_event(
                 thread_id, f"Sandbox error: {e}", recoverable=False
             ).to_sse()
+        finally:
+            # Memory: save investigation results in background
+            if memory_manager and len(captured_result_text) > 50:
+                asyncio.create_task(
+                    memory_manager.save(
+                        request.prompt, captured_result_text, tenant_id, team_id, thread_id
+                    )
+                )
 
     return StreamingResponse(
         stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def _extract_result_from_sse_chunk(chunk: str) -> Optional[str]:
+    """
+    Extract result text from an SSE chunk forwarded from a sandbox.
+
+    SSE format: 'data: {"type": "result", "data": {"text": "..."}, ...}\n\n'
+    A chunk may contain multiple SSE lines. Returns the last result text found.
+    """
+    result_text = None
+    for line in chunk.split("\n"):
+        line = line.strip()
+        if not line.startswith("data: "):
+            continue
+        try:
+            payload = json.loads(line[6:])
+            if payload.get("type") == "result":
+                text = payload.get("data", {}).get("text", "")
+                if text:
+                    result_text = text
+        except (json.JSONDecodeError, AttributeError):
+            pass
+    return result_text
 
 
 @app.post("/interrupt")
