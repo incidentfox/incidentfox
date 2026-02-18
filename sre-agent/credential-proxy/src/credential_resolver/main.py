@@ -320,6 +320,34 @@ async def lifespan(app: FastAPI):
         ]
         logger.info(f"Environment credentials loaded for: {configured}")
 
+        # Validate that at least one LLM provider is configured — required for the
+        # agent to function.  Fail fast with a clear message so users know what to fix.
+        _LLM_PROVIDER_IDS = {
+            "anthropic", "openai", "gemini", "deepseek", "xai", "groq", "mistral",
+            "cohere", "together_ai", "fireworks_ai", "openrouter", "bedrock",
+            "vertex_ai", "azure_ai", "azure", "ollama", "moonshot", "minimax",
+        }
+        any_llm = any(
+            is_integration_configured(k, ENV_CREDENTIALS.get(k, {}))
+            for k in _LLM_PROVIDER_IDS
+        )
+        if not any_llm:
+            import sys
+            logger.error("=" * 60)
+            logger.error("STARTUP ERROR: No LLM API key configured.")
+            logger.error("The agent cannot run without an LLM provider.")
+            logger.error("")
+            logger.error("Add at least one of these to your .env file:")
+            logger.error("  ANTHROPIC_API_KEY=sk-ant-...   (Anthropic Claude — default)")
+            logger.error("  OPENAI_API_KEY=sk-...           (OpenAI GPT)")
+            logger.error("  GEMINI_API_KEY=...              (Google Gemini)")
+            logger.error("  GROQ_API_KEY=...                (Groq — fast & cheap)")
+            logger.error("  OLLAMA_HOST=http://...          (local Ollama)")
+            logger.error("")
+            logger.error("See .env.example for the full list of supported providers.")
+            logger.error("=" * 60)
+            sys.exit(1)
+
         # Debug: show masked credentials to verify they're loaded
         for integration, creds in ENV_CREDENTIALS.items():
             if is_integration_configured(integration, creds):

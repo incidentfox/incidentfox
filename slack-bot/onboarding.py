@@ -38,7 +38,7 @@ LLM_PROVIDERS = [
         "anthropic",
         "Anthropic (Claude)",
         "claude-sonnet-4-20250514",
-        "Default — uses IncidentFox key or your own",
+        "Default — add ANTHROPIC_API_KEY to .env or use IncidentFox key",
     ),
     ("openai", "OpenAI", "openai/gpt-4o", "GPT-4o, o3, o1 models"),
     ("gemini", "Google Gemini", "gemini/gemini-2.5-flash", "Direct Gemini API"),
@@ -3544,15 +3544,16 @@ def build_ai_model_modal(
         }
     )
 
+    _is_local_mode = os.getenv("CONFIG_MODE", "").lower() == "local"
+    _provider_hint = (
+        ":bulb: *Anthropic (Claude)* is the default. Add *ANTHROPIC_API_KEY* to your .env file, or pick another provider."
+        if _is_local_mode
+        else ":bulb: *Anthropic (Claude)* is the default and uses IncidentFox's API key. Choose another provider to use your own key."
+    )
     blocks.append(
         {
             "type": "context",
-            "elements": [
-                {
-                    "type": "mrkdwn",
-                    "text": ":bulb: *Anthropic (Claude)* is the default and uses IncidentFox's API key. Choose another provider to use your own key.",
-                }
-            ],
+            "elements": [{"type": "mrkdwn", "text": _provider_hint}],
         }
     )
 
@@ -3843,7 +3844,11 @@ def build_ai_model_modal(
                         "elements": [
                             {
                                 "type": "mrkdwn",
-                                "text": ":lock: Using IncidentFox's Anthropic API key with zero data retention.",
+                                "text": (
+                        ":warning: Local mode requires your own key. Set *ANTHROPIC_API_KEY=sk-ant-...* in your .env file and restart."
+                        if os.getenv("CONFIG_MODE", "").lower() == "local"
+                        else ":lock: Using IncidentFox's Anthropic API key with zero data retention."
+                    ),
                             }
                         ],
                     }
