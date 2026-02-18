@@ -7131,5 +7131,16 @@ if __name__ == "__main__":
         # Register all handlers on the app instance (in HTTP mode, this is done by SlackAppRegistry)
         register_all_handlers(app)
 
+        # In local mode, auto-register the workspace routing so the routing lookup
+        # works without requiring the user to manually set SLACK_WORKSPACE_ID.
+        if os.environ.get("CONFIG_MODE", "").lower() == "local":
+            try:
+                auth_resp = app.client.auth_test()
+                workspace_id = auth_resp.get("team_id")
+                if workspace_id:
+                    get_config_client().register_local_routing(workspace_id)
+            except Exception as e:
+                logger.warning(f"Could not auto-register local routing: {e}")
+
         handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
         handler.start()

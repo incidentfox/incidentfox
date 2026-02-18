@@ -85,6 +85,7 @@ class _LocalYAMLSchema(BaseModel):
     prompts: Optional[Dict[str, Any]] = None
     skills: Optional[Any] = None
     security: Optional[_SecuritySchema] = None
+    routing: Optional[Dict[str, Any]] = None
 
 
 # ── internal helpers ───────────────────────────────────────────────────────────

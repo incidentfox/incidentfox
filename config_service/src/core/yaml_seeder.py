@@ -207,6 +207,10 @@ def _extract_team_config(config: Dict[str, Any]) -> Dict[str, Any]:
     if "ai_model" in config:
         team_config["ai_model"] = config["ai_model"]
 
+    # Routing — maps the team to incoming Slack/webhook events
+    if "routing" in config:
+        team_config["routing"] = config["routing"]
+
     return team_config
 
 
@@ -220,9 +224,18 @@ def _replace_config_json(
     would silently preserve keys that were removed from the YAML (e.g. an
     integrations.llm section that was deleted when the file was reset).
 
-    Uses a raw SQL UPDATE to bypass SQLAlchemy ORM mutation tracking, which
-    is unreliable for JSONB columns with autoflush=False sessions.
+    Only the top-level keys present in new_config are replaced.  All other
+    top-level keys in the existing config_json (e.g. "routing", workspace
+    tokens, Slack identifiers) are preserved so that non-YAML-managed state
+    is never wiped by a seed operation.
+
+    Uses a raw SQL UPDATE with jsonb merge to bypass SQLAlchemy ORM mutation
+    tracking, which is unreliable for JSONB columns with autoflush=False.
     """
+    # Build merged config: start from existing, overlay only the YAML-managed keys.
+    existing = dict(node.config_json or {})
+    merged = {**existing, **new_config}
+
     session.execute(
         update(NodeConfiguration)
         .where(
@@ -230,7 +243,7 @@ def _replace_config_json(
             NodeConfiguration.node_id == node.node_id,
         )
         .values(
-            config_json=new_config,
+            config_json=merged,
             effective_config_json=None,
             effective_config_computed_at=None,
             updated_by="yaml_seeder",

@@ -212,6 +212,14 @@ skills:
   # - github: true
   # - kubernetes: true
 
+# Routing (auto-managed — do not edit)
+# In local mode the slack-bot auto-discovers the workspace ID via auth.test()
+# at startup and registers it here.  You only need to set this manually if you
+# have multiple Slack workspaces and want explicit control over routing.
+# routing:
+#   slack_workspace_ids:
+#     - T09UF9JAHD1  # your Slack workspace ID (find it in slack-bot logs)
+
 # Security Policies (optional)
 # Configure guardrails and permissions
 security:

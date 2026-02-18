@@ -448,6 +448,25 @@ class ConfigServiceClient:
         response.raise_for_status()
         return response.json()
 
+    def register_local_routing(self, workspace_id: str) -> None:
+        """Register the Slack workspace ID as a routing identifier in local mode.
+
+        Called at startup in single-workspace local mode so the routing lookup
+        works without requiring the user to manually configure SLACK_WORKSPACE_ID.
+
+        Args:
+            workspace_id: Slack workspace ID (e.g., "T09UF9JAHD1")
+        """
+        try:
+            self._update_config(
+                "local",
+                "default",
+                {"routing": {"slack_workspace_ids": [workspace_id]}},
+            )
+            logger.info(f"Registered local routing for workspace {workspace_id}")
+        except Exception as e:
+            logger.warning(f"Failed to register local routing for {workspace_id}: {e}")
+
     def get_workspace_config(
         self,
         slack_team_id: str,

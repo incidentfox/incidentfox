@@ -141,6 +141,7 @@ class YAMLConfigManager:
                     "prompts",
                     "skills",
                     "security",
+                    "routing",
                 }
                 written_keys = set(verified.keys())
                 stray_keys = written_keys - expected_top_level
@@ -375,18 +376,25 @@ def write_config_to_yaml(
                         # "llm" is an internal DB field — convert to ai_model instead (below)
                         continue
 
-                    yaml_int_config = CommentedMap()
+                    yaml_int_delta: Dict[str, Any] = {}
                     for key, value in (int_config or {}).items():
                         if yaml_manager._is_secret_field(key):
                             env_var_name = f"{int_name.upper()}_{key.upper()}"
                             env_manager.write_env_variable(
                                 env_var_name, value, comment=f"{int_name} {key}"
                             )
-                            yaml_int_config[key] = f"${{{env_var_name}}}"
+                            yaml_int_delta[key] = f"${{{env_var_name}}}"
                         else:
-                            yaml_int_config[key] = value
+                            yaml_int_delta[key] = value
 
-                    yaml_config["integrations"][int_name] = yaml_int_config
+                    if int_name in yaml_config["integrations"]:
+                        # Update in-place so inline comments (e.g. "# us1, us2, eu1…")
+                        # and end-of-block comment sections are preserved.
+                        yaml_manager._merge_preserving_structure(
+                            yaml_config["integrations"][int_name], yaml_int_delta
+                        )
+                    else:
+                        yaml_config["integrations"][int_name] = yaml_int_delta
 
                 # Remove any stale "llm" key that may have been written by older code
                 if "llm" in yaml_config.get("integrations", {}):
