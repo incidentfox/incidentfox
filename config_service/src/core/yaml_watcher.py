@@ -14,7 +14,11 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from src.core.audit_log import app_logger
-from src.core.yaml_config import YAMLConfigManager, is_local_mode, is_write_back_suppressed
+from src.core.yaml_config import (
+    YAMLConfigManager,
+    is_local_mode,
+    is_write_back_suppressed,
+)
 from src.core.yaml_seeder import seed_from_yaml
 from src.core.yaml_validator import validate_yaml_config
 from src.db.session import get_session_maker
