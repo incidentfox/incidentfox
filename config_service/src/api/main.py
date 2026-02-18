@@ -25,8 +25,9 @@ from src.api.routes.ui import router as ui_router
 from src.api.routes.visitor import router as visitor_router
 from src.core.audit_log import app_logger, configure_logging, new_request_id
 from src.core.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
-from src.core.yaml_config import is_local_mode
+from src.core.yaml_config import YAMLConfigManager, is_local_mode
 from src.core.yaml_seeder import seed_from_yaml
+from src.core.yaml_validator import validate_yaml_config
 from src.core.yaml_watcher import start_yaml_watcher_background
 from src.db.session import get_session_maker
 
@@ -41,6 +42,23 @@ def create_app() -> FastAPI:
         if is_local_mode():
             logger = app_logger().bind(component="startup")
             logger.info("Running in local mode, seeding config from YAML...")
+
+            # Validate YAML before seeding — warn-only at startup so a bad file
+            # never prevents the service from coming up
+            try:
+                yaml_manager = YAMLConfigManager("config/local.yaml")
+                resolved = yaml_manager.load_config()
+                result = validate_yaml_config(resolved)
+                if result.warnings:
+                    for w in result.warnings:
+                        logger.warning(f"⚠️  YAML warning: {w}")
+                if not result.is_valid:
+                    logger.warning(
+                        "⚠️  local.yaml has validation errors (proceeding anyway):\n"
+                        + result.format()
+                    )
+            except Exception as e:
+                logger.warning(f"Could not validate local.yaml: {e}")
 
             # Create database session
             SessionLocal = get_session_maker()

@@ -5,8 +5,10 @@ Handles seeding the database from local.yaml on startup in local development mod
 """
 
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from src.core.audit_log import app_logger
@@ -17,6 +19,7 @@ from src.db.config_repository import (
     initialize_org_config,
     update_node_configuration,
 )
+from src.db.config_models import NodeConfiguration
 
 logger = app_logger().bind(component="yaml_seeder")
 
@@ -89,55 +92,50 @@ def seed_from_yaml(
     # Seed org config
     if should_seed_org and org_config_data:
         if org_config:
-            update_node_configuration(
-                session,
-                org_id,
-                org_id,
-                org_config_data,
-                updated_by="yaml_seeder",
-                change_reason="Seeded from local.yaml",
-                skip_validation=True,
-            )
-            logger.info(f"Updated org config for {org_id}")
+            if force:
+                # Replace config entirely — YAML is the source of truth.
+                # update_node_configuration always deep-merges, which would
+                # preserve deleted keys (e.g. integrations.llm after a reset).
+                _replace_config_json(session, org_config, org_config_data)
+                logger.info(f"Replaced org config for {org_id}")
+            else:
+                update_node_configuration(
+                    session,
+                    org_id,
+                    org_id,
+                    org_config_data,
+                    updated_by="yaml_seeder",
+                    change_reason="Seeded from local.yaml",
+                    skip_validation=True,
+                )
+                logger.info(f"Updated org config for {org_id}")
         else:
             get_or_create_node_configuration(session, org_id, org_id, node_type="org")
-            # Now update it with our config
-            update_node_configuration(
-                session,
-                org_id,
-                org_id,
-                org_config_data,
-                updated_by="yaml_seeder",
-                change_reason="Seeded from local.yaml",
-                skip_validation=True,
-            )
+            org_config = get_node_configuration(session, org_id, org_id)
+            _replace_config_json(session, org_config, org_config_data)
             logger.info(f"Created org config for {org_id}")
 
     # Seed team config
     if should_seed_team and team_config_data:
         if team_config:
-            update_node_configuration(
-                session,
-                org_id,
-                team_id,
-                team_config_data,
-                updated_by="yaml_seeder",
-                change_reason="Seeded from local.yaml",
-                skip_validation=True,
-            )
-            logger.info(f"Updated team config for {org_id}/{team_id}")
+            if force:
+                _replace_config_json(session, team_config, team_config_data)
+                logger.info(f"Replaced team config for {org_id}/{team_id}")
+            else:
+                update_node_configuration(
+                    session,
+                    org_id,
+                    team_id,
+                    team_config_data,
+                    updated_by="yaml_seeder",
+                    change_reason="Seeded from local.yaml",
+                    skip_validation=True,
+                )
+                logger.info(f"Updated team config for {org_id}/{team_id}")
         else:
             get_or_create_node_configuration(session, org_id, team_id, node_type="team")
-            # Now update it with our config
-            update_node_configuration(
-                session,
-                org_id,
-                team_id,
-                team_config_data,
-                updated_by="yaml_seeder",
-                change_reason="Seeded from local.yaml",
-                skip_validation=True,
-            )
+            team_config = get_node_configuration(session, org_id, team_id)
+            _replace_config_json(session, team_config, team_config_data)
             logger.info(f"Created team config for {org_id}/{team_id}")
 
     session.commit()
@@ -173,12 +171,29 @@ def _extract_team_config(config: Dict[str, Any]) -> Dict[str, Any]:
     - Integrations (team-specific credentials)
     - Prompts (team-specific behavior)
     - Skills (team-specific capabilities)
+
+    The YAML schema uses ai_model as the single source of truth for the active
+    provider/model.  The Slack bot reads integrations.llm.model from the DB, so
+    we synthesize that field here — it is never stored in the YAML itself.
     """
     team_config = {}
 
-    # Integrations are team-specific
+    # Integrations are team-specific.
+    # The YAML never contains an "llm" key (that is internal to the DB).
     if "integrations" in config:
-        team_config["integrations"] = config["integrations"]
+        team_config["integrations"] = dict(config["integrations"])
+
+    # Synthesize integrations.llm.model from ai_model so the Slack bot can read
+    # which provider/model is active without the user ever needing to write "llm"
+    # in their YAML.
+    ai_model = config.get("ai_model", {})
+    if ai_model:
+        provider = ai_model.get("provider", "anthropic")
+        model_id = ai_model.get("model_id", "")
+        if model_id:
+            team_config.setdefault("integrations", {})["llm"] = {
+                "model": f"{provider}/{model_id}"
+            }
 
     # Prompts are team-specific
     if "prompts" in config:
@@ -193,3 +208,33 @@ def _extract_team_config(config: Dict[str, Any]) -> Dict[str, Any]:
         team_config["ai_model"] = config["ai_model"]
 
     return team_config
+
+
+def _replace_config_json(session: Session, node: "NodeConfiguration", new_config: Dict[str, Any]) -> None:
+    """Directly replace a node's config_json, bypassing deep merge.
+
+    Used by seed_from_yaml(force=True) so that the YAML file is the complete
+    source of truth.  update_node_configuration always deep-merges, which
+    would silently preserve keys that were removed from the YAML (e.g. an
+    integrations.llm section that was deleted when the file was reset).
+
+    Uses a raw SQL UPDATE to bypass SQLAlchemy ORM mutation tracking, which
+    is unreliable for JSONB columns with autoflush=False sessions.
+    """
+    session.execute(
+        update(NodeConfiguration)
+        .where(
+            NodeConfiguration.org_id == node.org_id,
+            NodeConfiguration.node_id == node.node_id,
+        )
+        .values(
+            config_json=new_config,
+            effective_config_json=None,
+            effective_config_computed_at=None,
+            updated_by="yaml_seeder",
+            version=(node.version or 1) + 1,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    # Expire the in-memory object so any subsequent reads go back to the DB
+    session.expire(node)

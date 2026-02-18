@@ -255,7 +255,11 @@ class ConfigServiceClient:
             del _team_token_cache[slack_team_id]
 
         # Issue new token
-        org_id = f"slack-{slack_team_id}"
+        # In local mode, use 'local' org instead of per-workspace orgs
+        if CONFIG_MODE == "local":
+            org_id = "local"
+        else:
+            org_id = f"slack-{slack_team_id}"
         team_node_id = "default"
 
         try:
@@ -661,7 +665,11 @@ class ConfigServiceClient:
         Raises:
             ConfigServiceError: If the config service request fails.
         """
-        org_id = f"slack-{slack_team_id}"
+        # In local mode, use 'local' org instead of per-workspace orgs
+        if CONFIG_MODE == "local":
+            org_id = "local"
+        else:
+            org_id = f"slack-{slack_team_id}"
         team_node_id = "default"
 
         config = {
@@ -791,7 +799,11 @@ class ConfigServiceClient:
         Raises:
             ConfigServiceError: If the config service request fails.
         """
-        org_id = f"slack-{slack_team_id}"
+        # In local mode, use 'local' org instead of per-workspace orgs
+        if CONFIG_MODE == "local":
+            org_id = "local"
+        else:
+            org_id = f"slack-{slack_team_id}"
         team_node_id = "default"
 
         update = {"integrations": {integration_id: config}}

@@ -92,7 +92,7 @@ class YAMLConfigManager:
         # Ensure parent directory exists
         self.config_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write atomically
+        # Write atomically: dump to temp file, validate, then rename.
         with tempfile.NamedTemporaryFile(
             mode="w",
             dir=self.config_file_path.parent,
@@ -104,6 +104,23 @@ class YAMLConfigManager:
                 self.yaml.dump(data_to_write, tmp_file)
                 tmp_file.flush()
                 os.fsync(tmp_file.fileno())
+
+                # Integrity check: re-parse the temp file and verify top-level
+                # keys are still sane (catches ruamel.yaml comment-position bugs
+                # before they overwrite the live file).
+                with open(tmp_path, 'r') as verify_f:
+                    verified = self.yaml.load(verify_f)
+                if verified is None:
+                    raise ValueError("Written YAML parsed as empty")
+                expected_top_level = {"org_id", "team_id", "ai_model", "integrations",
+                                      "prompts", "skills", "security"}
+                written_keys = set(verified.keys())
+                stray_keys = written_keys - expected_top_level
+                if stray_keys:
+                    raise ValueError(
+                        f"Write-back produced unexpected top-level keys: {stray_keys}. "
+                        "This is likely a ruamel.yaml comment-positioning bug."
+                    )
 
                 # Atomic rename
                 tmp_path.replace(self.config_file_path)
@@ -162,8 +179,11 @@ class YAMLConfigManager:
         # Update integration config
         config["integrations"][integration_name] = yaml_config
 
-        # Write back to file
-        self.write_config(dict(config), preserve_formatting=True)
+        # Write back to file.
+        # Pass the CommentedMap directly (preserve_formatting=False skips the
+        # double-load+merge that corrupts comment positions).  Comments are
+        # embedded in the CommentedMap itself so ruamel.yaml preserves them.
+        self.write_config(config, preserve_formatting=False)
         self.logger.info(f"Updated integration config for {integration_name}")
 
     def _merge_preserving_structure(self, existing: Any, new: Dict[str, Any]) -> Any:
@@ -306,30 +326,56 @@ def write_config_to_yaml(
                 yaml_config["security"] = config_json["security"]
 
         elif node_type == "team":
-            # Write team-level config
+            # Write team-level config.
+            #
+            # YAML schema contract:
+            #   ai_model:         ← single source of truth for active provider + model
+            #   integrations:     ← provider credentials and other tool configs
+            #                       Does NOT contain an "llm" key; that is an internal
+            #                       DB field used by the Slack bot and is hidden from YAML.
 
-            # Handle integrations specially (extract secrets to .env)
+            # Handle integrations — skip the internal "llm" key, extract secrets to .env
             if "integrations" in config_json:
                 if "integrations" not in yaml_config:
                     yaml_config["integrations"] = CommentedMap()
 
                 for int_name, int_config in config_json["integrations"].items():
-                    yaml_int_config = CommentedMap()
+                    if int_name == "llm":
+                        # "llm" is an internal DB field — convert to ai_model instead (below)
+                        continue
 
-                    for key, value in int_config.items():
+                    yaml_int_config = CommentedMap()
+                    for key, value in (int_config or {}).items():
                         if yaml_manager._is_secret_field(key):
-                            # Write secret to .env
                             env_var_name = f"{int_name.upper()}_{key.upper()}"
                             env_manager.write_env_variable(
                                 env_var_name, value, comment=f"{int_name} {key}"
                             )
-                            # Use reference in YAML
                             yaml_int_config[key] = f"${{{env_var_name}}}"
                         else:
-                            # Non-secret field
                             yaml_int_config[key] = value
 
                     yaml_config["integrations"][int_name] = yaml_int_config
+
+                # Remove any stale "llm" key that may have been written by older code
+                if 'llm' in yaml_config.get('integrations', {}):
+                    del yaml_config['integrations']['llm']
+
+                # Convert integrations.llm.model → ai_model (highest priority — overrides
+                # whatever ai_model was already in the YAML or config_json)
+                llm = config_json['integrations'].get('llm') or {}
+                model_string = llm.get('model', '')
+                if model_string:
+                    if '/' in model_string:
+                        provider, model_id = model_string.split('/', 1)
+                    else:
+                        provider = 'anthropic' if 'claude' in model_string.lower() else 'unknown'
+                        model_id = model_string
+
+                    if 'ai_model' not in yaml_config:
+                        yaml_config['ai_model'] = CommentedMap()
+                    yaml_config['ai_model']['provider'] = provider
+                    yaml_config['ai_model']['model_id'] = model_id
 
             # Handle prompts
             if "prompts" in config_json:
@@ -339,12 +385,10 @@ def write_config_to_yaml(
             if "skills" in config_json:
                 yaml_config["skills"] = config_json["skills"]
 
-            # Handle ai_model override at team level
-            if "ai_model" in config_json:
-                yaml_config["ai_model"] = config_json["ai_model"]
-
-        # Write back to file (atomic operation)
-        yaml_manager.write_config(dict(yaml_config), preserve_formatting=True)
+        # Write back to file (atomic operation).
+        # Pass the CommentedMap directly — preserve_formatting=False avoids a
+        # second load+merge that would corrupt comment positions in the file.
+        yaml_manager.write_config(yaml_config, preserve_formatting=False)
 
         logger = app_logger().bind(component="yaml_writeback")
         logger.info(

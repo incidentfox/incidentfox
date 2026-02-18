@@ -185,9 +185,20 @@ class EnvManager:
 _env_manager: Optional[EnvManager] = None
 
 
-def get_env_manager(env_file_path: str = ".env") -> EnvManager:
-    """Get or create the global EnvManager instance."""
+def get_env_manager(env_file_path: Optional[str] = None) -> EnvManager:
+    """Get or create the global EnvManager instance.
+
+    Args:
+        env_file_path: Optional path to .env file.
+                      If not provided, uses ENV_FILE_PATH env var or defaults to ".env"
+    """
     global _env_manager
+
+    # Determine the env file path
+    if env_file_path is None:
+        # Check ENV_FILE_PATH environment variable (set in docker-compose for container)
+        env_file_path = os.getenv("ENV_FILE_PATH", ".env")
+
     if _env_manager is None or _env_manager.env_file_path != Path(env_file_path):
         _env_manager = EnvManager(env_file_path)
     return _env_manager

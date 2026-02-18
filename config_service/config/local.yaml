@@ -14,25 +14,120 @@ org_id: local
 team_id: default
 
 # AI Model Configuration
+# Set provider + model_id to choose which AI powers agent runs.
+# The corresponding API key must be set in the integrations section below.
+#
+# Providers and recommended models (as of Feb 2026):
+#
+#   provider: anthropic    → integrations.anthropic.api_key
+#     model_id: claude-sonnet-4-6         # latest flagship (default)
+#     model_id: claude-opus-4-6-20260205  # most capable
+#     model_id: claude-opus-4-5-20251101  # previous opus generation
+#     model_id: claude-sonnet-4-5-20250929
+#     model_id: claude-haiku-4-5-20251001 # fast & cheap
+#
+#   provider: openai       → integrations.openai.api_key
+#     model_id: gpt-4o                    # flagship
+#     model_id: gpt-4o-mini               # fast & cheap
+#     model_id: gpt-4.1                   # latest GPT-4 series
+#     model_id: o3                        # advanced reasoning
+#     model_id: o4-mini                   # fast reasoning
+#
+#   provider: gemini       → integrations.gemini.api_key
+#     model_id: gemini-2.5-pro            # most capable
+#     model_id: gemini-2.5-flash          # fast & affordable
+#     model_id: gemini-2.0-flash          # stable fast model
+#     model_id: gemini-1.5-pro            # solid, widely supported
+#
+#   provider: deepseek     → integrations.deepseek.api_key
+#     model_id: deepseek-chat             # general purpose (DeepSeek V3)
+#     model_id: deepseek-reasoner         # reasoning (DeepSeek R1)
+#     model_id: deepseek-v3               # explicit V3
+#
+#   provider: xai          → integrations.xai.api_key
+#     model_id: grok-3                    # latest flagship
+#     model_id: grok-3-beta               # stable grok-3
+#     model_id: grok-2-latest             # previous gen, stable
+#
+#   provider: groq         → integrations.groq.api_key  (fast inference)
+#     model_id: llama-3.3-70b-versatile
+#     model_id: meta-llama/llama-4-scout-17b-16e-instruct
+#     model_id: meta-llama/llama-4-maverick-17b-128e-instruct
+#
+#   provider: mistral      → integrations.mistral.api_key
+#     model_id: mistral-large-latest      # flagship
+#     model_id: mistral-medium-latest     # balanced
+#     model_id: mistral-small-latest      # fast & cheap
+#     model_id: codestral-latest          # code-specialized
+#
+#   provider: cohere       → integrations.cohere.api_key
+#     model_id: command-a-03-2025         # latest flagship
+#     model_id: command-r-plus            # balanced
+#     model_id: command-r-08-2024
+#
+#   provider: ollama       → no API key needed (runs locally)
+#     model_id: llama3.2                  # any model you've pulled
+#     model_id: mistral                   # see https://ollama.com/library
+#     base_url: http://host.docker.internal:11434
+#
+#   provider: openrouter   → integrations.openrouter.api_key
+#     model_id: anthropic/claude-sonnet-4-6  # route any model via OpenRouter
+#     # Full list: https://openrouter.ai/models
+#
 ai_model:
-  provider: anthropic  # anthropic, openai, or ollama
-  model_id: claude-sonnet-4-20250514
-  # Optional: Override base URL for custom endpoints
-  # base_url: http://localhost:11434  # For Ollama
+  provider: anthropic  # see options above
+  model_id: claude-sonnet-4-6
+  # Optional: Override base URL (required for ollama, azure, bedrock)
+  # base_url: http://host.docker.internal:11434
 
 # Integrations
-# Configure your observability, cloud, and collaboration tools
+# Configure your observability, cloud, and collaboration tools.
+# Only uncomment the sections you need — unused integrations are ignored.
 integrations:
   # Coralogix - Log management and observability
-  # Uncomment and configure to enable:
   coralogix:
     api_key: ${CORALOGIX_API_KEY}
     region: us2  # us1, us2, eu1, eu2, ap1, ap2
     application_name: incidentfox-local
     subsystem_name: sre-agent
 
+  # Anthropic - API key for Anthropic models (claude-*)
+  anthropic:
+    api_key: ${ANTHROPIC_API_KEY}
+
+  # OpenAI - API key for OpenAI models (gpt-*, o1, o3, o4-*)
+  openai:
+    api_key: ${OPENAI_API_KEY}
+
+  # Google Gemini - API key for Gemini models
+  # gemini:
+  #   api_key: ${GEMINI_API_KEY}
+
+  # xAI (Grok) - API key for grok-* models
+  # xai:
+  #   api_key: ${XAI_API_KEY}
+
+  # DeepSeek - API key for deepseek-* models
+  # deepseek:
+  #   api_key: ${DEEPSEEK_API_KEY}
+
+  # Groq - API key for fast Groq-hosted inference
+  # groq:
+  #   api_key: ${GROQ_API_KEY}
+
+  # Mistral AI - API key for mistral-* and codestral-* models
+  # mistral:
+  #   api_key: ${MISTRAL_API_KEY}
+
+  # Cohere - API key for command-* models
+  # cohere:
+  #   api_key: ${COHERE_API_KEY}
+
+  # OpenRouter - single API key to access any provider
+  # openrouter:
+  #   api_key: ${OPENROUTER_API_KEY}
+
   # AWS - Cloud infrastructure
-  # Uncomment and configure to enable:
   # aws:
   #   access_key_id: ${AWS_ACCESS_KEY_ID}
   #   secret_access_key: ${AWS_SECRET_ACCESS_KEY}
@@ -42,7 +137,6 @@ integrations:
   #   # rds_instance_id: my-database
 
   # GitHub - Code repository and CI/CD
-  # Uncomment and configure to enable:
   # github:
   #   token: ${GITHUB_TOKEN}
   #   # Optional: Specific repos to watch
@@ -51,7 +145,6 @@ integrations:
   #   #   - owner/repo2
 
   # Prometheus - Metrics and alerting
-  # Uncomment and configure to enable:
   # prometheus:
   #   url: ${PROMETHEUS_URL}
   #   # Optional: Basic auth
@@ -59,13 +152,11 @@ integrations:
   #   # password: ${PROMETHEUS_PASSWORD}
 
   # Grafana - Dashboards and visualization
-  # Uncomment and configure to enable:
   # grafana:
   #   url: ${GRAFANA_URL}
   #   api_key: ${GRAFANA_API_KEY}
 
   # PagerDuty - Incident management
-  # Uncomment and configure to enable:
   # pagerduty:
   #   api_key: ${PAGERDUTY_API_KEY}
   #   # Optional: Specific service IDs to monitor
@@ -73,14 +164,12 @@ integrations:
   #   #   - PXXXXXX
 
   # Datadog - APM and monitoring
-  # Uncomment and configure to enable:
   # datadog:
   #   api_key: ${DATADOG_API_KEY}
   #   app_key: ${DATADOG_APP_KEY}
   #   site: datadoghq.com  # or datadoghq.eu, us3.datadoghq.com, etc.
 
   # Sentry - Error tracking
-  # Uncomment and configure to enable:
   # sentry:
   #   auth_token: ${SENTRY_AUTH_TOKEN}
   #   organization: my-org
@@ -89,7 +178,6 @@ integrations:
   #   #   - my-project
 
   # Kubernetes - Container orchestration
-  # Uncomment and configure to enable:
   # kubernetes:
   #   config_path: ${KUBECONFIG}
   #   # Or use in-cluster config:

@@ -62,11 +62,15 @@ services:
       TEAM_AUTH_MODE: token
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: console
+      ENV_FILE_PATH: /repo/.env  # Path to .env file for write-back
     ports:
       - "8080:8080"
     volumes:
       # Mount config directory for YAML config in local mode
       - ./config_service/config:/app/config:rw
+      # Mount repo root for .env write-back in local mode
+      # (Mounting entire repo allows atomic file operations)
+      - .:/repo:rw
     depends_on:
       postgres:
         condition: service_healthy

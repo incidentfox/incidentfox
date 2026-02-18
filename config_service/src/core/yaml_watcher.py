@@ -14,8 +14,9 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from src.core.audit_log import app_logger
-from src.core.yaml_config import is_local_mode
+from src.core.yaml_config import YAMLConfigManager, is_local_mode
 from src.core.yaml_seeder import seed_from_yaml
+from src.core.yaml_validator import validate_yaml_config
 from src.db.session import get_session_maker
 
 logger = app_logger().bind(component="yaml_watcher")
@@ -51,6 +52,22 @@ class YAMLConfigHandler(FileSystemEventHandler):
         )
 
         try:
+            # Validate before applying — hard block on errors
+            yaml_manager = YAMLConfigManager(str(self.config_file_path))
+            resolved = yaml_manager.load_config()
+            result = validate_yaml_config(resolved)
+
+            if result.warnings:
+                for w in result.warnings:
+                    logger.warning(f"⚠️  YAML warning: {w}")
+
+            if not result.is_valid:
+                logger.error(
+                    "❌ local.yaml has validation errors — not applying changes. "
+                    "Fix the file and save again.\n" + result.format()
+                )
+                return
+
             # Reload config from YAML and update database
             SessionLocal = get_session_maker()
             db = SessionLocal()
