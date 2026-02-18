@@ -93,7 +93,6 @@ services:
     container_name: incidentfox-credential-resolver
     restart: unless-stopped
     environment:
-      - CREDENTIAL_SOURCE=environment
       - JWT_MODE=permissive
       - CONFIG_SERVICE_URL=http://config-service:8080
     env_file:

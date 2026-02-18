@@ -259,7 +259,14 @@ class ConfigServiceClient:
             else anthropic_config.get("subscription_status", "none")
         )
 
-        # Step 1: Check if customer has valid access (trial OR subscription)
+        # Step 1: BYOK — if the customer configured their own key, use it immediately.
+        # No trial/subscription check needed: they're paying Anthropic directly.
+        if customer_api_key:
+            logger.info(f"Using customer BYOK Anthropic key for tenant={tenant_id}")
+            return {"api_key": customer_api_key}
+
+        # Step 2: No BYOK — check if they're authorized to use our shared key.
+        # Requires a valid trial OR an active subscription.
         has_valid_trial = False
         if is_trial and trial_expires_at:
             try:
@@ -276,22 +283,12 @@ class ConfigServiceClient:
 
         has_active_subscription = subscription_status == "active"
 
-        # Deny access if neither trial nor subscription
         if not has_valid_trial and not has_active_subscription:
             logger.warning(
-                f"Access denied for tenant={tenant_id}: "
+                f"Access denied for tenant={tenant_id}: no BYOK, "
                 f"trial_valid={has_valid_trial}, subscription={subscription_status}"
             )
             return None
-
-        # Step 2: Customer has access - determine which API key to use
-        # If they configured their own key, use it (BYOK)
-        if customer_api_key:
-            logger.info(
-                f"Using customer's own Anthropic key for tenant={tenant_id} "
-                f"(trial={has_valid_trial}, subscription={subscription_status})"
-            )
-            return {"api_key": customer_api_key}
 
         # Otherwise, use our shared key with attribution for cost tracking
         shared_key = get_shared_anthropic_key()

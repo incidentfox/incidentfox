@@ -86,21 +86,14 @@ def _get_github_app_token(creds: dict) -> str | None:
         return None
 
 
-# Credential source: "config_service" (SaaS) or "environment" (local/self-hosted)
-CREDENTIAL_SOURCE = os.getenv("CREDENTIAL_SOURCE", "environment")
-
 # JWT validation mode: "strict" (require valid JWT) or "permissive" (allow missing JWT for local dev)
 JWT_MODE = os.getenv("JWT_MODE", "strict")
 
 # Cache for credentials (5-minute TTL)
 credential_cache: TTLCache = TTLCache(maxsize=1000, ttl=300)
 
-# Config Service client (only initialized if needed)
+# Config Service client
 config_client: ConfigServiceClient | None = None
-
-# Environment-based credentials (for local/self-hosted mode)
-# Loaded at startup from environment variables
-ENV_CREDENTIALS: dict[str, dict] = {}
 
 
 def load_env_credentials() -> dict[str, dict]:
@@ -299,79 +292,44 @@ def mask_secret(value: str | None, visible_chars: int = 6) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    global config_client, ENV_CREDENTIALS
+    global config_client
 
-    logger.info(
-        f"Starting credential-resolver with source={CREDENTIAL_SOURCE}, jwt_mode={JWT_MODE}"
-    )
+    logger.info(f"Starting credential-resolver (jwt_mode={JWT_MODE})")
 
-    # Always init config_client when CONFIG_SERVICE_URL is reachable —
-    # even in environment mode we need it to look up the team's LLM model.
     config_client = ConfigServiceClient()
     logger.info("Config Service client initialized")
 
-    if CREDENTIAL_SOURCE == "config_service":
-        pass  # credentials also come from config_service
-    else:
-        ENV_CREDENTIALS = load_env_credentials()
-        # Check which integrations are configured using shared validation
-        configured = [
-            k for k, v in ENV_CREDENTIALS.items() if is_integration_configured(k, v)
-        ]
-        logger.info(f"Environment credentials loaded for: {configured}")
+    # Bootstrap LLM key validation — check env vars directly since config-service
+    # isn't ready to query yet.  Credentials flow: .env → local.yaml → config-service
+    # → here at runtime.  This catches the common "forgot to set API key" mistake early.
+    _LLM_PROVIDER_IDS = {
+        "anthropic", "openai", "gemini", "deepseek", "xai", "groq", "mistral",
+        "cohere", "together_ai", "fireworks_ai", "openrouter", "bedrock",
+        "vertex_ai", "azure_ai", "azure", "ollama", "moonshot", "minimax",
+    }
+    env_creds = load_env_credentials()
+    any_llm = any(
+        is_integration_configured(k, env_creds.get(k, {})) for k in _LLM_PROVIDER_IDS
+    )
+    if not any_llm:
+        import sys
+        logger.error("=" * 60)
+        logger.error("STARTUP ERROR: No LLM API key configured.")
+        logger.error("The agent cannot run without an LLM provider.")
+        logger.error("")
+        logger.error("Add at least one of these to your .env file:")
+        logger.error("  ANTHROPIC_API_KEY=sk-ant-...   (Anthropic Claude — default)")
+        logger.error("  OPENAI_API_KEY=sk-...           (OpenAI GPT)")
+        logger.error("  GEMINI_API_KEY=...              (Google Gemini)")
+        logger.error("  GROQ_API_KEY=...                (Groq — fast & cheap)")
+        logger.error("  OLLAMA_HOST=http://...          (local Ollama)")
+        logger.error("")
+        logger.error("See .env.example for the full list of supported providers.")
+        logger.error("=" * 60)
+        sys.exit(1)
 
-        # Validate that at least one LLM provider is configured — required for the
-        # agent to function.  Fail fast with a clear message so users know what to fix.
-        _LLM_PROVIDER_IDS = {
-            "anthropic", "openai", "gemini", "deepseek", "xai", "groq", "mistral",
-            "cohere", "together_ai", "fireworks_ai", "openrouter", "bedrock",
-            "vertex_ai", "azure_ai", "azure", "ollama", "moonshot", "minimax",
-        }
-        any_llm = any(
-            is_integration_configured(k, ENV_CREDENTIALS.get(k, {}))
-            for k in _LLM_PROVIDER_IDS
-        )
-        if not any_llm:
-            import sys
-            logger.error("=" * 60)
-            logger.error("STARTUP ERROR: No LLM API key configured.")
-            logger.error("The agent cannot run without an LLM provider.")
-            logger.error("")
-            logger.error("Add at least one of these to your .env file:")
-            logger.error("  ANTHROPIC_API_KEY=sk-ant-...   (Anthropic Claude — default)")
-            logger.error("  OPENAI_API_KEY=sk-...           (OpenAI GPT)")
-            logger.error("  GEMINI_API_KEY=...              (Google Gemini)")
-            logger.error("  GROQ_API_KEY=...                (Groq — fast & cheap)")
-            logger.error("  OLLAMA_HOST=http://...          (local Ollama)")
-            logger.error("")
-            logger.error("See .env.example for the full list of supported providers.")
-            logger.error("=" * 60)
-            sys.exit(1)
-
-        # Debug: show masked credentials to verify they're loaded
-        for integration, creds in ENV_CREDENTIALS.items():
-            if is_integration_configured(integration, creds):
-                # Log the primary credential for each type
-                if integration == "datadog":
-                    logger.info(
-                        f"  {integration}: api_key={mask_secret(creds.get('api_key'))}, "
-                        f"app_key={mask_secret(creds.get('app_key'))}, site={creds.get('site')}"
-                    )
-                elif integration in [
-                    "confluence",
-                    "grafana",
-                    "elasticsearch",
-                    "prometheus",
-                    "jaeger",
-                ]:
-                    logger.info(
-                        f"  {integration}: domain={creds.get('domain') or '(not set)'}, "
-                        f"api_key={mask_secret(creds.get('api_key'))}"
-                    )
-                else:
-                    logger.info(
-                        f"  {integration}: api_key={mask_secret(creds.get('api_key'))}"
-                    )
+    configured = [k for k in _LLM_PROVIDER_IDS if is_integration_configured(k, env_creds.get(k, {}))]
+    logger.info(f"LLM providers available in env: {configured}")
 
     yield
 
@@ -397,7 +355,7 @@ class ExtAuthzResponse(BaseModel):
 @app.get("/health")
 async def health():
     """Health check endpoint."""
-    return {"status": "healthy", "source": CREDENTIAL_SOURCE, "jwt_mode": JWT_MODE}
+    return {"status": "healthy", "source": "config_service", "jwt_mode": JWT_MODE}
 
 
 @app.get("/api/integrations")
@@ -2116,12 +2074,7 @@ async def extract_tenant_context(request: Request) -> tuple[str, str, str]:
 async def get_credentials(
     tenant_id: str, team_id: str, integration_id: str
 ) -> dict | None:
-    """Get credentials from configured source."""
-    if CREDENTIAL_SOURCE == "environment":
-        # Local/self-hosted: load from env vars
-        return ENV_CREDENTIALS.get(integration_id)
-
-    # SaaS: fetch from Config Service (cached)
+    """Get credentials from Config Service (with 5-minute cache)."""
     cache_key = (tenant_id, team_id, integration_id)
     if cache_key in credential_cache:
         return credential_cache[cache_key]
