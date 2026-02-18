@@ -220,29 +220,44 @@ class ConfigServiceClient:
     def _resolve_anthropic_credentials(
         self, config: dict, tenant_id: str
     ) -> dict | None:
-        """Resolve Anthropic credentials with subscription + trial support.
+        """Resolve Anthropic credentials.
 
-        Access control logic:
-        1. Check if customer has ACCESS (valid trial OR active subscription)
-        2. If access granted, determine which API key to use:
-           - Customer BYOK (api_key in integrations.anthropic) -> use their key
-           - No BYOK -> use our shared key with attribution
-        3. If no access, DENY
+        Two distinct modes:
+
+        Local / self-hosted (tenant_id == "local"):
+          - No access control — operator owns the deployment.
+          - BYOK required; no shared key fallback.
+
+        SaaS (any other tenant):
+          - Must have a valid trial OR active subscription to access the platform,
+            even when bringing their own key.
+          - If authorized: BYOK if configured, else our shared key with attribution.
 
         Args:
             config: Full effective_config from Config Service (trial fields at
                 top level, API key inside integrations.anthropic)
-            tenant_id: For attribution tagging
+            tenant_id: For attribution tagging and mode detection
 
         Returns:
-            Dict with api_key and optional attribution metadata, or None if access denied
+            Dict with api_key and optional attribution metadata, or None if denied
         """
-        # Get customer API key from integrations.anthropic
         anthropic_config = config.get("integrations", {}).get("anthropic", {})
         creds = self._extract_credentials(anthropic_config)
         customer_api_key = creds.get("api_key")
-        # Trial/subscription fields may be at top level or inside integrations.anthropic
-        # Use `is not None` checks to avoid falsy values (False, "") falling through
+
+        # ── Local / self-hosted ───────────────────────────────────────────────
+        # tenant_id == "local" means the operator is running their own instance.
+        # No trial/subscription check — just use their own key.
+        if tenant_id == "local":
+            if customer_api_key:
+                logger.info("Using BYOK Anthropic key (local mode)")
+                return {"api_key": customer_api_key}
+            logger.warning("Local mode: no Anthropic API key configured")
+            return None
+
+        # ── SaaS ─────────────────────────────────────────────────────────────
+        # Trial/subscription fields may be at top level or inside integrations.anthropic.
+        # Use `is not None` checks to avoid falsy values (False, "") falling through.
         is_trial = (
             config.get("is_trial")
             if config.get("is_trial") is not None
@@ -259,14 +274,6 @@ class ConfigServiceClient:
             else anthropic_config.get("subscription_status", "none")
         )
 
-        # Step 1: BYOK — if the customer configured their own key, use it immediately.
-        # No trial/subscription check needed: they're paying Anthropic directly.
-        if customer_api_key:
-            logger.info(f"Using customer BYOK Anthropic key for tenant={tenant_id}")
-            return {"api_key": customer_api_key}
-
-        # Step 2: No BYOK — check if they're authorized to use our shared key.
-        # Requires a valid trial OR an active subscription.
         has_valid_trial = False
         if is_trial and trial_expires_at:
             try:
@@ -279,18 +286,25 @@ class ConfigServiceClient:
                 has_valid_trial = now < expires_at
             except (ValueError, TypeError) as e:
                 logger.error(f"Invalid trial_expires_at format: {e}")
-                has_valid_trial = False
 
         has_active_subscription = subscription_status == "active"
 
+        # Access gate: must have trial or subscription (even for BYOK).
         if not has_valid_trial and not has_active_subscription:
             logger.warning(
-                f"Access denied for tenant={tenant_id}: no BYOK, "
+                f"Access denied for tenant={tenant_id}: "
                 f"trial_valid={has_valid_trial}, subscription={subscription_status}"
             )
             return None
 
-        # Otherwise, use our shared key with attribution for cost tracking
+        # Authorized — use BYOK if available, else fall back to shared key.
+        if customer_api_key:
+            logger.info(
+                f"Using BYOK Anthropic key for tenant={tenant_id} "
+                f"(trial={has_valid_trial}, subscription={subscription_status})"
+            )
+            return {"api_key": customer_api_key}
+
         shared_key = get_shared_anthropic_key()
         if not shared_key:
             logger.error(
@@ -302,10 +316,7 @@ class ConfigServiceClient:
             f"Using shared Anthropic key for tenant={tenant_id} "
             f"(trial={has_valid_trial}, subscription={subscription_status})"
         )
-        return {
-            "api_key": shared_key,
-            "workspace_attribution": tenant_id,
-        }
+        return {"api_key": shared_key, "workspace_attribution": tenant_id}
 
     def _extract_credentials(self, config: dict) -> dict:
         """Extract credential fields from integration config.
