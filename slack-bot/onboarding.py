@@ -3548,7 +3548,7 @@ def build_ai_model_modal(
     _provider_hint = (
         ":bulb: *Anthropic (Claude)* is the default. Add *ANTHROPIC_API_KEY* to your .env file, or pick another provider."
         if _is_local_mode
-        else ":bulb: *Anthropic (Claude)* is the default and uses IncidentFox's API key. Choose another provider to use your own key."
+        else ":bulb: With *Anthropic*, leave the API key blank to use IncidentFox's key, or enter your own. Other providers always require your own key."
     )
     blocks.append(
         {
