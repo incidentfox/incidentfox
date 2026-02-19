@@ -239,17 +239,19 @@ async def agent_background_task(thread_id: str):
         logger.info(f"[BG] Background task ended for thread {thread_id}")
 
 
-def _download_file_attachments(file_downloads: list):
+def _download_file_attachments(file_downloads: list, thread_id: str):
     """
     Download file attachments directly using stored token info.
 
     In simple mode there's no sandbox, so we download files in-process
     using the credentials stored in _file_download_tokens. Files are saved
-    to ./attachments/{filename} to match what the prompt tells the agent.
+    to the agent's session directory at /tmp/sessions/{thread_id}/attachments/
+    to match what the enriched prompt tells the agent.
     """
     from pathlib import Path
 
-    attachments_dir = Path("attachments")
+    # Must match agent.py's session directory for simple mode
+    attachments_dir = Path(f"/tmp/sessions/{thread_id}/attachments")
     attachments_dir.mkdir(parents=True, exist_ok=True)
 
     for download in file_downloads:
@@ -324,7 +326,7 @@ async def create_investigation_stream(
 
         # Download file attachments directly (no sandbox, so download in-process)
         if file_downloads:
-            _download_file_attachments(file_downloads)
+            _download_file_attachments(file_downloads, thread_id)
 
         # Send message to background task
         message_queue = _message_queues[thread_id]
