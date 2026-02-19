@@ -2923,14 +2923,11 @@ def _build_vercel_message(
 
 async def _process_vercel_webhook(request: Request, project_id: str, message: str):
     """Process a Vercel webhook by routing to the appropriate team's agent."""
-    import logging
-
     from incidentfox_orchestrator.clients import (
         AgentApiClient,
         ConfigServiceClient,
     )
 
-    logger = logging.getLogger(__name__)
     correlation_id = __import__("uuid").uuid4().hex
 
     _log(
