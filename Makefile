@@ -1,17 +1,24 @@
 # IncidentFox — Local Development
 #
 # Usage:
-#   make dev        Start all services (postgres, config-service, credential-proxy, sre-agent, slack-bot)
-#                   Note: slack-bot requires SLACK_BOT_TOKEN + SLACK_APP_TOKEN in .env
-#   make stop       Stop all services
-#   make logs       Follow all logs
-#   make clean      Remove containers, volumes, and images
-#   make db-shell   Open psql shell
+#   make dev            Start all services (includes Langfuse trace viewer at http://localhost:3000)
+#                       Note: slack-bot requires SLACK_BOT_TOKEN + SLACK_APP_TOKEN in .env
+#   make stop           Stop all services
+#   make logs           Follow all logs
+#   make clean          Remove containers, volumes, and images
+#   make db-shell       Open psql shell
 
 .PHONY: dev stop logs logs-agent logs-config status clean db-shell
 
 dev:
 	docker compose up -d --build
+	@echo ""
+	@echo "✅ IncidentFox local stack started"
+	@echo ""
+	@echo "   Agent API:    http://localhost:8000"
+	@echo "   Config API:   http://localhost:8080"
+	@echo "   LLM Traces:   http://localhost:3000  (admin@localhost / admin-local-dev)"
+	@echo ""
 
 stop:
 	docker compose down

@@ -21,9 +21,11 @@ from .QAModels import (  # noqa: F401
     UnifiedQAModel,
 )
 from .RetrievalAugmentation import (
-    RetrievalAugmentation,
-    RetrievalAugmentationConfig,
-)  # noqa: F401
+    RetrievalAugmentation as RetrievalAugmentation,
+)
+from .RetrievalAugmentation import (
+    RetrievalAugmentationConfig as RetrievalAugmentationConfig,
+)
 from .Retrievers import BaseRetriever  # noqa: F401
 from .SummarizationModels import (  # noqa: F401
     BaseSummarizationModel,

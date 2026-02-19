@@ -25,6 +25,7 @@ import uuid
 from typing import Dict, List, Optional
 
 import httpx
+from agent import InteractiveAgentSession
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -167,8 +168,6 @@ async def agent_background_task(thread_id: str):
     Background task that keeps ClaudeSDKClient alive for multi-turn conversations.
     Processes messages from queue and sends responses back.
     """
-
-    from agent import InteractiveAgentSession
 
     logger.info(f"[BG] Starting background agent task for thread {thread_id}")
 

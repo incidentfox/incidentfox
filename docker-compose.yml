@@ -6,6 +6,11 @@ version: '3.8'
 #
 # Services:
 #   postgres, config-service, credential-resolver, envoy, sre-agent, slack-bot
+#   langfuse (postgres, clickhouse, redis, minio, web, worker) — trace viewer
+#
+# Trace dashboard: http://localhost:3000  (admin@localhost / admin-local-dev)
+#   All agent traces go to local Langfuse by default — zero config needed.
+#   To use Langfuse Cloud instead, set LANGFUSE_HOST/PUBLIC_KEY/SECRET_KEY in .env.
 #
 # Note: slack-bot requires SLACK_BOT_TOKEN and SLACK_APP_TOKEN in .env
 #       If not configured, it will exit gracefully with a warning message
@@ -131,6 +136,167 @@ services:
       - default  # Needs external access to reach upstream APIs
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Langfuse — LLM trace viewer (auto-starts, traces appear at localhost:3000)
+  # ─────────────────────────────────────────────────────────────────────────────
+  langfuse-postgres:
+    image: postgres:16-alpine
+    container_name: langfuse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app_network
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:24.12
+    container_name: langfuse-clickhouse
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: langfuse
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - langfuse-clickhouse-logs:/var/log/clickhouse-server
+      - ./local/langfuse-clickhouse-config.xml:/etc/clickhouse-server/config.d/langfuse.xml:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app_network
+
+  langfuse-redis:
+    image: redis:7-alpine
+    container_name: langfuse-redis
+    restart: unless-stopped
+    volumes:
+      - langfuse-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app_network
+
+  langfuse-minio:
+    image: minio/minio
+    container_name: langfuse-minio
+    restart: unless-stopped
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server /data --console-address ":9001"'
+    environment:
+      MINIO_ROOT_USER: langfuse
+      MINIO_ROOT_PASSWORD: langfuse-local-secret
+    volumes:
+      - langfuse-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app_network
+
+  langfuse-web:
+    image: langfuse/langfuse:3
+    container_name: langfuse-web
+    restart: unless-stopped
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: local-dev-nextauth-secret-change-for-production
+      SALT: local-dev-salt-change-for-production-use
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse:langfuse@langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: langfuse
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: langfuse-local-secret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: langfuse-local-secret
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      # Headless init — pre-seed project so traces appear with zero config
+      LANGFUSE_INIT_ORG_NAME: IncidentFox
+      LANGFUSE_INIT_ORG_ID: incidentfox-local
+      LANGFUSE_INIT_PROJECT_NAME: sre-agent
+      LANGFUSE_INIT_PROJECT_ID: sre-agent-local
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: lf-pk-local-dev
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: lf-sk-local-dev
+      LANGFUSE_INIT_USER_EMAIL: admin@localhost
+      LANGFUSE_INIT_USER_NAME: admin
+      LANGFUSE_INIT_USER_PASSWORD: admin-local-dev
+    networks:
+      - app_network
+      - default  # Needs host access for port 3000 publishing
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: langfuse-worker
+    restart: unless-stopped
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
+      SALT: local-dev-salt-change-for-production-use
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse:langfuse@langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: langfuse
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: langfuse-local-secret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+    networks:
+      - app_network
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # SRE Agent — runs investigations (in-process, no K8s sandboxes)
   # ─────────────────────────────────────────────────────────────────────────────
   sre-agent:
@@ -152,13 +318,17 @@ services:
       - INCIDENTFOX_TEAM_ID=default
       # Coralogix config (no API key - injected by proxy)
       - CORALOGIX_DOMAIN=${CORALOGIX_DOMAIN:-}
-      # Other services
-      - LMNR_PROJECT_API_KEY=${LMNR_PROJECT_API_KEY:-}
+      # Langfuse tracing — defaults to local instance; override in .env for cloud
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-lf-pk-local-dev}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-lf-sk-local-dev}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse-web:3000}
     depends_on:
       envoy:
         condition: service_started
       config-service:
         condition: service_healthy
+      langfuse-web:
+        condition: service_started
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -238,3 +408,13 @@ networks:
 volumes:
   postgres-data:
     name: incidentfox-postgres-data
+  langfuse-postgres-data:
+    name: langfuse-postgres-data
+  langfuse-clickhouse-data:
+    name: langfuse-clickhouse-data
+  langfuse-clickhouse-logs:
+    name: langfuse-clickhouse-logs
+  langfuse-redis-data:
+    name: langfuse-redis-data
+  langfuse-minio-data:
+    name: langfuse-minio-data

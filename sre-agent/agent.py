@@ -23,8 +23,8 @@ LLM Provider:
 Observability:
 - Configurable backend via OBSERVABILITY_BACKEND env var: "laminar", "langfuse", or "none"
 - Laminar: Sessions grouped by thread_id, metadata for filtering, outcome tags
-- Langfuse: Trace/span/generation tracking with Claude SDK callback integration
-- Backend selection is a deployment config (Helm values), not per-tenant
+- Langfuse: Auto-enabled in local dev (http://localhost:3000); configurable for cloud
+- Backend selection is a deployment config (Helm values / env), not per-tenant
 """
 
 import base64
@@ -366,15 +366,19 @@ def init_observability() -> None:
         try:
             from langfuse import Langfuse
 
+            langfuse_host = os.getenv("LANGFUSE_HOST", "https://us.cloud.langfuse.com")
             _langfuse_client = Langfuse(
                 public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
                 secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-                host=os.getenv("LANGFUSE_HOST", "https://us.cloud.langfuse.com"),
+                host=langfuse_host,
             )
             _observability_initialized = True
-            print(
-                f"[OBSERVABILITY] Langfuse initialized (host: {os.getenv('LANGFUSE_HOST', 'https://us.cloud.langfuse.com')})"
-            )
+            if langfuse_host == "http://langfuse-web:3000":
+                print(
+                    "[OBSERVABILITY] Langfuse traces: http://localhost:3000  (admin@localhost / admin-local-dev)"
+                )
+            else:
+                print(f"[OBSERVABILITY] Langfuse initialized (host: {langfuse_host})")
         except Exception as e:
             print(f"[OBSERVABILITY] Langfuse init failed: {e}")
             _observability_backend = "none"
