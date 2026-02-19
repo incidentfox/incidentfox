@@ -5103,7 +5103,7 @@ def _build_team_choice_modal(slack_team_id, channel_id, channel_name, existing_t
         name = team.get("name") or node_id
         options.append(
             {
-                "text": {"type": "plain_text", "text": f"Join \"{name}\""},
+                "text": {"type": "plain_text", "text": f'Join "{name}"'},
                 "value": f"join:{node_id}",
             }
         )
@@ -5150,7 +5150,9 @@ def _build_team_choice_modal(slack_team_id, channel_id, channel_name, existing_t
     }
 
 
-def _open_team_setup_modal(client, trigger_id, slack_team_id, channel_id, channel_name, user_id=None):
+def _open_team_setup_modal(
+    client, trigger_id, slack_team_id, channel_id, channel_name, user_id=None
+):
     """Open the appropriate team setup modal (choice or create).
 
     If existing non-default teams are found, opens the choice modal.
@@ -5181,8 +5183,7 @@ def _open_team_setup_modal(client, trigger_id, slack_team_id, channel_id, channe
 
     # Check for existing non-default teams
     existing_teams = [
-        t for t in cc.list_team_nodes(org_id)
-        if t.get("node_id") != "default"
+        t for t in cc.list_team_nodes(org_id) if t.get("node_id") != "default"
     ]
 
     if existing_teams:
@@ -5275,7 +5276,7 @@ def handle_team_setup_choice(ack, body, client, view):
         )
         return
 
-    team_node_id = choice[len("join:"):]
+    team_node_id = choice[len("join:") :]
 
     try:
         cc = get_config_client()
@@ -5541,9 +5542,7 @@ def handle_open_team_setup(ack, body, client):
             channel_name=channel_name,
             user_id=user_id,
         )
-        logger.info(
-            f"Opened team setup modal from button for channel {channel_id}"
-        )
+        logger.info(f"Opened team setup modal from button for channel {channel_id}")
 
     except Exception as e:
         logger.error(f"Failed to open team setup from button: {e}", exc_info=True)

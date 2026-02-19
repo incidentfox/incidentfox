@@ -263,7 +263,9 @@ async def main():
             "PHASE 4b RESULT",
             "Slack knowledge ingested into RAG",
             documents_sent=len(slack_documents),
-            knowledge_types=list(set(item.knowledge_type for item in slack_knowledge_items)),
+            knowledge_types=list(
+                set(item.knowledge_type for item in slack_knowledge_items)
+            ),
             result=json.dumps(slack_ingest_result, default=str)[:300],
             ingest_duration_sec=f"{ingest_time:.1f}",
         )
@@ -328,8 +330,16 @@ async def main():
     github_knowledge_items = []
     if github_docs:
         # Separate architecture maps (already LLM-processed) from regular docs
-        arch_docs = [d for d in github_docs if d.metadata.get("document_type") == "architecture_map"]
-        regular_docs = [d for d in github_docs if d.metadata.get("document_type") != "architecture_map"]
+        arch_docs = [
+            d
+            for d in github_docs
+            if d.metadata.get("document_type") == "architecture_map"
+        ]
+        regular_docs = [
+            d
+            for d in github_docs
+            if d.metadata.get("document_type") != "architecture_map"
+        ]
 
         start = time.time()
         if regular_docs:
@@ -367,31 +377,35 @@ async def main():
         for doc in arch_docs:
             meta = {k: v for k, v in doc.metadata.items() if k != "raw_architecture"}
             meta["knowledge_type"] = "relational"
-            github_ingest_docs.append({
-                "content": doc.content,
-                "source_url": doc.source_url,
-                "content_type": doc.content_type,
-                "metadata": meta,
-            })
+            github_ingest_docs.append(
+                {
+                    "content": doc.content,
+                    "source_url": doc.source_url,
+                    "content_type": doc.content_type,
+                    "metadata": meta,
+                }
+            )
 
         # Extracted knowledge items
         for item in github_knowledge_items:
-            github_ingest_docs.append({
-                "content": item.content,
-                "source_url": item.source_url or "",
-                "content_type": "text",
-                "metadata": {
-                    "title": item.title,
-                    "knowledge_type": item.knowledge_type,
-                    "entities": [
-                        {"name": e.name, "type": e.entity_type}
-                        for e in item.entities
-                    ],
-                    "confidence": item.confidence,
-                    "org_id": org_id,
-                    "source": "integration_scan",
-                },
-            })
+            github_ingest_docs.append(
+                {
+                    "content": item.content,
+                    "source_url": item.source_url or "",
+                    "content_type": "text",
+                    "metadata": {
+                        "title": item.title,
+                        "knowledge_type": item.knowledge_type,
+                        "entities": [
+                            {"name": e.name, "type": e.entity_type}
+                            for e in item.entities
+                        ],
+                        "confidence": item.confidence,
+                        "org_id": org_id,
+                        "source": "integration_scan",
+                    },
+                }
+            )
 
         start = time.time()
         try:
@@ -412,10 +426,9 @@ async def main():
             github_ingest_result = {"error": str(e)}
         ingest_time = time.time() - start
 
-        all_knowledge_types = (
-            ["relational"] * len(arch_docs)
-            + [item.knowledge_type for item in github_knowledge_items]
-        )
+        all_knowledge_types = ["relational"] * len(arch_docs) + [
+            item.knowledge_type for item in github_knowledge_items
+        ]
 
         _log(
             "PHASE 6b RESULT",
@@ -466,16 +479,26 @@ async def main():
     print(f"  LLM recommendations:           {len(analysis.recommendations)}")
     print(f"  Pending changes created:       {len(change_ids)}")
 
-    print(f"\n  --- Knowledge Extraction ---")
+    print("\n  --- Knowledge Extraction ---")
     print(f"  Slack knowledge items:         {len(slack_knowledge_items)}")
-    slack_kt = set(item.knowledge_type for item in slack_knowledge_items) if slack_knowledge_items else set()
+    slack_kt = (
+        set(item.knowledge_type for item in slack_knowledge_items)
+        if slack_knowledge_items
+        else set()
+    )
     print(f"  Slack knowledge types:         {slack_kt or 'none'}")
     print(f"  GitHub knowledge items:        {len(github_knowledge_items)}")
-    github_kt = set(item.knowledge_type for item in github_knowledge_items) if github_knowledge_items else set()
+    github_kt = (
+        set(item.knowledge_type for item in github_knowledge_items)
+        if github_knowledge_items
+        else set()
+    )
     print(f"  GitHub knowledge types:        {github_kt or 'none'}")
 
-    print(f"\n  --- RAG Ingestion ---")
-    print(f"  Slack docs ingested to RAG:    {len(slack_documents) if 'slack_documents' in dir() else 0}")
+    print("\n  --- RAG Ingestion ---")
+    print(
+        f"  Slack docs ingested to RAG:    {len(slack_documents) if 'slack_documents' in dir() else 0}"
+    )
     print(f"  GitHub docs ingested to RAG:   {len(github_docs)}")
 
     arch_docs_summary = [

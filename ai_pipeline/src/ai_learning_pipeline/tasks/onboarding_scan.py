@@ -828,7 +828,9 @@ class OnboardingScanTask:
             )
 
         # Ingest via existing method
-        result = await self._ingest_documents(documents, tree=f"slack_{self.org_id}_{self.team_node_id}")
+        result = await self._ingest_documents(
+            documents, tree=f"slack_{self.org_id}_{self.team_node_id}"
+        )
         result["items_extracted"] = len(knowledge_items)
         result["raw_messages_processed"] = len(messages)
 

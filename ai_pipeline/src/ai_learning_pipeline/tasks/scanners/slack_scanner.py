@@ -215,9 +215,7 @@ class SlackEnvironmentScanner:
             # Filter to team-scoped channels if specified
             if self.channel_ids:
                 scoped_ids = set(self.channel_ids)
-                all_channels = [
-                    ch for ch in all_channels if ch.get("id") in scoped_ids
-                ]
+                all_channels = [ch for ch in all_channels if ch.get("id") in scoped_ids]
                 _log(
                     "channels_filtered_by_team",
                     total_workspace=len(all_channels) + len(scoped_ids),
