@@ -12,6 +12,13 @@
 
 dev:
 	docker compose up -d --build
+	@echo ""
+	@echo "✅ IncidentFox local stack started"
+	@echo ""
+	@echo "   Agent API:    http://localhost:8000"
+	@echo "   Config API:   http://localhost:8080"
+	@echo "   LLM Traces:   http://localhost:3000  (admin@localhost / admin-local-dev)"
+	@echo ""
 
 stop:
 	docker compose down

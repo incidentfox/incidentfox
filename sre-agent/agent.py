@@ -332,7 +332,10 @@ elif os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
         _get_langfuse_client()
         _configure_claude_agent_sdk()
         _langfuse_initialized = True
-        print("✅ [DEBUG] Langfuse initialized via OpenTelemetry")
+        if langfuse_base == "http://langfuse-web:3000":
+            print("✅ Langfuse traces: http://localhost:3000  (admin@localhost / admin-local-dev)")
+        else:
+            print(f"✅ Langfuse traces: {langfuse_base}")
     except ImportError as e:
         print(f"⚠️ [DEBUG] Langfuse packages not available: {e}")
     except Exception as e:

@@ -8,7 +8,7 @@ version: '3.8'
 #   postgres, config-service, credential-resolver, envoy, sre-agent, slack-bot
 #   langfuse (postgres, clickhouse, redis, minio, web, worker) — trace viewer
 #
-# Trace dashboard: http://localhost:3000  (admin@localhost / admin)
+# Trace dashboard: http://localhost:3000  (admin@localhost / admin-local-dev)
 #   All agent traces go to local Langfuse by default — zero config needed.
 #   To use Langfuse Cloud or Laminar instead, override in .env (see .env.example).
 #
@@ -257,9 +257,9 @@ services:
       LANGFUSE_INIT_PROJECT_ID: sre-agent-local
       LANGFUSE_INIT_PROJECT_PUBLIC_KEY: lf-pk-local-dev
       LANGFUSE_INIT_PROJECT_SECRET_KEY: lf-sk-local-dev
-      LANGFUSE_INIT_USER_EMAIL: admin@admin.com
+      LANGFUSE_INIT_USER_EMAIL: admin@localhost
       LANGFUSE_INIT_USER_NAME: admin
-      LANGFUSE_INIT_USER_PASSWORD: adminadmin
+      LANGFUSE_INIT_USER_PASSWORD: admin-local-dev
     networks:
       - app_network
       - default  # Needs host access for port 3000 publishing

@@ -30,9 +30,12 @@ make dev
 
 That's it! The stack will:
 - Start Postgres, config-service, credential-resolver, envoy, sre-agent, and slack-bot
+- Start **Langfuse** — a local LLM trace viewer, no extra config needed
 - Run database migrations automatically
 - Seed initial config from `config_service/config/local.yaml`
 - Connect to Slack (if `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` are configured)
+
+**LLM traces:** Open http://localhost:3000 after `make dev`. Login: `admin@localhost` / `admin-local-dev`. Every agent investigation appears here automatically.
 
 ### Optional: Add Slack Integration
 
@@ -255,6 +258,23 @@ docker compose logs --tail 50 sre-agent
 | **sre-agent** | http://localhost:8000 | Agent API, investigations |
 | **envoy** | http://localhost:8001 | Credential proxy |
 | **postgres** | localhost:5432 | Database (user: `incidentfox`, db: `incidentfox`) |
+| **Langfuse (traces)** | http://localhost:3000 | LLM trace viewer — login: `admin@localhost` / `admin-local-dev` |
+
+### Viewing LLM Traces (Langfuse)
+
+Langfuse starts automatically with `make dev`. Every agent investigation is traced end-to-end — no `.env` changes required.
+
+1. Open http://localhost:3000
+2. Login: `admin@localhost` / `admin-local-dev`
+3. Navigate to **Traces** to see all agent runs
+
+Each trace shows the full conversation, tool calls, token usage, and latency for every turn. Useful for debugging agent behavior and prompt performance.
+
+To disable tracing (e.g. to reduce overhead in rapid iteration):
+```bash
+DISABLE_LANGFUSE=true
+```
+Add to `.env` and restart `sre-agent`.
 
 ### Database Access
 
