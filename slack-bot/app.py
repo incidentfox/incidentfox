@@ -4930,19 +4930,21 @@ def handle_setup_team_command(ack, body, client):
                 msg = f"This channel is already configured as team *{team_node_id}*."
                 if web_ui_url:
                     msg += f"\nConfigure it at <{web_ui_url}/team/tools|Web Dashboard>."
-                client.chat_postEphemeral(
-                    channel=channel_id, user=user_id, text=msg
-                )
+                client.chat_postEphemeral(channel=channel_id, user=user_id, text=msg)
                 return
 
         # Sanitize channel name to use as default team name
-        default_name = re.sub(r"[^a-z0-9-]", "-", channel_name.lower()).strip("-") or "new-team"
+        default_name = (
+            re.sub(r"[^a-z0-9-]", "-", channel_name.lower()).strip("-") or "new-team"
+        )
 
-        private_metadata = json.dumps({
-            "slack_team_id": slack_team_id,
-            "channel_id": channel_id,
-            "channel_name": channel_name,
-        })
+        private_metadata = json.dumps(
+            {
+                "slack_team_id": slack_team_id,
+                "channel_id": channel_id,
+                "channel_name": channel_name,
+            }
+        )
 
         modal = {
             "type": "modal",
@@ -4973,7 +4975,10 @@ def handle_setup_team_command(ack, body, client):
                         "type": "plain_text_input",
                         "action_id": "team_name_input",
                         "initial_value": default_name,
-                        "placeholder": {"type": "plain_text", "text": "e.g. payments-team"},
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "e.g. payments-team",
+                        },
                         "max_length": 64,
                     },
                     "hint": {
@@ -4985,7 +4990,9 @@ def handle_setup_team_command(ack, body, client):
         }
 
         client.views_open(trigger_id=body["trigger_id"], view=modal)
-        logger.info(f"Opened /setup-team modal for channel {channel_id} in workspace {slack_team_id}")
+        logger.info(
+            f"Opened /setup-team modal for channel {channel_id} in workspace {slack_team_id}"
+        )
 
     except Exception as e:
         logger.error(f"Failed to open /setup-team modal: {e}", exc_info=True)
@@ -5024,14 +5031,18 @@ def handle_setup_team_submission(ack, body, client, view):
     if not team_node_id:
         ack(
             response_action="errors",
-            errors={"team_name_block": "Team name must contain at least one letter or number."},
+            errors={
+                "team_name_block": "Team name must contain at least one letter or number."
+            },
         )
         return
 
     if team_node_id == "default":
         ack(
             response_action="errors",
-            errors={"team_name_block": "\"default\" is reserved. Choose a different name."},
+            errors={
+                "team_name_block": '"default" is reserved. Choose a different name.'
+            },
         )
         return
 
@@ -5047,7 +5058,9 @@ def handle_setup_team_submission(ack, body, client, view):
         if result.get("already_existed"):
             ack(
                 response_action="errors",
-                errors={"team_name_block": f"A team named \"{team_node_id}\" already exists. Choose a different name."},
+                errors={
+                    "team_name_block": f'A team named "{team_node_id}" already exists. Choose a different name.'
+                },
             )
             return
 
@@ -7059,7 +7072,9 @@ if __name__ == "__main__":
             )
             logger.warning("=" * 70)
             logger.warning("")
-            logger.warning(f"Missing environment variables: {', '.join(missing_tokens)}")
+            logger.warning(
+                f"Missing environment variables: {', '.join(missing_tokens)}"
+            )
             logger.warning("")
             logger.warning("To enable Slack integration, add these to your .env file:")
             logger.warning("  SLACK_BOT_TOKEN=xoxb-your-bot-token")
