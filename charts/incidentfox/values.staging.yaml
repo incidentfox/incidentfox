@@ -338,7 +338,10 @@ services:
       secretKey: ANTHROPIC_API_KEY
 
   aiPipelineApi:
-    enabled: false  # Deprecated - use ultimateRag instead
+    enabled: true
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ai-pipeline:latest"
+    replicas: 1
+    servicePort: 8085
 
   knowledgeBase:
     enabled: false  # Deprecated - use ultimateRag instead

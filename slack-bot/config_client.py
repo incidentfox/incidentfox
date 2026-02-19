@@ -1202,7 +1202,7 @@ class ConfigServiceClient:
         """
         pipeline_url = os.environ.get(
             "AI_PIPELINE_API_URL",
-            "http://ai-pipeline-api-svc.incidentfox-prod.svc.cluster.local:8085",
+            "http://incidentfox-ai-pipeline-api:8085",
         )
 
         # Fetch team's routed channels for team-scoped scanning

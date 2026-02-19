@@ -47,6 +47,10 @@ spec:
               value: {{ default "pilot" .Values.global.configService.orgId | quote }}
             - name: PIPELINE_API_PORT
               value: {{ .Values.services.aiPipelineApi.servicePort | quote }}
+            {{- if .Values.services.ultimateRag.enabled }}
+            - name: RAPTOR_URL
+              value: {{ printf "http://incidentfox-ultimate-rag.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.ultimateRag.servicePort | int) | quote }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /health
