@@ -16,13 +16,14 @@ import json
 import sys
 from pathlib import Path
 
-# Add agent module to path
 REPO_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(REPO_ROOT / "agent" / "src"))
 
-from ai_agent.prompts.agent_capabilities import AGENT_CAPABILITIES
-from ai_agent.prompts.default_prompts import get_default_agent_prompt
-from ai_agent.prompts.layers import (
+# Import prompt modules from local copy (migrated from agent/src/ai_agent/prompts/)
+sys.path.insert(0, str(Path(__file__).parent))
+
+from prompts.agent_capabilities import AGENT_CAPABILITIES
+from prompts.default_prompts import get_default_agent_prompt
+from prompts.layers import (
     BEHAVIORAL_PRINCIPLES,
     DELEGATION_GUIDANCE,
     ERROR_HANDLING_COMMON,

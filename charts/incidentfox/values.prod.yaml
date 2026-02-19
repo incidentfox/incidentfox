@@ -239,13 +239,9 @@ services:
         value: "http://incidentfox-k8s-gateway.incidentfox-prod.svc.cluster.local:8085"
       - name: SANDBOX_TTL_MINUTES
         value: "20"
-    # Disable tracing in production (using OpenAI tracing UI)
-    tracing:
-      enabled: false
-      langfuse:
-        enabled: false
-      otlp:
-        enabled: false
+    # Agent observability — disabled in production
+    agentObservability:
+      backend: "none"
 
   # Sandbox Router for routing to sandbox pods
   sandboxRouter:

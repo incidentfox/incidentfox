@@ -235,19 +235,28 @@ services:
         # eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/incidentfox-agent"
 
     # ===================================================================
-    # OPTIONAL: LLM Observability
+    # OPTIONAL: Agent Observability (LLM Tracing)
     # ===================================================================
-    tracing:
-      enabled: false  # <CUSTOMER_DECIDES>
+    # Monitor the AI agent's own LLM calls (token usage, latency, prompts).
+    # This is NOT the same as tool integrations (Datadog, Grafana, etc.)
+    # which the agent uses to investigate your incidents.
+    #
+    # Supported backends:
+    #   "langfuse" — https://langfuse.com (self-hosted or cloud)
+    #   "laminar"  — https://www.lmnr.ai
+    #   "none"     — disabled (default)
+    agentObservability:
+      backend: "none"  # <CUSTOMER_FILLS: "langfuse" | "laminar" | "none">
+      # --- Langfuse configuration (if backend: "langfuse") ---
       langfuse:
-        enabled: false
-        host: "https://cloud.langfuse.com"
-        secretName: "incidentfox-langfuse"
+        host: "https://cloud.langfuse.com"  # <CUSTOMER_FILLS: your Langfuse instance URL>
+        secretName: "incidentfox-langfuse"   # K8s secret containing Langfuse keys
         publicKeyKey: "LANGFUSE_PUBLIC_KEY"
         secretKeyKey: "LANGFUSE_SECRET_KEY"
-      otlp:
-        enabled: false
-        endpoint: ""  # Example: "http://jaeger-collector:4317"
+      # --- Laminar configuration (if backend: "laminar") ---
+      laminar:
+        secretName: "incidentfox-laminar"    # K8s secret containing Laminar API key
+        apiKeyKey: "LMNR_PROJECT_API_KEY"
 
     resources:
       requests:

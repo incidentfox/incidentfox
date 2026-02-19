@@ -296,13 +296,11 @@ Intent definitions:
         This is the core semantic search that all strategies can use.
         """
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.utils import distances_from_embeddings
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError as e:
             logger.error(f"Failed to import RAPTOR modules: {e}")
-            logger.error(
-                "Ensure knowledge_base is in PYTHONPATH and dependencies are installed"
-            )
+            logger.error("Ensure RAPTOR dependencies are installed")
             return []
 
         chunks = []
@@ -945,8 +943,8 @@ class AdaptiveDepthStrategy(RetrievalStrategy):
     ) -> List[RetrievedChunk]:
         """Retrieve nodes at a specific tree depth using semantic search."""
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.utils import distances_from_embeddings
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError as e:
             logger.error(f"Failed to import RAPTOR modules: {e}")
             return []
@@ -1292,8 +1290,8 @@ class IncidentAwareStrategy(RetrievalStrategy):
         from ..graph.entities import EntityType
 
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.utils import distances_from_embeddings
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError:
             logger.warning("RAPTOR not available, falling back to keyword matching")
             return await self._find_runbooks_keyword(query, forest, graph)
@@ -1401,8 +1399,8 @@ class IncidentAwareStrategy(RetrievalStrategy):
         from ..graph.entities import EntityType
 
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.utils import distances_from_embeddings
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError:
             logger.warning("RAPTOR not available, falling back to keyword matching")
             return await self._find_similar_incidents_keyword(query, forest, graph)

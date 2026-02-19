@@ -14,42 +14,19 @@ import os
 import sys
 
 # Pickle compatibility shim for RAPTOR trees.
-# In dev, the module is at 'knowledge_base.raptor'. In Docker, it's at 'raptor'
-# (copied to /app/raptor/). Code imports 'knowledge_base.raptor.*' everywhere,
-# so we need bidirectional aliases.
-try:
-    from knowledge_base import raptor as kb_raptor
+# Pickle files contain objects like raptor.tree_structures.Node which need
+# the 'raptor' module at the top level. In Docker, /app/raptor/ exists (copied
+# from ultimate_rag/raptor_lib/). We create a namespace package so Python's
+# import machinery can load individual submodules on demand without triggering
+# raptor/__init__.py's eager imports (which crash with SIGILL on ARM64).
+import types as _types
 
-    sys.modules["raptor"] = kb_raptor
-    if hasattr(kb_raptor, "tree_structures"):
-        sys.modules["raptor.tree_structures"] = kb_raptor.tree_structures
-except ImportError:
-    # Docker container: raptor is at /app/raptor/, not knowledge_base.raptor.
-    # We CANNOT do `import raptor` because raptor/__init__.py eagerly imports
-    # cluster_utils → umap → pynndescent which crashes with SIGILL on ARM64.
-    # Instead, create namespace packages that point at /app/raptor/ so Python's
-    # import machinery can load individual submodules on demand.
-    import types as _types
-
-    _raptor_dir = os.path.join(os.environ.get("PYTHONPATH", "/app"), "raptor")
-    if os.path.isdir(_raptor_dir):
-        # Fake 'raptor' namespace (for pickle compat: raptor.tree_structures.Node)
-        _raptor_ns = _types.ModuleType("raptor")
-        _raptor_ns.__path__ = [_raptor_dir]
-        _raptor_ns.__package__ = "raptor"
-        sys.modules["raptor"] = _raptor_ns
-
-        # Fake 'knowledge_base.raptor' namespace (for code imports)
-        _kb = _types.ModuleType("knowledge_base")
-        _kb.__path__ = []
-        _kb.__package__ = "knowledge_base"
-        sys.modules["knowledge_base"] = _kb
-
-        _kb_raptor = _types.ModuleType("knowledge_base.raptor")
-        _kb_raptor.__path__ = [_raptor_dir]
-        _kb_raptor.__package__ = "knowledge_base.raptor"
-        _kb.raptor = _kb_raptor
-        sys.modules["knowledge_base.raptor"] = _kb_raptor
+_raptor_dir = os.path.join(os.environ.get("PYTHONPATH", "/app"), "raptor")
+if os.path.isdir(_raptor_dir) and "raptor" not in sys.modules:
+    _raptor_ns = _types.ModuleType("raptor")
+    _raptor_ns.__path__ = [_raptor_dir]
+    _raptor_ns.__package__ = "raptor"
+    sys.modules["raptor"] = _raptor_ns
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -805,7 +782,7 @@ class UltimateRAGServer:
         # Initialize embedder for teaching interface
         embedder = None
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
 
             embedder = OpenAIEmbeddingModel()
             logger.info("Initialized OpenAI embedder for TeachingInterface")
@@ -1073,7 +1050,7 @@ class UltimateRAGServer:
                 embeddings = None
 
                 try:
-                    from knowledge_base.raptor.EmbeddingModels import (
+                    from ultimate_rag.raptor_lib.EmbeddingModels import (
                         OpenAIEmbeddingModel,
                     )
 
@@ -1347,7 +1324,7 @@ class UltimateRAGServer:
                 embed_start = time.time()
 
                 try:
-                    from knowledge_base.raptor.EmbeddingModels import (
+                    from ultimate_rag.raptor_lib.EmbeddingModels import (
                         OpenAIEmbeddingModel,
                     )
 

@@ -20,10 +20,11 @@ LLM Provider:
 - Multi-LLM support: Handled via credential-proxy which routes to different providers
   (Claude, Gemini, OpenAI) based on configuration
 
-Laminar Tracing:
-- Sessions: Groups multi-turn conversations by thread_id
-- Metadata: Environment, thread_id, sandbox_name for filtering/debugging
-- Tags: Success/error/incomplete outcome tags for analysis
+Observability:
+- Configurable backend via OBSERVABILITY_BACKEND env var: "laminar", "langfuse", or "none"
+- Laminar: Sessions grouped by thread_id, metadata for filtering, outcome tags
+- Langfuse: Trace/span/generation tracking with Claude SDK callback integration
+- Backend selection is a deployment config (Helm values), not per-tenant
 """
 
 import base64
@@ -52,7 +53,6 @@ from events import (
     tool_end_event,
     tool_start_event,
 )
-from lmnr import Laminar, observe
 
 # Max image size to embed (5MB)
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
@@ -288,28 +288,117 @@ def _extract_files_from_text(text: str) -> tuple[str, list]:
 
 load_dotenv()
 
-# Initialize Laminar for tracing (if API key is set)
-# Note: This should be done ONCE per process, before any ClaudeSDKClient is created
-# Set DISABLE_LAMINAR=true to disable Laminar instrumentation (for debugging proxy conflicts)
-_laminar_initialized = False
-_laminar_disabled = os.getenv("DISABLE_LAMINAR", "").lower() in ("true", "1", "yes")
+# ---------------------------------------------------------------------------
+# Observability backend initialization
+# ---------------------------------------------------------------------------
+# Configured via OBSERVABILITY_BACKEND env var: "laminar" | "langfuse" | "none"
+# Falls back to auto-detection for backward compatibility:
+#   - LMNR_PROJECT_API_KEY set → laminar
+#   - LANGFUSE_PUBLIC_KEY set  → langfuse
+#   - neither                  → none
+# ---------------------------------------------------------------------------
+_observability_backend = "none"
+_observability_initialized = False
 
-if _laminar_disabled:
-    print("⚠️ [DEBUG] Laminar instrumentation DISABLED via DISABLE_LAMINAR env var")
-elif os.getenv("LMNR_PROJECT_API_KEY") and not _laminar_initialized:
-    # Debug: Log Laminar initialization
-    print(
-        f"🔍 [DEBUG] Initializing Laminar with API key: {os.getenv('LMNR_PROJECT_API_KEY')[:10]}..."
-    )
-    print(
-        f"🔍 [DEBUG] ANTHROPIC_BASE_URL: {os.getenv('ANTHROPIC_BASE_URL', 'not set')}"
-    )
-    print(
-        f"🔍 [DEBUG] ANTHROPIC_API_KEY: {os.getenv('ANTHROPIC_API_KEY', 'not set')[:20]}..."
-    )
-    Laminar.initialize()
-    _laminar_initialized = True
-    print("✅ [DEBUG] Laminar initialized successfully")
+# Laminar helpers (lazy-imported)
+_Laminar = None
+_observe = None
+
+# Langfuse helpers (lazy-imported)
+_langfuse_client = None
+
+
+def _detect_observability_backend() -> str:
+    """Detect which observability backend to use."""
+    backend = os.getenv("OBSERVABILITY_BACKEND", "").lower().strip()
+    if backend in ("laminar", "langfuse", "none"):
+        return backend
+    # Auto-detect from available credentials
+    if os.getenv("LMNR_PROJECT_API_KEY"):
+        return "laminar"
+    if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+        return "langfuse"
+    return "none"
+
+
+def init_observability() -> None:
+    """Initialize the configured observability backend. Call once at process startup."""
+    global _observability_backend, _observability_initialized
+    global _Laminar, _observe, _langfuse_client
+
+    if _observability_initialized:
+        return
+
+    _observability_backend = _detect_observability_backend()
+
+    if _observability_backend == "laminar":
+        try:
+            from lmnr import Laminar, observe
+
+            _Laminar = Laminar
+            _observe = observe
+            Laminar.initialize()
+            _observability_initialized = True
+            print(
+                f"[OBSERVABILITY] Laminar initialized (key: {os.getenv('LMNR_PROJECT_API_KEY', '')[:10]}...)"
+            )
+        except Exception as e:
+            print(f"[OBSERVABILITY] Laminar init failed: {e}")
+            _observability_backend = "none"
+
+    elif _observability_backend == "langfuse":
+        try:
+            from langfuse import Langfuse
+
+            _langfuse_client = Langfuse(
+                public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+                secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+                host=os.getenv("LANGFUSE_HOST", "https://us.cloud.langfuse.com"),
+            )
+            _observability_initialized = True
+            print(
+                f"[OBSERVABILITY] Langfuse initialized (host: {os.getenv('LANGFUSE_HOST', 'https://us.cloud.langfuse.com')})"
+            )
+        except Exception as e:
+            print(f"[OBSERVABILITY] Langfuse init failed: {e}")
+            _observability_backend = "none"
+
+    else:
+        print("[OBSERVABILITY] No backend configured")
+        _observability_initialized = True
+
+
+def observability_set_session(thread_id: str, metadata: dict | None = None) -> None:
+    """Set session/trace context for the current thread."""
+    if _observability_backend == "laminar" and _Laminar:
+        _Laminar.set_trace_session_id(thread_id)
+        if metadata:
+            _Laminar.set_trace_metadata(metadata)
+    elif _observability_backend == "langfuse" and _langfuse_client:
+        # Langfuse session context is set per-trace at creation time
+        pass
+
+
+def observability_set_tags(tags: list[str]) -> None:
+    """Set outcome tags on the current span."""
+    if _observability_backend == "laminar" and _Laminar:
+        _Laminar.set_span_tags(tags)
+
+
+def observability_observe():
+    """Decorator for tracing a function. Returns identity decorator if backend doesn't support it."""
+    if _observability_backend == "laminar" and _observe:
+        return _observe()
+
+    # No-op decorator
+    def identity(fn):
+        return fn
+
+    return identity
+
+
+# Initialize at import time
+init_observability()
 
 
 def get_environment() -> str:
@@ -610,26 +699,21 @@ class InteractiveAgentSession:
             # Manually enter the async context manager
             await self.client.__aenter__()
 
-            # Set up Laminar tracing metadata (if enabled)
-            if not _laminar_disabled and _laminar_initialized:
-                environment = get_environment()
-                metadata = {
-                    "environment": environment,
-                    "thread_id": self.thread_id,
-                }
-
-                if os.getenv("SANDBOX_NAME"):
-                    metadata["sandbox_name"] = os.getenv("SANDBOX_NAME")
-
-                Laminar.set_trace_session_id(self.thread_id)
-                Laminar.set_trace_metadata(metadata)
+            # Set up observability session context
+            metadata = {
+                "environment": get_environment(),
+                "thread_id": self.thread_id,
+            }
+            if os.getenv("SANDBOX_NAME"):
+                metadata["sandbox_name"] = os.getenv("SANDBOX_NAME")
+            observability_set_session(self.thread_id, metadata)
 
     async def cleanup(self):
         """Clean up the client session."""
         if self.client:
             await self.client.__aexit__(None, None, None)
 
-    @observe()
+    @observability_observe()
     async def execute(
         self, prompt: str, images: list = None
     ) -> AsyncIterator[StreamEvent]:
@@ -838,8 +922,7 @@ class InteractiveAgentSession:
 
         except Exception as e:
             error_occurred = True
-            if not _laminar_disabled and _laminar_initialized:
-                Laminar.set_span_tags(["error", "exception"])
+            observability_set_tags(["error", "exception"])
             import traceback
 
             error_msg = str(e)
@@ -858,12 +941,11 @@ class InteractiveAgentSession:
             # Don't re-raise - let the error event be sent cleanly
         finally:
             self.is_running = False
-            # Add outcome tags (if Laminar is enabled)
-            if not _laminar_disabled and _laminar_initialized:
-                if success:
-                    Laminar.set_span_tags(["success"])
-                elif not error_occurred:
-                    Laminar.set_span_tags(["incomplete"])
+            # Add outcome tags
+            if success:
+                observability_set_tags(["success"])
+            elif not error_occurred:
+                observability_set_tags(["incomplete"])
 
     async def interrupt(self) -> AsyncIterator[StreamEvent]:
         """

@@ -64,6 +64,44 @@ def _log(event: str, **fields: Any) -> None:
         print(f"{event} {fields}")
 
 
+async def _post_output_to_destinations(
+    output_destinations: list[dict[str, Any]],
+    result: dict[str, Any],
+    *,
+    agent_name: str,
+    correlation_id: str,
+    effective_config: dict[str, Any],
+) -> None:
+    """Post agent result to non-Slack output destinations (GitHub, etc.)."""
+    if not output_destinations:
+        return
+    try:
+        from incidentfox_orchestrator.output_handlers import post_to_destinations
+
+        output_results = await post_to_destinations(
+            destinations=output_destinations,
+            result_text=result.get("result", ""),
+            success=result.get("success", False),
+            agent_name=agent_name,
+            run_id=correlation_id,
+            team_config=effective_config,
+        )
+        for r in output_results:
+            _log(
+                "output_destination_result",
+                correlation_id=correlation_id,
+                destination_type=r.destination_type,
+                success=r.success,
+                error=r.error,
+            )
+    except Exception as e:
+        _log(
+            "output_destination_posting_failed",
+            correlation_id=correlation_id,
+            error=str(e),
+        )
+
+
 import re
 
 # Pattern to extract run_id from GitHub comment body
@@ -605,6 +643,15 @@ async def _process_github_webhook(
         )
 
         # Note: Agent service handles run completion recording
+
+        # Post to non-Slack output destinations (e.g., GitHub PR comment)
+        await _post_output_to_destinations(
+            output_destinations=output_destinations,
+            result=result,
+            agent_name=entrance_agent_name,
+            correlation_id=correlation_id,
+            effective_config=effective_config,
+        )
 
         _log(
             "github_webhook_completed",
@@ -1156,6 +1203,15 @@ async def _process_pagerduty_webhook(
 
         # Note: Agent service handles run completion recording
 
+        # Post to non-Slack output destinations
+        await _post_output_to_destinations(
+            output_destinations=output_destinations,
+            result=result,
+            agent_name=entrance_agent_name,
+            correlation_id=correlation_id,
+            effective_config=effective_config,
+        )
+
         _log(
             "pagerduty_webhook_completed",
             correlation_id=correlation_id,
@@ -1576,6 +1632,15 @@ async def _process_incidentio_webhook(
         )
 
         # Note: Agent service handles run completion recording
+
+        # Post to non-Slack output destinations
+        await _post_output_to_destinations(
+            output_destinations=output_destinations,
+            result=result,
+            agent_name=entrance_agent_name,
+            correlation_id=correlation_id,
+            effective_config=effective_config,
+        )
 
         _log(
             "incidentio_webhook_completed",
@@ -2493,6 +2558,15 @@ async def _process_blameless_webhook(
             team_id=team_node_id,
         )
 
+        # Post to non-Slack output destinations
+        await _post_output_to_destinations(
+            output_destinations=output_destinations,
+            result=result,
+            agent_name=entrance_agent_name,
+            correlation_id=correlation_id,
+            effective_config=effective_config,
+        )
+
         _log(
             "blameless_webhook_completed",
             correlation_id=correlation_id,
@@ -2691,6 +2765,15 @@ async def _process_firehydrant_webhook(
             trigger_source="firehydrant",
             tenant_id=org_id,
             team_id=team_node_id,
+        )
+
+        # Post to non-Slack output destinations
+        await _post_output_to_destinations(
+            output_destinations=output_destinations,
+            result=result,
+            agent_name=entrance_agent_name,
+            correlation_id=correlation_id,
+            effective_config=effective_config,
         )
 
         _log(

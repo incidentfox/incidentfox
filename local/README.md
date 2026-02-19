@@ -41,8 +41,8 @@ The local CLI is a self-hosted multi-agent system for advanced users who need:
 - Self-hosted infrastructure
 - Non-Claude LLM providers
 
-**Requirements:** Docker, Docker Compose, OpenAI API key
-
 **Documentation:** [incidentfox_cli/README.md](./incidentfox_cli/README.md)
+
+> **Note:** The Docker Compose trial stack has been removed. For local development, use `make dev` from the repository root.
 
 </details>

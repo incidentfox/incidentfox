@@ -166,12 +166,41 @@ spec:
             - name: MAX_CONCURRENT_INVESTIGATIONS
               value: {{ .Values.services.agent.maxConcurrentInvestigations | default 8 | quote }}
             # =================================================================
-            # Tracing configuration (Langfuse / OTEL)
+            # Agent Observability (LLM tracing — Langfuse / Laminar)
             # =================================================================
-            {{- if .Values.services.agent.tracing.enabled }}
-            - name: TRACING_ENABLED
-              value: "true"
+            {{- $obs := .Values.services.agent.agentObservability }}
+            {{- if and $obs (ne ($obs.backend | default "none") "none") }}
+            - name: OBSERVABILITY_BACKEND
+              value: {{ $obs.backend | quote }}
+            {{- if eq $obs.backend "langfuse" }}
+            - name: LANGFUSE_HOST
+              value: {{ $obs.langfuse.host | default "https://us.cloud.langfuse.com" | quote }}
+            - name: LANGFUSE_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $obs.langfuse.secretName }}
+                  key: {{ $obs.langfuse.publicKeyKey }}
+            - name: LANGFUSE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $obs.langfuse.secretName }}
+                  key: {{ $obs.langfuse.secretKeyKey }}
+            {{- else if eq $obs.backend "laminar" }}
+            - name: LMNR_PROJECT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $obs.laminar.secretName }}
+                  key: {{ $obs.laminar.apiKeyKey }}
+            {{- end }}
+            {{- end }}
+            # =================================================================
+            # Legacy tracing (deprecated — use agentObservability instead)
+            # =================================================================
+            {{- if and .Values.services.agent.tracing (.Values.services.agent.tracing.enabled) }}
+            {{- if not $obs }}
             {{- if .Values.services.agent.tracing.langfuse.enabled }}
+            - name: OBSERVABILITY_BACKEND
+              value: "langfuse"
             - name: LANGFUSE_HOST
               value: {{ .Values.services.agent.tracing.langfuse.host | quote }}
             - name: LANGFUSE_PUBLIC_KEY
@@ -184,6 +213,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.services.agent.tracing.langfuse.secretName }}
                   key: {{ .Values.services.agent.tracing.langfuse.secretKeyKey }}
+            {{- end }}
             {{- end }}
             {{- if .Values.services.agent.tracing.otlp.enabled }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT

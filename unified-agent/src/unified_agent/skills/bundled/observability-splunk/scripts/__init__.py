@@ -1,1 +1,0 @@
-# Splunk observability scripts

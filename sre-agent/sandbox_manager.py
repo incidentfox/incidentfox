@@ -628,54 +628,8 @@ static_resources:
                                         "name": "CONFIGURED_INTEGRATIONS",
                                         "value": configured_integrations,
                                     },
-                                    # Laminar tracing: platform observability (shared across all customers)
-                                    # Used for debugging agent behavior - not customer data
-                                    # NOTE: Temporarily disabled to debug proxy conflict issue
-                                    {
-                                        "name": "LMNR_PROJECT_API_KEY",
-                                        "valueFrom": {
-                                            "secretKeyRef": {
-                                                "name": "incidentfox-secrets",
-                                                "key": "laminar-api-key",
-                                                "optional": True,
-                                            }
-                                        },
-                                    },
-                                    # Disable Laminar's claude-agent-sdk instrumentation
-                                    # This prevents Laminar's proxy from intercepting Claude SDK calls
-                                    # which may conflict with our Envoy sidecar credential injection
-                                    {
-                                        "name": "DISABLE_LAMINAR",
-                                        "value": "true",
-                                    },
-                                    # Langfuse observability (optional)
-                                    {
-                                        "name": "LANGFUSE_PUBLIC_KEY",
-                                        "valueFrom": {
-                                            "secretKeyRef": {
-                                                "name": "incidentfox-langfuse",
-                                                "key": "LANGFUSE_PUBLIC_KEY",
-                                                "optional": True,
-                                            }
-                                        },
-                                    },
-                                    {
-                                        "name": "LANGFUSE_SECRET_KEY",
-                                        "valueFrom": {
-                                            "secretKeyRef": {
-                                                "name": "incidentfox-langfuse",
-                                                "key": "LANGFUSE_SECRET_KEY",
-                                                "optional": True,
-                                            }
-                                        },
-                                    },
-                                    {
-                                        "name": "LANGFUSE_HOST",
-                                        "value": os.getenv(
-                                            "LANGFUSE_HOST",
-                                            "https://us.cloud.langfuse.com",
-                                        ),
-                                    },
+                                    # NOTE: Observability (Laminar/Langfuse) runs on the sre-agent server,
+                                    # not in sandbox pods. See agent.py init_observability().
                                     # Kubernetes: use in-cluster SA auth (incidentfox-sandbox-pod)
                                     # NOT kubeconfig — that resolves to EC2 node IAM identity
                                     # Dynamic values
