@@ -5022,7 +5022,6 @@ def handle_api_key_submission(ack, body, client, view):
     logger.info(f"API key saved for team {team_id}")
 
 
-
 def _build_team_setup_modal(
     slack_team_id, channel_id, channel_name, existing_teams=None, org_id=None
 ):
@@ -5131,7 +5130,6 @@ def _resolve_org_id(cc, slack_team_id, channel_id=None):
     return f"slack-{slack_team_id}", None
 
 
-
 def _open_team_setup_modal(
     client, trigger_id, slack_team_id, channel_id, channel_name, user_id=None
 ):
@@ -5230,9 +5228,7 @@ def handle_team_setup_choice(ack, body, client, view):
     ).get("value")
 
     new_team_name = (
-        values.get("new_team_block", {})
-        .get("new_team_input", {})
-        .get("value", "")
+        values.get("new_team_block", {}).get("new_team_input", {}).get("value", "")
         or ""
     ).strip()
 
@@ -5247,12 +5243,17 @@ def handle_team_setup_choice(ack, body, client, view):
         return
 
     if not selected_team and not new_team_name:
-        error_block = "existing_team_block" if "existing_team_block" in [
-            b.get("block_id") for b in view.get("blocks", [])
-        ] else "new_team_block"
+        error_block = (
+            "existing_team_block"
+            if "existing_team_block"
+            in [b.get("block_id") for b in view.get("blocks", [])]
+            else "new_team_block"
+        )
         ack(
             response_action="errors",
-            errors={error_block: "Select an existing team or enter a name for a new one."},
+            errors={
+                error_block: "Select an existing team or enter a name for a new one."
+            },
         )
         return
 
@@ -5330,7 +5331,9 @@ def handle_team_setup_choice(ack, body, client, view):
             logger.error(f"Failed to join team: {e}", exc_info=True)
             ack(
                 response_action="errors",
-                errors={"existing_team_block": "Something went wrong. Please try again."},
+                errors={
+                    "existing_team_block": "Something went wrong. Please try again."
+                },
             )
         return
 
@@ -5341,14 +5344,18 @@ def handle_team_setup_choice(ack, body, client, view):
     if not team_node_id:
         ack(
             response_action="errors",
-            errors={"new_team_block": "Team name must contain at least one letter or number."},
+            errors={
+                "new_team_block": "Team name must contain at least one letter or number."
+            },
         )
         return
 
     if team_node_id == "default":
         ack(
             response_action="errors",
-            errors={"new_team_block": '"default" is reserved. Choose a different name.'},
+            errors={
+                "new_team_block": '"default" is reserved. Choose a different name.'
+            },
         )
         return
 
