@@ -14,13 +14,13 @@ import os
 import re
 import threading
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, Optional
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, make_response, redirect, render_template, request
+from flask import Flask, render_template, request
 from installation_store import ConfigServiceInstallationStore
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
@@ -2755,7 +2755,6 @@ def _trigger_incident_io_investigation(event, client, context):
     # Extract alert details from Slack message
     text = event.get("text", "")
     blocks = event.get("blocks", [])
-    attachments = event.get("attachments", [])
     channel_id = event.get("channel")
     message_ts = event.get("ts")
 
@@ -2834,7 +2833,6 @@ def _trigger_incident_io_investigation(event, client, context):
         api_status = incidentio_alert.get("status", "")
         api_created_at = incidentio_alert.get("created_at", "")
         api_dedup_key = incidentio_alert.get("deduplication_key", "")
-        api_alert_source_id = incidentio_alert.get("alert_source_id", "")
 
         # Extract custom attributes
         api_attributes = incidentio_alert.get("attributes", [])
@@ -3957,7 +3955,6 @@ def handle_coralogix_dismiss(ack, body, respond):
 
     # Parse the value
     value = json.loads(body["actions"][0]["value"])
-    thread_ts = value["thread_ts"]
     url = value["url"]
 
     logger.info(f"Coralogix investigation dismissed for: {url[:50]}...")
@@ -4170,8 +4167,6 @@ def handle_view_full_output(ack, body, client):
     """Handle "View Full" button - show complete untruncated file content."""
     ack()
 
-    import json
-
     # Parse button value: thread_id|thought_idx|tool_idx
     button_value = body["actions"][0].get("value", "")
     try:
@@ -4265,8 +4260,6 @@ def handle_view_full_output(ack, body, client):
 def handle_view_subagent_details(ack, body, client):
     """Handle "View Details" button for subagent - show all child tool calls."""
     ack()
-
-    import json
 
     # Parse button value: thread_id|thought_idx|task_idx|subagent_id
     button_value = body["actions"][0].get("value", "")
@@ -4664,7 +4657,7 @@ def handle_answer_submit(ack, body, client):
                     }
                 ],
             )
-        except:
+        except Exception:
             pass
 
 
@@ -4818,7 +4811,6 @@ def handle_feedback(ack, body, client):
     action = body.get("actions", [{}])[0]
     value = action.get("value", "")
     message_ts = body.get("message", {}).get("ts")
-    channel_id = body.get("channel", {}).get("id")
 
     if value == "positive":
         logger.info(f"Positive feedback for message {message_ts}")
@@ -5165,6 +5157,7 @@ def _resolve_org_id(cc, slack_team_id, channel_id=None):
     if routing:
         return routing["org_id"], routing
     return f"slack-{slack_team_id}", None
+
 
 
 def _open_team_setup_modal(
@@ -6034,7 +6027,6 @@ def handle_k8s_saas_clusters_modal_close(ack, body, client, view):
 
     private_metadata = json.loads(view.get("private_metadata", "{}"))
     team_id = private_metadata.get("team_id")
-    category_filter = private_metadata.get("category_filter", "all")
 
     logger.info(f"Closed K8s SaaS clusters modal for team {team_id}")
 

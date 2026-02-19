@@ -148,3 +148,93 @@ handleClick(e);
 | Read a file | `read_file.py --repo X --path src/app.tsx` |
 | Search for patterns | `search_code.py --query "amplitude" --repo X` |
 | Submit review | `create_review.py --repo X --pr N --body "..." --comments-file F` |
+| Create a branch | `create_branch.py --repo X --branch fix/typo` |
+| Create/update a file | `create_or_update_file.py --repo X --path f --branch b --message "msg" --file /tmp/c.txt` |
+| Create a PR | `create_pull_request.py --repo X --title "Fix" --head fix/typo` |
+| Set commit status | `create_commit_status.py --repo X --sha SHA --state success` |
+
+---
+
+## Write Operations
+
+These scripts allow the agent to make changes to repositories: creating branches, committing files, opening PRs, and setting commit statuses.
+
+### create_branch.py -- Create a new branch
+```bash
+python .claude/skills/github-pr-review/scripts/create_branch.py --repo OWNER/REPO --branch BRANCH_NAME [--from-branch SOURCE]
+
+# Examples:
+python .claude/skills/github-pr-review/scripts/create_branch.py --repo acme/webapp --branch fix/missing-telemetry
+python .claude/skills/github-pr-review/scripts/create_branch.py --repo acme/webapp --branch fix/missing-telemetry --from-branch develop
+```
+
+### create_or_update_file.py -- Create or update a file in the repo
+```bash
+python .claude/skills/github-pr-review/scripts/create_or_update_file.py \
+  --repo OWNER/REPO --path FILE_PATH --branch BRANCH --message "commit message" --file /tmp/content.txt
+
+# Update an existing file (pass --sha from read_file_with_sha):
+python .claude/skills/github-pr-review/scripts/create_or_update_file.py \
+  --repo OWNER/REPO --path FILE_PATH --branch BRANCH --message "commit message" --sha CURRENT_SHA --file /tmp/content.txt
+
+# Pipe content via stdin:
+echo "new content" | python .claude/skills/github-pr-review/scripts/create_or_update_file.py \
+  --repo OWNER/REPO --path FILE_PATH --branch BRANCH --message "commit message"
+```
+
+### create_pull_request.py -- Open a pull request
+```bash
+python .claude/skills/github-pr-review/scripts/create_pull_request.py \
+  --repo OWNER/REPO --title "PR title" --head BRANCH_NAME [--base main] [--body "description"]
+
+# Examples:
+python .claude/skills/github-pr-review/scripts/create_pull_request.py \
+  --repo acme/webapp --title "Add missing telemetry events" --head fix/missing-telemetry
+
+python .claude/skills/github-pr-review/scripts/create_pull_request.py \
+  --repo acme/webapp --title "Add missing telemetry events" --head fix/missing-telemetry \
+  --base develop --body-file /tmp/pr_body.md
+```
+
+### create_commit_status.py -- Set a commit status (check)
+```bash
+python .claude/skills/github-pr-review/scripts/create_commit_status.py \
+  --repo OWNER/REPO --sha COMMIT_SHA --state STATE [--description "text"] [--context "label"] [--target-url URL]
+
+# Valid states: error, failure, pending, success
+
+# Examples:
+python .claude/skills/github-pr-review/scripts/create_commit_status.py \
+  --repo acme/webapp --sha abc123 --state success --description "All checks passed"
+
+python .claude/skills/github-pr-review/scripts/create_commit_status.py \
+  --repo acme/webapp --sha abc123 --state failure \
+  --description "Security issues found" --context "IncidentFox/security"
+```
+
+---
+
+### Write Workflow Example: Fix and PR
+
+A typical workflow for making a code change via the GitHub API:
+
+```bash
+# 1. Create a branch
+python .claude/skills/github-pr-review/scripts/create_branch.py \
+  --repo acme/webapp --branch fix/missing-telemetry
+
+# 2. Commit the fix (write content to a temp file first, then pass it)
+python .claude/skills/github-pr-review/scripts/create_or_update_file.py \
+  --repo acme/webapp --path src/analytics.ts --branch fix/missing-telemetry \
+  --message "Add missing telemetry call" --file /tmp/analytics.ts
+
+# 3. Open a PR
+python .claude/skills/github-pr-review/scripts/create_pull_request.py \
+  --repo acme/webapp --title "Add missing telemetry events" --head fix/missing-telemetry \
+  --body "Adds tracking events for checkout and payment flows."
+
+# 4. Set a status on the head commit
+python .claude/skills/github-pr-review/scripts/create_commit_status.py \
+  --repo acme/webapp --sha abc123def456 --state success \
+  --description "Telemetry review complete"
+```

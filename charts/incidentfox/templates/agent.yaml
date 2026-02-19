@@ -220,6 +220,21 @@ spec:
               value: {{ .Values.services.agent.tracing.otlp.endpoint | quote }}
             {{- end }}
             {{- end }}
+            # =================================================================
+            # Vercel Integration
+            # =================================================================
+            {{- if .Values.externalSecrets.vercel.enabled }}
+            - name: VERCEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: incidentfox-vercel
+                  key: token
+            - name: VERCEL_TEAM_ID
+              valueFrom:
+                secretKeyRef:
+                  name: incidentfox-vercel
+                  key: team_id
+            {{- end }}
             # Static team token (dev/single-tenant mode only)
             {{- if .Values.services.agent.staticTeamToken.enabled }}
             - name: INCIDENTFOX_TEAM_TOKEN

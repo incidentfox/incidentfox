@@ -36,6 +36,7 @@ ROUTING_PRIORITY = [
     "pagerduty_service_ids",
     "slack_channel_ids",
     "github_repos",
+    "vercel_project_ids",
     "coralogix_team_names",
     "incidentio_alert_source_ids",
     "services",
@@ -740,7 +741,12 @@ def _normalize_identifier(identifier_type: str, value: str) -> str:
     """Normalize identifier value for comparison."""
     value = value.strip()
     # Lowercase for text-based identifiers
-    if identifier_type in ("coralogix_team_names", "github_repos", "services"):
+    if identifier_type in (
+        "coralogix_team_names",
+        "github_repos",
+        "vercel_project_ids",
+        "services",
+    ):
         value = value.lower()
     return value
 
@@ -764,6 +770,7 @@ def _check_routing_match(
         "teams_channel_id": "teams_channel_ids",
         "google_chat_space_id": "google_chat_space_ids",
         "github_repo": "github_repos",
+        "vercel_project_id": "vercel_project_ids",
         "coralogix_team_name": "coralogix_team_names",
         "incidentio_alert_source_id": "incidentio_alert_source_ids",
         "service": "services",
@@ -808,6 +815,7 @@ def lookup_routing(
         "teams_channel_id",
         "google_chat_space_id",
         "github_repo",
+        "vercel_project_id",
         "coralogix_team_name",
         "incidentio_alert_source_id",
         "service",

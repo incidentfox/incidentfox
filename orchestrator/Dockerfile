@@ -2,6 +2,8 @@ FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
+RUN useradd -m -u 1000 appuser
+
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
   gcc \
   && rm -rf /var/lib/apt/lists/*
@@ -25,6 +27,9 @@ RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2" && \
     cp -r $SITE_PKGS/wheel-*.dist-info $SITE_PKGS/setuptools/_vendor/
 
 ENV PYTHONPATH=/app/src
+
+RUN chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8070
 

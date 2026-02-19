@@ -5,6 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN useradd -m -u 1000 appuser
+
 # Install Node.js (required for MCP preview functionality)
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y --no-install-recommends curl && \
@@ -38,6 +40,9 @@ COPY scripts /app/scripts
 COPY templates /app/templates
 
 ENV PYTHONPATH=/app
+
+RUN chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8080
 

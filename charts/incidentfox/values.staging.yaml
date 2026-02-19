@@ -180,6 +180,13 @@ services:
     requireAdminStar: true
     slackAgentMaxTurns: "200"
     slackAgentTimeoutSeconds: "180"
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
 
   # Slack Bot - Multi-tenant Slack integration
   slackBot:
@@ -188,6 +195,13 @@ services:
     replicas: 1
     servicePort: 3000
     baseUrl: "https://slack-staging.incidentfox.ai"  # OAuth redirect base URL (staging)
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
     freeTrial:
       enabled: true
       days: 7
@@ -245,6 +259,13 @@ services:
             - type: Pods
               value: 1                     # Remove 1 pod at a time
               periodSeconds: 60
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "2000m"
+        memory: "4Gi"
     startupProbe:
       enabled: true
       path: "/health"
@@ -276,6 +297,13 @@ services:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/sandbox-router:latest"
     replicas: 1
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
     hpa:
       enabled: true
       minReplicas: 1
@@ -293,6 +321,13 @@ services:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:latest"
     replicas: 1
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
     credentialSource: config_service
     jwtMode: strict
     sharedAnthropicKey:
@@ -311,6 +346,13 @@ services:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ultimate-rag:latest"
     replicas: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "4Gi"
+      limits:
+        cpu: "2000m"
+        memory: "8Gi"
     serviceAccountRoleArn: "arn:aws:iam::103002841599:role/incidentfox-raptor-kb-role"
     defaultTree: "mega_ultra_v2"
     s3:
@@ -326,6 +368,13 @@ services:
   webUi:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-web-ui:latest"
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
     cookieSecure: true
     raptorApiUrl: "http://incidentfox-rag.incidentfox.svc.cluster.local:8000"
     oidc:
@@ -342,3 +391,10 @@ services:
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:latest"
     replicas: 1
     logLevel: "INFO"
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"

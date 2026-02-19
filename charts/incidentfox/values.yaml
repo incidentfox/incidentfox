@@ -161,6 +161,13 @@ externalSecrets:
       clientIdRemoteRefKey: incidentfox/prod/slack_client_id
       clientSecretRemoteRefKey: incidentfox/prod/slack_client_secret
       signingSecretRemoteRefKey: incidentfox/prod/slack_signing_secret
+  # Vercel integration (deployment webhooks and API access)
+  vercel:
+    enabled: false
+    secretPath: ""
+
+# Vercel webhook signature verification domain
+vercelVerify: ""
 
 services:
   configService:

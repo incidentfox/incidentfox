@@ -2659,7 +2659,6 @@ def extract_datadog_site(input_str: str) -> tuple[bool, str, str]:
         (is_valid, site, error_message)
         site is the normalized site value (e.g., "us5.datadoghq.com", "datadoghq.eu")
     """
-    import re
     from urllib.parse import urlparse
 
     if not input_str:
@@ -2728,7 +2727,6 @@ def extract_confluence_url(input_str: str) -> tuple[bool, str, str]:
     Returns:
         (is_valid, base_url, error_message)
     """
-    import re
     from urllib.parse import urlparse
 
     if not input_str:
@@ -3605,8 +3603,6 @@ def build_ai_model_modal(
     if provider_id:
         provider_schema = get_integration_by_id(provider_id)
         if provider_schema:
-            provider_name = provider_schema.get("name", provider_id)
-
             # Cloudflare: map per-upstream provider_api_key for display
             if (
                 provider_id == "cloudflare_ai"
@@ -3991,7 +3987,6 @@ def build_integration_config_modal(
     integration_name = schema.get("name", int_id.title())
     description = schema.get("description", "")
     docs_url = schema.get("docs_url")
-    video_url = schema.get("video_url")
     setup_instructions = schema.get("setup_instructions", "")
     status = schema.get("status", "active")
 

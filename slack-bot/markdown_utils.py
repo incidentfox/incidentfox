@@ -80,7 +80,6 @@ class SlackRenderer(mistune.BaseRenderer):
 
     def strong(self, token, state) -> str:
         """Bold: **text** -> *text*"""
-        children = token["children"]
         text = self._get_children(token, state)
         return f"*{text}*"
 

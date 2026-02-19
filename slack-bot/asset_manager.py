@@ -6,9 +6,8 @@ Uploads assets once per workspace on first use, then caches file IDs.
 Much simpler than CDN and works in any enterprise environment.
 """
 
-import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 from slack_sdk import WebClient
 

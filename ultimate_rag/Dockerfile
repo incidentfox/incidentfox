@@ -5,6 +5,8 @@ FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
+RUN useradd -m -u 1000 appuser
+
 # Install system dependencies including AWS CLI
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     build-essential \
@@ -64,6 +66,9 @@ RUN chmod +x entrypoint.sh
 
 # Create trees directory
 RUN mkdir -p /app/trees
+
+RUN chown -R appuser:appuser /app /app/trees
+USER appuser
 
 # Environment
 ENV RAPTOR_TREES_DIR=/app/trees

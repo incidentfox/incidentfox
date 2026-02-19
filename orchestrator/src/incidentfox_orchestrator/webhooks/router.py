@@ -9,6 +9,7 @@ Handles all external webhook endpoints:
 - /webhooks/incidentio - Incident.io webhooks
 - /webhooks/blameless - Blameless webhooks
 - /webhooks/firehydrant - FireHydrant webhooks
+- /webhooks/vercel/logs - Vercel Log Drain webhooks
 - /webhooks/google-chat - Google Chat App webhooks
 - /webhooks/teams - MS Teams Bot Framework webhooks
 
@@ -25,11 +26,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from functools import partial
 from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from incidentfox_orchestrator.clients import CorrelationServiceClient
 from incidentfox_orchestrator.context_enrichment import (
@@ -47,6 +49,7 @@ from incidentfox_orchestrator.webhooks.signatures import (
     verify_incidentio_signature,
     verify_pagerduty_signature,
     verify_recall_signature,
+    verify_vercel_signature,
 )
 
 if TYPE_CHECKING:
@@ -2785,6 +2788,269 @@ async def _process_firehydrant_webhook(
     except Exception as e:
         _log(
             "firehydrant_webhook_failed",
+            correlation_id=correlation_id,
+            error=str(e),
+        )
+
+
+# ============================================================================
+# Vercel Log Drain Webhooks
+# ============================================================================
+
+# Vercel log drain debounce: prevent duplicate investigations
+_vercel_debounce: dict[str, float] = {}  # project_id -> last_trigger_time
+_vercel_investigated_deployments: set[str] = set()  # deployment IDs already processed
+_VERCEL_DEBOUNCE_SECONDS = 600  # 10 minutes
+
+
+@router.get("/vercel/logs")
+async def vercel_log_drain_verify(request: Request):
+    """Vercel Log Drain URL verification endpoint.
+
+    Vercel sends a GET request during log drain registration.
+    Must return the x-vercel-verify value.
+    """
+    verify_value = os.getenv("VERCEL_VERIFY", "")
+    return Response(content=verify_value, media_type="text/plain")
+
+
+@router.post("/vercel/logs")
+async def vercel_log_drain(request: Request, background_tasks: BackgroundTasks):
+    """Receive Vercel Log Drain webhook events.
+
+    Processes runtime error events and routes them to the appropriate
+    team's agent for investigation.
+    """
+    body = await request.body()
+
+    # Verify signature if secret is configured
+    webhook_secret = os.getenv("VERCEL_WEBHOOK_SECRET", "")
+    if webhook_secret:
+        signature = request.headers.get("x-vercel-signature", "")
+        if not verify_vercel_signature(body, signature, webhook_secret):
+            raise HTTPException(status_code=401, detail="Invalid Vercel signature")
+
+    try:
+        events = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    if not isinstance(events, list):
+        events = [events]
+
+    # Filter for error events
+    error_events = [
+        e for e in events if e.get("type") == "error" or e.get("level") == "error"
+    ]
+    if not error_events:
+        return {"status": "ok", "message": "No error events"}
+
+    # Extract project/deployment info from first error
+    first_error = error_events[0]
+    project_id = first_error.get("projectId", "")
+    deployment_id = first_error.get("deploymentId", "")
+
+    # Debounce: skip if we recently processed this project
+    now = time.time()
+    if project_id in _vercel_debounce:
+        elapsed = now - _vercel_debounce[project_id]
+        if elapsed < _VERCEL_DEBOUNCE_SECONDS:
+            return {
+                "status": "ok",
+                "message": f"Debounced (last trigger {int(elapsed)}s ago)",
+            }
+
+    # Skip if we already investigated this deployment
+    if deployment_id and deployment_id in _vercel_investigated_deployments:
+        return {
+            "status": "ok",
+            "message": f"Already investigated deployment {deployment_id}",
+        }
+
+    # Update debounce state
+    _vercel_debounce[project_id] = now
+    if deployment_id:
+        _vercel_investigated_deployments.add(deployment_id)
+        # Cap set size to prevent memory leak
+        if len(_vercel_investigated_deployments) > 500:
+            _vercel_investigated_deployments.clear()
+
+    # Route to team via config service
+    message = _build_vercel_message(error_events, project_id, deployment_id)
+
+    background_tasks.add_task(
+        _process_vercel_webhook,
+        request=request,
+        project_id=project_id,
+        message=message,
+    )
+
+    return {"status": "ok", "message": "Processing Vercel error events"}
+
+
+def _build_vercel_message(
+    error_events: list, project_id: str, deployment_id: str
+) -> str:
+    """Build a message for the agent from Vercel error events."""
+    first = error_events[0]
+    error_message = first.get("message", "Unknown error")
+    path = first.get("path", first.get("proxy", {}).get("path", "unknown"))
+    status_code = first.get(
+        "statusCode", first.get("proxy", {}).get("statusCode", "unknown")
+    )
+
+    msg = (
+        f"Vercel runtime error detected.\n\n"
+        f"**Error**: {error_message}\n"
+        f"**Path**: {path}\n"
+        f"**Status**: {status_code}\n"
+        f"**Project ID**: {project_id}\n"
+        f"**Deployment ID**: {deployment_id}\n"
+        f"**Error count**: {len(error_events)} events\n\n"
+        f"Investigate the root cause. If this deployment is linked to a PR, "
+        f"trace it back to identify the problematic change."
+    )
+    return msg
+
+
+async def _process_vercel_webhook(request: Request, project_id: str, message: str):
+    """Process a Vercel webhook by routing to the appropriate team's agent."""
+    import logging
+
+    import httpx
+
+    from incidentfox_orchestrator.clients import (
+        AgentApiClient,
+        ConfigServiceClient,
+    )
+
+    logger = logging.getLogger(__name__)
+    correlation_id = __import__("uuid").uuid4().hex
+
+    _log(
+        "vercel_webhook_processing",
+        correlation_id=correlation_id,
+        project_id=project_id,
+    )
+
+    try:
+        cfg: ConfigServiceClient = request.app.state.config_service
+        agent_api: AgentApiClient = request.app.state.agent_api
+
+        # Look up which team handles this Vercel project
+        routing = await asyncio.to_thread(
+            cfg.lookup_routing,
+            internal_service_name="orchestrator",
+            identifiers={"vercel_project_id": project_id},
+        )
+
+        if not routing.get("found"):
+            _log(
+                "vercel_webhook_no_routing",
+                correlation_id=correlation_id,
+                project_id=project_id,
+            )
+            return
+
+        org_id = routing["org_id"]
+        team_node_id = routing["team_node_id"]
+
+        admin_token = (os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or "").strip()
+        if not admin_token:
+            return
+
+        # Get impersonation token
+        imp = await asyncio.to_thread(
+            cfg.issue_team_impersonation_token,
+            admin_token,
+            org_id=org_id,
+            team_node_id=team_node_id,
+        )
+        team_token = str(imp.get("token") or "")
+        if not team_token:
+            return
+
+        # Get team config to determine entrance agent and dedicated URL
+        entrance_agent_name = "planner"  # Default fallback
+        dedicated_agent_url: str | None = None
+        effective_config: dict = {}
+        try:
+            effective_config = await asyncio.to_thread(
+                cfg.get_effective_config, team_token=team_token
+            )
+            entrance_agent_name = effective_config.get("entrance_agent", "planner")
+            dedicated_agent_url = effective_config.get("agent", {}).get(
+                "dedicated_service_url"
+            )
+        except Exception:
+            pass  # Fall back to shared agent
+
+        # Resolve output destinations
+        from incidentfox_orchestrator.output_resolver import resolve_output_destinations
+
+        trigger_payload = {
+            "project_id": project_id,
+        }
+
+        output_destinations = resolve_output_destinations(
+            trigger_source="vercel",
+            trigger_payload=trigger_payload,
+            team_config=effective_config,
+        )
+
+        _log(
+            "vercel_webhook_output_destinations_resolved",
+            correlation_id=correlation_id,
+            destination_count=len(output_destinations),
+            destination_types=[d.get("type") for d in output_destinations],
+        )
+
+        # Trigger agent investigation
+        result = await asyncio.to_thread(
+            partial(
+                agent_api.run_agent,
+                team_token=team_token,
+                agent_name=entrance_agent_name,
+                message=message,
+                context={
+                    "metadata": {
+                        "vercel": {
+                            "project_id": project_id,
+                        },
+                        "trigger": "vercel",
+                    },
+                },
+                timeout=int(
+                    os.getenv("ORCHESTRATOR_VERCEL_AGENT_TIMEOUT_SECONDS", "180")
+                ),
+                max_turns=int(os.getenv("ORCHESTRATOR_VERCEL_AGENT_MAX_TURNS", "30")),
+                correlation_id=correlation_id,
+                agent_base_url=dedicated_agent_url,
+                output_destinations=output_destinations,
+                trigger_source="vercel",
+                tenant_id=org_id,
+                team_id=team_node_id,
+            )
+        )
+
+        # Post to non-Slack output destinations
+        await _post_output_to_destinations(
+            output_destinations=output_destinations,
+            result=result,
+            agent_name=entrance_agent_name,
+            correlation_id=correlation_id,
+            effective_config=effective_config,
+        )
+
+        _log(
+            "vercel_webhook_completed",
+            correlation_id=correlation_id,
+            project_id=project_id,
+        )
+
+    except Exception as e:
+        _log(
+            "vercel_webhook_failed",
             correlation_id=correlation_id,
             error=str(e),
         )

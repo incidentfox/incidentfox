@@ -158,6 +158,16 @@ spec:
                 port:
                   number: {{ .Values.services.configService.servicePort }}
           {{- end }}
+          {{- if .Values.services.orchestrator.enabled }}
+          # Webhooks - route to orchestrator for Vercel, GitHub, PagerDuty, etc.
+          - path: /webhooks
+            pathType: Prefix
+            backend:
+              service:
+                name: incidentfox-orchestrator
+                port:
+                  number: {{ .Values.services.orchestrator.servicePort }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:

@@ -144,6 +144,15 @@ spec:
                   name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
                   key: {{ .Values.externalSecrets.contract.teams.tenantIdKey | quote }}
             {{- end }}
+            {{- if .Values.externalSecrets.vercel.enabled }}
+            - name: VERCEL_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: incidentfox-vercel
+                  key: webhook_secret
+            - name: VERCEL_VERIFY
+              value: {{ .Values.vercelVerify | default "" | quote }}
+            {{- end }}
             # Slack-triggered agent run parameters (enterprise defaults)
             - name: ORCHESTRATOR_SLACK_AGENT_MAX_TURNS
               value: {{ default 50 .Values.services.orchestrator.slack.agentMaxTurns | quote }}

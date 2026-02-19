@@ -38,6 +38,8 @@ spec:
         app.kubernetes.io/name: incidentfox-ultimate-rag
     spec:
       serviceAccountName: incidentfox-ultimate-rag
+      securityContext:
+        fsGroup: 1000
       {{- if .Values.services.ultimateRag.nodeSelector }}
       nodeSelector:
 {{ toYaml .Values.services.ultimateRag.nodeSelector | indent 8 }}
