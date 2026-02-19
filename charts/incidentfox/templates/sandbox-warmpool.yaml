@@ -271,6 +271,7 @@ spec:
         app: incidentfox-agent
         component: warmpool
         warmpool: "true"
+        incidentfox.io/isolation: sandbox
     spec:
       serviceAccountName: {{ .Release.Name }}-sandbox-pod
       {{- if .Values.services.agent.sandbox.useGvisor }}

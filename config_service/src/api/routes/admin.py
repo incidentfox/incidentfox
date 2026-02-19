@@ -353,6 +353,7 @@ def admin_get_node_config(
     principal: AdminPrincipal = Depends(require_admin),
     session: Session = Depends(get_db),
 ):
+    check_org_access(principal, org_id)
     node_config = get_node_configuration(session, org_id=org_id, node_id=node_id)
     cfg = node_config.config_json if node_config else {}
     ADMIN_ACTIONS_TOTAL.labels("get_node_config", "ok").inc()
@@ -378,6 +379,7 @@ def admin_get_node_raw_config(
 
     Same response shape as GET /api/v1/config/me/raw, but admin-scoped.
     """
+    check_org_access(principal, org_id)
     try:
         lineage_nodes = get_lineage_nodes(session, org_id=org_id, node_id=node_id)
         node_ids = [n.node_id for n in lineage_nodes]
@@ -417,6 +419,7 @@ def admin_get_node_effective_config(
 
     Same response shape as GET /api/v1/config/me/effective, but admin-scoped.
     """
+    check_org_access(principal, org_id)
     try:
         eff = get_effective_config(session, org_id=org_id, node_id=node_id)
     except ValueError as e:
@@ -442,6 +445,7 @@ def admin_get_node_audit(
     principal: AdminPrincipal = Depends(require_admin),
     session: Session = Depends(get_db),
 ):
+    check_org_access(principal, org_id)
     rows = list_node_config_audit(session, org_id=org_id, node_id=node_id, limit=limit)
     ADMIN_ACTIONS_TOTAL.labels("get_node_audit", "ok").inc()
     audit_logger().info(
@@ -479,6 +483,7 @@ def admin_get_org_audit(
     principal: AdminPrincipal = Depends(require_admin),
     session: Session = Depends(get_db),
 ):
+    check_org_access(principal, org_id)
     rows = list_org_config_audit(
         session,
         org_id=org_id,
@@ -529,6 +534,7 @@ def admin_export_org_audit(
     principal: AdminPrincipal = Depends(require_admin),
     session: Session = Depends(get_db),
 ):
+    check_org_access(principal, org_id)
     fmt = (format or "csv").strip().lower()
     if fmt not in ("csv", "json"):
         raise HTTPException(status_code=400, detail="format must be one of: csv, json")
@@ -615,6 +621,7 @@ def admin_update_node(
     principal: AdminPrincipal = Depends(require_admin),
     session: Session = Depends(get_db),
 ):
+    check_org_access(principal, org_id)
     try:
         node = update_org_node(
             session,
@@ -657,6 +664,7 @@ def admin_patch_node_config(
     x_admin_actor: str = Header(default="admin", convert_underscores=False),
     x_bypass_approval: str = Header(default="", convert_underscores=False),
 ):
+    check_org_access(principal, org_id)
     try:
         # Check if this change requires approval
         bypass = x_bypass_approval.lower() == "true"
@@ -796,6 +804,7 @@ def admin_rollback_node_config(
     session: Session = Depends(get_db),
     x_admin_actor: str = Header(default="admin", convert_underscores=False),
 ):
+    check_org_access(principal, org_id)
     try:
         updated_config, diff = rollback_to_version(
             session,
@@ -841,6 +850,7 @@ def admin_issue_team_token(
     session: Session = Depends(get_db),
     x_admin_actor: str = Header(default="admin", convert_underscores=False),
 ):
+    check_org_access(principal, org_id)
     pepper = get_token_pepper()
     token = issue_team_token(
         session,
@@ -878,6 +888,7 @@ def admin_issue_team_impersonation_token(
 
     This avoids long-lived team token sprawl when orchestrator needs to call team-scoped endpoints.
     """
+    check_org_access(principal, org_id)
     from src.core.impersonation import mint_team_impersonation_token
     from src.db.repository import record_impersonation_jti
 
@@ -938,6 +949,7 @@ def admin_revoke_team_token(
     session: Session = Depends(get_db),
     x_admin_actor: str = Header(default="admin", convert_underscores=False),
 ):
+    check_org_access(principal, org_id)
     revoke_team_token_scoped(
         session, org_id=org_id, team_node_id=team_node_id, token_id=token_id
     )
@@ -962,6 +974,7 @@ def admin_list_team_tokens(
     principal: AdminPrincipal = Depends(require_admin),
     session: Session = Depends(get_db),
 ):
+    check_org_access(principal, org_id)
     rows = list_team_tokens(session, org_id=org_id, team_node_id=team_node_id)
     ADMIN_ACTIONS_TOTAL.labels("list_team_tokens", "ok").inc()
     audit_logger().info(
@@ -995,6 +1008,7 @@ def admin_list_org_tokens(
     session: Session = Depends(get_db),
 ):
     """List all tokens across all teams in the organization."""
+    check_org_access(principal, org_id)
     from src.db.repository import get_org_node, list_org_tokens
 
     # Verify org exists (org root node has node_id == org_id)
@@ -1047,6 +1061,7 @@ def admin_get_token_details(
     session: Session = Depends(get_db),
 ):
     """Get detailed information about a specific token."""
+    check_org_access(principal, org_id)
     from src.db.repository import get_token_by_id
 
     token = get_token_by_id(session, token_id=token_id)
@@ -1092,6 +1107,7 @@ def admin_extend_token(
     x_admin_actor: str = Header(default="admin", convert_underscores=False),
 ):
     """Extend token expiration by specified number of days."""
+    check_org_access(principal, org_id)
     from src.db.repository import extend_token_expiration, get_token_by_id
 
     # Verify token belongs to org
@@ -1147,6 +1163,7 @@ def admin_bulk_revoke_tokens(
     x_admin_actor: str = Header(default="admin", convert_underscores=False),
 ):
     """Bulk revoke multiple tokens."""
+    check_org_access(principal, org_id)
     from src.db.repository import bulk_revoke_tokens, get_token_by_id
 
     token_ids = body.get("token_ids", [])
@@ -1202,6 +1219,7 @@ def admin_get_org_stats(
     session: Session = Depends(get_db),
 ):
     """Get organization statistics for the dashboard."""
+    check_org_access(principal, org_id)
     from datetime import timedelta
 
     from sqlalchemy import and_, func
@@ -1501,6 +1519,7 @@ def admin_get_org_activity(
     session: Session = Depends(get_db),
 ):
     """Get recent activity feed for the dashboard."""
+    check_org_access(principal, org_id)
     from sqlalchemy import desc
 
     from src.db.config_models import ConfigChangeHistory
@@ -1592,6 +1611,7 @@ def admin_get_pending_items(
     session: Session = Depends(get_db),
 ):
     """Get counts of pending items that need attention."""
+    check_org_access(principal, org_id)
     from datetime import timedelta
 
     from sqlalchemy import and_, func
@@ -1652,6 +1672,7 @@ def admin_get_system_health(
     session: Session = Depends(get_db),
 ):
     """Get system health status for services and integrations."""
+    check_org_access(principal, org_id)
     from src.db.models import Integration
 
     # Get all integrations for the org
@@ -1833,6 +1854,7 @@ def admin_list_knowledge_edges(
     session: Session = Depends(get_db),
     limit: int = 200,
 ):
+    check_org_access(principal, org_id)
     rows = (
         session.query(KnowledgeEdge)
         .filter(
@@ -1872,6 +1894,7 @@ def admin_upsert_knowledge_edges(
     principal: AdminPrincipal = Depends(require_admin),
     session: Session = Depends(get_db),
 ):
+    check_org_access(principal, org_id)
     upserted = 0
     for e in edges or []:
         entity = (e.entity or "").strip()
@@ -1930,6 +1953,7 @@ def admin_list_knowledge_docs(
     session: Session = Depends(get_db),
     limit: int = 200,
 ):
+    check_org_access(principal, org_id)
     rows = (
         session.query(KnowledgeDocument)
         .filter(
@@ -1971,6 +1995,7 @@ def admin_upsert_knowledge_docs(
     principal: AdminPrincipal = Depends(require_admin),
     session: Session = Depends(get_db),
 ):
+    check_org_access(principal, org_id)
     upserted = 0
     for d in docs or []:
         doc_id = (d.doc_id or "").strip()

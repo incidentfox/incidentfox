@@ -125,9 +125,8 @@ spec:
             # ServiceAccount for sandbox pods (K8s tools read-only access)
             - name: SANDBOX_SERVICE_ACCOUNT
               value: {{ .Release.Name }}-sandbox-pod
-            # gVisor runtime for enhanced isolation
-            - name: USE_GVISOR
-              value: {{ .Values.services.agent.sandbox.useGvisor | default "true" | quote }}
+            # gVisor is mandatory by default (sandbox_manager.py).
+            # Set DISABLE_GVISOR=true only for local dev where gVisor is unavailable.
             # Credential resolver namespace (for Envoy ext_authz)
             - name: CREDENTIAL_RESOLVER_NAMESPACE
               value: {{ .Values.namespace | quote }}
@@ -140,6 +139,12 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.jwtSecret.secretName | default "incidentfox-jwt-secret" }}
                   key: {{ .Values.externalSecrets.contract.jwtSecret.secretKey | default "JWT_SECRET" }}
+            # Service-to-service auth for /investigate (shared with slack-bot)
+            - name: INVESTIGATE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.jwtSecret.secretName | default "incidentfox-jwt-secret" }}
+                  key: {{ .Values.externalSecrets.contract.jwtSecret.investigateAuthTokenKey | default "INVESTIGATE_AUTH_TOKEN" }}
             {{- end }}
             # =================================================================
             # Warm Pool Configuration

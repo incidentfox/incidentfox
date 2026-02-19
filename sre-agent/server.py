@@ -32,7 +32,7 @@ import httpx
 from auth import generate_sandbox_jwt
 from dotenv import load_dotenv
 from events import error_event
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sandbox_manager import (
@@ -58,6 +58,37 @@ print(f"✅ SandboxManager initialized (namespace={namespace}, image={image})")
 # Requests beyond this limit wait (backpressure) instead of all crashing.
 MAX_CONCURRENT_INVESTIGATIONS = int(os.getenv("MAX_CONCURRENT_INVESTIGATIONS", "8"))
 _investigation_semaphore = asyncio.Semaphore(MAX_CONCURRENT_INVESTIGATIONS)
+
+# Service-to-service auth for /investigate and /interrupt.
+# In production, set via K8s Secret (shared between slack-bot and sre-agent).
+# If unset, auth is disabled (local dev with `make dev`).
+INVESTIGATE_AUTH_TOKEN = os.getenv("INVESTIGATE_AUTH_TOKEN", "")
+if INVESTIGATE_AUTH_TOKEN:
+    print("🔒 /investigate auth enabled (INVESTIGATE_AUTH_TOKEN is set)")
+else:
+    print("⚠️  /investigate auth disabled (INVESTIGATE_AUTH_TOKEN not set — local dev only)")
+
+
+def require_service_auth(request: Request) -> None:
+    """Verify service-to-service auth token on /investigate and /interrupt.
+
+    In production, only slack-bot (and optionally orchestrator) should call
+    these endpoints. The token prevents any compromised pod from forging
+    tenant context and hijacking credential-proxy.
+
+    Skipped when INVESTIGATE_AUTH_TOKEN is not configured (local dev).
+    """
+    if not INVESTIGATE_AUTH_TOKEN:
+        return
+
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+
+    token = auth_header.split(" ", 1)[1].strip()
+    if not secrets.compare_digest(token, INVESTIGATE_AUTH_TOKEN):
+        raise HTTPException(status_code=403, detail="Invalid service token")
+
 
 # File proxy: token -> download info mapping
 # Tokens expire after 1 hour to prevent stale downloads
@@ -506,7 +537,7 @@ def create_investigation_stream(
     return stream
 
 
-@app.post("/investigate")
+@app.post("/investigate", dependencies=[Depends(require_service_auth)])
 async def investigate(request: InvestigateRequest):
     """
     Run investigation and stream results.
@@ -689,7 +720,7 @@ async def _investigate_inner(request: InvestigateRequest):
     )
 
 
-@app.post("/interrupt")
+@app.post("/interrupt", dependencies=[Depends(require_service_auth)])
 async def interrupt(request: InterruptRequest):
     """
     Interrupt current execution and stop.
@@ -747,7 +778,7 @@ async def interrupt(request: InterruptRequest):
     )
 
 
-@app.post("/answer")
+@app.post("/answer", dependencies=[Depends(require_service_auth)])
 async def answer_question(request: AnswerRequest):
     """
     Receive answer to AskUserQuestion from Slack bot.

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from ...db.models import Integration, SecurityPolicy, TokenAudit, TokenPermission
 from ...db.session import get_db
-from .admin import require_admin
+from .admin import check_org_access, require_admin
 
 router = APIRouter(prefix="/api/v1/admin/orgs/{org_id}", tags=["security"])
 
@@ -105,6 +105,7 @@ async def get_security_policies(
     admin: dict = Depends(require_admin),
 ):
     """Get security policies for an organization."""
+    check_org_access(admin, org_id)
     policy = db.query(SecurityPolicy).filter(SecurityPolicy.org_id == org_id).first()
 
     if not policy:
@@ -134,6 +135,7 @@ async def update_security_policies(
     admin: dict = Depends(require_admin),
 ):
     """Update security policies for an organization."""
+    check_org_access(admin, org_id)
     policy = db.query(SecurityPolicy).filter(SecurityPolicy.org_id == org_id).first()
 
     if not policy:
@@ -176,6 +178,7 @@ async def get_token_audit(
     admin: dict = Depends(require_admin),
 ):
     """Get token audit logs with optional filtering."""
+    check_org_access(admin, org_id)
     query = db.query(TokenAudit).filter(TokenAudit.org_id == org_id)
 
     if team_node_id:
@@ -203,6 +206,7 @@ async def list_integrations(
     admin: dict = Depends(require_admin),
 ):
     """List all integrations for an organization."""
+    check_org_access(admin, org_id)
     integrations = db.query(Integration).filter(Integration.org_id == org_id).all()
 
     # If no integrations exist, return default list
@@ -257,6 +261,7 @@ async def get_integration(
     admin: dict = Depends(require_admin),
 ):
     """Get a specific integration."""
+    check_org_access(admin, org_id)
     integration = (
         db.query(Integration)
         .filter(
@@ -281,6 +286,7 @@ async def update_integration(
     admin: dict = Depends(require_admin),
 ):
     """Update an integration."""
+    check_org_access(admin, org_id)
     integration = (
         db.query(Integration)
         .filter(
@@ -335,6 +341,7 @@ async def test_integration(
     admin: dict = Depends(require_admin),
 ):
     """Test an integration connection."""
+    check_org_access(admin, org_id)
     import httpx
 
     config = body.config
@@ -511,6 +518,7 @@ async def get_available_permissions(
     admin: dict = Depends(require_admin),
 ):
     """Get list of available token permissions."""
+    check_org_access(admin, org_id)
     return {
         "permissions": [
             {
@@ -579,6 +587,7 @@ async def run_token_lifecycle(
     1. Find tokens expiring soon and record warning audit events
     2. Auto-revoke tokens that have been inactive too long
     """
+    check_org_access(admin, org_id)
     from ...db import repository
 
     result = repository.process_token_lifecycle(db, org_id=org_id)
@@ -639,6 +648,7 @@ async def list_pending_changes(
     admin: dict = Depends(require_admin),
 ):
     """List pending config changes awaiting approval."""
+    check_org_access(admin, org_id)
     from ...db import repository
 
     changes = repository.list_pending_changes(
@@ -673,6 +683,7 @@ async def get_pending_change(
     admin: dict = Depends(require_admin),
 ):
     """Get a single pending change."""
+    check_org_access(admin, org_id)
     from ...db import repository
 
     change = repository.get_pending_change(db, change_id=change_id)
@@ -693,6 +704,7 @@ async def review_pending_change(
     admin: dict = Depends(require_admin),
 ):
     """Approve or reject a pending change."""
+    check_org_access(admin, org_id)
     from ...db import repository
     from ...services.email_service import (
         send_change_approved_notification,
@@ -828,6 +840,7 @@ async def get_sso_config(
     admin: dict = Depends(require_admin),
 ):
     """Get SSO configuration for an organization."""
+    check_org_access(admin, org_id)
     from ...db.models import SSOConfig
 
     config = db.query(SSOConfig).filter(SSOConfig.org_id == org_id).first()
@@ -863,6 +876,7 @@ async def update_sso_config(
     admin: dict = Depends(require_admin),
 ):
     """Update SSO configuration for an organization."""
+    check_org_access(admin, org_id)
     from ...db.models import SSOConfig
 
     config = db.query(SSOConfig).filter(SSOConfig.org_id == org_id).first()
@@ -917,6 +931,7 @@ async def test_sso_config(
     admin: dict = Depends(require_admin),
 ):
     """Test SSO configuration by fetching OIDC discovery document."""
+    check_org_access(admin, org_id)
     import httpx
 
     from ...db.models import SSOConfig

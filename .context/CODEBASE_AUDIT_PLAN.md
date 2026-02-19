@@ -376,6 +376,14 @@ This phase is highly parallelizable. Each tool port is independent:
 
 ## Phase 9: Documentation & Developer Experience
 
+**Cross-cutting requirement**: As code is reviewed or changed in **any** phase, update or create documentation to be clean, correct, and up-to-date. Docs serve three audiences:
+
+1. **Internal developers** — Architecture context, service-level READMEs, development guides, code comments where logic isn't self-evident
+2. **Coding agents** — CLAUDE.md, SCRATCHPAD.md, .context/ files, skill SKILL.md files, inline docstrings on public APIs
+3. **End users / customers** — API references, configuration guides, onboarding docs, deployment guides
+
+This is not a phase-9-only concern — every phase should leave docs better than it found them.
+
 ### 9A. Accuracy audit
 - [ ] Compare CLAUDE.md architecture description with actual code — are they in sync?
 - [ ] Review README.md — does getting started actually work?
@@ -388,6 +396,9 @@ This phase is highly parallelizable. Each tool port is independent:
 - [ ] Runbook for common operational issues
 - [ ] Incident response procedures
 - [ ] Architecture decision records (ADRs)
+- [ ] Security architecture doc (auth flows, credential-proxy, sandbox isolation, JWT lifecycle)
+- [ ] Per-service API contract docs (request/response schemas, auth requirements, error codes)
+- [ ] Multi-tenancy model doc (org → team hierarchy, config merge, token scoping, RBAC)
 
 ### 9C. Code quality standards
 - [ ] Review `ruff.toml` — it ignores bare excepts (E722), unused imports (F401), undefined names (F821). These should be fixed, not ignored.
