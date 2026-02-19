@@ -1371,7 +1371,9 @@ class UltimateRAGServer:
                             kt_str = doc_meta.get("knowledge_type")
                             if kt_str:
                                 try:
-                                    doc_knowledge_type = KnowledgeType.from_string(kt_str)
+                                    doc_knowledge_type = KnowledgeType.from_string(
+                                        kt_str
+                                    )
                                 except (ValueError, KeyError):
                                     pass
 

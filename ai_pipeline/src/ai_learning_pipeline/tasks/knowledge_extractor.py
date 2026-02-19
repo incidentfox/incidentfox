@@ -84,8 +84,7 @@ def _build_slack_prompt(channel_name: str, formatted_messages: str) -> str:
         "could use when investigating production incidents. Discard chitchat, social "
         "messages, and anything not related to infrastructure, services, incidents, "
         "deployments, or operations.\n\n"
-        "## Messages\n\n"
-        + formatted_messages + "\n\n"
+        "## Messages\n\n" + formatted_messages + "\n\n"
         "## Instructions\n\n"
         "Analyze these messages and extract KNOWLEDGE ITEMS. Each item should be a "
         "self-contained piece of operational knowledge synthesized from the conversation.\n\n"
@@ -113,17 +112,17 @@ def _build_slack_prompt(channel_name: str, formatted_messages: str) -> str:
         "- For incident discussions, extract the resolution steps as a separate PROCEDURAL item\n"
         "- Keep each item's content concise but complete (100-300 words)\n\n"
         "Respond in JSON:\n"
-        '{\n'
+        "{\n"
         '  "items": [\n'
-        '    {\n'
+        "    {\n"
         '      "title": "...",\n'
         '      "knowledge_type": "procedural",\n'
         '      "content": "...",\n'
         '      "entities": [{"name": "payment-service", "type": "service"}],\n'
         '      "confidence": 0.85\n'
-        '    }\n'
-        '  ]\n'
-        '}'
+        "    }\n"
+        "  ]\n"
+        "}"
     )
 
 
@@ -142,9 +141,13 @@ def _build_document_prompt(
         "Your job is to transform this raw document into structured operational "
         "knowledge that an AI SRE agent can use during incident investigation.\n\n"
         "## Document\n"
-        "Source: " + source_url + "\n"
+        "Source: "
+        + source_url
+        + "\n"
         + (metadata_hint + "\n" if metadata_hint else "")
-        + "\n" + content + "\n\n"
+        + "\n"
+        + content
+        + "\n\n"
         "## Instructions\n\n"
         "Analyze this document and produce a structured knowledge extraction:\n\n"
         '1. "knowledge_type": Classify as one of: procedural, factual, relational, temporal, social, policy\n'
@@ -169,14 +172,14 @@ def _build_document_prompt(
         '6. "skip": true if this document has no operational value for an SRE agent '
         "(e.g., a template with no content, a deprecated notice, marketing copy)\n\n"
         "Respond in JSON:\n"
-        '{\n'
+        "{\n"
         '  "skip": false,\n'
         '  "title": "...",\n'
         '  "knowledge_type": "factual",\n'
         '  "content": "...",\n'
         '  "entities": [{"name": "user-service", "type": "service"}],\n'
         '  "confidence": 0.9\n'
-        '}'
+        "}"
     )
 
 
@@ -215,9 +218,7 @@ class KnowledgeExtractor:
         # Process each channel concurrently
         tasks = []
         for channel_name, ch_messages in by_channel.items():
-            tasks.append(
-                self._extract_from_channel(channel_name, ch_messages, org_id)
-            )
+            tasks.append(self._extract_from_channel(channel_name, ch_messages, org_id))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -358,7 +359,8 @@ class KnowledgeExtractor:
                     KnowledgeItem(
                         content=doc.content,
                         knowledge_type="relational",
-                        title="Architecture Map: %s" % doc.metadata.get("org_id", "unknown"),
+                        title="Architecture Map: %s"
+                        % doc.metadata.get("org_id", "unknown"),
                         source_url=doc.source_url,
                         confidence=0.9,
                         metadata=doc.metadata,
@@ -410,7 +412,9 @@ class KnowledgeExtractor:
         if len(content) > 60_000:
             content = content[:60_000] + "\n\n[... truncated ...]"
 
-        prompt = _build_document_prompt(source_type, doc.source_url, metadata_hint, content)
+        prompt = _build_document_prompt(
+            source_type, doc.source_url, metadata_hint, content
+        )
 
         async with self._semaphore:
             result = await self._call_llm(prompt)
