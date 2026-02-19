@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from github_client import create_review, format_pr_summary, get_pr
+from github_client import create_review
 
 
 def main():

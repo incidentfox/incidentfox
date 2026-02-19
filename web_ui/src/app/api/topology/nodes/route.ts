@@ -1,23 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getConfigServiceBaseUrl, getUpstreamAuthHeaders } from "../../_utils/upstream";
 
 export const runtime = "nodejs";
 
-function getConfigServiceBaseUrl() {
-  const baseUrl = process.env.CONFIG_SERVICE_URL;
-  if (!baseUrl) {
-    throw new Error("CONFIG_SERVICE_URL is not set");
+export async function GET(request: NextRequest) {
+  const authHeaders = getUpstreamAuthHeaders(request);
+  if (!Object.keys(authHeaders).length) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return baseUrl;
-}
 
-export async function GET() {
   try {
     const baseUrl = getConfigServiceBaseUrl();
     const orgId = process.env.ORG_ID || "org1";
 
     const upstreamUrl = new URL(`/api/v1/admin/orgs/${orgId}/nodes`, baseUrl);
     const res = await fetch(upstreamUrl, {
-      // Avoid caching stale config/topology
+      headers: authHeaders,
       cache: "no-store",
     });
 

@@ -2,7 +2,6 @@
 
 import json
 
-import pytest
 from credential_resolver.llm_stream import StreamTranslator
 
 

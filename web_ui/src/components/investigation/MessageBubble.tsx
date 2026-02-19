@@ -6,6 +6,15 @@ import { Bot, RotateCcw, ExternalLink, FileText, ShieldCheck, BrainCircuit } fro
 import { ChatMessage } from '@/types/chat';
 import { Logo } from '@/components/Logo';
 
+function escapeHtml(str: string): string {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 export function MessageBubble({ message }: { message: ChatMessage }) {
     const isAgent = message.type === 'agent_thought' || message.type === 'conclusion';
     const isConclusion = message.type === 'conclusion';
@@ -44,8 +53,8 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
                             <div className="prose dark:prose-invert prose-sm max-w-none mb-4">
                                 {/* Simple markdown parser replacement for demo */}
                                 {message.content?.split('\n').map((line, i) => (
-                                    <p key={i} className="mb-1" dangerouslySetInnerHTML={{ 
-                                        __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/`(.*?)`/g, '<code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">$1</code>') 
+                                    <p key={i} className="mb-1" dangerouslySetInnerHTML={{
+                                        __html: escapeHtml(line).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/`(.*?)`/g, '<code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">$1</code>')
                                     }} />
                                 ))}
                             </div>

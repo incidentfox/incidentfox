@@ -382,7 +382,7 @@ async def update_config(
         )
 
     # Check if approval is required
-    approval_fields = get_fields_requiring_approval(
+    get_fields_requiring_approval(
         body.config,
         config.config_json,
         field_defs,
@@ -1033,22 +1033,6 @@ async def update_my_config(
             )
 
     try:
-        # DEBUG: Log what we're receiving
-        logger.info(
-            f"🔍 DEBUG - PATCH /api/v1/config/me - org_id={org_id}, team_node_id={team_node_id}"
-        )
-        logger.info(f"🔍 DEBUG - body.config keys: {list(body.config.keys())}")
-        if "mcp_servers" in body.config:
-            logger.info(
-                f"🔍 DEBUG - mcp_servers in patch: {body.config['mcp_servers']}"
-            )
-            for mcp_id, mcp_patch in body.config["mcp_servers"].items():
-                logger.info(f"🔍 DEBUG - MCP {mcp_id} patch: {mcp_patch}")
-                if "enabled_tools" in mcp_patch:
-                    logger.info(
-                        f"🔍 DEBUG - enabled_tools: {mcp_patch['enabled_tools']} (type: {type(mcp_patch['enabled_tools'])})"
-                    )
-
         updated_config, diff = repo.update_node_configuration(
             db,
             org_id,
@@ -1057,14 +1041,6 @@ async def update_my_config(
             updated_by="team",
             change_reason=body.reason,
         )
-
-        # DEBUG: Log what was actually saved
-        if "mcp_servers" in updated_config.config_json:
-            logger.info("🔍 DEBUG - After merge, saved mcp_servers:")
-            for mcp_id, mcp_config in updated_config.config_json["mcp_servers"].items():
-                logger.info(
-                    f"🔍 DEBUG - MCP {mcp_id} saved enabled_tools: {mcp_config.get('enabled_tools', ['*'])}"
-                )
 
         repo.invalidate_config_cache(db, org_id, team_node_id, cascade=False)
         db.commit()

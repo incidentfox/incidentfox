@@ -4,6 +4,7 @@
 Usage:
     python query_prometheus.py --query "rate(http_requests_total[5m])"
     python query_prometheus.py --query "up{job='api'}" --time-range 120
+    python query_prometheus.py --query "up" --datasource-id 8
 """
 
 import argparse
@@ -14,6 +15,23 @@ from datetime import datetime, timedelta, timezone
 from grafana_client import grafana_request
 
 
+def find_prometheus_datasource_id():
+    """Auto-discover the default Prometheus datasource ID."""
+    try:
+        datasources = grafana_request("GET", "api/datasources")
+        # First try: find the default datasource of type prometheus
+        for ds in datasources:
+            if ds.get("type") == "prometheus" and ds.get("isDefault"):
+                return ds["id"]
+        # Second try: find any prometheus datasource
+        for ds in datasources:
+            if ds.get("type") == "prometheus":
+                return ds["id"]
+    except Exception:
+        pass
+    return 1  # fallback
+
+
 def main():
     parser = argparse.ArgumentParser(description="Query Prometheus via Grafana")
     parser.add_argument("--query", required=True, help="PromQL query")
@@ -22,12 +40,16 @@ def main():
     )
     parser.add_argument("--step", default="1m", help="Query step (default: 1m)")
     parser.add_argument(
-        "--datasource-id", type=int, default=1, help="Datasource ID (default: 1)"
+        "--datasource-id", type=int, default=0, help="Datasource ID (0=auto-detect)"
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
     try:
+        ds_id = args.datasource_id
+        if ds_id == 0:
+            ds_id = find_prometheus_datasource_id()
+
         end = datetime.now(timezone.utc)
         start = end - timedelta(minutes=args.time_range)
 
@@ -39,7 +61,7 @@ def main():
         }
         data = grafana_request(
             "GET",
-            f"api/datasources/proxy/{args.datasource_id}/api/v1/query_range",
+            f"api/datasources/proxy/{ds_id}/api/v1/query_range",
             params=params,
         )
 
@@ -55,6 +77,7 @@ def main():
         result = {
             "ok": True,
             "query": args.query,
+            "datasource_id": ds_id,
             "result_count": len(results),
             "results": formatted,
         }
@@ -64,7 +87,7 @@ def main():
         else:
             print(f"Query: {args.query}")
             print(
-                f"Time range: {args.time_range}m | Step: {args.step} | Series: {len(results)}"
+                f"Time range: {args.time_range}m | Step: {args.step} | Datasource: {ds_id} | Series: {len(results)}"
             )
             for r in formatted:
                 labels = r.get("metric", {})

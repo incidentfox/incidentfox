@@ -7,9 +7,7 @@ Credentials are injected transparently by the proxy layer.
 Works with Elasticsearch 7.x, 8.x, and 9.x via REST API.
 """
 
-import json
 import os
-import sys
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -154,9 +152,8 @@ def search(
         "sort": sort or [{"@timestamp": {"order": "desc"}}],
     }
 
-    with httpx.Client(
-        timeout=60.0, verify=False
-    ) as client:  # verify=False for self-signed certs
+    _verify_tls = os.getenv("ES_VERIFY_TLS", "true").lower() not in ("false", "0", "no")
+    with httpx.Client(timeout=60.0, verify=_verify_tls) as client:
         response = client.post(url, headers=get_headers(), json=body)
         response.raise_for_status()
         return response.json()
@@ -193,7 +190,8 @@ def aggregate(
         "size": size,
     }
 
-    with httpx.Client(timeout=60.0, verify=False) as client:
+    _verify_tls = os.getenv("ES_VERIFY_TLS", "true").lower() not in ("false", "0", "no")
+    with httpx.Client(timeout=60.0, verify=_verify_tls) as client:
         response = client.post(url, headers=get_headers(), json=body)
         response.raise_for_status()
         return response.json()

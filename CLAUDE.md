@@ -16,7 +16,7 @@ config-service ← used by web_ui, slack-bot, orchestrator, credential-resolver
 
 Two entry points for running agents: **Slack** (via slack-bot) and **web_ui** (directly). Both stream SSE from sre-agent.
 
-**sre-agent** is the active agent. Runs in isolated gVisor K8s sandbox pods — each investigation gets its own sandbox. Uses Claude SDK with skills (progressive knowledge loading) and scripts (Python/Bash integrations). No MCP tools — everything is skills + scripts.
+**sre-agent** is the active agent. Runs in isolated gVisor K8s sandbox pods — each investigation gets its own sandbox. Uses Claude SDK with 45 skills (progressive knowledge loading) and scripts (Python/Bash integrations). No MCP tools — everything is skills + scripts.
 
 **slack-bot** is the Slack UI layer. Connects via Socket Mode. Streams SSE from sre-agent. Handles multi-workspace OAuth, onboarding, feedback. Currently talks directly to sre-agent (not through orchestrator).
 
@@ -24,26 +24,37 @@ Two entry points for running agents: **Slack** (via slack-bot) and **web_ui** (d
 
 **config-service** is the control plane. Hierarchical org→team config with deep merge (dicts merge, lists replace). Manages tokens, audit logging, RBAC. Teams authenticate with bearer tokens.
 
-**orchestrator** routes webhooks (Slack, GitHub, PagerDuty, Incident.io) and handles team provisioning. Currently NOT in the active Slack path — slack-bot talks directly to sre-agent. web_ui can optionally route through orchestrator. Long-term, all surfaces should go through orchestrator.
+**orchestrator** routes webhooks (Slack, GitHub, PagerDuty, Incident.io, Blameless, FireHydrant) and handles team provisioning. Has output_handlers for posting agent results to GitHub PR/issue comments. Currently NOT in the active Slack path — slack-bot talks directly to sre-agent. web_ui can optionally route through orchestrator. Long-term, all surfaces should go through orchestrator.
 
 **credential-proxy** (Envoy + credential-resolver) injects API keys into outbound requests so sandboxes never see secrets. JWT-based sandbox identity.
 
 ## Dead / deprecated code (do not extend)
 
-- **agent/** — Original OpenAI SDK agent. Deprecated. Contains 60+ tool implementations we're porting to sre-agent. Do not add features here.
-- **unified-agent/** — OpenHands SDK attempt. Also deprecated. Has 80+ tools and config-driven agent hierarchy. Being folded back into sre-agent.
-- **knowledge_base/** — Replaced by ultimate_rag/.
-- **ai_pipeline/** — Deprecated.
-- **dependency_service/** — Disabled in all environments.
-- **correlation_service/** — Unclear if used. Check before deleting.
+- **dependency_service/** — Stub only (README.md, no code). Placeholder for premium feature.
+- **correlation_service/** — Stub only (README.md, no code). Placeholder for premium feature.
 
-The history: agent/ (OpenAI SDK) → sre-agent (Claude SDK) → unified-agent (OpenHands SDK) → back to sre-agent (Claude SDK). We keep flipping because sre-agent's skills architecture is simpler and Claude SDK is better tested.
+**Removed**:
+- `unified-agent/` — OpenHands SDK attempt. Deleted after all valuable tools were ported to sre-agent skills.
+- `agent/` — Original OpenAI SDK agent. Deleted after prompts were migrated to `config_service/scripts/prompts/` and all tools ported to sre-agent skills.
+- `knowledge_base/` — Original RAPTOR service. Deleted after raptor lib was copied to `ultimate_rag/raptor_lib/` and all imports updated. The Helm template (`knowledge-base.yaml`) remains but is disabled in all environments (`knowledgeBase.enabled: false`).
 
-## What still needs porting from agent/ and unified-agent/
+**Not deprecated** (despite being disabled in staging/prod):
+- **ai_pipeline/** — Premium feature under active development. Disabled via `enabled: false` in all environments. Integrated with orchestrator, slack-bot, and web_ui.
 
-Tools not yet in sre-agent: Grafana, Jira, Sentry, Docker, GitLab, BigQuery, Snowflake, MySQL, PostgreSQL, Azure, GCP, Kafka, New Relic, Sourcegraph. These exist as Python functions in agent/src/ai_agent/tools/ and unified-agent/src/unified_agent/tools/. Port them as skills with scripts, not as direct tool functions.
+The history: agent/ (OpenAI SDK) → sre-agent (Claude SDK) → unified-agent (OpenHands SDK, deleted) → back to sre-agent (Claude SDK). We standardized on sre-agent because its skills architecture is simpler and Claude SDK is better tested.
 
-Config-driven subagents: unified-agent supports JSON-defined agent hierarchies via config-service (agent_builder.py with topological sort). sre-agent needs this for per-team agent customization.
+## Remaining work (agent/ and unified-agent/ are deleted)
+
+All 45 tools have been ported to sre-agent skills. Prompts migrated to `config_service/scripts/prompts/`. GitHub output handler ported to orchestrator. Remaining items:
+
+- **Config-driven subagents**: Port `agent_builder.py` pattern (topological sort, agent-as-tool, model alias resolution) to sre-agent for per-team agent customization via config-service.
+- **Output handlers for Teams & Google Chat**: Port Adaptive Cards (Teams) and Card v2 (Google Chat) handlers to orchestrator (GitHub handler already done).
+- **DB migration tools**: Flyway, Alembic, Prisma (low priority).
+- **Schema Registry & Debezium tools** (low priority).
+
+## Security audit status
+
+A comprehensive 8-phase security audit was completed (see `.context/CODEBASE_AUDIT_PLAN.md`). 204 findings across P0–P3. 69 fixed, 135 deferred. All findings documented in `.context/findings/phase-{1..8}-*.md`. Key fixes: sandbox auth, pickle RCE prevention, XSS/CSRF fixes, securityContext on all Helm deployments, SQL injection prevention, path traversal guards.
 
 ## Environments & Clusters
 
@@ -72,7 +83,7 @@ Secrets: AWS Secrets Manager → ExternalSecrets Operator → K8s Secrets. Never
 
 The local stack builds all services from source. Config-service auto-runs alembic migrations and seeds local dev data (org=local, team=default). sre-agent loads team config from config-service via header-based auth (`INCIDENTFOX_TENANT_ID=local`, `INCIDENTFOX_TEAM_ID=default`).
 
-**Note**: `local/docker-compose.yml` is deprecated — it runs the old agent/ (OpenAI SDK). Use the root docker-compose.yml instead.
+**Note**: `local/docker-compose.yml` has been removed (it ran the deprecated agent/). Use the root docker-compose.yml instead. The `local/` directory now only contains `claude_code_pack/`, `incidentfox_cli/`, and test files.
 
 ## Key files
 
@@ -86,7 +97,8 @@ The local stack builds all services from source. Config-service auto-runs alembi
 | slack-bot/config_client.py | Config service client |
 | slack-bot/modal_builder.py | Interactive modals (103KB) |
 | config_service/src/api/main.py | Config API with hierarchical merge |
-| orchestrator/src/.../api/main.py | Webhook router |
+| orchestrator/src/.../webhooks/router.py | Webhook router (GitHub, PagerDuty, Incident.io, Blameless, FireHydrant) |
+| orchestrator/src/.../output_handlers/ | Post agent results to GitHub PRs/issues |
 | web_ui/src/app/ | Next.js app router pages (team + admin modes) |
 | web_ui/src/app/api/ | API routes proxying to config-service, sre-agent, ultimate_rag |
 | charts/incidentfox/ | Helm chart for all services |
@@ -105,7 +117,7 @@ The local stack builds all services from source. Config-service auto-runs alembi
 
 ## Conventions
 
-- Python services use `uv` (sre-agent, config-service) or `poetry` (agent). Prefer uv for new work.
+- Python services use `uv` (sre-agent, config-service). Prefer uv for new work.
 - web_ui is Next.js with pnpm.
 - Linting: ruff. Config in ruff.toml.
 - All services have Dockerfiles. sre-agent has Dockerfile (prod, hardened) and Dockerfile.simple (dev).
@@ -114,9 +126,8 @@ The local stack builds all services from source. Config-service auto-runs alembi
 ## Architecture decisions pending
 
 1. **Orchestrator integration**: sre-agent currently bypasses orchestrator and talks directly to slack-bot. This blocks non-Slack surfaces (MS Teams, Google Chat — secrets already in staging values). Need to abstract Slack-specific prompts and the file proxy server.
-2. **Config-driven agents**: Port unified-agent's agent_builder.py pattern to sre-agent so teams can customize agents via config-service.
-3. **Tool porting**: ~40 tools in agent/ not yet in sre-agent. Port as skills.
-4. **Dead code cleanup**: agent/, unified-agent/, knowledge_base/, ai_pipeline/, dependency_service/, correlation_service/ should be removed once porting is complete.
+2. **Config-driven agents**: Port agent_builder.py pattern to sre-agent so teams can customize agents via config-service.
+3. **Helm cleanup**: `knowledge-base.yaml` template still exists (disabled in all envs). Remove once confirmed no customer uses it. Also remove `knowledgeBase` sections from values files.
 
 ## Scratchpad
 

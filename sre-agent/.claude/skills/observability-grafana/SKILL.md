@@ -1,6 +1,6 @@
 ---
 name: grafana-dashboards
-description: Grafana dashboard and metrics analysis. Use when querying dashboards, panels, Prometheus metrics via Grafana, checking datasources, or reviewing alerts.
+description: Grafana dashboard and metrics analysis. Use when querying dashboards, panels, Prometheus metrics via Grafana, checking datasources, reviewing alerts, or creating dashboards from templates.
 allowed-tools: Bash(python *)
 ---
 
@@ -31,12 +31,16 @@ python .claude/skills/observability-grafana/scripts/get_dashboard.py --uid DASHB
 
 ### query_prometheus.py - Query Prometheus via Grafana
 ```bash
-python .claude/skills/observability-grafana/scripts/query_prometheus.py --query "PROMQL" [--time-range 60] [--step 1m]
+python .claude/skills/observability-grafana/scripts/query_prometheus.py --query "PROMQL" [--time-range 60] [--step 1m] [--datasource-id ID]
 
-# Examples:
+# Examples (auto-detects Prometheus datasource):
 python .claude/skills/observability-grafana/scripts/query_prometheus.py --query "rate(http_requests_total[5m])"
 python .claude/skills/observability-grafana/scripts/query_prometheus.py --query "up{job='api'}" --time-range 120
+
+# Explicit datasource ID (use list_datasources.py to find it):
+python .claude/skills/observability-grafana/scripts/query_prometheus.py --query "up" --datasource-id 8
 ```
+**Note**: The Prometheus datasource ID is auto-detected by default. Use `list_datasources.py` if you need to target a specific datasource.
 
 ### list_datasources.py - List Configured Datasources
 ```bash
@@ -47,6 +51,35 @@ python .claude/skills/observability-grafana/scripts/list_datasources.py
 ```bash
 python .claude/skills/observability-grafana/scripts/get_alerts.py
 ```
+
+### create_dashboard.py - Create Dashboard from Template
+```bash
+python .claude/skills/observability-grafana/scripts/create_dashboard.py \
+  --title "My Dashboard" \
+  --template .claude/skills/observability-grafana/templates/vercel-overview.json
+
+# With folder:
+python .claude/skills/observability-grafana/scripts/create_dashboard.py \
+  --title "My Dashboard" \
+  --template .claude/skills/observability-grafana/templates/vercel-overview.json \
+  --folder-uid FOLDER_UID
+
+# Overwrite existing:
+python .claude/skills/observability-grafana/scripts/create_dashboard.py \
+  --title "My Dashboard" \
+  --template .claude/skills/observability-grafana/templates/vercel-overview.json \
+  --overwrite
+```
+
+---
+
+## Dashboard Templates
+
+Pre-built templates are in `.claude/skills/observability-grafana/templates/`:
+
+| Template | Description |
+|----------|-------------|
+| `vercel-overview.json` | 4-panel Vercel monitoring: error count, error rate, log stream, request summary |
 
 ---
 
@@ -71,8 +104,9 @@ rate(process_cpu_seconds_total{service="api"}[5m])
 ## Investigation Workflow
 
 ```
-1. list_dashboards.py --query "api"
-2. get_dashboard.py --uid <uid>
-3. query_prometheus.py --query "rate(http_requests_total{service='api',status=~'5..'}[5m])"
-4. get_alerts.py
+1. list_datasources.py                    # Find available datasources
+2. list_dashboards.py --query "api"       # Find relevant dashboards
+3. get_dashboard.py --uid <uid>           # Get dashboard details
+4. query_prometheus.py --query "rate(http_requests_total{service='api',status=~'5..'}[5m])"
+5. get_alerts.py                          # Check active alerts
 ```

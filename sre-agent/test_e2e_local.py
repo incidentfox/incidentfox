@@ -14,7 +14,6 @@ Usage:
 import asyncio
 import json
 import os
-import signal
 import sys
 import time
 
@@ -166,7 +165,7 @@ async def main():
         async for message in claude_query(prompt=prompt, options=options):
             now = time.monotonic()
             elapsed = now - start_time
-            idle = now - last_activity
+            now - last_activity
             last_activity = now
             message_count += 1
             msg_type = type(message).__name__

@@ -46,7 +46,7 @@ def main():
                             / 60,
                             2,
                         )
-                    except:
+                    except (ValueError, KeyError, TypeError):
                         pass
                 all_incidents.append(
                     {
@@ -87,7 +87,7 @@ def main():
                             inc["created_at"].replace("Z", "+00:00")
                         ).hour
                     ] += 1
-                except:
+                except (ValueError, KeyError, TypeError):
                     pass
 
         analytics = []

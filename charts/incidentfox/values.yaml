@@ -161,6 +161,13 @@ externalSecrets:
       clientIdRemoteRefKey: incidentfox/prod/slack_client_id
       clientSecretRemoteRefKey: incidentfox/prod/slack_client_secret
       signingSecretRemoteRefKey: incidentfox/prod/slack_signing_secret
+  # Vercel integration (deployment webhooks and API access)
+  vercel:
+    enabled: false
+    secretPath: ""
+
+# Vercel webhook signature verification domain
+vercelVerify: ""
 
 services:
   configService:
@@ -256,7 +263,7 @@ services:
       # Warm pool name
       poolName: incidentfox-warmpool
       # Envoy image for sidecar
-      envoyImage: "envoyproxy/envoy:v1.28-latest"
+      envoyImage: "envoyproxy/envoy:v1.28.7"
       # Resource limits for warm pool agent container
       agentResources:
         requests:
@@ -284,20 +291,33 @@ services:
         pollingInterval: 15    # seconds between metric polls
         cooldownPeriod: 300    # seconds before scaling down after last trigger
         buffer: 1              # standby pods to maintain above active claims
-    # Tracing configuration (supports multiple backends via OTEL)
+    # Agent Observability — LLM tracing for monitoring agent behavior
+    # Backend options: "langfuse", "laminar", "none"
+    # This traces the agent's own LLM calls (token usage, latency, prompts).
+    # NOT the same as tool integrations (Datadog, Grafana, etc.) which the agent
+    # uses to investigate customer incidents.
+    agentObservability:
+      backend: "none"  # "langfuse" | "laminar" | "none"
+      langfuse:
+        host: "https://us.cloud.langfuse.com"
+        secretName: "incidentfox-langfuse"
+        publicKeyKey: "LANGFUSE_PUBLIC_KEY"
+        secretKeyKey: "LANGFUSE_SECRET_KEY"
+      laminar:
+        secretName: "incidentfox-laminar"
+        apiKeyKey: "LMNR_PROJECT_API_KEY"
+    # Legacy tracing config (deprecated — use agentObservability instead)
     tracing:
       enabled: false
-      # Langfuse - LLM-specific observability (https://langfuse.com)
       langfuse:
         enabled: false
         host: "https://us.cloud.langfuse.com"
         secretName: "incidentfox-langfuse"
         publicKeyKey: "LANGFUSE_PUBLIC_KEY"
         secretKeyKey: "LANGFUSE_SECRET_KEY"
-      # Generic OTLP exporter (Jaeger, Tempo, Datadog, etc.)
       otlp:
         enabled: false
-        endpoint: ""  # e.g., http://jaeger-collector:4317
+        endpoint: ""
     resources:
       requests:
         cpu: "200m"
@@ -718,7 +738,7 @@ services:
   # Runs periodically to garbage collect sandboxes past their TTL.
   sandboxCleanup:
     enabled: false  # Enable when using gVisor sandboxes
-    image: "bitnami/kubectl:latest"
+    image: "bitnami/kubectl:1.29.2"
     schedule: "*/15 * * * *"  # Every 15 minutes
     successfulJobsHistoryLimit: 3
     failedJobsHistoryLimit: 3

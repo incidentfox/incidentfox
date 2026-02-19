@@ -251,7 +251,7 @@ def register_handlers(app: AsyncApp, integration: SlackBoltIntegration) -> None:
 
             # CRITICAL: Run agent in thread pool to avoid blocking the event loop.
             # agent_api.run_agent() uses sync httpx and can take several minutes.
-            result = await asyncio.to_thread(
+            await asyncio.to_thread(
                 partial(
                     agent_api.run_agent,
                     team_token=team_token,

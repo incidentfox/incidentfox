@@ -4,7 +4,6 @@ Loads runbooks from a runbooks/ directory as MCP resources.
 Runbooks are markdown files that describe procedures for handling specific issues.
 """
 
-import os
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP

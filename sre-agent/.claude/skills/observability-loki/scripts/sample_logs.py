@@ -50,7 +50,7 @@ def main():
         result = query(logql, limit=args.limit, start=start, end=now)
 
         data = result.get("data", {})
-        result_type = data.get("resultType", "streams")
+        data.get("resultType", "streams")
         streams = data.get("result", [])
 
         if args.json:

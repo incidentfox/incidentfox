@@ -5,6 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN useradd -m -u 1000 appuser
+
 # Install Node.js (required for MCP preview functionality)
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y --no-install-recommends curl && \
@@ -36,6 +38,9 @@ COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini
 COPY scripts /app/scripts
 COPY templates /app/templates
+
+RUN chown -R appuser:appuser /app
+USER appuser
 
 ENV PYTHONPATH=/app
 

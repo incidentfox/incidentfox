@@ -10,7 +10,6 @@ Create Date: 2026-02-03
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects.postgresql import JSONB
 
 # revision identifiers, used by Alembic.
 revision = "20260203_k8s_clusters"

@@ -9,16 +9,73 @@ For development, use local disk storage.
 For production, use S3 for durability and sharing across instances.
 """
 
+import io
 import json
 import logging
 import os
 import pickle
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
+
+
+class _RestrictedUnpickler(pickle.Unpickler):
+    """Unpickler that only allows safe built-in types.
+
+    Prevents arbitrary code execution via crafted pickle payloads.
+    Our trees are serialized as plain dicts (via _tree_to_dict), so only
+    built-in types should ever appear in the pickle stream.
+    """
+
+    _SAFE_BUILTINS = frozenset(
+        {
+            "dict",
+            "list",
+            "tuple",
+            "set",
+            "frozenset",
+            "str",
+            "bytes",
+            "int",
+            "float",
+            "bool",
+            "complex",
+            "type",
+        }
+    )
+    _SAFE_MODULES = frozenset(
+        {
+            "builtins",
+            "datetime",
+            "collections",
+            # RAPTOR compatibility: trees may contain raptor Node/Tree objects
+            "raptor.tree_structures",
+            "raptor.tree_builder",
+        }
+    )
+
+    def find_class(self, module: str, name: str):
+        if module == "builtins" and name in self._SAFE_BUILTINS:
+            return super().find_class(module, name)
+        if module in self._SAFE_MODULES:
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(
+            f"Blocked unpickling of {module}.{name} — " f"only safe types are allowed"
+        )
+
+
+def safe_pickle_load(f) -> Any:
+    """Load a pickle file using restricted unpickler."""
+    return _RestrictedUnpickler(f).load()
+
+
+def safe_pickle_loads(data: bytes) -> Any:
+    """Load pickle bytes using restricted unpickler."""
+    return _RestrictedUnpickler(io.BytesIO(data)).load()
+
 
 from .node import KnowledgeNode, KnowledgeTree, TreeForest
-from .types import ImportanceScore, KnowledgeType
+from .types import KnowledgeType
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +198,7 @@ class TreePersistence:
         try:
             if load_path.suffix == ".pkl":
                 with open(load_path, "rb") as f:
-                    data = pickle.load(f)
+                    data = safe_pickle_load(f)
             else:
                 with open(load_path, "r") as f:
                     data = json.load(f)
@@ -243,7 +300,7 @@ class TreePersistence:
                 Bucket=self.s3_bucket,
                 Key=s3_key,
             )
-            data = pickle.loads(response["Body"].read())
+            data = safe_pickle_loads(response["Body"].read())
             tree = self._dict_to_tree(data)
             logger.info(f"Loaded tree '{tree_id}' from s3://{self.s3_bucket}/{s3_key}")
             return tree
@@ -256,7 +313,7 @@ class TreePersistence:
                     Bucket=self.s3_bucket,
                     Key=alt_key,
                 )
-                data = pickle.loads(response["Body"].read())
+                data = safe_pickle_loads(response["Body"].read())
                 tree = self._dict_to_tree(data)
                 logger.info(
                     f"Loaded tree '{tree_id}' from s3://{self.s3_bucket}/{alt_key}"

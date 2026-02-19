@@ -20,7 +20,15 @@ import jwt
 
 # Shared secret with sre-agent server
 # In production, load from K8s Secret (same secret in both deployments)
-JWT_SECRET = os.getenv("JWT_SECRET", "incidentfox-sandbox-jwt-secret-change-in-prod")
+# In permissive mode (local dev), JWT validation is optional so empty is allowed.
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+_JWT_MODE = os.getenv("JWT_MODE", "strict")
+if not JWT_SECRET and _JWT_MODE == "strict":
+    raise RuntimeError(
+        "JWT_SECRET environment variable is required in strict mode. "
+        "Set it in .env for local dev or via K8s Secret in production. "
+        "Set JWT_MODE=permissive to disable (local dev only)."
+    )
 
 # JWT settings (must match sre-agent/auth.py)
 JWT_ALGORITHM = "HS256"

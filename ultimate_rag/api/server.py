@@ -14,53 +14,36 @@ import os
 import sys
 
 # Pickle compatibility shim for RAPTOR trees.
-# In dev, the module is at 'knowledge_base.raptor'. In Docker, it's at 'raptor'
-# (copied to /app/raptor/). Code imports 'knowledge_base.raptor.*' everywhere,
-# so we need bidirectional aliases.
-try:
-    from knowledge_base import raptor as kb_raptor
+# Pickle files contain objects like raptor.tree_structures.Node which need
+# the 'raptor' module at the top level. In Docker, /app/raptor/ exists (copied
+# from ultimate_rag/raptor_lib/). We create a namespace package so Python's
+# import machinery can load individual submodules on demand without triggering
+# raptor/__init__.py's eager imports (which crash with SIGILL on ARM64).
+import types as _types
 
-    sys.modules["raptor"] = kb_raptor
-    if hasattr(kb_raptor, "tree_structures"):
-        sys.modules["raptor.tree_structures"] = kb_raptor.tree_structures
-except ImportError:
-    # Docker container: raptor is at /app/raptor/, not knowledge_base.raptor.
-    # We CANNOT do `import raptor` because raptor/__init__.py eagerly imports
-    # cluster_utils → umap → pynndescent which crashes with SIGILL on ARM64.
-    # Instead, create namespace packages that point at /app/raptor/ so Python's
-    # import machinery can load individual submodules on demand.
-    import types as _types
-
-    _raptor_dir = os.path.join(os.environ.get("PYTHONPATH", "/app"), "raptor")
-    if os.path.isdir(_raptor_dir):
-        # Fake 'raptor' namespace (for pickle compat: raptor.tree_structures.Node)
-        _raptor_ns = _types.ModuleType("raptor")
-        _raptor_ns.__path__ = [_raptor_dir]
-        _raptor_ns.__package__ = "raptor"
-        sys.modules["raptor"] = _raptor_ns
-
-        # Fake 'knowledge_base.raptor' namespace (for code imports)
-        _kb = _types.ModuleType("knowledge_base")
-        _kb.__path__ = []
-        _kb.__package__ = "knowledge_base"
-        sys.modules["knowledge_base"] = _kb
-
-        _kb_raptor = _types.ModuleType("knowledge_base.raptor")
-        _kb_raptor.__path__ = [_raptor_dir]
-        _kb_raptor.__package__ = "knowledge_base.raptor"
-        _kb.raptor = _kb_raptor
-        sys.modules["knowledge_base.raptor"] = _kb_raptor
+_raptor_dir = os.path.join(os.environ.get("PYTHONPATH", "/app"), "raptor")
+if os.path.isdir(_raptor_dir) and "raptor" not in sys.modules:
+    _raptor_ns = _types.ModuleType("raptor")
+    _raptor_ns.__path__ = [_raptor_dir]
+    _raptor_ns.__package__ = "raptor"
+    sys.modules["raptor"] = _raptor_ns
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from ..core.node import KnowledgeTree
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+import hmac
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+
+# ==================== Auth ====================
+
+RAG_API_KEY = os.environ.get("RAG_API_KEY", "")
 
 logger = logging.getLogger(__name__)
 
@@ -805,7 +788,7 @@ class UltimateRAGServer:
         # Initialize embedder for teaching interface
         embedder = None
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
 
             embedder = OpenAIEmbeddingModel()
             logger.info("Initialized OpenAI embedder for TeachingInterface")
@@ -852,13 +835,38 @@ class UltimateRAGServer:
             lifespan=lifespan,
         )
 
-        # Add CORS
+        # Auth middleware — skip for health/docs endpoints
+        if RAG_API_KEY:
+
+            @app.middleware("http")
+            async def api_key_auth_middleware(request: Request, call_next):
+                if request.url.path in ("/health", "/docs", "/openapi.json"):
+                    return await call_next(request)
+                auth = request.headers.get("authorization", "")
+                api_key = request.headers.get("x-api-key", "")
+                token = ""
+                if auth.startswith("Bearer "):
+                    token = auth[7:]
+                elif api_key:
+                    token = api_key
+                if not token or not hmac.compare_digest(token, RAG_API_KEY):
+                    from starlette.responses import JSONResponse
+
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "Invalid or missing API key"},
+                    )
+                return await call_next(request)
+
+        # Add CORS — restrict origins to known internal callers
+        allowed_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+        allowed_origins = [o.strip() for o in allowed_origins if o.strip()]
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_origins=allowed_origins or ["*"],
+            allow_credentials=bool(allowed_origins),
+            allow_methods=["GET", "POST"],
+            allow_headers=["Authorization", "X-API-Key", "Content-Type"],
         )
 
         # Register routes
@@ -1011,10 +1019,23 @@ class UltimateRAGServer:
                     }
                 )
             elif request.file_path:
-                # File path - read and process
+                # File path - validate within allowed directory, then process
+                allowed_base = Path(RAPTOR_TREES_DIR).resolve()
+                try:
+                    resolved = Path(request.file_path).resolve()
+                except (ValueError, OSError):
+                    raise HTTPException(400, "Invalid file path")
+                if (
+                    not str(resolved).startswith(str(allowed_base) + os.sep)
+                    and resolved != allowed_base
+                ):
+                    raise HTTPException(
+                        403,
+                        "File path must be within the configured trees directory",
+                    )
                 try:
                     result = self.processor.process_file(
-                        file_path=request.file_path,
+                        file_path=str(resolved),
                         content_type=self._get_content_type(request.content_type),
                         extra_metadata=request.metadata,
                     )
@@ -1028,8 +1049,11 @@ class UltimateRAGServer:
                                 "metadata": request.metadata,
                             }
                         )
+                except HTTPException:
+                    raise
                 except Exception as e:
-                    raise HTTPException(400, f"Failed to read file: {e}")
+                    logger.error(f"Failed to read file: {e}")
+                    raise HTTPException(400, "Failed to read file")
             else:
                 raise HTTPException(400, "Provide content, documents, or file_path")
 
@@ -1073,7 +1097,7 @@ class UltimateRAGServer:
                 embeddings = None
 
                 try:
-                    from knowledge_base.raptor.EmbeddingModels import (
+                    from ultimate_rag.raptor_lib.EmbeddingModels import (
                         OpenAIEmbeddingModel,
                     )
 
@@ -1220,15 +1244,17 @@ class UltimateRAGServer:
             try:
                 # Step 1: Extract text from all documents
                 texts = []
+                chunk_doc_indices = []  # Track which document each chunk came from
                 all_entities = []
                 all_relationships = []
 
-                for doc in request.documents:
+                for doc_idx, doc in enumerate(request.documents):
                     try:
                         # For hierarchy building, we want the raw text
                         # (RAPTOR will do its own chunking)
                         if request.build_hierarchy:
                             texts.append(doc.content)
+                            chunk_doc_indices.append(doc_idx)
                             # Still extract entities/relationships for the graph
                             result = self.processor.process_content(
                                 content=doc.content,
@@ -1246,7 +1272,9 @@ class UltimateRAGServer:
                                 content_type=self._get_content_type(doc.content_type),
                                 extra_metadata=doc.metadata,
                             )
-                            texts.extend([chunk.text for chunk in result.chunks])
+                            for chunk in result.chunks:
+                                texts.append(chunk.text)
+                                chunk_doc_indices.append(doc_idx)
                             all_entities.extend(result.entities_found)
                             all_relationships.extend(result.relationships_found)
                             warnings.extend(result.warnings)
@@ -1347,7 +1375,7 @@ class UltimateRAGServer:
                 embed_start = time.time()
 
                 try:
-                    from knowledge_base.raptor.EmbeddingModels import (
+                    from ultimate_rag.raptor_lib.EmbeddingModels import (
                         OpenAIEmbeddingModel,
                     )
 
@@ -1381,11 +1409,26 @@ class UltimateRAGServer:
                         authority_score=0.7,
                     )
 
+                    # Determine knowledge_type from source document metadata
+                    doc_knowledge_type = KnowledgeType.FACTUAL
+                    if i < len(chunk_doc_indices):
+                        doc_idx = chunk_doc_indices[i]
+                        if doc_idx < len(request.documents):
+                            doc_meta = request.documents[doc_idx].metadata or {}
+                            kt_str = doc_meta.get("knowledge_type")
+                            if kt_str:
+                                try:
+                                    doc_knowledge_type = KnowledgeType.from_string(
+                                        kt_str
+                                    )
+                                except (ValueError, KeyError):
+                                    pass
+
                     node = KnowledgeNode(
                         text=text,
                         index=new_index,
                         layer=0,
-                        knowledge_type=KnowledgeType.FACTUAL,
+                        knowledge_type=doc_knowledge_type,
                         importance=importance,
                         tree_id=tree.tree_id,
                     )

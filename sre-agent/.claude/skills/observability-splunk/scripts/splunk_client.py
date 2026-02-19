@@ -7,9 +7,7 @@ Credentials are injected transparently by the proxy layer.
 Uses Splunk REST API for search operations.
 """
 
-import json
 import os
-import sys
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -149,7 +147,12 @@ def execute_search(
         "max_count": max_results,
     }
 
-    with httpx.Client(timeout=120.0, verify=False) as client:
+    _verify_tls = os.getenv("SPLUNK_VERIFY_TLS", "true").lower() not in (
+        "false",
+        "0",
+        "no",
+    )
+    with httpx.Client(timeout=120.0, verify=_verify_tls) as client:
         # Create the job
         response = client.post(
             job_url,

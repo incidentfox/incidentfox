@@ -43,7 +43,7 @@ def make_stub_agent_app(
         if not body.team_token:
             raise HTTPException(status_code=401, detail="missing_team_token")
         try:
-            cfg = get_effective_config(body.team_token)
+            get_effective_config(body.team_token)
         except Exception as e:
             raise HTTPException(
                 status_code=502, detail=f"config_service_error:{e}"

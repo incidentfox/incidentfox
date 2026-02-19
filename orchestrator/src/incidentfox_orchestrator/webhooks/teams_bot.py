@@ -16,7 +16,7 @@ import json
 import os
 import uuid
 from functools import partial
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from botbuilder.core import (
     BotFrameworkAdapter,

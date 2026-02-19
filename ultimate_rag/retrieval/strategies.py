@@ -8,7 +8,6 @@ Each strategy provides a different approach to finding relevant knowledge:
 - HybridGraphTreeStrategy: Combines graph traversal with tree search
 """
 
-import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -18,7 +17,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from ..core.node import KnowledgeNode, KnowledgeTree, TreeForest
-    from ..graph.entities import Entity
     from ..graph.graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
@@ -296,13 +294,11 @@ Intent definitions:
         This is the core semantic search that all strategies can use.
         """
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.utils import distances_from_embeddings
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError as e:
             logger.error(f"Failed to import RAPTOR modules: {e}")
-            logger.error(
-                "Ensure knowledge_base is in PYTHONPATH and dependencies are installed"
-            )
+            logger.error("Ensure RAPTOR dependencies are installed")
             return []
 
         chunks = []
@@ -945,8 +941,8 @@ class AdaptiveDepthStrategy(RetrievalStrategy):
     ) -> List[RetrievedChunk]:
         """Retrieve nodes at a specific tree depth using semantic search."""
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.utils import distances_from_embeddings
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError as e:
             logger.error(f"Failed to import RAPTOR modules: {e}")
             return []
@@ -1119,7 +1115,7 @@ class HybridGraphTreeStrategy(RetrievalStrategy):
         3. Get RAPTOR nodes linked to those entities
         """
         chunks = []
-        analysis = self.analyze_query(query)
+        self.analyze_query(query)
 
         # Find starting entities (in production, use NER or entity linking)
         starting_entities = self._find_entities_in_query(query, graph)
@@ -1292,8 +1288,8 @@ class IncidentAwareStrategy(RetrievalStrategy):
         from ..graph.entities import EntityType
 
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.utils import distances_from_embeddings
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError:
             logger.warning("RAPTOR not available, falling back to keyword matching")
             return await self._find_runbooks_keyword(query, forest, graph)
@@ -1401,8 +1397,8 @@ class IncidentAwareStrategy(RetrievalStrategy):
         from ..graph.entities import EntityType
 
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.utils import distances_from_embeddings
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError:
             logger.warning("RAPTOR not available, falling back to keyword matching")
             return await self._find_similar_incidents_keyword(query, forest, graph)

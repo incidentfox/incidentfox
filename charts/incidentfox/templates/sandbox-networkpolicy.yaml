@@ -1,0 +1,106 @@
+{{- if and .Values.services.agent.enabled .Values.services.agent.sandbox.enabled }}
+# =============================================================================
+# Sandbox Network Policy - Restricts egress from sandbox pods
+# =============================================================================
+# Sandbox pods run untrusted code (agent output, prompt-injected commands).
+#
+# Strategy:
+#   1. Allow cluster-internal services needed for investigations
+#   2. Allow general HTTP/HTTPS egress (many integrations not yet proxied)
+#   3. BLOCK AWS metadata service (169.254.169.254) — highest-risk SSRF target
+#   4. BLOCK link-local range (169.254.0.0/16)
+#
+# K8s API access: Allowed on port 443/6443. Sandboxes use kubectl for
+# investigation. Access is scoped by RBAC (incidentfox-sandbox-pod SA).
+#
+# Phase 2 TODO: Once all integrations route through credential-resolver,
+# remove the general HTTP/HTTPS egress rule. Currently 8 skills make
+# direct outbound calls (GitLab, Splunk, Loki, VictoriaLogs/Metrics,
+# ClickUp, Honeycomb, New Relic).
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-sandbox-egress
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: incidentfox
+    component: sandbox-network-policy
+    {{- include "incidentfox.labels" . | nindent 4 }}
+spec:
+  # Select all sandbox pods (both dynamic and warm pool)
+  podSelector:
+    matchLabels:
+      incidentfox.io/isolation: sandbox
+  policyTypes:
+  - Egress
+  egress:
+
+  # --- Cluster-internal services ---
+
+  # DNS resolution (kube-dns)
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  # Credential-resolver (Envoy ext_authz + LLM proxy + integration reverse proxy)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: incidentfox-credential-resolver
+    ports:
+    - protocol: TCP
+      port: 8002
+
+  # Config-service (team config lookups from agent scripts)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: incidentfox-config-service
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  # RAG/knowledge base service (RAPTOR queries)
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: incidentfox-ultimate-rag
+    ports:
+    - protocol: TCP
+      port: 8000
+
+  # Sandbox-router (SSE streaming back to sre-agent)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: sandbox-router
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  # --- External egress (K8s API + integrations + internet) ---
+
+  # Allow HTTP/HTTPS/K8s API to any IP EXCEPT AWS metadata + link-local.
+  # This covers: K8s API (443/6443), kubectl, and unproxied integrations.
+  # CRITICAL: 169.254.169.254 is blocked to prevent SSRF to node IAM creds.
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 169.254.0.0/16
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 6443
+{{- end }}

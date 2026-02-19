@@ -49,7 +49,7 @@ def main():
                             / 60,
                             2,
                         )
-                    except:
+                    except (ValueError, KeyError, TypeError):
                         pass
                 all_incidents.append(
                     {

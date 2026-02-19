@@ -11,7 +11,6 @@ This pipeline orchestrates the full content ingestion workflow:
 This replaces heuristic-based extraction with production-quality LLM analysis.
 """
 
-import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -22,7 +21,6 @@ from openai import AsyncOpenAI
 from ..intelligence import (
     BatchConflictResolver,
     BatchContentAnalyzer,
-    ConflictRecommendation,
     ConflictResolver,
     ContentAnalysisResult,
     ContentAnalyzer,
@@ -32,7 +30,6 @@ from .processor import (
     DocumentProcessor,
     ProcessedChunk,
     ProcessingConfig,
-    ProcessingResult,
 )
 
 logger = logging.getLogger(__name__)

@@ -13,7 +13,6 @@ Provides statistical analysis tools:
 
 import json
 import statistics
-from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -21,7 +20,7 @@ from mcp.server.fastmcp import FastMCP
 def _is_prophet_available() -> bool:
     """Check if Prophet is installed."""
     try:
-        from prophet import Prophet
+        from prophet import Prophet  # noqa: F401
 
         return True
     except ImportError:

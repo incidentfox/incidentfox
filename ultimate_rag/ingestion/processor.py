@@ -18,8 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
 
 if TYPE_CHECKING:
-    from ..core.node import KnowledgeNode, KnowledgeTree
-    from ..graph.graph import KnowledgeGraph
+    pass
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ Exposes stored dependency data discovered by the dependency-service CronJob.
 Used by correlation-service for topology-based alert correlation.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query

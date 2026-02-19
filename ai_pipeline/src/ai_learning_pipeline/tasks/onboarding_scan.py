@@ -16,15 +16,16 @@ import json
 import os
 import uuid
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import httpx
 
+from .knowledge_extractor import KnowledgeExtractor
+from .scanners import Document, get_scanner
 from .scanners.slack_scanner import (
     CollectedMessage,
-    ScanResult,
     Signal,
     SlackEnvironmentScanner,
 )
@@ -423,9 +424,11 @@ class OnboardingScanTask:
         self,
         org_id: str,
         team_node_id: str,
+        channel_ids: Optional[List[str]] = None,
     ):
         self.org_id = org_id
         self.team_node_id = team_node_id
+        self.channel_ids = channel_ids  # Team-scoped channels (None = all)
 
         self.config_service_url = os.getenv(
             "CONFIG_SERVICE_URL", "http://config-service:8080"
@@ -434,6 +437,7 @@ class OnboardingScanTask:
 
         self.analyzer = SignalAnalyzer()
         self.recommender = IntegrationRecommender(self.config_service_url)
+        self.knowledge_extractor = KnowledgeExtractor()
 
     async def run_initial_scan(self, slack_bot_token: str) -> Dict[str, Any]:
         """
@@ -452,8 +456,10 @@ class OnboardingScanTask:
             "started_at": datetime.utcnow().isoformat(),
         }
 
-        # 1. Scan Slack
-        scanner = SlackEnvironmentScanner(bot_token=slack_bot_token)
+        # 1. Scan Slack (scoped to team's channels if specified)
+        scanner = SlackEnvironmentScanner(
+            bot_token=slack_bot_token, channel_ids=self.channel_ids
+        )
         scan_result = scanner.scan()
 
         result["channels_scanned"] = scan_result.channels_scanned
@@ -545,25 +551,19 @@ class OnboardingScanTask:
         if not integration_config:
             integration_config = await self._get_integration_config(integration_id)
 
-        # 2. Run integration-specific data ingestion
-        scanner_method = self._get_integration_scanner(integration_id)
-        if scanner_method:
-            try:
-                ingest_result = await scanner_method(integration_config or {})
-                result["ingestion"] = ingest_result
-            except Exception as e:
-                _log(
-                    "integration_scanner_failed",
-                    integration_id=integration_id,
-                    error=str(e),
-                )
-                result["ingestion"] = {"error": str(e)}
-        else:
-            _log(
-                "no_scanner_for_integration",
-                integration_id=integration_id,
+        # 2. Run integration-specific scanner (fetches credentials, calls API directly)
+        try:
+            ingest_result = await self._run_integration_scanner(
+                integration_id, integration_config or {}
             )
-            result["ingestion"] = {"status": "no_scanner_available"}
+            result["ingestion"] = ingest_result
+        except Exception as e:
+            _log(
+                "integration_scanner_failed",
+                integration_id=integration_id,
+                error=str(e),
+            )
+            result["ingestion"] = {"error": str(e)}
 
         # 3. Re-check for new recommendations based on updated integrations
         existing = await self._get_existing_integrations()
@@ -586,177 +586,137 @@ class OnboardingScanTask:
 
         return result
 
-    def _get_integration_scanner(self, integration_id: str):
-        """Return the scanner method for a given integration, or None."""
-        scanners = {
-            "github": self._scan_github,
-            "confluence": self._scan_confluence,
-        }
-        return scanners.get(integration_id)
-
-    async def _scan_github(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    async def _fetch_credentials(self, integration_id: str) -> Optional[Dict[str, Any]]:
         """
-        Scan a connected GitHub integration for operational knowledge.
+        Fetch decrypted credentials for an integration from config service.
 
-        Discovers repos, READMEs, runbooks, and incident-related docs
-        and ingests them into RAG.
+        Uses the generic credential endpoint — no per-integration proxies needed.
         """
-        # GitHub integration uses the GitHub App — repos are auto-discovered.
-        # We look for operational docs: runbooks, postmortems, READMEs.
-        github_org = config.get("account_login") or config.get("org")
-        if not github_org:
-            return {"status": "no_org_configured"}
-
-        documents = []
-
-        # Fetch repos via config service (which proxies GitHub App auth)
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
-                    f"{self.config_service_url}/api/v1/internal/github"
-                    f"/repos?org_id={self.org_id}",
-                    headers={
-                        "X-Internal-Service": "ai_pipeline",
-                        "Content-Type": "application/json",
-                    },
+                    f"{self.config_service_url}/api/v1/internal/credentials"
+                    f"/{self.org_id}/{integration_id}",
+                    headers={"X-Internal-Service": "ai_pipeline"},
                 )
 
-                if response.status_code != 200:
-                    return {
-                        "status": "failed_to_list_repos",
-                        "code": response.status_code,
-                    }
-
-                repos = response.json()
-                if not isinstance(repos, list):
-                    repos = repos.get("repositories", [])
+                if response.status_code == 200:
+                    return response.json().get("config", {})
+                else:
+                    _log(
+                        "credentials_fetch_failed",
+                        integration_id=integration_id,
+                        status=response.status_code,
+                    )
+                    return None
 
         except Exception as e:
-            return {"status": "repos_fetch_error", "error": str(e)}
+            _log("credentials_fetch_error", integration_id=integration_id, error=str(e))
+            return None
 
-        # For each repo, try to fetch operational docs
-        ops_paths = [
-            "README.md",
-            "docs/runbook.md",
-            "docs/runbooks/",
-            "runbook.md",
-            "RUNBOOK.md",
-            "docs/oncall.md",
-            "docs/incident-response.md",
-        ]
+    async def _run_integration_scanner(
+        self, integration_id: str, config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Run a scanner for a specific integration.
 
-        for repo in repos[:20]:  # Cap at 20 repos
-            repo_name = repo.get("full_name") or repo.get("name", "")
-            if not repo_name:
-                continue
+        1. Fetch credentials from config service (one generic endpoint)
+        2. Call the registered scanner (which talks to external API directly)
+        3. Ingest returned documents into RAG
+        """
+        scanner_fn = get_scanner(integration_id)
+        if not scanner_fn:
+            return {"status": "no_scanner_available"}
 
-            for doc_path in ops_paths:
-                try:
-                    async with httpx.AsyncClient(timeout=15.0) as client:
-                        resp = await client.get(
-                            f"{self.config_service_url}/api/v1/internal/github"
-                            f"/file?org_id={self.org_id}"
-                            f"&repo={repo_name}&path={doc_path}",
-                            headers={
-                                "X-Internal-Service": "ai_pipeline",
-                                "Content-Type": "application/json",
-                            },
-                        )
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            content = data.get("content", "")
-                            if content and len(content) >= 50:
-                                documents.append(
-                                    {
-                                        "content": content,
-                                        "source_url": f"github://{repo_name}/{doc_path}",
-                                        "content_type": "markdown",
-                                        "metadata": {
-                                            "repo": repo_name,
-                                            "path": doc_path,
-                                            "org_id": self.org_id,
-                                            "source": "integration_scan",
-                                        },
-                                    }
-                                )
-                except Exception:
-                    continue  # Best-effort per file
+        # Fetch decrypted credentials
+        credentials = await self._fetch_credentials(integration_id)
+        if not credentials:
+            return {"status": "no_credentials"}
+
+        # Run the scanner — it calls external APIs directly
+        documents = await scanner_fn(
+            credentials=credentials,
+            config=config,
+            org_id=self.org_id,
+        )
 
         if not documents:
-            return {"status": "no_docs_found", "repos_scanned": len(repos)}
+            return {"status": "no_docs_found"}
 
-        return await self._ingest_documents(documents, tree=f"github_{self.org_id}")
+        # LLM extraction: transform raw docs into classified knowledge
+        documents = await self._extract_knowledge_from_docs(documents, integration_id)
 
-    async def _scan_confluence(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        # Ingest into RAG
+        return await self._ingest_documents(
+            documents, tree=f"{integration_id}_{self.org_id}_{self.team_node_id}"
+        )
+
+    async def _extract_knowledge_from_docs(
+        self, documents: List[Document], source_type: str
+    ) -> List[Document]:
+        """Run LLM knowledge extraction on Document objects.
+
+        Transforms raw documents into classified knowledge items with
+        proper knowledge_type set.
         """
-        Scan a connected Confluence integration for operational knowledge.
+        knowledge_items = await self.knowledge_extractor.extract_from_documents(
+            documents=documents,
+            source_type=source_type,
+        )
 
-        Discovers runbook/incident spaces and ingests pages into RAG.
-        """
-        base_url = config.get("base_url") or config.get("url", "")
-        if not base_url:
-            return {"status": "no_url_configured"}
+        if not knowledge_items:
+            return documents
 
-        # Search for ops-relevant pages via config service proxy
-        search_queries = [
-            "runbook",
-            "incident response",
-            "on-call",
-            "postmortem",
-            "architecture",
-        ]
+        result = []
+        for item in knowledge_items:
+            result.append(
+                Document(
+                    content=item.content,
+                    source_url=item.source_url or "",
+                    content_type="text",
+                    knowledge_type=item.knowledge_type,
+                    metadata={
+                        "title": item.title,
+                        "entities": [
+                            {"name": e.name, "type": e.entity_type}
+                            for e in item.entities
+                        ],
+                        "confidence": item.confidence,
+                        "org_id": self.org_id,
+                        "source": "integration_scan",
+                        **item.metadata,
+                    },
+                )
+            )
 
-        documents = []
-        for query in search_queries:
-            try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.get(
-                        f"{self.config_service_url}/api/v1/internal/confluence"
-                        f"/search?org_id={self.org_id}&query={query}&limit=10",
-                        headers={
-                            "X-Internal-Service": "ai_pipeline",
-                            "Content-Type": "application/json",
-                        },
-                    )
-                    if resp.status_code == 200:
-                        pages = resp.json()
-                        if not isinstance(pages, list):
-                            pages = pages.get("results", [])
-
-                        for page in pages:
-                            content = page.get("body", "") or page.get("content", "")
-                            title = page.get("title", "Untitled")
-                            page_url = page.get("url", "")
-
-                            if content and len(content) >= 50:
-                                documents.append(
-                                    {
-                                        "content": content,
-                                        "source_url": page_url
-                                        or f"confluence://{title}",
-                                        "content_type": "markdown",
-                                        "metadata": {
-                                            "title": title,
-                                            "org_id": self.org_id,
-                                            "source": "integration_scan",
-                                            "search_query": query,
-                                        },
-                                    }
-                                )
-            except Exception:
-                continue  # Best-effort per query
-
-        if not documents:
-            return {"status": "no_pages_found"}
-
-        return await self._ingest_documents(documents, tree=f"confluence_{self.org_id}")
+        _log(
+            "knowledge_extracted",
+            source_type=source_type,
+            raw_documents=len(documents),
+            extracted_items=len(result),
+        )
+        return result
 
     async def _ingest_documents(
-        self, documents: List[Dict], tree: str
+        self, documents: List[Document], tree: str
     ) -> Dict[str, Any]:
         """Ingest a list of documents into RAG via /ingest/batch."""
+        doc_dicts = []
+        for doc in documents:
+            meta = dict(doc.metadata) if doc.metadata else {}
+            if doc.knowledge_type:
+                meta["knowledge_type"] = doc.knowledge_type
+            doc_dicts.append(
+                {
+                    "content": doc.content,
+                    "source_url": doc.source_url,
+                    "content_type": doc.content_type,
+                    "metadata": meta,
+                }
+            )
+
         payload = {
-            "documents": documents,
+            "documents": doc_dicts,
             "tree": tree,
             "build_hierarchy": False,
         }
@@ -824,101 +784,61 @@ class OnboardingScanTask:
         """
         Ingest collected Slack messages into the RAG system.
 
-        Groups messages by channel, formats them as documents following the
-        existing SlackSource format ([TIMESTAMP] USER: TEXT), and POSTs to
-        the Ultimate RAG /ingest/batch endpoint.
+        Uses LLM-powered KnowledgeExtractor to transform raw messages into
+        classified operational knowledge items before ingesting into RAG.
         """
         if not messages:
             return {"documents_sent": 0}
 
-        # Group messages by channel
-        by_channel: Dict[str, List[CollectedMessage]] = defaultdict(list)
-        for msg in messages:
-            by_channel[msg.channel_name].append(msg)
+        # LLM extraction: transform raw messages into knowledge items
+        knowledge_items = await self.knowledge_extractor.extract_from_slack(
+            messages=messages,
+            org_id=self.org_id,
+        )
 
+        if not knowledge_items:
+            _log(
+                "slack_knowledge_extraction_empty",
+                raw_messages=len(messages),
+            )
+            return {"documents_sent": 0, "items_extracted": 0}
+
+        # Convert KnowledgeItems to Document objects for ingestion
         documents = []
-        for channel_name, ch_messages in by_channel.items():
-            # Sort by timestamp
-            ch_messages.sort(key=lambda m: m.ts)
-
-            # Format messages following existing SlackSource convention
-            lines = []
-            participants: set = set()
-            for msg in ch_messages:
-                ts_float = float(msg.ts) if msg.ts else 0
-                ts_str = (
-                    datetime.fromtimestamp(ts_float).strftime("%Y-%m-%d %H:%M")
-                    if ts_float
-                    else "unknown"
-                )
-                lines.append(f"[{ts_str}] {msg.user}: {msg.text}")
-                participants.add(msg.user)
-
-            content = "\n".join(lines)
-
-            # Skip very short documents
-            if len(content) < 100:
-                continue
-
+        for item in knowledge_items:
             documents.append(
-                {
-                    "content": content,
-                    "source_url": f"slack://#{channel_name}",
-                    "content_type": "slack_thread",
-                    "metadata": {
-                        "channel": channel_name,
-                        "message_count": len(ch_messages),
-                        "participants": list(participants),
+                Document(
+                    content=item.content,
+                    source_url=item.source_url or f"slack://{self.org_id}",
+                    content_type="text",
+                    knowledge_type=item.knowledge_type,
+                    metadata={
+                        "title": item.title,
+                        "entities": [
+                            {"name": e.name, "type": e.entity_type}
+                            for e in item.entities
+                        ],
+                        "confidence": item.confidence,
                         "org_id": self.org_id,
                         "source": "onboarding_scan",
+                        **item.metadata,
                     },
-                }
+                )
             )
 
-        if not documents:
-            return {"documents_sent": 0}
+        # Ingest via existing method
+        result = await self._ingest_documents(
+            documents, tree=f"slack_{self.org_id}_{self.team_node_id}"
+        )
+        result["items_extracted"] = len(knowledge_items)
+        result["raw_messages_processed"] = len(messages)
 
-        # POST to Ultimate RAG /ingest/batch
-        payload = {
-            "documents": documents,
-            "tree": f"slack_{self.org_id}",
-            "build_hierarchy": False,  # Fast ingest, hierarchy built later by cronjob
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{self.rag_url}/ingest/batch",
-                    json=payload,
-                    headers={"Content-Type": "application/json"},
-                )
-
-                if response.status_code == 200:
-                    data = response.json()
-                    _log(
-                        "rag_ingestion_completed",
-                        documents_sent=len(documents),
-                        chunks_created=data.get("chunks_created", 0),
-                    )
-                    return {
-                        "documents_sent": len(documents),
-                        "chunks_created": data.get("chunks_created", 0),
-                        "nodes_created": data.get("nodes_created", 0),
-                    }
-                else:
-                    _log(
-                        "rag_ingestion_failed",
-                        status=response.status_code,
-                        body=response.text[:200],
-                    )
-                    return {
-                        "documents_sent": len(documents),
-                        "error": f"HTTP {response.status_code}",
-                    }
-
-        except Exception as e:
-            _log("rag_ingestion_error", error=str(e))
-            return {"documents_sent": len(documents), "error": str(e)}
+        _log(
+            "slack_knowledge_ingested",
+            raw_messages=len(messages),
+            items_extracted=len(knowledge_items),
+        )
+        return result
 
     async def _get_existing_integrations(self) -> List[str]:
         """Fetch already-configured integrations from config service."""

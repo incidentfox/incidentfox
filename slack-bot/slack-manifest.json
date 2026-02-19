@@ -15,6 +15,14 @@
             "display_name": "IncidentFox(Demo)",
             "always_online": true
         },
+        "slash_commands": [
+            {
+                "command": "/setup-team",
+                "description": "Create a team for this channel with its own configuration",
+                "usage_hint": "[team-name]",
+                "should_escape": false
+            }
+        ],
         "unfurl_domains": [
             "player.vimeo.com"
         ]

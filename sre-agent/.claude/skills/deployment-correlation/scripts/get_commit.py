@@ -13,7 +13,7 @@ import argparse
 import json
 import sys
 
-from github_client import format_commit, get_commit
+from github_client import get_commit
 
 
 def main():

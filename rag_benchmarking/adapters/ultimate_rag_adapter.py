@@ -5,7 +5,6 @@ This adapter connects the Ultimate RAG system to standard RAG benchmarks,
 allowing evaluation against MultiHop-RAG, RAGBench, CRAG, and others.
 """
 
-import asyncio
 import json
 import time
 from dataclasses import dataclass, field

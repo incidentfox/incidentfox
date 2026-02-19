@@ -228,6 +228,138 @@ class ConfigServiceClient:
         response.raise_for_status()
         return response.json()
 
+    def list_team_nodes(self, org_id: str) -> list:
+        """List all team nodes in an org.
+
+        Returns:
+            List of node dicts with org_id, node_id, parent_id, node_type, name.
+            Returns empty list on error.
+        """
+        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/nodes"
+        try:
+            response = self._session.get(url, headers=self._headers(), timeout=10)
+            response.raise_for_status()
+            return [n for n in response.json() if n.get("node_type") == "team"]
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to list team nodes for {org_id}: {e}")
+            return []
+
+    def get_team_config(
+        self,
+        org_id: str,
+        team_node_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Get effective configuration for a specific team.
+
+        Args:
+            org_id: Organization ID (e.g., "slack-T12345")
+            team_node_id: Team node ID (e.g., "engineering", "default")
+
+        Returns:
+            Effective config dict, or None if not found.
+        """
+        url = f"{self.base_url}/api/v1/config/me"
+        headers = self._headers()
+        headers["X-Org-Id"] = org_id
+        headers["X-Team-Node-Id"] = team_node_id
+
+        try:
+            response = self._session.get(url, headers=headers, timeout=10)
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            data = response.json()
+            return data.get("effective_config", data)
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to get config for {org_id}/{team_node_id}: {e}")
+            return None
+
+    def add_channel_to_team(
+        self,
+        org_id: str,
+        team_node_id: str,
+        channel_id: str,
+    ) -> None:
+        """Add a Slack channel to an existing team's routing.
+
+        Reads the current routing config, appends the channel if not already
+        present, and writes back the full list (config PATCH replaces lists).
+
+        Args:
+            org_id: Organization ID
+            team_node_id: Team node ID to add the channel to
+            channel_id: Slack channel ID to add
+        """
+        # Fetch current config to preserve existing channels
+        config = self.get_team_config(org_id, team_node_id) or {}
+        current_channels = config.get("routing", {}).get("slack_channel_ids", [])
+
+        if channel_id not in current_channels:
+            current_channels = list(current_channels) + [channel_id]
+
+        self._update_config(
+            org_id,
+            team_node_id,
+            {"routing": {"slack_channel_ids": current_channels}},
+        )
+
+    def setup_team(
+        self,
+        slack_team_id: str,
+        team_node_id: str,
+        team_name: str,
+        channel_id: str,
+        org_id: str = None,
+    ) -> Dict[str, Any]:
+        """Create a team node, mint a token, and wire a channel to it.
+
+        Args:
+            slack_team_id: Slack workspace ID
+            team_node_id: Desired team node ID (slug)
+            team_name: Human-readable team name
+            channel_id: Slack channel ID to route to this team
+            org_id: Resolved org ID. If None, derived from slack_team_id.
+
+        Returns:
+            Dict with team_node_id, token, already_existed.
+
+        Raises:
+            requests.exceptions.RequestException on network/server errors.
+        """
+        if not org_id:
+            if CONFIG_MODE == "local":
+                org_id = "local"
+            else:
+                org_id = f"slack-{slack_team_id}"
+
+        # Create team node (idempotent — returns exists: True if duplicate)
+        create_result = self._create_team_node(org_id, team_node_id, team_name)
+        already_existed = create_result.get("exists", False)
+
+        if already_existed:
+            return {
+                "team_node_id": team_node_id,
+                "token": None,
+                "already_existed": True,
+            }
+
+        # Mint team token
+        token_response = self._issue_team_token(org_id, team_node_id)
+        token = token_response.get("token")
+
+        # Wire channel to this team
+        self._update_config(
+            org_id,
+            team_node_id,
+            {"routing": {"slack_channel_ids": [channel_id]}},
+        )
+
+        return {
+            "team_node_id": team_node_id,
+            "token": token,
+            "already_existed": False,
+        }
+
     def get_team_token(self, slack_team_id: str) -> Optional[str]:
         """
         Get a team token for Config Service API access.
@@ -324,6 +456,7 @@ class ConfigServiceClient:
                 return {
                     "org_id": result["org_id"],
                     "team_node_id": result["team_node_id"],
+                    "matched_by": result.get("matched_by"),
                 }
 
             logger.debug(
@@ -1057,11 +1190,13 @@ class ConfigServiceClient:
         Trigger an onboarding environment scan via the AI Pipeline API.
 
         Fire-and-forget: failures are logged but never propagated.
+        Automatically includes the team's routed channel IDs so the scanner
+        only processes channels belonging to this team.
 
         Args:
             org_id: Organization ID (e.g., "slack-T12345")
             team_node_id: Team node ID (e.g., "default")
-            trigger: "initial" or "integration"
+            trigger: "initial", "integration", or "team_created"
             slack_team_id: Slack team ID (required for initial trigger)
             integration_id: Integration ID (required for integration trigger)
         """
@@ -1069,6 +1204,15 @@ class ConfigServiceClient:
             "AI_PIPELINE_API_URL",
             "http://ai-pipeline-api-svc.incidentfox-prod.svc.cluster.local:8085",
         )
+
+        # Fetch team's routed channels for team-scoped scanning
+        channel_ids = None
+        if team_node_id != "default":
+            try:
+                config = self.get_team_config(org_id, team_node_id) or {}
+                channel_ids = config.get("routing", {}).get("slack_channel_ids")
+            except Exception as e:
+                logger.warning(f"Failed to fetch team channel routing: {e}")
 
         payload = {
             "org_id": org_id,
@@ -1079,6 +1223,8 @@ class ConfigServiceClient:
             payload["slack_team_id"] = slack_team_id
         if integration_id:
             payload["integration_id"] = integration_id
+        if channel_ids:
+            payload["channel_ids"] = channel_ids
 
         try:
             response = self._session.post(
@@ -1157,6 +1303,57 @@ class ConfigServiceClient:
                 status_code=status_code,
                 response_text=response_text,
             ) from e
+
+    # =========================================================================
+    # Session Cache (for View Session persistence)
+    # =========================================================================
+
+    def save_session_state(
+        self,
+        message_ts: str,
+        state_json: dict,
+        thread_ts: Optional[str] = None,
+        org_id: Optional[str] = None,
+        team_node_id: Optional[str] = None,
+    ) -> bool:
+        """Persist session state to DB for the View Session modal."""
+        url = f"{self.base_url}/api/v1/internal/session-cache/{message_ts}"
+        payload = {
+            "state_json": state_json,
+            "thread_ts": thread_ts,
+            "org_id": org_id,
+            "team_node_id": team_node_id,
+        }
+        try:
+            response = self._session.put(
+                url,
+                json=payload,
+                headers=self._get_internal_headers(),
+                timeout=10,
+            )
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to save session state for {message_ts}: {e}")
+            return False
+
+    def get_session_state(self, message_ts: str) -> Optional[dict]:
+        """Fetch persisted session state from DB. Returns state_json dict or None."""
+        url = f"{self.base_url}/api/v1/internal/session-cache/{message_ts}"
+        try:
+            response = self._session.get(
+                url,
+                headers=self._get_internal_headers(),
+                timeout=10,
+            )
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            data = response.json()
+            return data.get("state_json")
+        except Exception as e:
+            logger.warning(f"Failed to fetch session state for {message_ts}: {e}")
+            return None
 
 
 # Global client instance

@@ -65,16 +65,16 @@ class RaptorTreeBuilder:
             return
 
         try:
-            from knowledge_base.raptor.embedding_cache import (
+            from ultimate_rag.raptor_lib.embedding_cache import (
                 CachedEmbeddingModel,
                 EmbeddingCache,
             )
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.SummarizationModels import (
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.SummarizationModels import (
                 CachedSummarizationModel,
                 GPT3TurboSummarizationModel,
             )
-            from knowledge_base.raptor.summary_cache import SummaryCache
+            from ultimate_rag.raptor_lib.summary_cache import SummaryCache
 
             # Embedding model
             self._embedding_model = OpenAIEmbeddingModel(
@@ -110,8 +110,8 @@ class RaptorTreeBuilder:
         except ImportError as e:
             logger.error(f"Failed to import RAPTOR components: {e}")
             raise RuntimeError(
-                "knowledge_base.raptor module not available. "
-                "Ensure PYTHONPATH includes knowledge_base directory."
+                "RAPTOR module not available. "
+                "Ensure ultimate_rag.raptor_lib is importable."
             ) from e
 
     def _init_builder(self):
@@ -122,7 +122,7 @@ class RaptorTreeBuilder:
         self._init_models()
 
         try:
-            from knowledge_base.raptor.cluster_tree_builder import (
+            from ultimate_rag.raptor_lib.cluster_tree_builder import (
                 ClusterTreeBuilder,
                 ClusterTreeConfig,
             )
@@ -152,9 +152,7 @@ class RaptorTreeBuilder:
 
         except ImportError as e:
             logger.error(f"Failed to import ClusterTreeBuilder: {e}")
-            raise RuntimeError(
-                "ClusterTreeBuilder not available in knowledge_base.raptor"
-            ) from e
+            raise RuntimeError("ClusterTreeBuilder not available in raptor_lib") from e
 
     def build_from_texts(
         self,

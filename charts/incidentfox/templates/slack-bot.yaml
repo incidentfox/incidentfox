@@ -40,6 +40,10 @@ spec:
       imagePullSecrets:
 {{ toYaml .Values.global.imagePullSecrets | indent 8 }}
       {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: slack-bot
           image: {{ required "services.slackBot.image is required" .Values.services.slackBot.image }}
@@ -49,6 +53,11 @@ spec:
               name: http
           resources:
 {{ toYaml .Values.services.slackBot.resources | indent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             # Slack app mode (http for production)
             - name: SLACK_APP_MODE
@@ -58,6 +67,12 @@ spec:
             # Agent service URL (for investigations)
             - name: SRE_AGENT_URL
               value: {{ printf "http://incidentfox-agent.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.agent.servicePort | int) | quote }}
+            # Service-to-service auth for sre-agent /investigate (must match agent's INVESTIGATE_AUTH_TOKEN)
+            - name: INVESTIGATE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.jwtSecret.secretName | default "incidentfox-jwt-secret" }}
+                  key: {{ .Values.externalSecrets.contract.jwtSecret.investigateAuthTokenKey | default "INVESTIGATE_AUTH_TOKEN" }}
             # Config Service (for multi-tenancy)
             - name: CONFIG_SERVICE_URL
               value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}

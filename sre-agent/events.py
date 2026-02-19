@@ -9,7 +9,7 @@ Events are streamed as SSE (Server-Sent Events) with JSON payloads.
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 
 @dataclass

@@ -20,12 +20,11 @@ LLM Provider:
 - Multi-LLM support: Handled via credential-proxy which routes to different providers
   (Claude, Gemini, OpenAI) based on configuration
 
-Tracing (Langfuse + Laminar):
-- Langfuse: Auto-enabled in local dev (via OpenTelemetry + langsmith instrumentation)
-- Laminar: Optional, enabled when LMNR_PROJECT_API_KEY is set
-- Sessions: Groups multi-turn conversations by thread_id
-- Metadata: Environment, thread_id, sandbox_name for filtering/debugging
-- Tags: Success/error/incomplete outcome tags for analysis (Laminar only)
+Observability:
+- Configurable backend via OBSERVABILITY_BACKEND env var: "laminar", "langfuse", or "none"
+- Laminar: Sessions grouped by thread_id, metadata for filtering, outcome tags
+- Langfuse: Auto-enabled in local dev (http://localhost:3000); configurable for cloud
+- Backend selection is a deployment config (Helm values / env), not per-tenant
 """
 
 import base64
@@ -33,7 +32,7 @@ import mimetypes
 import os
 import re
 from pathlib import Path
-from typing import AsyncIterator, Optional, Union
+from typing import AsyncIterator
 
 # Claude SDK imports
 from claude_agent_sdk import (
@@ -44,7 +43,6 @@ from claude_agent_sdk import (
     ResultMessage,
     TextBlock,
 )
-from claude_agent_sdk.types import StreamEvent as SDKStreamEvent
 from dotenv import load_dotenv
 from events import (
     StreamEvent,
@@ -54,7 +52,6 @@ from events import (
     tool_end_event,
     tool_start_event,
 )
-from lmnr import Laminar, observe
 
 # Max image size to embed (5MB)
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
@@ -95,21 +92,29 @@ def _extract_images_from_text(text: str) -> tuple[str, list]:
         if path_str.startswith(("http://", "https://", "data:")):
             continue
 
-        # Resolve path
-        # Accept: ./path, /path, /workspace/path, attachments/path
+        # Resolve path — always relative to /workspace
+        # Reject absolute paths that don't start with /workspace
+        workspace = Path("/workspace")
         if path_str.startswith("./"):
-            full_path = Path("/workspace") / path_str[2:]
-        elif path_str.startswith("/"):
+            full_path = workspace / path_str[2:]
+        elif path_str.startswith("/workspace/"):
             full_path = Path(path_str)
-        elif path_str.startswith("attachments/"):
-            full_path = Path("/workspace") / path_str
+        elif path_str.startswith("/"):
+            # Reject other absolute paths (e.g. /var/run/secrets)
+            print(f"⚠️ [IMAGE] Rejecting absolute path: {path_str}")
+            continue
         else:
-            full_path = Path("/workspace") / path_str
+            full_path = workspace / path_str
 
-        # Security: only allow paths within /workspace
+        # Security: resolve symlinks and verify path is within /workspace
         try:
-            resolved = full_path.resolve()
-            if not str(resolved).startswith("/workspace"):
+            resolved = full_path.resolve(strict=False)
+            # Use Path containment check (not string prefix) to prevent
+            # bypass via paths like /workspacefoo
+            if (
+                workspace.resolve() not in resolved.parents
+                and resolved != workspace.resolve()
+            ):
                 print(f"⚠️ [IMAGE] Skipping path outside workspace: {path_str}")
                 continue
         except Exception:
@@ -211,20 +216,31 @@ def _extract_files_from_text(text: str) -> tuple[str, list]:
         if path_str.startswith("#"):
             continue
 
-        # Resolve path
+        # Resolve path — always relative to /workspace
+        # Reject absolute paths that don't start with /workspace
+        workspace = Path("/workspace")
         if path_str.startswith("./"):
-            full_path = Path("/workspace") / path_str[2:]
-        elif path_str.startswith("/"):
+            full_path = workspace / path_str[2:]
+        elif path_str.startswith("/workspace/"):
             full_path = Path(path_str)
+        elif path_str.startswith("/"):
+            # Reject other absolute paths (e.g. /var/run/secrets, /tmp/sandbox-jwt)
+            print(f"⚠️ [FILE] Rejecting absolute path: {path_str}")
+            continue
         elif path_str.startswith("attachments/"):
-            full_path = Path("/workspace") / path_str
+            full_path = workspace / path_str
         else:
-            full_path = Path("/workspace") / path_str
+            full_path = workspace / path_str
 
-        # Security: only allow paths within /workspace
+        # Security: resolve symlinks and verify path is within /workspace
         try:
-            resolved = full_path.resolve()
-            if not str(resolved).startswith("/workspace"):
+            resolved = full_path.resolve(strict=False)
+            # Use Path containment check (not string prefix) to prevent
+            # bypass via paths like /workspacefoo
+            if (
+                workspace.resolve() not in resolved.parents
+                and resolved != workspace.resolve()
+            ):
                 print(f"⚠️ [FILE] Skipping path outside workspace: {path_str}")
                 continue
         except Exception:
@@ -290,56 +306,121 @@ def _extract_files_from_text(text: str) -> tuple[str, list]:
 
 load_dotenv()
 
-# Initialize Laminar for tracing (if API key is set)
-# Note: This should be done ONCE per process, before any ClaudeSDKClient is created
-# Set DISABLE_LAMINAR=true to disable Laminar instrumentation (for debugging proxy conflicts)
-_laminar_initialized = False
-_laminar_disabled = os.getenv("DISABLE_LAMINAR", "").lower() in ("true", "1", "yes")
+# ---------------------------------------------------------------------------
+# Observability backend initialization
+# ---------------------------------------------------------------------------
+# Configured via OBSERVABILITY_BACKEND env var: "laminar" | "langfuse" | "none"
+# Falls back to auto-detection for backward compatibility:
+#   - LMNR_PROJECT_API_KEY set → laminar
+#   - LANGFUSE_PUBLIC_KEY set  → langfuse
+#   - neither                  → none
+# ---------------------------------------------------------------------------
+_observability_backend = "none"
+_observability_initialized = False
 
-if _laminar_disabled:
-    print("⚠️ [DEBUG] Laminar instrumentation DISABLED via DISABLE_LAMINAR env var")
-elif os.getenv("LMNR_PROJECT_API_KEY") and not _laminar_initialized:
-    try:
-        print("🔍 [DEBUG] Initializing Laminar (managed cloud)...")
-        Laminar.initialize()
-        _laminar_initialized = True
-        print("✅ [DEBUG] Laminar initialized successfully")
-    except Exception as e:
-        print(f"⚠️ [DEBUG] Failed to initialize Laminar: {e}")
+# Laminar helpers (lazy-imported)
+_Laminar = None
+_observe = None
 
-# Initialize Langfuse for tracing (if API keys are set)
-# Uses OpenTelemetry via langsmith[claude-agent-sdk,otel] instrumentation
-# Docs: https://langfuse.com/integrations/claude-agent-sdk
-_langfuse_initialized = False
-_langfuse_disabled = os.getenv("DISABLE_LANGFUSE", "").lower() in ("true", "1", "yes")
+# Langfuse helpers (lazy-imported)
+_langfuse_client = None
 
-if _langfuse_disabled:
-    print("⚠️ [DEBUG] Langfuse instrumentation DISABLED via DISABLE_LANGFUSE env var")
-elif os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
-    try:
-        # OTel env vars must be set before configure_claude_agent_sdk()
-        os.environ.setdefault("LANGSMITH_OTEL_ENABLED", "true")
-        os.environ.setdefault("LANGSMITH_OTEL_ONLY", "true")
-        os.environ.setdefault("LANGSMITH_TRACING", "true")
 
-        from langfuse import get_client as _get_langfuse_client
-        from langsmith.integrations.claude_agent_sdk import (
-            configure_claude_agent_sdk as _configure_claude_agent_sdk,
-        )
+def _detect_observability_backend() -> str:
+    """Detect which observability backend to use."""
+    backend = os.getenv("OBSERVABILITY_BACKEND", "").lower().strip()
+    if backend in ("laminar", "langfuse", "none"):
+        return backend
+    # Auto-detect from available credentials
+    if os.getenv("LMNR_PROJECT_API_KEY"):
+        return "laminar"
+    if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+        return "langfuse"
+    return "none"
 
-        langfuse_base = os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
-        print(f"🔍 [DEBUG] Initializing Langfuse (base_url={langfuse_base})...")
-        _get_langfuse_client()
-        _configure_claude_agent_sdk()
-        _langfuse_initialized = True
-        if langfuse_base == "http://langfuse-web:3000":
-            print("✅ Langfuse traces: http://localhost:3000  (admin@localhost / admin-local-dev)")
-        else:
-            print(f"✅ Langfuse traces: {langfuse_base}")
-    except ImportError as e:
-        print(f"⚠️ [DEBUG] Langfuse packages not available: {e}")
-    except Exception as e:
-        print(f"⚠️ [DEBUG] Failed to initialize Langfuse: {e}")
+
+def init_observability() -> None:
+    """Initialize the configured observability backend. Call once at process startup."""
+    global _observability_backend, _observability_initialized
+    global _Laminar, _observe, _langfuse_client
+
+    if _observability_initialized:
+        return
+
+    _observability_backend = _detect_observability_backend()
+
+    if _observability_backend == "laminar":
+        try:
+            from lmnr import Laminar, observe
+
+            _Laminar = Laminar
+            _observe = observe
+            Laminar.initialize()
+            _observability_initialized = True
+            print("[OBSERVABILITY] Laminar initialized (key present)")
+        except Exception as e:
+            print(f"[OBSERVABILITY] Laminar init failed: {e}")
+            _observability_backend = "none"
+
+    elif _observability_backend == "langfuse":
+        try:
+            from langfuse import Langfuse
+
+            # LANGFUSE_BASE_URL is used in local dev (docker-compose sets it to
+            # http://langfuse-web:3000). Fall back to LANGFUSE_HOST for cloud deployments.
+            langfuse_host = os.getenv("LANGFUSE_BASE_URL") or os.getenv(
+                "LANGFUSE_HOST", "https://us.cloud.langfuse.com"
+            )
+            _langfuse_client = Langfuse(
+                public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+                secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+                host=langfuse_host,
+            )
+            _observability_initialized = True
+            if langfuse_host == "http://langfuse-web:3000":
+                print("[OBSERVABILITY] Langfuse traces: http://localhost:3000  (admin@localhost / admin-local-dev)")
+            else:
+                print(f"[OBSERVABILITY] Langfuse initialized (host: {langfuse_host})")
+        except Exception as e:
+            print(f"[OBSERVABILITY] Langfuse init failed: {e}")
+            _observability_backend = "none"
+
+    else:
+        print("[OBSERVABILITY] No backend configured")
+        _observability_initialized = True
+
+
+def observability_set_session(thread_id: str, metadata: dict | None = None) -> None:
+    """Set session/trace context for the current thread."""
+    if _observability_backend == "laminar" and _Laminar:
+        _Laminar.set_trace_session_id(thread_id)
+        if metadata:
+            _Laminar.set_trace_metadata(metadata)
+    elif _observability_backend == "langfuse" and _langfuse_client:
+        # Langfuse session context is set per-trace at creation time
+        pass
+
+
+def observability_set_tags(tags: list[str]) -> None:
+    """Set outcome tags on the current span."""
+    if _observability_backend == "laminar" and _Laminar:
+        _Laminar.set_span_tags(tags)
+
+
+def observability_observe():
+    """Decorator for tracing a function. Returns identity decorator if backend doesn't support it."""
+    if _observability_backend == "laminar" and _observe:
+        return _observe()
+
+    # No-op decorator
+    def identity(fn):
+        return fn
+
+    return identity
+
+
+# Initialize at import time
+init_observability()
 
 
 def get_environment() -> str:
@@ -640,26 +721,20 @@ class InteractiveAgentSession:
             # Manually enter the async context manager
             await self.client.__aenter__()
 
-            # Set up Laminar tracing metadata (if enabled)
-            if not _laminar_disabled and _laminar_initialized:
-                environment = get_environment()
-                metadata = {
-                    "environment": environment,
-                    "thread_id": self.thread_id,
-                }
-
-                if os.getenv("SANDBOX_NAME"):
-                    metadata["sandbox_name"] = os.getenv("SANDBOX_NAME")
-
-                Laminar.set_trace_session_id(self.thread_id)
-                Laminar.set_trace_metadata(metadata)
+            # Set up observability session context
+            metadata = {
+                "environment": get_environment(),
+                "thread_id": self.thread_id,
+            }
+            if os.getenv("SANDBOX_NAME"):
+                metadata["sandbox_name"] = os.getenv("SANDBOX_NAME")
+            observability_set_session(self.thread_id, metadata)
 
     async def cleanup(self):
-        """Clean up the client session."""
-        if self.client:
-            await self.client.__aexit__(None, None, None)
+        """Clean up the client session. Alias for close()."""
+        await self.close()
 
-    @observe()
+    @observability_observe()
     async def execute(
         self, prompt: str, images: list = None
     ) -> AsyncIterator[StreamEvent]:
@@ -681,6 +756,11 @@ class InteractiveAgentSession:
 
         if self.client is None:
             raise RuntimeError("Session not started. Call start() first.")
+
+        if self.is_running:
+            raise RuntimeError(
+                "Session already executing. Wait for current execution to complete."
+            )
 
         self.is_running = True
         self._was_interrupted = False
@@ -868,32 +948,37 @@ class InteractiveAgentSession:
 
         except Exception as e:
             error_occurred = True
-            if not _laminar_disabled and _laminar_initialized:
-                Laminar.set_span_tags(["error", "exception"])
+            observability_set_tags(["error", "exception"])
             import traceback
 
             error_msg = str(e)
             print(f"❌ [AGENT] Exception during execute: {error_msg}")
             traceback.print_exc()
 
-            # Provide user-friendly messages for known SDK issues
+            # Provide user-friendly messages for known issues; default to generic
             if "buffer size" in error_msg.lower() or "1048576" in error_msg:
                 error_msg = "Subagent produced too much output (SDK buffer limit). Try a simpler task."
             elif "decode" in error_msg.lower() and "json" in error_msg.lower():
                 error_msg = (
                     "SDK JSON parsing error. The response was too large or malformed."
                 )
+            elif "rate" in error_msg.lower() and "limit" in error_msg.lower():
+                error_msg = (
+                    "API rate limit reached. Please wait a moment and try again."
+                )
+            else:
+                # Don't leak internal details (file paths, DB strings, SDK state)
+                error_msg = "An internal error occurred during the investigation."
 
             yield error_event(self.thread_id, error_msg, recoverable=False)
             # Don't re-raise - let the error event be sent cleanly
         finally:
             self.is_running = False
-            # Add outcome tags (if Laminar is enabled)
-            if not _laminar_disabled and _laminar_initialized:
-                if success:
-                    Laminar.set_span_tags(["success"])
-                elif not error_occurred:
-                    Laminar.set_span_tags(["incomplete"])
+            # Add outcome tags
+            if success:
+                observability_set_tags(["success"])
+            elif not error_occurred:
+                observability_set_tags(["incomplete"])
 
     async def interrupt(self) -> AsyncIterator[StreamEvent]:
         """
@@ -934,8 +1019,9 @@ class InteractiveAgentSession:
                 subtype="interrupted",
             )
         except Exception as e:
+            print(f"❌ [AGENT] Interrupt failed: {str(e)}")
             yield error_event(
-                self.thread_id, f"Interrupt failed: {str(e)}", recoverable=False
+                self.thread_id, "Interrupt failed. Please try again.", recoverable=False
             )
             raise
 

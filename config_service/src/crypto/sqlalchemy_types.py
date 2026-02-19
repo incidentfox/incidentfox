@@ -9,7 +9,7 @@ Usage:
         config: Mapped[dict] = mapped_column(EncryptedJSONB, nullable=False)
 """
 
-from typing import Any, Optional
+from typing import Optional
 
 from sqlalchemy import Text, TypeDecorator
 from sqlalchemy.dialects.postgresql import JSONB

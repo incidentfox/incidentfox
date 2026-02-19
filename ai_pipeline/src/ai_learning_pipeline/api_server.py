@@ -5,11 +5,10 @@ Exposes HTTP endpoints for triggering pipeline tasks on-demand,
 including the onboarding scan triggered by the Slack bot.
 """
 
-import asyncio
 import json
 import os
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import BackgroundTasks, FastAPI
 from pydantic import BaseModel, Field
@@ -51,6 +50,10 @@ class ScanTriggerRequest(BaseModel):
     integration_id: Optional[str] = Field(
         None, description="Integration ID (for integration trigger)"
     )
+    channel_ids: Optional[List[str]] = Field(
+        None,
+        description="Slack channel IDs to scan (team-scoped). None = scan all channels.",
+    )
 
 
 class ScanTriggerResponse(BaseModel):
@@ -66,7 +69,12 @@ class ScanTriggerResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-async def _run_initial_scan(org_id: str, team_node_id: str, slack_team_id: str):
+async def _run_initial_scan(
+    org_id: str,
+    team_node_id: str,
+    slack_team_id: str,
+    channel_ids: Optional[List[str]] = None,
+):
     """Run initial onboarding scan in background."""
     from .tasks.onboarding_scan import OnboardingScanTask
 
@@ -79,7 +87,9 @@ async def _run_initial_scan(org_id: str, team_node_id: str, slack_team_id: str):
             _log("bot_token_not_found", org_id=org_id)
             return
 
-        task = OnboardingScanTask(org_id=org_id, team_node_id=team_node_id)
+        task = OnboardingScanTask(
+            org_id=org_id, team_node_id=team_node_id, channel_ids=channel_ids
+        )
         result = await task.run_initial_scan(slack_bot_token=bot_token)
 
         # If recommendations were generated, notify via Slack DM
@@ -209,6 +219,7 @@ async def trigger_scan(
             org_id=request.org_id,
             team_node_id=request.team_node_id,
             slack_team_id=request.slack_team_id,
+            channel_ids=request.channel_ids,
         )
 
         _log(

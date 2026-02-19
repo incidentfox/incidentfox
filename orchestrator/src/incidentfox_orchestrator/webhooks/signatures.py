@@ -6,6 +6,7 @@ Each external service has its own signature scheme:
 - GitHub: HMAC-SHA256 with sha256= prefix
 - PagerDuty: HMAC-SHA256 with v1= prefix
 - Incident.io: HMAC-SHA256
+- Vercel: HMAC-SHA1 (Log Drain)
 - Google Chat: Google-signed JWT (Bearer token)
 - MS Teams: Azure AD JWT (handled by BotFrameworkAdapter)
 
@@ -425,6 +426,18 @@ def verify_firehydrant_signature(
 
     if not _constant_time_compare(expected_digest, provided_digest):
         raise SignatureVerificationError("bad_signature", "firehydrant")
+
+
+def verify_vercel_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """Verify Vercel Log Drain webhook signature (HMAC-SHA1).
+
+    Vercel signs log drain payloads using HMAC-SHA1 with the integration secret.
+    The signature is sent in the x-vercel-signature header.
+    """
+    if not secret:
+        return False
+    expected = hmac.new(secret.encode(), payload, hashlib.sha1).hexdigest()
+    return hmac.compare_digest(expected, signature)
 
 
 def verify_google_chat_bearer_token(

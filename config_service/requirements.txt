@@ -28,6 +28,9 @@ prometheus-client>=0.19.0
 PyJWT>=2.8.0
 cryptography>=41.0.0
 
+# Cron expression parsing for scheduled jobs
+croniter>=2.0.0
+
 # Optional cache (enabled via CONFIG_CACHE_BACKEND=redis)
 redis>=5.0.0
 

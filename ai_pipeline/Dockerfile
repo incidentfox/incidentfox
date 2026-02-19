@@ -5,6 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN useradd -m -u 1000 appuser
+
 # Install system dependencies
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y --no-install-recommends curl && \
@@ -16,6 +18,9 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy source code
 COPY src /app/src
+
+RUN chown -R appuser:appuser /app
+USER appuser
 
 ENV PYTHONPATH=/app/src
 

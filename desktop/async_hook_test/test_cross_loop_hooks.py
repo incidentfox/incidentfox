@@ -14,7 +14,6 @@ We test different solutions to make hooks work across event loops.
 import asyncio
 import threading
 import time
-from dataclasses import dataclass
 
 # ============================================================================
 # PROBLEM: Current implementation with asyncio.Lock

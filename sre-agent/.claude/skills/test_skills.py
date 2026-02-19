@@ -120,7 +120,7 @@ def validate_json_output(result: TestResult) -> TestResult:
                     f"API error in response: {data.get('error') or data.get('errors')}"
                 )
         return result
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         # Not JSON output - that's OK for non-json mode
         return result
 
@@ -255,7 +255,7 @@ def test_jaeger() -> list[TestResult]:
                 )
                 result2 = validate_json_output(result2)
                 results.append(result2)
-        except:
+        except Exception:
             pass
 
     return results

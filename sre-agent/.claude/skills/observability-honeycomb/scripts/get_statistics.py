@@ -20,9 +20,8 @@ import argparse
 import json
 import re
 import sys
-from collections import Counter
 
-from honeycomb_client import get_columns, run_query
+from honeycomb_client import run_query
 
 
 def main():

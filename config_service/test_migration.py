@@ -127,7 +127,7 @@ def test_migration():
     print("📋 Columns in node_configurations:")
     all_good = True
     for col_name, col_type in column_names.items():
-        expected = expected_columns.get(col_name, "UNEXPECTED")
+        expected_columns.get(col_name, "UNEXPECTED")
         col_type_str = str(col_type)
         # Normalize type checking (SQLite varies)
         matches = col_name in expected_columns

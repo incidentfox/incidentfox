@@ -4,11 +4,9 @@
 import argparse
 import json
 import sys
-from collections import defaultdict
 
 from jaeger_client import (
     calculate_latency_stats,
-    extract_span_info,
     format_duration,
     get_operations,
     search_traces,

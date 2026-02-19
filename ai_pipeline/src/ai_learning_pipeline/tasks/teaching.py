@@ -11,7 +11,7 @@ Processes pending knowledge teachings from agents:
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import httpx
 

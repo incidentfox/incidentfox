@@ -297,8 +297,7 @@ class TeamPrincipal:
 
     def can_write(self) -> bool:
         """Check if this principal can write configuration."""
-        # Visitors can now write for playground demo
-        return True
+        return not self.is_visitor()
 
 
 def require_team_auth(

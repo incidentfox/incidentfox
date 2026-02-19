@@ -20,6 +20,7 @@ from src.db.models import (
     OrgNode,
     PendingConfigChange,
     SecurityPolicy,
+    SlackSessionCache,
     TeamToken,
     TokenAudit,
     TokenPermission,
@@ -865,7 +866,7 @@ def upsert_team_overrides(
     if existing is None:
         # Create new config
         new = NodeConfiguration(
-            id=f"cfg-{uuid.uuid4().hex[:12]}",
+            id=f"cfg-{uuid4().hex[:12]}",
             org_id=org_id,
             node_id=team_node_id,
             node_type="team",  # This function is only called for teams
@@ -884,7 +885,7 @@ def upsert_team_overrides(
 
     # Store in new audit table
     change = ConfigChangeHistory(
-        id=f"chg-{uuid.uuid4().hex[:12]}",
+        id=f"chg-{uuid4().hex[:12]}",
         org_id=org_id,
         node_id=team_node_id,
         previous_config=before,
@@ -1469,6 +1470,75 @@ def get_feedback_stats(
 
 
 # =============================================================================
+# Slack Session Cache Functions
+# =============================================================================
+
+
+def save_session_state(
+    session: Session,
+    *,
+    message_ts: str,
+    state_json: dict,
+    thread_ts: Optional[str] = None,
+    org_id: Optional[str] = None,
+    team_node_id: Optional[str] = None,
+) -> SlackSessionCache:
+    """Save or update a session state for the View Session modal."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    stmt = (
+        pg_insert(SlackSessionCache)
+        .values(
+            message_ts=message_ts,
+            thread_ts=thread_ts,
+            org_id=org_id,
+            team_node_id=team_node_id,
+            state_json=state_json,
+            created_at=datetime.utcnow(),
+        )
+        .on_conflict_do_update(
+            index_elements=["message_ts"],
+            set_={
+                "state_json": state_json,
+                "created_at": datetime.utcnow(),
+            },
+        )
+    )
+    session.execute(stmt)
+    session.flush()
+
+    return session.get(SlackSessionCache, message_ts)
+
+
+def get_session_state(
+    session: Session,
+    *,
+    message_ts: str,
+) -> Optional[SlackSessionCache]:
+    """Fetch a cached session state by message_ts."""
+    return session.get(SlackSessionCache, message_ts)
+
+
+def cleanup_expired_sessions(
+    session: Session,
+    *,
+    max_age_hours: int = 72,  # 3 days
+) -> int:
+    """Delete session cache entries older than max_age_hours. Returns count deleted."""
+    from datetime import timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    stmt = select(SlackSessionCache).where(SlackSessionCache.created_at < cutoff)
+    expired = list(session.execute(stmt).scalars().all())
+
+    for entry in expired:
+        session.delete(entry)
+
+    session.flush()
+    return len(expired)
+
+
+# =============================================================================
 # Unified Audit Functions
 # =============================================================================
 
@@ -1558,19 +1628,21 @@ def list_unified_audit(
 
     # --- Config Audit ---
     if "config" in all_sources:
-        stmt = select(NodeConfigAudit).where(NodeConfigAudit.org_id == org_id)
+        from .config_models import ConfigChangeHistory
+
+        stmt = select(ConfigChangeHistory).where(ConfigChangeHistory.org_id == org_id)
         if team_node_id:
-            stmt = stmt.where(NodeConfigAudit.node_id == team_node_id)
+            stmt = stmt.where(ConfigChangeHistory.node_id == team_node_id)
         if actor:
-            stmt = stmt.where(NodeConfigAudit.changed_by.ilike(f"%{actor}%"))
+            stmt = stmt.where(ConfigChangeHistory.changed_by.ilike(f"%{actor}%"))
         if since:
-            stmt = stmt.where(NodeConfigAudit.changed_at >= since)
+            stmt = stmt.where(ConfigChangeHistory.changed_at >= since)
         if until:
-            stmt = stmt.where(NodeConfigAudit.changed_at <= until)
+            stmt = stmt.where(ConfigChangeHistory.changed_at <= until)
 
         config_rows = session.execute(stmt).scalars().all()
         for row in config_rows:
-            changed_keys = list((row.diff_json or {}).get("changed", {}).keys())
+            changed_keys = list((row.change_diff or {}).get("changed", {}).keys())
             summary = (
                 f"Config updated: {', '.join(changed_keys[:3])}"
                 if changed_keys

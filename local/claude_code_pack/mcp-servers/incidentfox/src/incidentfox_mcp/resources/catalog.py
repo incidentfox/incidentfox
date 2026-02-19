@@ -4,7 +4,6 @@ Loads .incidentfox.yaml from the current directory or user's home to provide
 context about the user's infrastructure during investigations.
 """
 
-import os
 from pathlib import Path
 
 import yaml

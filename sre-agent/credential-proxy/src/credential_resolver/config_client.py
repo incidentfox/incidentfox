@@ -292,18 +292,12 @@ class ConfigServiceClient:
 
         # Access gate: must have trial or subscription (even for BYOK).
         if not has_valid_trial and not has_active_subscription:
-            logger.warning(
-                f"Access denied for tenant={tenant_id}: "
-                f"trial_valid={has_valid_trial}, subscription={subscription_status}"
-            )
+            logger.warning(f"Access denied for tenant={tenant_id}: not authorized")
             return None
 
         # Authorized — use BYOK if available, else fall back to shared key.
         if customer_api_key:
-            logger.info(
-                f"Using BYOK Anthropic key for tenant={tenant_id} "
-                f"(trial={has_valid_trial}, subscription={subscription_status})"
-            )
+            logger.info(f"Using BYOK Anthropic key for tenant={tenant_id}")
             return {"api_key": customer_api_key}
 
         shared_key = get_shared_anthropic_key()
@@ -313,10 +307,7 @@ class ConfigServiceClient:
             )
             return None
 
-        logger.info(
-            f"Using shared Anthropic key for tenant={tenant_id} "
-            f"(trial={has_valid_trial}, subscription={subscription_status})"
-        )
+        logger.info(f"Using shared Anthropic key for tenant={tenant_id}")
         return {"api_key": shared_key, "workspace_attribution": tenant_id}
 
     def _extract_credentials(self, config: dict) -> dict:

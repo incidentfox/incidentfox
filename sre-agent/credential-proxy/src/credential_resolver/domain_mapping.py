@@ -38,6 +38,11 @@ DOMAIN_TO_INTEGRATION: dict[str, str] = {
     "api.firehydrant.io": "firehydrant",
     # VictoriaMetrics / VictoriaLogs (managed cloud)
     "cloud.victoriametrics.com": "victoriametrics",
+    # Amplitude (US and EU regions)
+    "amplitude.com": "amplitude",
+    "analytics.eu.amplitude.com": "amplitude",
+    # Vercel
+    "api.vercel.com": "vercel",
 }
 
 # Path prefixes for proxy mode (when host is envoy:8001, localhost:8001, etc.)

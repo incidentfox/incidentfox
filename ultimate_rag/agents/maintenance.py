@@ -8,15 +8,14 @@ Proactively maintains the knowledge base:
 - Suggests improvements
 """
 
-import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from ..core.node import KnowledgeNode, KnowledgeTree, TreeForest
+    from ..core.node import KnowledgeNode, TreeForest
     from ..graph.graph import KnowledgeGraph
     from .observations import ObservationCollector
 
@@ -352,8 +351,8 @@ class MaintenanceAgent:
             return []
 
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.utils import distances_from_embeddings
+            from ultimate_rag.raptor_lib.EmbeddingModels import OpenAIEmbeddingModel
+            from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError as e:
             logger.warning(
                 f"RAPTOR imports failed, falling back to keyword clustering: {e}"
@@ -504,8 +503,10 @@ class MaintenanceAgent:
     ) -> List[tuple]:
         """Find pairs of nodes with high semantic similarity that might contradict."""
         try:
-            from knowledge_base.raptor.EmbeddingModels import OpenAIEmbeddingModel
-            from knowledge_base.raptor.utils import distances_from_embeddings
+            from ultimate_rag.raptor_lib.EmbeddingModels import (
+                OpenAIEmbeddingModel,
+            )  # noqa: F401
+            from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError:
             logger.warning("RAPTOR not available for similarity detection")
             return []

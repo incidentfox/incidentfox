@@ -7,14 +7,14 @@ on:
       # Trigger when templates change
       - 'config_service/templates/*.json'
       # Trigger when prompt layers change
-      - 'agent/src/ai_agent/prompts/*.py'
+      - 'config_service/scripts/prompts/*.py'
       # Trigger when the generator script changes
       - 'config_service/scripts/generate_golden_prompts.py'
   push:
     branches: [main]
     paths:
       - 'config_service/templates/*.json'
-      - 'agent/src/ai_agent/prompts/*.py'
+      - 'config_service/scripts/prompts/*.py'
       - 'config_service/scripts/generate_golden_prompts.py'
 
 permissions:

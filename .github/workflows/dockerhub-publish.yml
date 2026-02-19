@@ -18,10 +18,9 @@ on:
         type: choice
         options:
           - all
-          - agent
           - ai-pipeline
           - config-service
-          - raptor
+          - ultimate-rag
           - web-ui
   release:
     types: [published]
@@ -37,10 +36,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - service: agent
-            context: ./agent
-            dockerfile: ./agent/Dockerfile
-            image: incidentfox/agent
           - service: ai-pipeline
             context: ./ai_pipeline
             dockerfile: ./ai_pipeline/Dockerfile
@@ -49,10 +44,10 @@ jobs:
             context: ./config_service
             dockerfile: ./config_service/Dockerfile
             image: incidentfox/config-service
-          - service: raptor
-            context: ./knowledge_base
-            dockerfile: ./knowledge_base/Dockerfile
-            image: incidentfox/raptor
+          - service: ultimate-rag
+            context: ./ultimate_rag
+            dockerfile: ./ultimate_rag/Dockerfile
+            image: incidentfox/ultimate-rag
           - service: web-ui
             context: ./web_ui
             dockerfile: ./web_ui/Dockerfile

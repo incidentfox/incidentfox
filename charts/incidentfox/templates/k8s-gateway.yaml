@@ -31,6 +31,10 @@ spec:
       imagePullSecrets:
 {{ toYaml .Values.global.imagePullSecrets | indent 8 }}
       {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: k8s-gateway
           image: {{ required "services.k8sGateway.image is required" .Values.services.k8sGateway.image }}
@@ -41,6 +45,12 @@ spec:
               protocol: TCP
           resources:
 {{ toYaml .Values.services.k8sGateway.resources | indent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: PORT
               value: {{ .Values.services.k8sGateway.servicePort | quote }}

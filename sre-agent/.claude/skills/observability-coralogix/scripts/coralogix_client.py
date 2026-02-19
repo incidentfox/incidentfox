@@ -16,7 +16,6 @@ Region/Domain mapping (from Coralogix docs):
 import json
 import os
 import re
-import sys
 from datetime import datetime, timedelta
 from typing import Any
 

@@ -11,7 +11,7 @@ Performs maintenance operations on the knowledge base:
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import httpx
 

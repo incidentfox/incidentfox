@@ -9,7 +9,7 @@ import httpx
 import structlog
 from httpx_sse import aconnect_sse
 
-from .config import get_pod_name, get_settings
+from .config import get_settings
 from .executor import K8sExecutor
 
 logger = structlog.get_logger(__name__)

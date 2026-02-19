@@ -13,7 +13,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from .reranker import (
     CohereReranker,
@@ -39,7 +39,7 @@ from .strategies import (
 
 if TYPE_CHECKING:
     from ..agents.observations import ObservationCollector
-    from ..core.node import KnowledgeNode, TreeForest
+    from ..core.node import TreeForest
     from ..graph.graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)

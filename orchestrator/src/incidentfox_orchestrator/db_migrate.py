@@ -73,7 +73,7 @@ MIGRATIONS: list[tuple[str, str]] = [
 def main() -> None:
     s = load_settings()
     init_engine(s.db_url)
-    engine = get_engine()
+    get_engine()
     with db_session() as sess:
         for name, sql in MIGRATIONS:
             sess.execute(sql_text(sql))

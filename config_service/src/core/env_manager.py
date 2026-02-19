@@ -7,10 +7,8 @@ Handles reading and writing to .env files, with support for:
 - Thread-safe operations
 """
 
-import fcntl
 import os
 import re
-import shutil
 import tempfile
 from pathlib import Path
 from typing import Dict, Optional

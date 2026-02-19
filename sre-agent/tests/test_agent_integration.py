@@ -8,10 +8,7 @@ Tests the complete implementation:
 3. Backward compatibility
 """
 
-import json
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -20,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def test_config_loading():
     """Test that config loads correctly with new fields."""
-    from config import AgentConfig, ModelConfig, load_team_config
+    from config import AgentConfig, ModelConfig
 
     # Create an AgentConfig with all new fields
     agent = AgentConfig(

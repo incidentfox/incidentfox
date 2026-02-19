@@ -18,6 +18,10 @@ spec:
       imagePullSecrets:
 {{ toYaml .Values.global.imagePullSecrets | indent 8 }}
       {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: web-ui
           image: {{ required "services.webUi.image is required" .Values.services.webUi.image }}
@@ -26,6 +30,11 @@ spec:
             - containerPort: {{ .Values.services.webUi.servicePort }}
           resources:
 {{ toYaml .Values.services.webUi.resources | indent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: CONFIG_SERVICE_URL
               value: {{ required "global.configService.url is required" .Values.global.configService.url | quote }}
@@ -157,6 +166,16 @@ spec:
                 name: incidentfox-config-service
                 port:
                   number: {{ .Values.services.configService.servicePort }}
+          {{- end }}
+          {{- if .Values.services.orchestrator.enabled }}
+          # Webhooks - route to orchestrator for Vercel, GitHub, PagerDuty, etc.
+          - path: /webhooks
+            pathType: Prefix
+            backend:
+              service:
+                name: incidentfox-orchestrator
+                port:
+                  number: {{ .Values.services.orchestrator.servicePort }}
           {{- end }}
           - path: /
             pathType: Prefix

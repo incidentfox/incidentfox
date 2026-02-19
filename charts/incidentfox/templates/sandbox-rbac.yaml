@@ -152,10 +152,15 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log", "events", "namespaces", "nodes", "services"]
     verbs: ["get", "list", "watch"]
-  # ConfigMaps: read + patch (patch needed for flagd feature flag remediation)
+  # ConfigMaps: read-only (for investigation)
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "list", "watch", "patch"]
+    verbs: ["get", "list", "watch"]
+  # ConfigMaps: patch restricted to flagd config only (for feature flag remediation)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["flagd-config"]
+    verbs: ["patch"]
   # Workload resources
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]

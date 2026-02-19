@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const CONFIG_SERVICE_URL = process.env.CONFIG_SERVICE_URL || 'http://localhost:8080';
+import { getConfigServiceBaseUrl, getUpstreamAuthHeaders } from '../../../_utils/upstream';
 
 export async function GET(request: NextRequest) {
+  const authHeaders = getUpstreamAuthHeaders(request);
+  if (!Object.keys(authHeaders).length) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
-    // Pass through query parameters (category, featured)
+    const baseUrl = getConfigServiceBaseUrl();
     const searchParams = request.nextUrl.searchParams;
     const queryString = searchParams.toString();
-    const url = `${CONFIG_SERVICE_URL}/api/v1/integrations/schemas${queryString ? `?${queryString}` : ''}`;
+    const url = `${baseUrl}/api/v1/integrations/schemas${queryString ? `?${queryString}` : ''}`;
 
     const res = await fetch(url, {
       headers: {
+        ...authHeaders,
         'Content-Type': 'application/json',
       },
     });
