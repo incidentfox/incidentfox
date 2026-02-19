@@ -728,6 +728,30 @@ class AgentFeedback(Base):
     )
 
 
+class SlackSessionCache(Base):
+    """
+    Persisted cache of Slack investigation session state.
+
+    Stores serialized MessageState so the "View Session" button works
+    after slack-bot restarts or in-memory cache expires. Cleaned up after 3 days.
+    """
+
+    __tablename__ = "slack_session_cache"
+
+    message_ts: Mapped[str] = mapped_column(String(64), primary_key=True)
+    thread_ts: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    org_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    team_node_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    state_json: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (Index("ix_slack_session_cache_created_at", "created_at"),)
+
+
 class ConversationMapping(Base):
     """
     Map external session identifiers to OpenAI conversation IDs.

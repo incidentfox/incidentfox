@@ -239,7 +239,7 @@ def main() -> None:
                         "prefix": "",
                         "suffix": "",
                     },
-                    "max_turns": 20,
+                    "max_turns": 50,
                 },
                 "investigation": {"enabled": True},
                 "coding": {"enabled": False},

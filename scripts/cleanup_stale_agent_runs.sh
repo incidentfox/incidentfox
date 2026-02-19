@@ -58,4 +58,14 @@ else
   echo "$(date -Iseconds) No stale runs found"
 fi
 
+# Also clean up expired session cache entries (3-day TTL)
+echo "$(date -Iseconds) Cleaning up expired session cache entries..."
+SESSION_CLEANUP_RESPONSE=$(curl -sf \
+  -X DELETE \
+  -H "X-Internal-Service: ${INTERNAL_SERVICE}" \
+  "${CONFIG_SERVICE_URL}/api/v1/internal/session-cache/expired?max_age_hours=72" \
+  || echo '{"error": "session cache cleanup failed"}')
+
+echo "$(date -Iseconds) Session cache cleanup result: ${SESSION_CLEANUP_RESPONSE}"
+
 echo "$(date -Iseconds) Cleanup complete"

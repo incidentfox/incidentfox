@@ -273,7 +273,9 @@ def _download_file_attachments(file_downloads: list, thread_id: str):
             counter += 1
 
         try:
-            logger.info(f"Downloading {safe_filename} ({download.get('size', '?')} bytes) from Slack...")
+            logger.info(
+                f"Downloading {safe_filename} ({download.get('size', '?')} bytes) from Slack..."
+            )
             with httpx.Client(timeout=httpx.Timeout(300.0)) as client:
                 with client.stream(
                     "GET",

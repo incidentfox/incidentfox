@@ -89,6 +89,11 @@ def get_headers() -> dict[str, str]:
     else:
         # Proxy mode - use JWT for credential-resolver auth
         sandbox_jwt = os.getenv("SANDBOX_JWT")
+        if not sandbox_jwt:
+            jwt_path = "/tmp/sandbox-jwt"
+            if os.path.exists(jwt_path):
+                with open(jwt_path) as f:
+                    sandbox_jwt = f.read().strip()
         if sandbox_jwt:
             headers["X-Sandbox-JWT"] = sandbox_jwt
         else:

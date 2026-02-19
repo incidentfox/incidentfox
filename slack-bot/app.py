@@ -215,6 +215,65 @@ class MessageState:
     # Key: tool_use_id of Task tool, Value: {description, subagent_type, completed, tools: [...]}
     subagents: Dict[str, dict] = field(default_factory=dict)
 
+    def to_dict(self) -> dict:
+        """Serialize to dict for DB persistence. Strips base64 image data."""
+
+        def _strip_base64(items):
+            if not items:
+                return items
+            return [{k: v for k, v in item.items() if k != "data"} for item in items]
+
+        return {
+            "channel_id": self.channel_id,
+            "message_ts": self.message_ts,
+            "thread_ts": self.thread_ts,
+            "thread_id": self.thread_id,
+            "thoughts": [
+                {"text": t.text, "tools": t.tools, "completed": t.completed}
+                for t in self.thoughts
+            ],
+            "final_result": self.final_result,
+            "result_images": _strip_base64(self.result_images),
+            "result_files": _strip_base64(self.result_files),
+            "error": self.error,
+            "timeline": self.timeline,
+            "trigger_user_id": self.trigger_user_id,
+            "trigger_text": self.trigger_text,
+            "subagents": self.subagents,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MessageState":
+        """Deserialize from dict (DB retrieval)."""
+        thoughts = []
+        for t in data.get("thoughts", []):
+            if isinstance(t, ThoughtSection):
+                thoughts.append(t)
+            elif isinstance(t, dict):
+                thoughts.append(
+                    ThoughtSection(
+                        text=t.get("text", ""),
+                        tools=t.get("tools", []),
+                        completed=t.get("completed", False),
+                    )
+                )
+        state = cls(
+            channel_id=data.get("channel_id", ""),
+            message_ts=data.get("message_ts", ""),
+            thread_ts=data.get("thread_ts", ""),
+            thread_id=data.get("thread_id", ""),
+        )
+        state.thoughts = thoughts
+        state.final_result = data.get("final_result")
+        state.result_images = data.get("result_images")
+        state.result_files = data.get("result_files")
+        state.error = data.get("error")
+        state.timeline = data.get("timeline", [])
+        state.trigger_user_id = data.get("trigger_user_id")
+        state.trigger_text = data.get("trigger_text")
+        state.subagents = data.get("subagents", {})
+        return state
+
     @property
     def current_thought(self) -> str:
         """Get the current (last) thought text."""
@@ -240,10 +299,10 @@ class MessageState:
 
 # In-memory cache for investigation state (for modal views)
 # Keyed by message_ts (unique per message, unlike thread_id which is shared)
-# In production: use Redis keyed by message_ts
+# Falls back to config-service DB on cache miss (persisted for 3 days)
 _investigation_cache: Dict[str, MessageState] = {}
 _cache_timestamps: Dict[str, float] = {}  # Track when entries were added
-CACHE_TTL_HOURS = 24  # Keep cache entries for 24 hours
+CACHE_TTL_HOURS = 24  # Keep in-memory cache entries for 24 hours
 
 
 def _cleanup_old_cache_entries():
@@ -267,6 +326,48 @@ def _cleanup_old_cache_entries():
         logger.info(
             f"Cache cleanup: removed {len(expired_keys)} expired entries, {len(_investigation_cache)} remaining"
         )
+
+
+def _persist_session_to_db(
+    state: MessageState, org_id: str = None, team_node_id: str = None
+):
+    """Persist session state to config-service DB (fire-and-forget in background thread)."""
+    import threading
+
+    def _save():
+        try:
+            config_client = get_config_client()
+            config_client.save_session_state(
+                message_ts=state.message_ts,
+                state_json=state.to_dict(),
+                thread_ts=state.thread_ts,
+                org_id=org_id,
+                team_node_id=team_node_id,
+            )
+            logger.info(
+                f"Persisted session state to DB for message_ts={state.message_ts}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to persist session state to DB: {e}")
+
+    threading.Thread(target=_save, daemon=True).start()
+
+
+def _load_session_from_db(message_ts: str) -> Optional[MessageState]:
+    """Load session state from config-service DB. Returns MessageState or None."""
+    try:
+        config_client = get_config_client()
+        state_json = config_client.get_session_state(message_ts)
+        if state_json:
+            state = MessageState.from_dict(state_json)
+            # Populate in-memory cache for subsequent accesses
+            _investigation_cache[message_ts] = state
+            _cache_timestamps[message_ts] = time.time()
+            logger.info(f"Loaded session state from DB for message_ts={message_ts}")
+            return state
+    except Exception as e:
+        logger.warning(f"Failed to load session state from DB: {e}")
+    return None
 
 
 def save_investigation_snapshot(state: MessageState):
@@ -2185,6 +2286,9 @@ def _handle_mention_impl(event, say, client, context):
 
         _investigation_cache[state.message_ts] = state
         _cache_timestamps[state.message_ts] = time.time()
+        _persist_session_to_db(
+            state, org_id=resolved_org_id, team_node_id=resolved_team_node_id
+        )
 
         logger.info(
             f"✅ Investigation stream completed (processed {event_count} events, final_result={'present' if state.final_result else 'missing'})"
@@ -2510,6 +2614,9 @@ def _run_auto_listen_investigation(event, client, context):
 
         _investigation_cache[state.message_ts] = state
         _cache_timestamps[state.message_ts] = time.time()
+        _persist_session_to_db(
+            state, org_id=resolved_org_id, team_node_id=resolved_team_node_id
+        )
 
         if event_count == 0 and not state.error:
             state.error = "No response received from agent"
@@ -2918,6 +3025,9 @@ Use all available tools to gather context about this issue."""
 
         _investigation_cache[state.message_ts] = state
         _cache_timestamps[state.message_ts] = time.time()
+        _persist_session_to_db(
+            state, org_id=resolved_org_id, team_node_id=resolved_team_node_id
+        )
 
         logger.info(
             f"✅ Auto-investigation completed for Incident.io alert (processed {event_count} events, final_result={'present' if state.final_result else 'missing'})"
@@ -3369,6 +3479,9 @@ def handle_message(event, client, context):
 
             _investigation_cache[state.message_ts] = state
             _cache_timestamps[state.message_ts] = time.time()
+            _persist_session_to_db(
+                state, org_id=resolved_org_id, team_node_id=resolved_team_node_id
+            )
 
             logger.info(
                 f"✅ DM investigation completed (processed {event_count} events)"
@@ -3792,6 +3905,9 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
 
         _investigation_cache[state.message_ts] = state
         _cache_timestamps[state.message_ts] = time.time()
+        _persist_session_to_db(
+            state, org_id=resolved_org_id, team_node_id=resolved_team_node_id
+        )
 
         logger.info(
             f"✅ Coralogix investigation completed (processed {event_count} events, final_result={'present' if state.final_result else 'missing'})"
@@ -3869,12 +3985,14 @@ def handle_view_session(ack, body, client):
     # Get message_ts from button value (unique per message, unlike thread_id)
     message_ts = body["actions"][0].get("value", "unknown")
 
-    # Lookup investigation state
+    # Lookup investigation state: try in-memory cache first, then DB
     logger.info(f"View Session clicked: message_ts={message_ts}")
-    logger.info(f"Cache keys: {list(_investigation_cache.keys())}")
     state = _investigation_cache.get(message_ts)
     if not state:
-        logger.warning(f"No cached state for message_ts: {message_ts}")
+        logger.info(f"Cache miss for message_ts={message_ts}, trying DB...")
+        state = _load_session_from_db(message_ts)
+    if not state:
+        logger.warning(f"No cached or persisted state for message_ts: {message_ts}")
         # Show error modal
         client.views_open(
             trigger_id=body["trigger_id"],
@@ -3946,8 +4064,10 @@ def handle_modal_pagination(ack, body, client):
         logger.error(f"Failed to parse pagination data: {e}")
         return
 
-    # Lookup investigation state
+    # Lookup investigation state: try in-memory cache, then DB
     state = _investigation_cache.get(thread_id)
+    if not state:
+        state = _load_session_from_db(thread_id)
     if not state:
         logger.warning(f"No cached state for pagination: {thread_id}")
         return
@@ -4014,8 +4134,10 @@ def handle_view_tool_output(ack, body, client):
         logger.warning("Invalid tool index in view_tool_output")
         return
 
-    # Lookup investigation state
+    # Lookup investigation state: try in-memory cache, then DB
     state = _investigation_cache.get(thread_id)
+    if not state:
+        state = _load_session_from_db(thread_id)
     if not state or tool_idx >= len(state.timeline):
         logger.warning(f"Tool not found: thread_id={thread_id}, idx={tool_idx}")
         return
@@ -4060,8 +4182,10 @@ def handle_view_full_output(ack, body, client):
         logger.warning(f"Invalid button value: {button_value}")
         return
 
-    # Lookup investigation state
+    # Lookup investigation state: try in-memory cache, then DB
     state = _investigation_cache.get(thread_id)
+    if not state:
+        state = _load_session_from_db(thread_id)
     if not state:
         logger.warning(f"No cached state for thread_id: {thread_id}")
         return
@@ -4156,8 +4280,10 @@ def handle_view_subagent_details(ack, body, client):
         logger.warning(f"Invalid button value for subagent details: {button_value}")
         return
 
-    # Lookup investigation state
+    # Lookup investigation state: try in-memory cache, then DB
     state = _investigation_cache.get(thread_id)
+    if not state:
+        state = _load_session_from_db(thread_id)
     if not state:
         logger.warning(f"No cached state for thread_id: {thread_id}")
         return
@@ -4243,8 +4369,10 @@ def handle_subagent_modal_pagination(ack, body, client):
         logger.error(f"Failed to parse subagent pagination data: {e}")
         return
 
-    # Lookup investigation state
+    # Lookup investigation state: try in-memory cache, then DB
     state = _investigation_cache.get(thread_id)
+    if not state:
+        state = _load_session_from_db(thread_id)
     if not state:
         logger.warning(f"No cached state for subagent pagination: {thread_id}")
         return

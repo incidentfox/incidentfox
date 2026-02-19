@@ -1228,6 +1228,57 @@ class ConfigServiceClient:
                 response_text=response_text,
             ) from e
 
+    # =========================================================================
+    # Session Cache (for View Session persistence)
+    # =========================================================================
+
+    def save_session_state(
+        self,
+        message_ts: str,
+        state_json: dict,
+        thread_ts: Optional[str] = None,
+        org_id: Optional[str] = None,
+        team_node_id: Optional[str] = None,
+    ) -> bool:
+        """Persist session state to DB for the View Session modal."""
+        url = f"{self.base_url}/api/v1/internal/session-cache/{message_ts}"
+        payload = {
+            "state_json": state_json,
+            "thread_ts": thread_ts,
+            "org_id": org_id,
+            "team_node_id": team_node_id,
+        }
+        try:
+            response = self._session.put(
+                url,
+                json=payload,
+                headers=self._get_internal_headers(),
+                timeout=10,
+            )
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to save session state for {message_ts}: {e}")
+            return False
+
+    def get_session_state(self, message_ts: str) -> Optional[dict]:
+        """Fetch persisted session state from DB. Returns state_json dict or None."""
+        url = f"{self.base_url}/api/v1/internal/session-cache/{message_ts}"
+        try:
+            response = self._session.get(
+                url,
+                headers=self._get_internal_headers(),
+                timeout=10,
+            )
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            data = response.json()
+            return data.get("state_json")
+        except Exception as e:
+            logger.warning(f"Failed to fetch session state for {message_ts}: {e}")
+            return None
+
 
 # Global client instance
 _client: Optional[ConfigServiceClient] = None

@@ -20,6 +20,7 @@ from src.db.models import (
     OrgNode,
     PendingConfigChange,
     SecurityPolicy,
+    SlackSessionCache,
     TeamToken,
     TokenAudit,
     TokenPermission,
@@ -1466,6 +1467,75 @@ def get_feedback_stats(
         stats["by_source"][row.source][row.feedback_type] = row.count
 
     return stats
+
+
+# =============================================================================
+# Slack Session Cache Functions
+# =============================================================================
+
+
+def save_session_state(
+    session: Session,
+    *,
+    message_ts: str,
+    state_json: dict,
+    thread_ts: Optional[str] = None,
+    org_id: Optional[str] = None,
+    team_node_id: Optional[str] = None,
+) -> SlackSessionCache:
+    """Save or update a session state for the View Session modal."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    stmt = (
+        pg_insert(SlackSessionCache)
+        .values(
+            message_ts=message_ts,
+            thread_ts=thread_ts,
+            org_id=org_id,
+            team_node_id=team_node_id,
+            state_json=state_json,
+            created_at=datetime.utcnow(),
+        )
+        .on_conflict_do_update(
+            index_elements=["message_ts"],
+            set_={
+                "state_json": state_json,
+                "created_at": datetime.utcnow(),
+            },
+        )
+    )
+    session.execute(stmt)
+    session.flush()
+
+    return session.get(SlackSessionCache, message_ts)
+
+
+def get_session_state(
+    session: Session,
+    *,
+    message_ts: str,
+) -> Optional[SlackSessionCache]:
+    """Fetch a cached session state by message_ts."""
+    return session.get(SlackSessionCache, message_ts)
+
+
+def cleanup_expired_sessions(
+    session: Session,
+    *,
+    max_age_hours: int = 72,  # 3 days
+) -> int:
+    """Delete session cache entries older than max_age_hours. Returns count deleted."""
+    from datetime import timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    stmt = select(SlackSessionCache).where(SlackSessionCache.created_at < cutoff)
+    expired = list(session.execute(stmt).scalars().all())
+
+    for entry in expired:
+        session.delete(entry)
+
+    session.flush()
+    return len(expired)
 
 
 # =============================================================================
