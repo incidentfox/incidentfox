@@ -46,6 +46,8 @@ An **AI SRE** that helps root cause and propose mitigations for production on-ca
 
 **Highly customizable** — set up in minutes, and it self-improves by automatically learning and persisting your team's context.
 
+https://youtu.be/teWvgdgBqow?si=ROOxQRo9zzw_-gD7
+
 ---
 
 ## How We're Different
