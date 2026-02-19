@@ -5022,126 +5022,97 @@ def handle_api_key_submission(ack, body, client, view):
     logger.info(f"API key saved for team {team_id}")
 
 
-def _build_create_team_modal(slack_team_id, channel_id, channel_name, org_id=None):
-    """Build the create-new-team modal view."""
+
+def _build_team_setup_modal(
+    slack_team_id, channel_id, channel_name, existing_teams=None, org_id=None
+):
+    """Build the unified team setup modal with join dropdown + create input."""
+    metadata = {
+        "slack_team_id": slack_team_id,
+        "channel_id": channel_id,
+        "channel_name": channel_name,
+    }
+    if org_id:
+        metadata["org_id"] = org_id
+    private_metadata = json.dumps(metadata)
+
     default_name = (
         re.sub(r"[^a-z0-9-]", "-", channel_name.lower()).strip("-") or "new-team"
     )
-    metadata = {
-        "slack_team_id": slack_team_id,
-        "channel_id": channel_id,
-        "channel_name": channel_name,
-    }
-    if org_id:
-        metadata["org_id"] = org_id
-    private_metadata = json.dumps(metadata)
-    return {
-        "type": "modal",
-        "callback_id": "setup_team_submission",
-        "private_metadata": private_metadata,
-        "title": {"type": "plain_text", "text": "Create Team"},
-        "submit": {"type": "plain_text", "text": "Create Team"},
-        "close": {"type": "plain_text", "text": "Cancel"},
-        "blocks": [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        f"Create a dedicated team for *#{channel_name}* with its own "
-                        "integrations, agent config, and prompts.\n\n"
-                        "Messages in this channel will use the team's configuration "
-                        "instead of the workspace defaults."
-                    ),
-                },
+
+    blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"Configure team for *#{channel_name}*\n\n"
+                    "This channel currently uses the workspace default configuration."
+                ),
             },
-            {"type": "divider"},
+        },
+    ]
+
+    # "Use existing team" section — only shown when teams exist
+    if existing_teams:
+        team_options = []
+        for team in existing_teams:
+            node_id = team.get("node_id", "")
+            name = team.get("name") or node_id
+            team_options.append(
+                {
+                    "text": {"type": "plain_text", "text": name},
+                    "value": node_id,
+                }
+            )
+
+        blocks.append({"type": "divider"})
+        blocks.append(
             {
                 "type": "input",
-                "block_id": "team_name_block",
-                "label": {"type": "plain_text", "text": "Team Name"},
+                "block_id": "existing_team_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Use existing team"},
                 "element": {
-                    "type": "plain_text_input",
-                    "action_id": "team_name_input",
-                    "initial_value": default_name,
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "e.g. payments-team",
-                    },
-                    "max_length": 64,
+                    "type": "static_select",
+                    "action_id": "existing_team_select",
+                    "placeholder": {"type": "plain_text", "text": "Select a team..."},
+                    "options": team_options,
                 },
-                "hint": {
-                    "type": "plain_text",
-                    "text": "Lowercase letters, numbers, and hyphens. This becomes the team ID.",
-                },
-            },
-        ],
-    }
-
-
-def _build_team_choice_modal(slack_team_id, channel_id, channel_name, existing_teams, org_id=None):
-    """Build the team choice modal with radio buttons for existing teams + create new."""
-    metadata = {
-        "slack_team_id": slack_team_id,
-        "channel_id": channel_id,
-        "channel_name": channel_name,
-    }
-    if org_id:
-        metadata["org_id"] = org_id
-    private_metadata = json.dumps(metadata)
-
-    # Build dropdown options for existing teams
-    team_options = []
-    for team in existing_teams:
-        node_id = team.get("node_id", "")
-        name = team.get("name") or node_id
-        team_options.append(
-            {
-                "text": {"type": "plain_text", "text": name},
-                "value": f"join:{node_id}",
             }
         )
 
-    # Add "Create new team" as the last option
-    team_options.append(
-        {
-            "text": {"type": "plain_text", "text": "Create a new team"},
-            "value": "create_new",
-        }
-    )
+    # "Create new team" section
+    blocks.append({"type": "divider"})
+    create_block = {
+        "type": "input",
+        "block_id": "new_team_block",
+        "optional": bool(existing_teams),
+        "label": {"type": "plain_text", "text": "Create a new team"},
+        "element": {
+            "type": "plain_text_input",
+            "action_id": "new_team_input",
+            "placeholder": {
+                "type": "plain_text",
+                "text": f"e.g. {default_name}",
+            },
+            "max_length": 64,
+        },
+        "hint": {
+            "type": "plain_text",
+            "text": "Lowercase letters, numbers, and hyphens.",
+        },
+    }
+    blocks.append(create_block)
 
     return {
         "type": "modal",
         "callback_id": "team_setup_choice",
         "private_metadata": private_metadata,
         "title": {"type": "plain_text", "text": "Set Up Team"},
-        "submit": {"type": "plain_text", "text": "Continue"},
+        "submit": {"type": "plain_text", "text": "Submit"},
         "close": {"type": "plain_text", "text": "Cancel"},
-        "blocks": [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        f"Configure team for *#{channel_name}*\n\n"
-                        "This channel currently uses the workspace default configuration. "
-                        "Choose how to set it up:"
-                    ),
-                },
-            },
-            {"type": "divider"},
-            {
-                "type": "input",
-                "block_id": "team_choice_block",
-                "label": {"type": "plain_text", "text": "Team"},
-                "element": {
-                    "type": "static_select",
-                    "action_id": "team_choice_select",
-                    "placeholder": {"type": "plain_text", "text": "Select a team..."},
-                    "options": team_options,
-                },
-            },
-        ],
+        "blocks": blocks,
     }
 
 
@@ -5193,13 +5164,9 @@ def _open_team_setup_modal(
         t for t in cc.list_team_nodes(org_id) if t.get("node_id") != "default"
     ]
 
-    if existing_teams:
-        modal = _build_team_choice_modal(
-            slack_team_id, channel_id, channel_name, existing_teams, org_id
-        )
-    else:
-        modal = _build_create_team_modal(slack_team_id, channel_id, channel_name, org_id)
-
+    modal = _build_team_setup_modal(
+        slack_team_id, channel_id, channel_name, existing_teams or None, org_id
+    )
     client.views_open(trigger_id=trigger_id, view=modal)
 
 
@@ -5245,184 +5212,151 @@ def handle_setup_team_command(ack, body, client):
 
 @app.view("team_setup_choice")
 def handle_team_setup_choice(ack, body, client, view):
-    """Handle the team choice modal submission (join existing or create new)."""
+    """Handle the unified team setup modal (join existing or create new)."""
     private_metadata = json.loads(view.get("private_metadata", "{}"))
     slack_team_id = private_metadata.get("slack_team_id")
     channel_id = private_metadata.get("channel_id")
     channel_name = private_metadata.get("channel_name", "")
-
-    # Extract selected dropdown value
-    values = view.get("state", {}).get("values", {})
-    choice = (
-        values.get("team_choice_block", {})
-        .get("team_choice_select", {})
-        .get("selected_option", {})
-        .get("value", "")
-    )
-
-    if not choice:
-        ack(
-            response_action="errors",
-            errors={"team_choice_block": "Please select an option."},
-        )
-        return
-
     org_id = private_metadata.get("org_id")
 
-    if choice == "create_new":
-        # Switch to create-team modal
-        ack(
-            response_action="update",
-            view=_build_create_team_modal(slack_team_id, channel_id, channel_name, org_id),
-        )
-        return
+    values = view.get("state", {}).get("values", {})
 
-    # Join existing team: choice = "join:{team_node_id}"
-    if not choice.startswith("join:"):
+    # Check which option the user filled in
+    selected_team = (
+        values.get("existing_team_block", {})
+        .get("existing_team_select", {})
+        .get("selected_option", {})
+        or {}
+    ).get("value")
+
+    new_team_name = (
+        values.get("new_team_block", {})
+        .get("new_team_input", {})
+        .get("value", "")
+        or ""
+    ).strip()
+
+    # Validate: user must pick exactly one option
+    if selected_team and new_team_name:
         ack(
             response_action="errors",
-            errors={"team_choice_block": "Invalid selection."},
+            errors={
+                "new_team_block": "Choose one: select an existing team OR enter a new name, not both."
+            },
         )
         return
 
-    team_node_id = choice[len("join:") :]
+    if not selected_team and not new_team_name:
+        error_block = "existing_team_block" if "existing_team_block" in [
+            b.get("block_id") for b in view.get("blocks", [])
+        ] else "new_team_block"
+        ack(
+            response_action="errors",
+            errors={error_block: "Select an existing team or enter a name for a new one."},
+        )
+        return
 
-    try:
-        cc = get_config_client()
+    cc = get_config_client()
 
-        # Use org_id from routing lookup (passed via modal metadata)
-        if not org_id:
-            if os.environ.get("CONFIG_MODE", "").lower() == "local":
-                org_id = "local"
-            else:
-                org_id = f"slack-{slack_team_id}"
+    # Resolve org_id if not in metadata
+    if not org_id:
+        org_id, _ = _resolve_org_id(cc, slack_team_id, channel_id)
 
-        # Add channel to existing team's routing
-        cc.add_channel_to_team(org_id, team_node_id, channel_id)
+    # --- Path A: Join existing team ---
+    if selected_team:
+        team_node_id = selected_team
+        try:
+            cc.add_channel_to_team(org_id, team_node_id, channel_id)
 
-        # Trigger team-scoped onboarding scan in background
-        import threading
+            import threading
 
-        def _trigger():
-            try:
-                cc.trigger_onboarding_scan(
-                    org_id=org_id,
-                    team_node_id=team_node_id,
-                    trigger="team_created",
-                    slack_team_id=slack_team_id,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to trigger scan after team join: {e}")
+            def _trigger():
+                try:
+                    cc.trigger_onboarding_scan(
+                        org_id=org_id,
+                        team_node_id=team_node_id,
+                        trigger="team_joined",
+                        slack_team_id=slack_team_id,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to trigger scan after team join: {e}")
 
-        threading.Thread(target=_trigger, daemon=True).start()
+            threading.Thread(target=_trigger, daemon=True).start()
 
-        # Show confirmation
-        web_ui_url = os.environ.get("WEB_UI_URL", "")
-        confirm_blocks = [
-            {
-                "type": "header",
-                "text": {"type": "plain_text", "text": "Team Joined"},
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        f"*Team:* `{team_node_id}`\n"
-                        f"*Channel:* #{channel_name}\n\n"
-                        "This channel now uses the team's configuration."
-                    ),
+            web_ui_url = os.environ.get("WEB_UI_URL", "")
+            confirm_blocks = [
+                {
+                    "type": "header",
+                    "text": {"type": "plain_text", "text": "Team Joined"},
                 },
-            },
-        ]
-
-        if web_ui_url:
-            confirm_blocks.append({"type": "divider"})
-            confirm_blocks.append(
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"<{web_ui_url}/team/tools|Open Web Dashboard>",
+                        "text": (
+                            f"*Team:* `{team_node_id}`\n"
+                            f"*Channel:* #{channel_name}\n\n"
+                            "This channel now uses the team's configuration."
+                        ),
                     },
-                }
+                },
+            ]
+            if web_ui_url:
+                confirm_blocks.append({"type": "divider"})
+                confirm_blocks.append(
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"<{web_ui_url}/team/tools|Open Web Dashboard>",
+                        },
+                    }
+                )
+
+            ack(
+                response_action="update",
+                view={
+                    "type": "modal",
+                    "title": {"type": "plain_text", "text": "Team Joined"},
+                    "close": {"type": "plain_text", "text": "Done"},
+                    "blocks": confirm_blocks,
+                },
+            )
+            logger.info(
+                f"Channel {channel_id} joined team {team_node_id} in workspace {slack_team_id}"
             )
 
-        ack(
-            response_action="update",
-            view={
-                "type": "modal",
-                "title": {"type": "plain_text", "text": "Team Joined"},
-                "close": {"type": "plain_text", "text": "Done"},
-                "blocks": confirm_blocks,
-            },
-        )
+        except Exception as e:
+            logger.error(f"Failed to join team: {e}", exc_info=True)
+            ack(
+                response_action="errors",
+                errors={"existing_team_block": "Something went wrong. Please try again."},
+            )
+        return
 
-        logger.info(
-            f"Channel {channel_id} joined team {team_node_id} in workspace {slack_team_id}"
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to join team: {e}", exc_info=True)
-        ack(
-            response_action="errors",
-            errors={"team_choice_block": "Something went wrong. Please try again."},
-        )
-
-
-@app.view("setup_team_submission")
-def handle_setup_team_submission(ack, body, client, view):
-    """Handle the team creation modal submission."""
-    private_metadata = json.loads(view.get("private_metadata", "{}"))
-    slack_team_id = private_metadata.get("slack_team_id")
-    channel_id = private_metadata.get("channel_id")
-    channel_name = private_metadata.get("channel_name", "")
-
-    # Extract and validate team name
-    values = view.get("state", {}).get("values", {})
-    raw_name = (
-        values.get("team_name_block", {})
-        .get("team_name_input", {})
-        .get("value", "")
-        .strip()
-    )
-
-    # Sanitize to slug
-    team_node_id = re.sub(r"[^a-z0-9-]", "-", raw_name.lower()).strip("-")
-    team_node_id = re.sub(r"-+", "-", team_node_id)  # collapse multiple hyphens
+    # --- Path B: Create new team ---
+    team_node_id = re.sub(r"[^a-z0-9-]", "-", new_team_name.lower()).strip("-")
+    team_node_id = re.sub(r"-+", "-", team_node_id)
 
     if not team_node_id:
         ack(
             response_action="errors",
-            errors={
-                "team_name_block": "Team name must contain at least one letter or number."
-            },
+            errors={"new_team_block": "Team name must contain at least one letter or number."},
         )
         return
 
     if team_node_id == "default":
         ack(
             response_action="errors",
-            errors={
-                "team_name_block": '"default" is reserved. Choose a different name.'
-            },
+            errors={"new_team_block": '"default" is reserved. Choose a different name.'},
         )
         return
 
-    # Use org_id from routing lookup (passed via modal metadata)
-    org_id = private_metadata.get("org_id")
-
     try:
-        cc = get_config_client()
-
-        # Resolve org_id if not in metadata (backwards compat)
-        if not org_id:
-            org_id, _ = _resolve_org_id(cc, slack_team_id, channel_id)
-
         result = cc.setup_team(
             slack_team_id=slack_team_id,
             team_node_id=team_node_id,
-            team_name=raw_name,
+            team_name=new_team_name,
             channel_id=channel_id,
             org_id=org_id,
         )
@@ -5431,7 +5365,7 @@ def handle_setup_team_submission(ack, body, client, view):
             ack(
                 response_action="errors",
                 errors={
-                    "team_name_block": f'A team named "{team_node_id}" already exists. Choose a different name.'
+                    "new_team_block": f'A team named "{team_node_id}" already exists. Choose a different name.'
                 },
             )
             return
@@ -5454,7 +5388,6 @@ def handle_setup_team_submission(ack, body, client, view):
 
         threading.Thread(target=_trigger, daemon=True).start()
 
-        # Build confirmation view with the token shown once
         confirm_blocks = [
             {
                 "type": "header",
@@ -5513,7 +5446,6 @@ def handle_setup_team_submission(ack, body, client, view):
                 "blocks": confirm_blocks,
             },
         )
-
         logger.info(
             f"Created team {team_node_id} for channel {channel_id} in workspace {slack_team_id}"
         )
@@ -5522,7 +5454,7 @@ def handle_setup_team_submission(ack, body, client, view):
         logger.error(f"Failed to create team: {e}", exc_info=True)
         ack(
             response_action="errors",
-            errors={"team_name_block": "Something went wrong. Please try again."},
+            errors={"new_team_block": "Something went wrong. Please try again."},
         )
 
 
@@ -7462,7 +7394,6 @@ def register_all_handlers(bolt_app):
     )
 
     # View handlers
-    bolt_app.view("setup_team_submission")(handle_setup_team_submission)
     bolt_app.view("api_key_submission")(handle_api_key_submission)
     bolt_app.view("integrations_page")(handle_integrations_page_done)
     bolt_app.view("k8s_saas_add_cluster_submission")(
