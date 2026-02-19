@@ -1228,7 +1228,6 @@ class ConfigServiceClient:
                 response_text=response_text,
             ) from e
 
-
     # =========================================================================
     # Session Cache (for View Session persistence)
     # =========================================================================

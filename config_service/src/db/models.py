@@ -749,9 +749,7 @@ class SlackSessionCache(Base):
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
 
-    __table_args__ = (
-        Index("ix_slack_session_cache_created_at", "created_at"),
-    )
+    __table_args__ = (Index("ix_slack_session_cache_created_at", "created_at"),)
 
 
 class ConversationMapping(Base):

@@ -2837,8 +2837,6 @@ def cleanup_session_cache(
     service: str = Depends(require_internal_service),
 ):
     """Delete expired session cache entries."""
-    deleted = repository.cleanup_expired_sessions(
-        session, max_age_hours=max_age_hours
-    )
+    deleted = repository.cleanup_expired_sessions(session, max_age_hours=max_age_hours)
     session.commit()
     return {"deleted": deleted}

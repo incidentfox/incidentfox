@@ -217,6 +217,7 @@ class MessageState:
 
     def to_dict(self) -> dict:
         """Serialize to dict for DB persistence. Strips base64 image data."""
+
         def _strip_base64(items):
             if not items:
                 return items
@@ -249,11 +250,13 @@ class MessageState:
             if isinstance(t, ThoughtSection):
                 thoughts.append(t)
             elif isinstance(t, dict):
-                thoughts.append(ThoughtSection(
-                    text=t.get("text", ""),
-                    tools=t.get("tools", []),
-                    completed=t.get("completed", False),
-                ))
+                thoughts.append(
+                    ThoughtSection(
+                        text=t.get("text", ""),
+                        tools=t.get("tools", []),
+                        completed=t.get("completed", False),
+                    )
+                )
         state = cls(
             channel_id=data.get("channel_id", ""),
             message_ts=data.get("message_ts", ""),
@@ -325,7 +328,9 @@ def _cleanup_old_cache_entries():
         )
 
 
-def _persist_session_to_db(state: MessageState, org_id: str = None, team_node_id: str = None):
+def _persist_session_to_db(
+    state: MessageState, org_id: str = None, team_node_id: str = None
+):
     """Persist session state to config-service DB (fire-and-forget in background thread)."""
     import threading
 
@@ -339,7 +344,9 @@ def _persist_session_to_db(state: MessageState, org_id: str = None, team_node_id
                 org_id=org_id,
                 team_node_id=team_node_id,
             )
-            logger.info(f"Persisted session state to DB for message_ts={state.message_ts}")
+            logger.info(
+                f"Persisted session state to DB for message_ts={state.message_ts}"
+            )
         except Exception as e:
             logger.warning(f"Failed to persist session state to DB: {e}")
 
@@ -2279,7 +2286,9 @@ def _handle_mention_impl(event, say, client, context):
 
         _investigation_cache[state.message_ts] = state
         _cache_timestamps[state.message_ts] = time.time()
-        _persist_session_to_db(state, org_id=resolved_org_id, team_node_id=resolved_team_node_id)
+        _persist_session_to_db(
+            state, org_id=resolved_org_id, team_node_id=resolved_team_node_id
+        )
 
         logger.info(
             f"✅ Investigation stream completed (processed {event_count} events, final_result={'present' if state.final_result else 'missing'})"
@@ -2605,7 +2614,9 @@ def _run_auto_listen_investigation(event, client, context):
 
         _investigation_cache[state.message_ts] = state
         _cache_timestamps[state.message_ts] = time.time()
-        _persist_session_to_db(state, org_id=resolved_org_id, team_node_id=resolved_team_node_id)
+        _persist_session_to_db(
+            state, org_id=resolved_org_id, team_node_id=resolved_team_node_id
+        )
 
         if event_count == 0 and not state.error:
             state.error = "No response received from agent"
@@ -3014,7 +3025,9 @@ Use all available tools to gather context about this issue."""
 
         _investigation_cache[state.message_ts] = state
         _cache_timestamps[state.message_ts] = time.time()
-        _persist_session_to_db(state, org_id=resolved_org_id, team_node_id=resolved_team_node_id)
+        _persist_session_to_db(
+            state, org_id=resolved_org_id, team_node_id=resolved_team_node_id
+        )
 
         logger.info(
             f"✅ Auto-investigation completed for Incident.io alert (processed {event_count} events, final_result={'present' if state.final_result else 'missing'})"
@@ -3466,7 +3479,9 @@ def handle_message(event, client, context):
 
             _investigation_cache[state.message_ts] = state
             _cache_timestamps[state.message_ts] = time.time()
-            _persist_session_to_db(state, org_id=resolved_org_id, team_node_id=resolved_team_node_id)
+            _persist_session_to_db(
+                state, org_id=resolved_org_id, team_node_id=resolved_team_node_id
+            )
 
             logger.info(
                 f"✅ DM investigation completed (processed {event_count} events)"
@@ -3890,7 +3905,9 @@ Use the Coralogix tools to fetch details about this insight and gather relevant 
 
         _investigation_cache[state.message_ts] = state
         _cache_timestamps[state.message_ts] = time.time()
-        _persist_session_to_db(state, org_id=resolved_org_id, team_node_id=resolved_team_node_id)
+        _persist_session_to_db(
+            state, org_id=resolved_org_id, team_node_id=resolved_team_node_id
+        )
 
         logger.info(
             f"✅ Coralogix investigation completed (processed {event_count} events, final_result={'present' if state.final_result else 'missing'})"

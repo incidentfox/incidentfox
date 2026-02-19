@@ -1486,19 +1486,23 @@ def save_session_state(
     """Save or update a session state for the View Session modal."""
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-    stmt = pg_insert(SlackSessionCache).values(
-        message_ts=message_ts,
-        thread_ts=thread_ts,
-        org_id=org_id,
-        team_node_id=team_node_id,
-        state_json=state_json,
-        created_at=datetime.utcnow(),
-    ).on_conflict_do_update(
-        index_elements=["message_ts"],
-        set_={
-            "state_json": state_json,
-            "created_at": datetime.utcnow(),
-        },
+    stmt = (
+        pg_insert(SlackSessionCache)
+        .values(
+            message_ts=message_ts,
+            thread_ts=thread_ts,
+            org_id=org_id,
+            team_node_id=team_node_id,
+            state_json=state_json,
+            created_at=datetime.utcnow(),
+        )
+        .on_conflict_do_update(
+            index_elements=["message_ts"],
+            set_={
+                "state_json": state_json,
+                "created_at": datetime.utcnow(),
+            },
+        )
     )
     session.execute(stmt)
     session.flush()
