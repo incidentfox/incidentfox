@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img width="300" src="https://www.incidentfox.ai/public/logo.png" alt="IncidentFox">
+  <img width="300" src="/img/logo.png" alt="IncidentFox">
 </h1>
 <p align="center">
   <p align="center"><b>The open-source AI SRE platform</b>: Investigate production incidents, find root causes, and suggest fixes — automatically.</p>
