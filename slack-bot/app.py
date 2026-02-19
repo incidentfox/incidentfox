@@ -5090,20 +5090,20 @@ def _build_team_choice_modal(slack_team_id, channel_id, channel_name, existing_t
         metadata["org_id"] = org_id
     private_metadata = json.dumps(metadata)
 
-    # Build radio button options for existing teams
-    options = []
+    # Build dropdown options for existing teams
+    team_options = []
     for team in existing_teams:
         node_id = team.get("node_id", "")
         name = team.get("name") or node_id
-        options.append(
+        team_options.append(
             {
-                "text": {"type": "plain_text", "text": f'Join "{name}"'},
+                "text": {"type": "plain_text", "text": name},
                 "value": f"join:{node_id}",
             }
         )
 
     # Add "Create new team" as the last option
-    options.append(
+    team_options.append(
         {
             "text": {"type": "plain_text", "text": "Create a new team"},
             "value": "create_new",
@@ -5135,9 +5135,10 @@ def _build_team_choice_modal(slack_team_id, channel_id, channel_name, existing_t
                 "block_id": "team_choice_block",
                 "label": {"type": "plain_text", "text": "Team"},
                 "element": {
-                    "type": "radio_buttons",
+                    "type": "static_select",
                     "action_id": "team_choice_select",
-                    "options": options,
+                    "placeholder": {"type": "plain_text", "text": "Select a team..."},
+                    "options": team_options,
                 },
             },
         ],
@@ -5250,7 +5251,7 @@ def handle_team_setup_choice(ack, body, client, view):
     channel_id = private_metadata.get("channel_id")
     channel_name = private_metadata.get("channel_name", "")
 
-    # Extract selected radio button value
+    # Extract selected dropdown value
     values = view.get("state", {}).get("values", {})
     choice = (
         values.get("team_choice_block", {})
