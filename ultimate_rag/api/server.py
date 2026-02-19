@@ -1197,15 +1197,17 @@ class UltimateRAGServer:
             try:
                 # Step 1: Extract text from all documents
                 texts = []
+                chunk_doc_indices = []  # Track which document each chunk came from
                 all_entities = []
                 all_relationships = []
 
-                for doc in request.documents:
+                for doc_idx, doc in enumerate(request.documents):
                     try:
                         # For hierarchy building, we want the raw text
                         # (RAPTOR will do its own chunking)
                         if request.build_hierarchy:
                             texts.append(doc.content)
+                            chunk_doc_indices.append(doc_idx)
                             # Still extract entities/relationships for the graph
                             result = self.processor.process_content(
                                 content=doc.content,
@@ -1223,7 +1225,9 @@ class UltimateRAGServer:
                                 content_type=self._get_content_type(doc.content_type),
                                 extra_metadata=doc.metadata,
                             )
-                            texts.extend([chunk.text for chunk in result.chunks])
+                            for chunk in result.chunks:
+                                texts.append(chunk.text)
+                                chunk_doc_indices.append(doc_idx)
                             all_entities.extend(result.entities_found)
                             all_relationships.extend(result.relationships_found)
                             warnings.extend(result.warnings)
@@ -1358,11 +1362,24 @@ class UltimateRAGServer:
                         authority_score=0.7,
                     )
 
+                    # Determine knowledge_type from source document metadata
+                    doc_knowledge_type = KnowledgeType.FACTUAL
+                    if i < len(chunk_doc_indices):
+                        doc_idx = chunk_doc_indices[i]
+                        if doc_idx < len(request.documents):
+                            doc_meta = request.documents[doc_idx].metadata or {}
+                            kt_str = doc_meta.get("knowledge_type")
+                            if kt_str:
+                                try:
+                                    doc_knowledge_type = KnowledgeType.from_string(kt_str)
+                                except (ValueError, KeyError):
+                                    pass
+
                     node = KnowledgeNode(
                         text=text,
                         index=new_index,
                         layer=0,
-                        knowledge_type=KnowledgeType.FACTUAL,
+                        knowledge_type=doc_knowledge_type,
                         importance=importance,
                         tree_id=tree.tree_id,
                     )
