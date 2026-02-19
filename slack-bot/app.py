@@ -7043,28 +7043,31 @@ if __name__ == "__main__":
     logger.info("Starting...")
 
     # Validate required Slack credentials
-    missing_tokens = []
-    if not os.environ.get("SLACK_BOT_TOKEN"):
-        missing_tokens.append("SLACK_BOT_TOKEN")
-    if SLACK_APP_MODE == "socket" and not os.environ.get("SLACK_APP_TOKEN"):
-        missing_tokens.append("SLACK_APP_TOKEN")
+    # OAuth mode (production) needs SLACK_CLIENT_ID + SLACK_CLIENT_SECRET (already validated at module level)
+    # Single-workspace mode (dev) needs SLACK_BOT_TOKEN
+    if not oauth_enabled:
+        missing_tokens = []
+        if not os.environ.get("SLACK_BOT_TOKEN"):
+            missing_tokens.append("SLACK_BOT_TOKEN")
+        if SLACK_APP_MODE == "socket" and not os.environ.get("SLACK_APP_TOKEN"):
+            missing_tokens.append("SLACK_APP_TOKEN")
 
-    if missing_tokens:
-        logger.warning("=" * 70)
-        logger.warning(
-            "⚠️  Slack credentials not configured - slack-bot will not start"
-        )
-        logger.warning("=" * 70)
-        logger.warning("")
-        logger.warning(f"Missing environment variables: {', '.join(missing_tokens)}")
-        logger.warning("")
-        logger.warning("To enable Slack integration, add these to your .env file:")
-        logger.warning("  SLACK_BOT_TOKEN=xoxb-your-bot-token")
-        logger.warning("  SLACK_APP_TOKEN=xapp-your-app-token  (for Socket Mode)")
-        logger.warning("")
-        logger.warning("Then restart with: docker compose restart slack-bot")
-        logger.warning("=" * 70)
-        exit(0)  # Exit gracefully (not an error)
+        if missing_tokens:
+            logger.warning("=" * 70)
+            logger.warning(
+                "⚠️  Slack credentials not configured - slack-bot will not start"
+            )
+            logger.warning("=" * 70)
+            logger.warning("")
+            logger.warning(f"Missing environment variables: {', '.join(missing_tokens)}")
+            logger.warning("")
+            logger.warning("To enable Slack integration, add these to your .env file:")
+            logger.warning("  SLACK_BOT_TOKEN=xoxb-your-bot-token")
+            logger.warning("  SLACK_APP_TOKEN=xapp-your-app-token  (for Socket Mode)")
+            logger.warning("")
+            logger.warning("Then restart with: docker compose restart slack-bot")
+            logger.warning("=" * 70)
+            exit(0)  # Exit gracefully (not an error)
 
     if SLACK_APP_MODE == "http":
         # Production: HTTP mode with Flask

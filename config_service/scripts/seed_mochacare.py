@@ -70,6 +70,16 @@ Infrastructure: Vercel (serverless). Key signals: error logs, agent failure patt
 3. **Latency Degradation** — API response times increasing beyond normal ranges.
 4. **Service Health** — Overall system availability and endpoint health.
 
+## AMPLITUDE EVENT NAMES
+
+MochaCare tracks these events in Amplitude (names are case-sensitive, use exactly as shown):
+- `Agent Started` — fired when an agent invocation begins
+- `Agent Completed` — fired when an agent finishes successfully
+- `Agent Failed` — fired when an agent errors/crashes
+- `API Error` — fired on 4xx/5xx API responses
+
+Key properties: agent_id, user_id, duration_ms, error_type, error_message, status_code
+
 ## FOR STATUS REPORTS
 
 When generating a status report, follow this structure:
@@ -77,10 +87,13 @@ When generating a status report, follow this structure:
 ### 1. Check Grafana dashboards
 Use the Grafana skill to query dashboards and panels for the reporting period.
 
-### 2. Check recent logs
+### 2. Check Amplitude for agent events
+Use the Amplitude skill to query the events listed above. Focus on `Agent Failed` and `API Error` counts.
+
+### 3. Check recent logs
 Look for error patterns, new error types, and frequency changes.
 
-### 3. Generate report
+### 4. Generate report
 
 Format your report as:
 

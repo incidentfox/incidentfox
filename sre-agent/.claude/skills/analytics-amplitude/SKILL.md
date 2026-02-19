@@ -47,7 +47,7 @@ python .claude/skills/analytics-amplitude/scripts/query_events.py \
 **Arguments:**
 - `--event` (required): Event name exactly as tracked
 - `--start` / `--end` (required): Date range (YYYYMMDD or YYYY-MM-DD)
-- `--interval`: `realtime`, `hourly`, `daily` (default: realtime)
+- `--interval`: `realtime`, `daily`, `weekly`, `monthly` (default: realtime). Note: hourly is not available on all Amplitude plans.
 - `--metric`: `uniques`, `totals`, `avg`, `pct_dau` (default: uniques)
 - `--group-by`: Event property to segment by
 - `--filters`: JSON array of property filters

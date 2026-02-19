@@ -30,7 +30,7 @@ def main():
     parser.add_argument(
         "--interval",
         default="-300000",
-        help="Interval: -300000 (realtime), 3600000 (hourly), 86400000 (daily), or use 'hourly'/'daily'/'realtime'",
+        help="Interval: -300000 (realtime), 1 (daily), 7 (weekly), 30 (monthly), or use 'daily'/'weekly'/'realtime'",
     )
     parser.add_argument(
         "--group-by", help="Group by event property (e.g., 'platform', 'country')"
@@ -51,8 +51,8 @@ def main():
     start = args.start.replace("-", "")
     end = args.end.replace("-", "")
 
-    # Normalize interval
-    interval_map = {"realtime": "-300000", "hourly": "3600000", "daily": "86400000"}
+    # Normalize interval (Amplitude V2 API values)
+    interval_map = {"realtime": "-300000", "daily": "1", "weekly": "7", "monthly": "30"}
     interval = interval_map.get(args.interval, args.interval)
 
     # Build event spec
@@ -63,7 +63,7 @@ def main():
         event["group_by"] = [{"type": "event", "value": args.group_by}]
 
     params = {
-        "e": json.dumps(event),
+        "e": json.dumps(event, separators=(",", ":")),
         "start": start,
         "end": end,
         "i": interval,
