@@ -5079,7 +5079,9 @@ def _build_create_team_modal(slack_team_id, channel_id, channel_name, org_id=Non
     }
 
 
-def _build_team_choice_modal(slack_team_id, channel_id, channel_name, existing_teams, org_id=None):
+def _build_team_choice_modal(
+    slack_team_id, channel_id, channel_name, existing_teams, org_id=None
+):
     """Build the team choice modal with radio buttons for existing teams + create new."""
     metadata = {
         "slack_team_id": slack_team_id,
@@ -5160,7 +5162,6 @@ def _resolve_org_id(cc, slack_team_id, channel_id=None):
     return f"slack-{slack_team_id}", None
 
 
-
 def _open_team_setup_modal(
     client, trigger_id, slack_team_id, channel_id, channel_name, user_id=None
 ):
@@ -5198,7 +5199,9 @@ def _open_team_setup_modal(
             slack_team_id, channel_id, channel_name, existing_teams, org_id
         )
     else:
-        modal = _build_create_team_modal(slack_team_id, channel_id, channel_name, org_id)
+        modal = _build_create_team_modal(
+            slack_team_id, channel_id, channel_name, org_id
+        )
 
     client.views_open(trigger_id=trigger_id, view=modal)
 
@@ -5273,7 +5276,9 @@ def handle_team_setup_choice(ack, body, client, view):
         # Switch to create-team modal
         ack(
             response_action="update",
-            view=_build_create_team_modal(slack_team_id, channel_id, channel_name, org_id),
+            view=_build_create_team_modal(
+                slack_team_id, channel_id, channel_name, org_id
+            ),
         )
         return
 
