@@ -2779,3 +2779,66 @@ def delete_github_installation(
         raise HTTPException(status_code=404, detail="Installation not found")
 
     return {"deleted": True, "installation_id": installation_id}
+
+
+# =============================================================================
+# Slack Session Cache
+# =============================================================================
+
+
+class SessionCacheSaveRequest(BaseModel):
+    state_json: Dict[str, Any]
+    thread_ts: Optional[str] = None
+    org_id: Optional[str] = None
+    team_node_id: Optional[str] = None
+
+
+@router.put("/session-cache/{message_ts}")
+def save_session_cache(
+    message_ts: str,
+    request: SessionCacheSaveRequest,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """Save session state for the Slack View Session modal."""
+    entry = repository.save_session_state(
+        session,
+        message_ts=message_ts,
+        state_json=request.state_json,
+        thread_ts=request.thread_ts,
+        org_id=request.org_id,
+        team_node_id=request.team_node_id,
+    )
+    session.commit()
+    return {"message_ts": entry.message_ts, "saved": True}
+
+
+@router.get("/session-cache/{message_ts}")
+def get_session_cache(
+    message_ts: str,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """Fetch session state for the Slack View Session modal."""
+    entry = repository.get_session_state(session, message_ts=message_ts)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "message_ts": entry.message_ts,
+        "state_json": entry.state_json,
+        "created_at": entry.created_at.isoformat() if entry.created_at else None,
+    }
+
+
+@router.delete("/session-cache/expired")
+def cleanup_session_cache(
+    max_age_hours: int = 72,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """Delete expired session cache entries."""
+    deleted = repository.cleanup_expired_sessions(
+        session, max_age_hours=max_age_hours
+    )
+    session.commit()
+    return {"deleted": deleted}
