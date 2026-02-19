@@ -27,6 +27,7 @@ from typing import Dict, List, Optional
 import httpx
 from dotenv import load_dotenv
 from events import error_event, result_event
+from agent import InteractiveAgentSession
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -167,8 +168,6 @@ async def agent_background_task(thread_id: str):
     Processes messages from queue and sends responses back.
     """
     import json
-
-    from agent import InteractiveAgentSession
 
     logger.info(f"[BG] Starting background agent task for thread {thread_id}")
 
