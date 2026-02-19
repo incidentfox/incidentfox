@@ -10,7 +10,7 @@ version: '3.8'
 #
 # Trace dashboard: http://localhost:3000  (admin@localhost / admin-local-dev)
 #   All agent traces go to local Langfuse by default — zero config needed.
-#   To use Langfuse Cloud or Laminar instead, override in .env (see .env.example).
+#   To use Langfuse Cloud instead, set LANGFUSE_HOST/PUBLIC_KEY/SECRET_KEY in .env.
 #
 # Note: slack-bot requires SLACK_BOT_TOKEN and SLACK_APP_TOKEN in .env
 #       If not configured, it will exit gracefully with a warning message
@@ -321,7 +321,7 @@ services:
       # Langfuse tracing — defaults to local instance; override in .env for cloud
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-lf-pk-local-dev}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-lf-sk-local-dev}
-      - LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL:-http://langfuse-web:3000}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse-web:3000}
     depends_on:
       envoy:
         condition: service_started

@@ -366,11 +366,7 @@ def init_observability() -> None:
         try:
             from langfuse import Langfuse
 
-            # LANGFUSE_BASE_URL is used in local dev (docker-compose sets it to
-            # http://langfuse-web:3000). Fall back to LANGFUSE_HOST for cloud deployments.
-            langfuse_host = os.getenv("LANGFUSE_BASE_URL") or os.getenv(
-                "LANGFUSE_HOST", "https://us.cloud.langfuse.com"
-            )
+            langfuse_host = os.getenv("LANGFUSE_HOST", "https://us.cloud.langfuse.com")
             _langfuse_client = Langfuse(
                 public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
                 secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
