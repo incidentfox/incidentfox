@@ -106,9 +106,9 @@ That's it. IncidentFox starts Postgres, config-service, sre-agent, and the web c
 
 ## Open-source vs. paid
 
-This repo is available under the [Apache License 2.0](LICENSE), with the exception of the `ee` directory which contains premium enterprise features requiring an IncidentFox license.
+This repo is available under the [Apache License 2.0](LICENSE), with the exception of the production security layer (sandbox isolation, credential proxy) which is under the [Business Source License 1.1](LICENSE-ENTERPRISE). See [LICENSING.md](LICENSING.md) for details.
 
-The open-source agent is **fully featured** — same AI, same integrations, same intelligence. Enterprise adds management features for organizations with multiple teams.
+The open-source agent is **fully featured** — same AI, same integrations, same intelligence. Enterprise adds the production security layer and management features for organizations with multiple teams.
 
 | Feature | Open Source | Enterprise |
 |---------|:----------:|:----------:|

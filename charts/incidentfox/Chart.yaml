@@ -19,4 +19,4 @@ maintainers:
   - name: IncidentFox
     url: https://github.com/incidentfox
 annotations:
-  artifacthub.io/license: "proprietary"
+  artifacthub.io/license: "Apache-2.0"
