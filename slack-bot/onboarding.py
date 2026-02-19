@@ -1904,6 +1904,50 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "icon_fallback": ":snowflake:",
         "description": "Query data warehouse and analytics.",
     },
+    {
+        "id": "amplitude",
+        "name": "Amplitude",
+        "category": "observability",
+        "status": "active",
+        "icon": ":bar_chart:",
+        "icon_fallback": ":chart:",
+        "description": "Query product analytics events, user activity, and funnels.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into Amplitude\n"
+            "2. Go to *Settings* > *Projects* > select your project\n"
+            "3. Go to *General* tab, scroll to *API Credentials*\n"
+            "4. Copy the *API Key* and *Secret Key*\n"
+            "5. Paste both below"
+        ),
+        "docs_url": "https://www.docs.developers.amplitude.com/analytics/apis/",
+        "fields": [
+            {
+                "id": "api_key",
+                "name": "API Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "your-amplitude-api-key",
+                "hint": "Found in Amplitude project settings under API Credentials",
+            },
+            {
+                "id": "secret_key",
+                "name": "Secret Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "your-amplitude-secret-key",
+                "hint": "Found alongside the API Key in project settings",
+            },
+            {
+                "id": "region",
+                "name": "Region",
+                "type": "string",
+                "required": False,
+                "placeholder": "US (default) or EU",
+                "hint": "US for amplitude.com, EU for analytics.eu.amplitude.com",
+            },
+        ],
+    },
 ]
 
 

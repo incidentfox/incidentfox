@@ -93,6 +93,9 @@ class ClaimRequest(BaseModel):
     team_token: Optional[str] = (
         None  # Config service token (for dynamic config loading)
     )
+    configured_integrations: Optional[str] = (
+        None  # JSON list of configured integrations (non-sensitive metadata)
+    )
 
 
 class ExecuteResponse(BaseModel):
@@ -173,11 +176,14 @@ async def claim_sandbox(request: ClaimRequest):
     )  # For skill scripts hitting credential-resolver directly
     if request.team_token:
         os.environ["TEAM_TOKEN"] = request.team_token
+    if request.configured_integrations:
+        os.environ["CONFIGURED_INTEGRATIONS"] = request.configured_integrations
 
     print(
         f"🔑 [CLAIM] Sandbox claimed for thread {request.thread_id} "
         f"(tenant={request.tenant_id}, team={request.team_id}, "
-        f"team_token={'yes' if request.team_token else 'no'})"
+        f"team_token={'yes' if request.team_token else 'no'}, "
+        f"integrations={request.configured_integrations or '[]'})"
     )
 
     return {

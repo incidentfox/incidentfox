@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
 from contextlib import asynccontextmanager
@@ -312,7 +313,18 @@ def create_app() -> FastAPI:
                 reason="TEAMS_APP_ID or TEAMS_APP_PASSWORD not set",
             )
 
+        # Start scheduled jobs executor
+        from incidentfox_orchestrator.scheduler import scheduler_loop
+
+        scheduler_task = asyncio.create_task(scheduler_loop(app_))
+
         yield
+
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
 
     app = FastAPI(title="IncidentFox Orchestrator", version="0.1.0", lifespan=lifespan)
 

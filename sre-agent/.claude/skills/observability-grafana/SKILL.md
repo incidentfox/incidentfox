@@ -1,6 +1,6 @@
 ---
 name: grafana-dashboards
-description: Grafana dashboard and metrics analysis. Use when querying dashboards, panels, Prometheus metrics via Grafana, checking datasources, or reviewing alerts.
+description: Grafana dashboard and metrics analysis. Use when querying dashboards, panels, Prometheus metrics via Grafana, checking datasources, reviewing alerts, or creating dashboards from templates.
 allowed-tools: Bash(python *)
 ---
 
@@ -47,6 +47,35 @@ python .claude/skills/observability-grafana/scripts/list_datasources.py
 ```bash
 python .claude/skills/observability-grafana/scripts/get_alerts.py
 ```
+
+### create_dashboard.py - Create Dashboard from Template
+```bash
+python .claude/skills/observability-grafana/scripts/create_dashboard.py \
+  --title "My Dashboard" \
+  --template .claude/skills/observability-grafana/templates/vercel-overview.json
+
+# With folder:
+python .claude/skills/observability-grafana/scripts/create_dashboard.py \
+  --title "My Dashboard" \
+  --template .claude/skills/observability-grafana/templates/vercel-overview.json \
+  --folder-uid FOLDER_UID
+
+# Overwrite existing:
+python .claude/skills/observability-grafana/scripts/create_dashboard.py \
+  --title "My Dashboard" \
+  --template .claude/skills/observability-grafana/templates/vercel-overview.json \
+  --overwrite
+```
+
+---
+
+## Dashboard Templates
+
+Pre-built templates are in `.claude/skills/observability-grafana/templates/`:
+
+| Template | Description |
+|----------|-------------|
+| `vercel-overview.json` | 4-panel Vercel monitoring: error count, error rate, log stream, request summary |
 
 ---
 
