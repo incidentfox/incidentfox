@@ -378,7 +378,9 @@ def init_observability() -> None:
             )
             _observability_initialized = True
             if langfuse_host == "http://langfuse-web:3000":
-                print("[OBSERVABILITY] Langfuse traces: http://localhost:3000  (admin@localhost / admin-local-dev)")
+                print(
+                    "[OBSERVABILITY] Langfuse traces: http://localhost:3000  (admin@localhost / admin-local-dev)"
+                )
             else:
                 print(f"[OBSERVABILITY] Langfuse initialized (host: {langfuse_host})")
         except Exception as e:

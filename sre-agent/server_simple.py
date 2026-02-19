@@ -25,8 +25,8 @@ import uuid
 from typing import Dict, List, Optional
 
 import httpx
-from dotenv import load_dotenv
 from agent import InteractiveAgentSession
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
