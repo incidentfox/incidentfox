@@ -309,6 +309,7 @@ class ConfigServiceClient:
         team_node_id: str,
         team_name: str,
         channel_id: str,
+        org_id: str = None,
     ) -> Dict[str, Any]:
         """Create a team node, mint a token, and wire a channel to it.
 
@@ -317,6 +318,7 @@ class ConfigServiceClient:
             team_node_id: Desired team node ID (slug)
             team_name: Human-readable team name
             channel_id: Slack channel ID to route to this team
+            org_id: Resolved org ID. If None, derived from slack_team_id.
 
         Returns:
             Dict with team_node_id, token, already_existed.
@@ -324,10 +326,11 @@ class ConfigServiceClient:
         Raises:
             requests.exceptions.RequestException on network/server errors.
         """
-        if CONFIG_MODE == "local":
-            org_id = "local"
-        else:
-            org_id = f"slack-{slack_team_id}"
+        if not org_id:
+            if CONFIG_MODE == "local":
+                org_id = "local"
+            else:
+                org_id = f"slack-{slack_team_id}"
 
         # Create team node (idempotent — returns exists: True if duplicate)
         create_result = self._create_team_node(org_id, team_node_id, team_name)
@@ -453,6 +456,7 @@ class ConfigServiceClient:
                 return {
                     "org_id": result["org_id"],
                     "team_node_id": result["team_node_id"],
+                    "matched_by": result.get("matched_by"),
                 }
 
             logger.debug(

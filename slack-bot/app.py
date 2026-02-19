@@ -5030,18 +5030,19 @@ def handle_api_key_submission(ack, body, client, view):
     logger.info(f"API key saved for team {team_id}")
 
 
-def _build_create_team_modal(slack_team_id, channel_id, channel_name):
+def _build_create_team_modal(slack_team_id, channel_id, channel_name, org_id=None):
     """Build the create-new-team modal view."""
     default_name = (
         re.sub(r"[^a-z0-9-]", "-", channel_name.lower()).strip("-") or "new-team"
     )
-    private_metadata = json.dumps(
-        {
-            "slack_team_id": slack_team_id,
-            "channel_id": channel_id,
-            "channel_name": channel_name,
-        }
-    )
+    metadata = {
+        "slack_team_id": slack_team_id,
+        "channel_id": channel_id,
+        "channel_name": channel_name,
+    }
+    if org_id:
+        metadata["org_id"] = org_id
+    private_metadata = json.dumps(metadata)
     return {
         "type": "modal",
         "callback_id": "setup_team_submission",
@@ -5086,15 +5087,16 @@ def _build_create_team_modal(slack_team_id, channel_id, channel_name):
     }
 
 
-def _build_team_choice_modal(slack_team_id, channel_id, channel_name, existing_teams):
+def _build_team_choice_modal(slack_team_id, channel_id, channel_name, existing_teams, org_id=None):
     """Build the team choice modal with radio buttons for existing teams + create new."""
-    private_metadata = json.dumps(
-        {
-            "slack_team_id": slack_team_id,
-            "channel_id": channel_id,
-            "channel_name": channel_name,
-        }
-    )
+    metadata = {
+        "slack_team_id": slack_team_id,
+        "channel_id": channel_id,
+        "channel_name": channel_name,
+    }
+    if org_id:
+        metadata["org_id"] = org_id
+    private_metadata = json.dumps(metadata)
 
     # Build radio button options for existing teams
     options = []
@@ -5150,6 +5152,21 @@ def _build_team_choice_modal(slack_team_id, channel_id, channel_name, existing_t
     }
 
 
+def _resolve_org_id(cc, slack_team_id, channel_id=None):
+    """Resolve org_id for a Slack workspace via routing lookup.
+
+    Tries the routing table first (matches slack_workspace_id in team configs).
+    Falls back to the convention-based slack-{workspace_id} format.
+    """
+    if os.environ.get("CONFIG_MODE", "").lower() == "local":
+        return "local", None
+
+    routing = cc.lookup_routing(channel_id or "", workspace_id=slack_team_id)
+    if routing:
+        return routing["org_id"], routing
+    return f"slack-{slack_team_id}", None
+
+
 def _open_team_setup_modal(
     client, trigger_id, slack_team_id, channel_id, channel_name, user_id=None
 ):
@@ -5160,9 +5177,11 @@ def _open_team_setup_modal(
     """
     cc = get_config_client()
 
+    # Resolve org_id via routing lookup (finds the real org, e.g. "incidentfox-demo")
+    org_id, routing = _resolve_org_id(cc, slack_team_id, channel_id)
+
     # Check if this channel is already routed to a non-default team
-    routing = cc.lookup_routing(channel_id, workspace_id=slack_team_id)
-    if routing and routing.get("found"):
+    if routing:
         team_node_id = routing.get("team_node_id", "default")
         matched_by = routing.get("matched_by", "")
 
@@ -5175,12 +5194,6 @@ def _open_team_setup_modal(
                 client.chat_postEphemeral(channel=channel_id, user=user_id, text=msg)
             return
 
-    # Determine org_id
-    if os.environ.get("CONFIG_MODE", "").lower() == "local":
-        org_id = "local"
-    else:
-        org_id = f"slack-{slack_team_id}"
-
     # Check for existing non-default teams
     existing_teams = [
         t for t in cc.list_team_nodes(org_id) if t.get("node_id") != "default"
@@ -5188,10 +5201,10 @@ def _open_team_setup_modal(
 
     if existing_teams:
         modal = _build_team_choice_modal(
-            slack_team_id, channel_id, channel_name, existing_teams
+            slack_team_id, channel_id, channel_name, existing_teams, org_id
         )
     else:
-        modal = _build_create_team_modal(slack_team_id, channel_id, channel_name)
+        modal = _build_create_team_modal(slack_team_id, channel_id, channel_name, org_id)
 
     client.views_open(trigger_id=trigger_id, view=modal)
 
@@ -5260,11 +5273,13 @@ def handle_team_setup_choice(ack, body, client, view):
         )
         return
 
+    org_id = private_metadata.get("org_id")
+
     if choice == "create_new":
         # Switch to create-team modal
         ack(
             response_action="update",
-            view=_build_create_team_modal(slack_team_id, channel_id, channel_name),
+            view=_build_create_team_modal(slack_team_id, channel_id, channel_name, org_id),
         )
         return
 
@@ -5281,10 +5296,12 @@ def handle_team_setup_choice(ack, body, client, view):
     try:
         cc = get_config_client()
 
-        if os.environ.get("CONFIG_MODE", "").lower() == "local":
-            org_id = "local"
-        else:
-            org_id = f"slack-{slack_team_id}"
+        # Use org_id from routing lookup (passed via modal metadata)
+        if not org_id:
+            if os.environ.get("CONFIG_MODE", "").lower() == "local":
+                org_id = "local"
+            else:
+                org_id = f"slack-{slack_team_id}"
 
         # Add channel to existing team's routing
         cc.add_channel_to_team(org_id, team_node_id, channel_id)
@@ -5398,13 +5415,22 @@ def handle_setup_team_submission(ack, body, client, view):
         )
         return
 
+    # Use org_id from routing lookup (passed via modal metadata)
+    org_id = private_metadata.get("org_id")
+
     try:
         cc = get_config_client()
+
+        # Resolve org_id if not in metadata (backwards compat)
+        if not org_id:
+            org_id, _ = _resolve_org_id(cc, slack_team_id, channel_id)
+
         result = cc.setup_team(
             slack_team_id=slack_team_id,
             team_node_id=team_node_id,
             team_name=raw_name,
             channel_id=channel_id,
+            org_id=org_id,
         )
 
         if result.get("already_existed"):
@@ -5418,12 +5444,6 @@ def handle_setup_team_submission(ack, body, client, view):
 
         token = result.get("token", "")
         web_ui_url = os.environ.get("WEB_UI_URL", "")
-
-        # Trigger team-scoped onboarding scan in background
-        if os.environ.get("CONFIG_MODE", "").lower() == "local":
-            org_id = "local"
-        else:
-            org_id = f"slack-{slack_team_id}"
 
         import threading
 
