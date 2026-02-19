@@ -14,7 +14,15 @@
         "bot_user": {
             "display_name": "IncidentFox",
             "always_online": true
-        }
+        },
+        "slash_commands": [
+            {
+                "command": "/setup-team",
+                "description": "Create a team for this channel with its own configuration",
+                "usage_hint": "[team-name]",
+                "should_escape": false
+            }
+        ]
     },
     "oauth_config": {
         "redirect_urls": [

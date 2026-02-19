@@ -4902,6 +4902,230 @@ def handle_api_key_submission(ack, body, client, view):
     logger.info(f"API key saved for team {team_id}")
 
 
+@app.command("/setup-team")
+def handle_setup_team_command(ack, body, client):
+    """Open a modal to create a dedicated team for this channel."""
+    ack()
+
+    slack_team_id = body.get("team_id")
+    channel_id = body.get("channel_id")
+    channel_name = body.get("channel_name", "")
+    user_id = body.get("user_id")
+
+    if not slack_team_id or not channel_id:
+        logger.error("Missing team_id or channel_id in /setup-team command")
+        return
+
+    try:
+        cc = get_config_client()
+
+        # Check if this channel is already routed to a non-default team
+        routing = cc.lookup_routing(channel_id, workspace_id=slack_team_id)
+        if routing and routing.get("found"):
+            team_node_id = routing.get("team_node_id", "default")
+            matched_by = routing.get("matched_by", "")
+
+            if team_node_id != "default" and matched_by == "slack_channel_id":
+                web_ui_url = os.environ.get("WEB_UI_URL", "")
+                msg = f"This channel is already configured as team *{team_node_id}*."
+                if web_ui_url:
+                    msg += f"\nConfigure it at <{web_ui_url}/team/tools|Web Dashboard>."
+                client.chat_postEphemeral(
+                    channel=channel_id, user=user_id, text=msg
+                )
+                return
+
+        # Sanitize channel name to use as default team name
+        default_name = re.sub(r"[^a-z0-9-]", "-", channel_name.lower()).strip("-") or "new-team"
+
+        private_metadata = json.dumps({
+            "slack_team_id": slack_team_id,
+            "channel_id": channel_id,
+            "channel_name": channel_name,
+        })
+
+        modal = {
+            "type": "modal",
+            "callback_id": "setup_team_submission",
+            "private_metadata": private_metadata,
+            "title": {"type": "plain_text", "text": "Create Team"},
+            "submit": {"type": "plain_text", "text": "Create Team"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            f"Create a dedicated team for *#{channel_name}* with its own "
+                            "integrations, agent config, and prompts.\n\n"
+                            "Messages in this channel will use the team's configuration "
+                            "instead of the workspace defaults."
+                        ),
+                    },
+                },
+                {"type": "divider"},
+                {
+                    "type": "input",
+                    "block_id": "team_name_block",
+                    "label": {"type": "plain_text", "text": "Team Name"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "team_name_input",
+                        "initial_value": default_name,
+                        "placeholder": {"type": "plain_text", "text": "e.g. payments-team"},
+                        "max_length": 64,
+                    },
+                    "hint": {
+                        "type": "plain_text",
+                        "text": "Lowercase letters, numbers, and hyphens. This becomes the team ID.",
+                    },
+                },
+            ],
+        }
+
+        client.views_open(trigger_id=body["trigger_id"], view=modal)
+        logger.info(f"Opened /setup-team modal for channel {channel_id} in workspace {slack_team_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to open /setup-team modal: {e}", exc_info=True)
+        if user_id and channel_id:
+            try:
+                client.chat_postEphemeral(
+                    channel=channel_id,
+                    user=user_id,
+                    text=":warning: Failed to open team setup. Please try again.",
+                )
+            except Exception:
+                pass
+
+
+@app.view("setup_team_submission")
+def handle_setup_team_submission(ack, body, client, view):
+    """Handle the team creation modal submission."""
+    private_metadata = json.loads(view.get("private_metadata", "{}"))
+    slack_team_id = private_metadata.get("slack_team_id")
+    channel_id = private_metadata.get("channel_id")
+    channel_name = private_metadata.get("channel_name", "")
+
+    # Extract and validate team name
+    values = view.get("state", {}).get("values", {})
+    raw_name = (
+        values.get("team_name_block", {})
+        .get("team_name_input", {})
+        .get("value", "")
+        .strip()
+    )
+
+    # Sanitize to slug
+    team_node_id = re.sub(r"[^a-z0-9-]", "-", raw_name.lower()).strip("-")
+    team_node_id = re.sub(r"-+", "-", team_node_id)  # collapse multiple hyphens
+
+    if not team_node_id:
+        ack(
+            response_action="errors",
+            errors={"team_name_block": "Team name must contain at least one letter or number."},
+        )
+        return
+
+    if team_node_id == "default":
+        ack(
+            response_action="errors",
+            errors={"team_name_block": "\"default\" is reserved. Choose a different name."},
+        )
+        return
+
+    try:
+        cc = get_config_client()
+        result = cc.setup_team(
+            slack_team_id=slack_team_id,
+            team_node_id=team_node_id,
+            team_name=raw_name,
+            channel_id=channel_id,
+        )
+
+        if result.get("already_existed"):
+            ack(
+                response_action="errors",
+                errors={"team_name_block": f"A team named \"{team_node_id}\" already exists. Choose a different name."},
+            )
+            return
+
+        token = result.get("token", "")
+        web_ui_url = os.environ.get("WEB_UI_URL", "")
+
+        # Build confirmation view with the token shown once
+        confirm_blocks = [
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": "Team Created"},
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*Team:* `{team_node_id}`\n"
+                        f"*Channel:* #{channel_name}\n\n"
+                        "This channel now uses its own team configuration."
+                    ),
+                },
+            },
+            {"type": "divider"},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        "*Save this token now — you will not see it again.*\n\n"
+                        "Use it to sign in to the web dashboard where you can configure "
+                        "this team's integrations, agents, and prompts."
+                    ),
+                },
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"```{token}```",
+                },
+            },
+        ]
+
+        if web_ui_url:
+            confirm_blocks.append({"type": "divider"})
+            confirm_blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"<{web_ui_url}/team/tools|Open Web Dashboard>",
+                    },
+                }
+            )
+
+        ack(
+            response_action="update",
+            view={
+                "type": "modal",
+                "title": {"type": "plain_text", "text": "Team Created"},
+                "close": {"type": "plain_text", "text": "Done"},
+                "blocks": confirm_blocks,
+            },
+        )
+
+        logger.info(
+            f"Created team {team_node_id} for channel {channel_id} in workspace {slack_team_id}"
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to create team: {e}", exc_info=True)
+        ack(
+            response_action="errors",
+            errors={"team_name_block": "Something went wrong. Please try again."},
+        )
+
+
 @app.action("open_setup_wizard")
 def handle_open_setup_wizard(ack, body, client):
     """Open the setup wizard modal (goes directly to integrations page)."""
@@ -6735,6 +6959,9 @@ def register_all_handlers(bolt_app):
     Bolt App instances (one per white-label Slack app). The handler
     functions are defined above as module-level functions.
     """
+    # Command handlers
+    bolt_app.command("/setup-team")(handle_setup_team_command)
+
     # Event handlers
     bolt_app.event("app_mention")(handle_mention)
     bolt_app.event("message")(handle_message)
@@ -6790,6 +7017,7 @@ def register_all_handlers(bolt_app):
     )
 
     # View handlers
+    bolt_app.view("setup_team_submission")(handle_setup_team_submission)
     bolt_app.view("api_key_submission")(handle_api_key_submission)
     bolt_app.view("integrations_page")(handle_integrations_page_done)
     bolt_app.view("k8s_saas_add_cluster_submission")(
