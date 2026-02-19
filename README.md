@@ -43,7 +43,7 @@ We're on a mission to make incident response faster and less painful for every o
 
 ### Investigation & Root Cause Analysis
 
-- **[Slack-First Debugging](docs/SLACK_SETUP.md)**: Investigate incidents without leaving Slack. Upload screenshots, attach logs, and get analysis inline.
+- **[Chat-First Debugging](docs/SLACK_SETUP.md)**: Investigate incidents without leaving Slack, Microsoft Teams, or Google Chat. Upload screenshots, attach logs, and get analysis inline.
 - **[Multi-Agent Orchestration](docs/FEATURES.md)**: Specialist agents for Kubernetes, AWS, metrics, code analysis, and more — routed automatically based on the problem.
 - **[Smart Log Sampling](docs/FEATURES.md)**: Statistics first, then targeted sampling. Stays useful where other tools hit context limits.
 - **[Alert Correlation](docs/FEATURES.md)**: 3-layer analysis (temporal + topology + semantic) reduces alert noise by 85-95%.
@@ -54,17 +54,20 @@ We're on a mission to make incident response faster and less painful for every o
 
 ### Integrations
 
-- **[Logs & Metrics](docs/INTEGRATIONS.md)**: Coralogix, Grafana, Elasticsearch, Datadog, Prometheus, Jaeger, and more.
-- **[Incidents](docs/INTEGRATIONS.md)**: incident.io, PagerDuty (coming soon), Opsgenie (coming soon).
-- **[Cloud & Infra](docs/INTEGRATIONS.md)**: Kubernetes, AWS, GCP, Azure (coming soon).
-- **[Dev Tools](docs/INTEGRATIONS.md)**: GitHub, Confluence.
-- **[MCP Protocol](docs/INTEGRATIONS.md)**: Connect to any MCP server for unlimited integrations — add new tools in minutes via config, not code.
+| Category | Integrations |
+|----------|-------------|
+| **Logs & Metrics** | Coralogix, Grafana, Loki, Elasticsearch, OpenSearch, Datadog, Prometheus, CloudWatch, Splunk, New Relic, Honeycomb, Jaeger, Sentry, Amplitude |
+| **Incidents & Alerts** | PagerDuty, incident.io, Opsgenie *(coming soon)*, ServiceNow *(coming soon)* |
+| **Cloud & Infra** | Kubernetes (direct + agent), AWS *(coming soon)*, GCP *(coming soon)*, Azure *(coming soon)* |
+| **Dev & Project Tools** | GitHub, GitLab, Confluence, Jira, ClickUp, Linear *(coming soon)*, Notion *(coming soon)* |
+| **LLM Providers** | Claude, OpenAI, Gemini, DeepSeek, Mistral, Groq, Ollama, Azure OpenAI, Amazon Bedrock, Vertex AI, and [14 more](docs/INTEGRATIONS.md) |
+| **Extensibility** | Connect to any MCP server — add new tools in minutes via config, not code |
 
 ### General Platform
 
 - **[Web Console](docs/FEATURES.md)**: Dashboard for managing agents, viewing investigations, configuring tools and prompts per team.
 - **[Multi-Tenant Config](docs/FEATURES.md)**: Hierarchical org/team configuration with deep merge, RBAC, and audit logging.
-- **[Model Flexibility](docs/FEATURES.md)**: Supports Claude and OpenAI SDKs — use the model that fits your needs, no vendor lock-in.
+- **[Model Flexibility](docs/FEATURES.md)**: 24 LLM providers supported (Claude, OpenAI, Gemini, DeepSeek, Mistral, Ollama, and more) — no vendor lock-in.
 - **[Sandboxed Execution](docs/FEATURES.md)**: Each investigation runs in an isolated gVisor Kubernetes sandbox. Credentials never touch the agent (Envoy proxy injects secrets at request time).
 - **[Webhook Routing](docs/FEATURES.md)**: Orchestrator routes GitHub, PagerDuty, Incident.io, Blameless, and FireHydrant events to the right team's agent.
 - **[Self-Hosting](docs/DEPLOYMENT.md)**: Deploy on your own infrastructure with Helm. Air-gapped support available.
