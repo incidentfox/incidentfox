@@ -11,7 +11,6 @@ import hashlib
 import hmac
 import json
 import os
-import sys
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
