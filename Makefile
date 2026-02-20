@@ -4,13 +4,20 @@
 #   make dev        Start all services (postgres, config-service, credential-proxy, sre-agent, slack-bot)
 #                   Note: slack-bot requires SLACK_BOT_TOKEN + SLACK_APP_TOKEN in .env
 #   make stop       Stop all services
+#   make restart    Restart all services (rebuild)
 #   make logs       Follow all logs
 #   make clean      Remove containers, volumes, and images
 #   make db-shell   Open psql shell
 
-.PHONY: dev stop logs logs-agent logs-config status clean db-shell
+.PHONY: dev dev-slack restart stop logs logs-agent logs-config status clean db-shell
 
 dev:
+	docker compose up -d --build
+
+# Backward-compat alias (dev-slack was removed — slack-bot now starts with `make dev`)
+dev-slack: dev
+
+restart:
 	docker compose up -d --build
 
 stop:
