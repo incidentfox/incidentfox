@@ -570,9 +570,14 @@ class PipelineApiClient:
 
 class AgentApiClient:
     def __init__(
-        self, *, base_url: str, http_client: Optional[httpx.Client] = None
+        self,
+        *,
+        base_url: str,
+        investigate_auth_token: str = "",
+        http_client: Optional[httpx.Client] = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        self._investigate_auth_token = investigate_auth_token
         self._http = http_client
 
     def run_agent(
@@ -634,8 +639,12 @@ class AgentApiClient:
         result_success = False
         thread_id = correlation_id or ""
 
+        headers: dict[str, str] = {}
+        if self._investigate_auth_token:
+            headers["Authorization"] = f"Bearer {self._investigate_auth_token}"
+
         with httpx.Client(timeout=request_timeout) as c:
-            with c.stream("POST", url, json=payload) as r:
+            with c.stream("POST", url, json=payload, headers=headers) as r:
                 r.raise_for_status()
                 # Extract thread_id from response header if available
                 thread_id = r.headers.get("X-Thread-ID", thread_id)

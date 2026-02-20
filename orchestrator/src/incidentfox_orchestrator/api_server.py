@@ -189,7 +189,11 @@ def create_app() -> FastAPI:
             Base.metadata.create_all(bind=get_engine())
         app_.state.config_service = ConfigServiceClient(base_url=s.config_service_url)
         app_.state.pipeline_api = PipelineApiClient(base_url=s.ai_pipeline_api_url)
-        app_.state.agent_api = AgentApiClient(base_url=s.agent_api_url)
+        investigate_token = (os.getenv("INVESTIGATE_AUTH_TOKEN") or "").strip()
+        app_.state.agent_api = AgentApiClient(
+            base_url=s.agent_api_url,
+            investigate_auth_token=investigate_token,
+        )
         app_.state.admin_cache = _AdminCache()
         # Audit client for recording agent runs
         internal_admin = (os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN") or "").strip()
