@@ -278,8 +278,8 @@ class KnowledgeIngestionTask:
                 IntelligentIngestionPipeline,
                 PipelineConfig,
             )
-            from ultimate_rag.ingestion.pipeline import (
-                InMemoryStorageBackend,  # noqa: F401
+            from ultimate_rag.ingestion.pipeline import (  # noqa: F401
+                InMemoryStorageBackend,
             )
 
             # Create pipeline config
