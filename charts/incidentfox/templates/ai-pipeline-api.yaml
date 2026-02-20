@@ -18,7 +18,7 @@ spec:
         - name: ai-pipeline-api
           image: {{ required "services.aiPipelineApi.image is required" .Values.services.aiPipelineApi.image }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-          command: ["python3", "scripts/run_api_server.py"]
+          command: ["python", "-m", "ai_learning_pipeline.api_server"]
           ports:
             - containerPort: {{ .Values.services.aiPipelineApi.servicePort }}
           resources:
