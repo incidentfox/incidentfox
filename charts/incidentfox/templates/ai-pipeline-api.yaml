@@ -18,7 +18,7 @@ spec:
         - name: ai-pipeline-api
           image: {{ required "services.aiPipelineApi.image is required" .Values.services.aiPipelineApi.image }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-          command: ["python3", "scripts/run_api_server.py"]
+          command: ["python", "-m", "ai_learning_pipeline.api_server"]
           ports:
             - containerPort: {{ .Values.services.aiPipelineApi.servicePort }}
           resources:
@@ -47,6 +47,10 @@ spec:
               value: {{ default "pilot" .Values.global.configService.orgId | quote }}
             - name: PIPELINE_API_PORT
               value: {{ .Values.services.aiPipelineApi.servicePort | quote }}
+            {{- if .Values.services.ultimateRag.enabled }}
+            - name: RAPTOR_URL
+              value: {{ printf "http://incidentfox-ultimate-rag.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.ultimateRag.servicePort | int) | quote }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /health

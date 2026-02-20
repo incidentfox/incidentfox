@@ -115,6 +115,11 @@ spec:
             - name: WEB_UI_URL
               value: {{ .Values.global.webUiUrl | quote }}
             {{- end }}
+            {{- if .Values.services.aiPipelineApi.enabled }}
+            # AI Pipeline API URL for onboarding scans
+            - name: AI_PIPELINE_API_URL
+              value: {{ printf "http://incidentfox-ai-pipeline-api.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.aiPipelineApi.servicePort | int) | quote }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /health
