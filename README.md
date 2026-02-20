@@ -35,7 +35,9 @@
 
 ## Introduction
 
-**[IncidentFox](https://incidentfox.ai)** is the open-source AI SRE that teams use to investigate production incidents, correlate alerts, analyze logs, and find root causes. It connects to your observability stack, infrastructure, and code — then reasons through to an answer.
+**[IncidentFox](https://incidentfox.ai)** is the open-source AI SRE that automatically investigates production incidents, correlates alerts, analyzes logs, and finds root causes. It connects to your observability stack, infrastructure, and code — then reasons through to an answer.
+
+IncidentFox lives in Slack (or Microsoft Teams / Google Chat). It can auto-respond to every alert, investigate in the thread, and post a root cause summary — or you can @mention it on demand. It learns from your codebase, Slack history, and past incidents to get smarter over time.
 
 We're on a mission to make incident response faster and less painful for every on-call engineer, not just teams with dedicated SRE staff.
 
@@ -43,6 +45,7 @@ We're on a mission to make incident response faster and less painful for every o
 
 ### Investigation & Root Cause Analysis
 
+- **[Auto-Investigation](docs/FEATURES.md)**: Automatically responds to every alert in Slack, investigates in-thread, and posts a root cause summary. Also supports on-demand @mention for any question.
 - **[Chat-First Debugging](docs/SLACK_SETUP.md)**: Investigate incidents without leaving Slack, Microsoft Teams, or Google Chat. Upload screenshots, attach logs, and get analysis inline.
 - **[Multi-Agent Orchestration](docs/FEATURES.md)**: Specialist agents for Kubernetes, AWS, metrics, code analysis, and more — routed automatically based on the problem.
 - **[Smart Log Sampling](docs/FEATURES.md)**: Statistics first, then targeted sampling. Stays useful where other tools hit context limits.
@@ -105,9 +108,25 @@ That's it. IncidentFox starts Postgres, config-service, sre-agent, and the web c
 
 This repo is available under the [Apache License 2.0](LICENSE), with the exception of the `ee` directory which contains premium enterprise features requiring an IncidentFox license.
 
-Premium features include auto-learning (analyzes your codebase, Slack history, and past incidents to build custom integrations), team-specific agents, SOC 2 compliance, SSO/OIDC, approval workflows, and dedicated support.
+The open-source agent is **fully featured** — same AI, same integrations, same intelligence. Enterprise adds management features for organizations with multiple teams.
 
-If you are interested in managed IncidentFox Cloud or a self-hosted Enterprise offering, take a look at [our website](https://incidentfox.ai) or [contact us for a demo](mailto:founders@incidentfox.ai).
+| Feature | Open Source | Enterprise |
+|---------|:----------:|:----------:|
+| All 300+ integrations | Yes | Yes |
+| Auto-investigation on alerts | Yes | Yes |
+| Codebase & Slack history learning | Yes | Yes |
+| Knowledge base (RAPTOR) | Yes | Yes |
+| Alert correlation & anomaly detection | Yes | Yes |
+| Web console | Yes | Yes |
+| Bring your own LLM keys | Yes | Yes |
+| Self-hosted deployment | Yes | Yes |
+| Multi-team management & RBAC | - | Yes |
+| SSO / OIDC | - | Yes |
+| SOC 2 compliance | - | Yes |
+| Approval workflows | - | Yes |
+| Dedicated support & SLAs | - | Yes |
+
+If you are interested in managed IncidentFox Cloud or Enterprise, take a look at [our website](https://incidentfox.ai) or [contact us](mailto:founders@incidentfox.ai).
 
 ## Security
 
