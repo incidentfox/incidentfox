@@ -43,7 +43,10 @@ class ScanTriggerRequest(BaseModel):
     team_node_id: str = Field(
         default="default", description="Team node ID within the org"
     )
-    trigger: str = Field(..., description="Trigger type: 'initial' or 'integration'")
+    trigger: str = Field(
+        ...,
+        description="Trigger type: 'initial', 'team_joined', 'team_created', or 'integration'",
+    )
     slack_team_id: Optional[str] = Field(
         None, description="Slack team ID (for initial scan, to fetch bot token)"
     )
@@ -146,26 +149,34 @@ async def _get_bot_token(org_id: str, slack_team_id: str) -> Optional[str]:
     import httpx
 
     config_url = os.getenv("CONFIG_SERVICE_URL", "http://config-service:8080")
+    internal_headers = {"X-Internal-Service": "ai_pipeline"}
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            # Try fetching from installations endpoint
+            # Look up installation by Slack team_id
             response = await client.get(
-                f"{config_url}/api/v1/internal/slack-installations/{slack_team_id}",
-                headers={"X-Internal-Service": "ai_pipeline"},
+                f"{config_url}/api/v1/internal/slack/installations/find",
+                params={"team_id": slack_team_id},
+                headers=internal_headers,
             )
             if response.status_code == 200:
                 data = response.json()
-                return data.get("bot_token")
+                if data:
+                    token = data.get("bot_token")
+                    if token:
+                        _log(
+                            "bot_token_found",
+                            org_id=org_id,
+                            slack_team_id=slack_team_id,
+                        )
+                        return token
 
-            # Fallback: try effective config
-            response = await client.get(
-                f"{config_url}/api/v2/orgs/{org_id}/nodes/default/config/effective",
+            _log(
+                "bot_token_installation_lookup_failed",
+                org_id=org_id,
+                slack_team_id=slack_team_id,
+                status=response.status_code,
             )
-            if response.status_code == 200:
-                config = response.json()
-                slack_config = config.get("integrations", {}).get("slack", {})
-                return slack_config.get("bot_token")
 
     except Exception as e:
         _log("get_bot_token_failed", error=str(e))
@@ -206,12 +217,12 @@ async def trigger_scan(
     - OAuth installation (trigger=initial)
     - Integration configuration save (trigger=integration)
     """
-    if request.trigger == "initial":
+    if request.trigger in ("initial", "team_joined", "team_created"):
         if not request.slack_team_id:
             return ScanTriggerResponse(
                 status="error",
-                scan_type="initial",
-                message="slack_team_id is required for initial scan",
+                scan_type=request.trigger,
+                message="slack_team_id is required for initial/team scan",
             )
 
         background_tasks.add_task(
@@ -224,14 +235,15 @@ async def trigger_scan(
 
         _log(
             "scan_triggered",
-            trigger="initial",
+            trigger=request.trigger,
             org_id=request.org_id,
+            team_node_id=request.team_node_id,
         )
 
         return ScanTriggerResponse(
             status="scheduled",
-            scan_type="initial",
-            message="Initial environment scan scheduled",
+            scan_type=request.trigger,
+            message=f"{request.trigger} environment scan scheduled",
         )
 
     elif request.trigger == "integration":
