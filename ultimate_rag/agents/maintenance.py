@@ -504,8 +504,8 @@ class MaintenanceAgent:
         """Find pairs of nodes with high semantic similarity that might contradict."""
         try:
             from ultimate_rag.raptor_lib.EmbeddingModels import (
-                OpenAIEmbeddingModel,
-            )  # noqa: F401
+                OpenAIEmbeddingModel,  # noqa: F401
+            )
             from ultimate_rag.raptor_lib.utils import distances_from_embeddings
         except ImportError:
             logger.warning("RAPTOR not available for similarity detection")

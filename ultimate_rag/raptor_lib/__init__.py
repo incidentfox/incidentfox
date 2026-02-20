@@ -20,10 +20,10 @@ from .QAModels import (  # noqa: F401
     GPT4QAModel,
     UnifiedQAModel,
 )
-from .RetrievalAugmentation import (
+from .RetrievalAugmentation import (  # noqa: F401
     RetrievalAugmentation,
     RetrievalAugmentationConfig,
-)  # noqa: F401
+)
 from .Retrievers import BaseRetriever  # noqa: F401
 from .SummarizationModels import (  # noqa: F401
     BaseSummarizationModel,
