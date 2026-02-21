@@ -151,16 +151,12 @@ async def _execute_agent_run(app, job: dict) -> dict:
 
     # Deliver output to configured destinations (Slack, etc.)
     if result.get("success") and result.get("result"):
-        await _deliver_output(
-            app, output_destinations, result["result"], job
-        )
+        await _deliver_output(app, output_destinations, result["result"], job)
 
     return result
 
 
-async def _deliver_output(
-    app, destinations: list[dict], text: str, job: dict
-) -> None:
+async def _deliver_output(app, destinations: list[dict], text: str, job: dict) -> None:
     """Post agent result to output destinations (Slack channels, etc.)."""
     for dest in destinations:
         dest_type = dest.get("type", "")
@@ -174,9 +170,7 @@ async def _deliver_output(
             )
 
 
-async def _deliver_to_slack(
-    app, dest: dict, text: str, job: dict
-) -> None:
+async def _deliver_to_slack(app, dest: dict, text: str, job: dict) -> None:
     """Post result to a Slack channel."""
     channel_id = dest.get("channel_id")
     if not channel_id:
@@ -268,9 +262,7 @@ async def _deliver_to_slack(
         )
 
 
-async def _get_slack_bot_token(
-    app, slack_team_id: str | None = None
-) -> str:
+async def _get_slack_bot_token(app, slack_team_id: str | None = None) -> str:
     """Fetch a Slack bot token from config-service's installation store."""
     config_service = app.state.config_service
     base_url = config_service.base_url.rstrip("/")
