@@ -144,3 +144,40 @@ Not sure where to get started? You can:
 
 - Join our <a href="https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ">Slack</a>, and ask us any questions there.
 - Look for issues labeled **good first issue** on [GitHub](https://github.com/incidentfox/incidentfox/issues).
+
+---
+
+## License
+
+IncidentFox uses a dual-license model:
+
+- **Core platform** (agent, Slack bot, config service, orchestrator, Helm chart, local dev tooling) is licensed under the [Apache License 2.0](LICENSE).
+- **Security layer** (sandbox isolation, credential proxy) is licensed under the [Business Source License 1.1](LICENSE-ENTERPRISE).
+
+Enterprise features automatically convert to Apache 2.0 on the Change Date (February 18, 2030). You can use them freely for development, testing, and evaluation.
+
+See [LICENSING.md](LICENSING.md) for the complete breakdown of which directories are under which license.
+
+---
+
+## See Also
+
+**[Claude Code Plugin](local/claude_code_pack/)** — Standalone SRE tools for individual developers using Claude Code CLI. Not connected to the IncidentFox platform above.
+
+---
+
+## Connect with Us
+
+<p align="center">
+  <a href="https://join.slack.com/t/incidentfox/shared_invite/zt-3ojlxvs46-xuEJEplqBHPlymxtzQi8KQ"><img src="https://img.shields.io/badge/Slack-Community-611f69?style=for-the-badge&logo=slack" alt="Slack"></a>
+  &nbsp;
+  <a href="https://www.linkedin.com/company/incidentfox/"><img src="https://img.shields.io/badge/LinkedIn-Company-0077B5?style=for-the-badge&logo=linkedin" alt="LinkedIn"></a>
+  &nbsp;
+  <a href="https://x.com/jimmyweiiiii"><img src="https://img.shields.io/badge/X-@jimmyweiiiii-000000?style=for-the-badge&logo=x" alt="X - Jimmy"></a>
+  &nbsp;
+  <a href="https://x.com/LongYi1207"><img src="https://img.shields.io/badge/X-@LongYi1207-000000?style=for-the-badge&logo=x" alt="X - LongYi"></a>
+</p>
+
+<p align="center">
+  <em>Built with ❤️ by the IncidentFox team</em>
+</p>
