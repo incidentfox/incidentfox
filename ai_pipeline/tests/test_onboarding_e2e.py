@@ -521,12 +521,19 @@ class TestOnboardingScanE2E:
                     return config_response
                 elif "pending-changes" in url:
                     return pending_change_response
+                elif "tree/stats" in url:
+                    return httpx.Response(200, json={"nodes": 0})
+                elif "/trees" in url and "ingest" not in url:
+                    return httpx.Response(200, json={"tree_name": "test"})
                 elif "ingest/batch" in url:
                     return rag_response
+                elif "config/me" in url:
+                    return httpx.Response(200, json={"status": "ok"})
                 return httpx.Response(404)
 
             mock_client.get = AsyncMock(side_effect=route_request)
             mock_client.post = AsyncMock(side_effect=route_request)
+            mock_client.patch = AsyncMock(side_effect=route_request)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_http.return_value = mock_client
@@ -665,12 +672,21 @@ class TestIntegrationScanE2E:
                     return creds_response
                 elif "config/effective" in url:
                     return config_response
+                elif "tree/stats" in url:
+                    # Tree exists check — return 200 so _ensure_tree_exists succeeds
+                    return httpx.Response(200, json={"nodes": 0})
+                elif "/trees" in url and "ingest" not in url:
+                    return httpx.Response(200, json={"tree_name": "test"})
                 elif "ingest/batch" in url:
                     return rag_response
+                elif "config/me" in url:
+                    # _set_knowledge_tree_config PATCH
+                    return httpx.Response(200, json={"status": "ok"})
                 return httpx.Response(404)
 
             mock_client.get = AsyncMock(side_effect=route_request)
             mock_client.post = AsyncMock(side_effect=route_request)
+            mock_client.patch = AsyncMock(side_effect=route_request)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_http.return_value = mock_client
