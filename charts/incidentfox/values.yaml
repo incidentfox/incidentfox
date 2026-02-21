@@ -633,40 +633,6 @@ services:
         secretKey: "client_secret"
         # Optional: (not recommended) set a raw value directly in values.
         value: ""
-  dependencyService:
-    enabled: true
-    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox/dependency-service:v1.0.0"
-    replicas: 2
-    servicePort: 8085
-    logLevel: "INFO"
-    resources:
-      requests:
-        cpu: "250m"
-        memory: "256Mi"
-      limits:
-        cpu: "500m"
-        memory: "512Mi"
-    # New Relic configuration for distributed tracing
-    newRelic:
-      enabled: true
-      accountId: ""  # Set your New Relic account ID
-      # API key should be stored in AWS Secrets Manager and injected via External Secrets
-      secretName: "incidentfox-newrelic"
-      apiKeyKey: "NEW_RELIC_API_KEY"
-    livenessProbe:
-      enabled: true
-      path: /health
-      initialDelaySeconds: 10
-      periodSeconds: 30
-    pdb:
-      enabled: true
-      minAvailable: 1
-    hpa:
-      enabled: false
-      minReplicas: 2
-      maxReplicas: 4
-      targetCPUUtilizationPercentage: 70
-
   # K8s Gateway - Accepts connections from customer K8s agents (SaaS mode)
   # Enables customers to connect their private K8s clusters without firewall changes.
   # Agents connect outbound via SSE; gateway routes commands from AI agent.

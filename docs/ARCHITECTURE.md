@@ -21,21 +21,14 @@ ALB (k8s-incident-...)
 │  │ Orchestrator │───▶│ Config       │   │ Web UI   │  │
 │  │ - Routing    │    │ Service      │   │ (Next.js)│  │
 │  │ - Auth       │    │ - DB         │   │          │  │
-│  └──────┬───────┘    │ - Tokens     │   └──────────┘  │
-│         │            └──────────────┘                  │
-│         ▼                                               │
-│  ┌──────────────┐                                      │
-│  │ Agent        │                                      │
-│  │ - OpenAI SDK │                                      │
-│  │ - Tools      │                                      │
-│  │ - MCPs       │                                      │
-│  └──────────────┘                                      │
-│                                                          │
-│  ┌──────────────┐                                      │
-│  │ SRE Agent    │                                      │
-│  │ - Claude SDK │                                      │
-│  │ - Sandboxes  │                                      │
-│  └──────────────┘                                      │
+│  └──────────────┘    │ - Tokens     │   └──────────┘  │
+│                      └──────────────┘                  │
+│  ┌──────────────┐    ┌──────────────┐                  │
+│  │ Slack Bot    │───▶│ SRE Agent    │                  │
+│  │ - Bolt/Socket│    │ - Claude SDK │                  │
+│  │ - OAuth      │    │ - Skills     │                  │
+│  └──────────────┘    │ - Sandboxes  │                  │
+│                      └──────────────┘                                      │
 └─────────────────────────────────────────────────────────┘
     ↓
 External Services (Slack, Datadog, Coralogix, etc.)
@@ -149,38 +142,26 @@ See: `/docs/MULTI_TENANT_DESIGN.md` for detailed comparison and cost analysis
 
 ---
 
-## Agent Systems
+## Agent System
 
-### OpenAI Agents SDK (agent/)
+### SRE Agent (sre-agent/) — Claude SDK
 
-**Purpose**: Automated operations
+The active agent system. Runs in isolated gVisor K8s sandbox pods.
 
-- Multi-agent orchestration (planner → sub-agents)
-- 100+ tools (Kubernetes, AWS, Datadog, Slack, GitHub, etc.)
-- MCP integration (external tool servers)
-- Persistent DB storage
-- Retries & error handling
-
-**Use Cases**:
-- Auto-remediation (Pager Duty → investigate → propose fix)
-- CI/CD bots (GitHub → analyze failure → create PR)
-- Scheduled reports (weekly health checks)
-
-### Claude SDK (sre-agent/)
-
-**Purpose**: Interactive investigation
-
-- Isolated K8s sandboxes
-- Built-in tools only (Read, Edit, Bash, Grep, Glob)
+- 45 skills with progressive knowledge loading (~100 tokens metadata, full content on demand)
+- Python/Bash integration scripts for each skill
+- Isolated K8s sandboxes (each investigation gets its own pod)
+- Credentials injected at request time via credential-proxy (Envoy) — sandbox never sees secrets
 - Interrupt/resume support
 - Persistent filesystem (2 hour TTL)
 
 **Use Cases**:
-- Debugging unknown issues
-- Exploratory code investigation
-- Pair programming
+- Auto-investigation on Slack alerts
+- Interactive debugging via @mention
+- CI/CD analysis (GitHub webhook → investigate → post results)
+- On-demand deep investigation from web console
 
-See: `/sre-agent/docs/SDK_COMPARISON.md` for detailed comparison.
+See: `/sre-agent/docs/README.md` for architecture details.
 
 ---
 
@@ -208,11 +189,9 @@ See: `/sre-agent/docs/SDK_COMPARISON.md` for detailed comparison.
 
 Alternative (not used): Orchestrator collects results and posts (adds latency).
 
-### 4. Two Agent Systems (OpenAI SDK + Claude SDK)
+### 4. Single Agent System (Claude SDK)
 
-**Why**: Different use cases
-- OpenAI SDK: Automated workflows, multi-agent, integrations
-- Claude SDK: Interactive, interrupt support, isolated sandboxes
+**Why**: Standardized on sre-agent (Claude SDK) for all use cases. The skills architecture is simpler and the Claude SDK is better tested. Previous OpenAI SDK agent (`agent/`) was removed after all tools were ported to sre-agent skills.
 
 See: `/docs/ARCHITECTURE_DECISIONS.md` for full ADRs.
 
@@ -267,65 +246,19 @@ See: `/docs/TECH_DEBT.md` for scaling improvements.
 
 ---
 
-## Agent Capabilities & Tool Organization
+## SRE Agent Skills
 
-### Agent Capabilities
+sre-agent uses 45 skills organized by category. Skills use progressive knowledge loading — only ~100 tokens of metadata are loaded initially, with full skill content loaded on demand.
 
-| Agent | Purpose | Key Tools |
-|-------|---------|-----------|
-| **Planner** | Orchestrates complex multi-step tasks | Routes to specialized agents |
-| **Investigation** | General SRE troubleshooting (primary) | 30+ tools (K8s, AWS, logs, metrics) |
-| **K8s** | Kubernetes debugging | `list_pods`, `get_pod_logs`, `describe_deployment` |
-| **AWS** | AWS resource investigation | `describe_ec2`, `get_cloudwatch_logs`, `list_ecs_tasks` |
-| **Metrics** | Anomaly detection | `prophet_detect_anomalies`, `correlate_metrics` |
-| **Coding** | Code analysis & fixes | `read_file`, `git_diff`, `python_run_tests` |
-| **GitHub** | PR/Issue investigation | `search_code`, `list_pull_requests`, `get_workflow_runs` |
-| **Log Analysis** | Deep log investigation | Log search, pattern analysis, correlation |
-| **CI** | CI/CD debugging | Build logs, deployment history, rollbacks |
-| **Writeup** | Incident documentation | Generates postmortems and summaries |
+| Category | Skills |
+|----------|--------|
+| **Logs & Metrics** | Coralogix, Grafana, Elasticsearch, Datadog, CloudWatch, Splunk, New Relic, Honeycomb, Jaeger, Sentry, Loki, Amplitude |
+| **Incidents & Alerts** | PagerDuty, Incident.io, Opsgenie, Blameless, FireHydrant |
+| **Infrastructure** | Kubernetes, AWS, Docker, GCP, Azure |
+| **Dev & Project** | GitHub, GitLab, Jira, Linear, Notion, ClickUp, Sourcegraph, Google Docs |
+| **Investigation** | Root cause analysis, deployment correlation, remediation |
 
-### Tool Categories
-
-IncidentFox includes 300+ built-in tools organized across these categories:
-
-| Category | Tools | Description |
-|----------|-------|-------------|
-| **Kubernetes** | 9 | Pod logs, events, deployments, services, resource usage |
-| **AWS** | 8 | EC2, Lambda, RDS, ECS, CloudWatch logs/metrics |
-| **Anomaly Detection** | 8 | Prophet forecasting, Z-score detection, correlation, change points |
-| **Grafana** | 6 | Dashboards, Prometheus queries, alerts, annotations |
-| **Datadog** | 3 | Metrics, logs, APM |
-| **New Relic** | 2 | NRQL queries, APM summary |
-| **GitHub** | 16 | Code search, PRs, issues, workflows, file operations |
-| **Git** | 12 | Status, diff, log, blame, branches |
-| **Docker** | 15 | Build, run, logs, exec, compose |
-| **Coding** | 7 | File I/O, tests, linting, search |
-| **Browser** | 4 | Screenshots, scraping, PDF generation |
-| **Slack** | 5 | Messages, channels, threads |
-| **Elasticsearch** | 3 | Log search, aggregations |
-| **Meta** | 2 | `llm_call`, `web_search` (available to all agents) |
-
-**Complete tool reference:** [../agent/docs/TOOLS_CATALOG.md](../agent/docs/TOOLS_CATALOG.md)
-
-### Agent-as-Tool Pattern
-
-Agents can call other agents as tools, enabling complex multi-step investigations:
-
-```
-Planner Agent receives: "Investigate production outage"
-  ↓
-Analyzes request → Multiple services affected
-  ↓
-Delegates to specialists:
-  ├─> K8s Agent: Check pod health
-  │   └─> Returns: Frontend pod restarting
-  ├─> Metrics Agent: Analyze anomalies
-  │   └─> Returns: CPU spike at 10:15am
-  └─> Log Analysis Agent: Search errors
-      └─> Returns: OOM errors in logs
-  ↓
-Planner synthesizes: "Root cause: Memory leak in frontend"
-```
+Skills live at `sre-agent/.claude/skills/*/SKILL.md` with Python/Bash scripts at `sre-agent/.claude/skills/*/scripts/`.
 
 ---
 

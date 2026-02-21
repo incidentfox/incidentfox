@@ -22,15 +22,6 @@
 
 ### Service-Specific Documentation
 
-**Agent Service** (`/agent/docs/`):
-- `INTEGRATIONS.md` - External integration configuration (Coralogix, Snowflake, GitHub, Slack)
-- `OUTPUT_HANDLERS.md` - Multi-destination output system
-- `TEMPLATES.md` - Template system guide
-- `DYNAMIC_AGENT_SYSTEM.md` - JSON-based agent construction
-- `TOOLS_CATALOG.md` - Tool development guide
-- `MCP_CLIENT_IMPLEMENTATION.md` - MCP client for dynamic tool loading
-- `DEPLOYMENT.md` - Agent deployment procedures
-
 **Orchestrator Service** (`/orchestrator/docs/`):
 - `WEBHOOKS.md` - Webhook routing implementation
 - `PROVISIONING.md` - Team provisioning with K8s resources
@@ -56,11 +47,6 @@
 - `SDK_COMPARISON.md` - Claude SDK vs OpenAI Agents SDK (24 pages)
 - `KNOWN_ISSUES.md` - Known limitations
 
-**Knowledge Base** (`/knowledge_base/docs/`):
-- `README.md` - RAPTOR overview
-- `DEPLOYMENT_OPTIONS.md` - ECS vs K8s deployment
-- `parameter_recommendations.md` - Tuning guide
-
 ---
 
 ## 🏗️ System Overview
@@ -68,7 +54,8 @@
 ### Services (K8s namespace: `incidentfox`)
 | Service | Purpose | Port |
 |---------|---------|------|
-| `incidentfox-agent` | AI agents, tool execution | 8080 |
+| `incidentfox-sre-agent` | Claude SDK agent, sandbox management | 8080 |
+| `incidentfox-slack-bot` | Slack UI layer (Socket Mode) | 3000 |
 | `incidentfox-orchestrator` | Webhook routing, provisioning | 8080 |
 | `incidentfox-config-service` | Config, auth, DB | 8080 |
 | `incidentfox-web-ui` | Next.js frontend | 3000 |
@@ -124,10 +111,10 @@ curl -H "Authorization: Bearer <token>" \
 
 ### Deploy Individual Service
 ```bash
-cd agent
-docker build --platform linux/amd64 -t <your-registry>/incidentfox-agent:latest .
-docker push <your-registry>/incidentfox-agent:latest
-kubectl rollout restart deployment/incidentfox-agent -n incidentfox
+cd sre-agent
+docker build --platform linux/amd64 -t <your-registry>/incidentfox-sre-agent:latest .
+docker push <your-registry>/incidentfox-sre-agent:latest
+kubectl rollout restart deployment/incidentfox-sre-agent -n incidentfox
 ```
 
 **See**: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed procedures
@@ -153,27 +140,9 @@ kubectl get pods -n incidentfox
 
 ## 🔧 Integration Quick Reference
 
-### Test Coralogix
-```python
-from ai_agent.tools.coralogix_tools import search_coralogix_logs
-print(search_coralogix_logs(query='source logs | limit 3', time_range_minutes=60))
-```
+Integrations are configured per-team via config-service. sre-agent accesses them through skills and scripts that run inside gVisor sandboxes. Credentials are injected at request time by credential-proxy (Envoy).
 
-### Test Snowflake
-```python
-from ai_agent.tools.snowflake_tools import get_recent_incidents
-print(get_recent_incidents(limit=3))
-```
-
-### Test in Pod
-```bash
-kubectl exec -n incidentfox deploy/incidentfox-agent -- python -c "
-from ai_agent.tools.coralogix_tools import search_coralogix_logs
-print(search_coralogix_logs(query='source logs | limit 3', time_range_minutes=60))
-"
-```
-
-**See**: [agent/docs/INTEGRATIONS.md](agent/docs/INTEGRATIONS.md) for complete configuration
+**See**: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for complete configuration
 
 ---
 
@@ -208,25 +177,22 @@ kubectl run -n incidentfox test-routing --image=curlimages/curl --rm -it --resta
 
 ## 🤖 Agent Quick Reference
 
-### Available Agents
-- **planner** - Multi-agent orchestration, delegates to sub-agents
-- **coralogix_agent** - Log analysis specialist
-- **kubernetes_agent** - K8s operations specialist
-- **snowflake_agent** - Data enrichment specialist
-- **ci_agent** - CI/CD analysis specialist
+### SRE Agent (Claude SDK)
+
+The active agent system. Runs in isolated gVisor K8s sandbox pods. Uses 45 skills with progressive knowledge loading.
 
 ### Run Agent Directly
 ```bash
-curl -X POST http://agent:8080/api/v1/agent/run \
+curl -X POST http://sre-agent:8080/investigate \
   -H "Authorization: Bearer <TEAM_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
-    "agent_name": "planner",
-    "task": "Investigate error spike in payment service"
+    "query": "Investigate error spike in payment service",
+    "team_id": "default"
   }'
 ```
 
-**See**: [agent/docs/DYNAMIC_AGENT_SYSTEM.md](agent/docs/DYNAMIC_AGENT_SYSTEM.md) for agent configuration
+**See**: [sre-agent/docs/README.md](sre-agent/docs/README.md) for agent architecture
 
 ---
 
@@ -243,17 +209,12 @@ curl -X POST "http://<raptor-kb-host>/api/v1/answer" \
   -d '{"question":"How does webhook routing work?","tree_name":"<tree_name>"}'
 ```
 
-### Deploy RAPTOR KB
+### Deploy RAPTOR KB (Ultimate RAG)
 ```bash
-cd knowledge_base
-docker buildx build --platform linux/arm64 -t <your-registry>/raptor-kb:latest --push .
-# For ECS:
-aws ecs update-service --cluster <cluster-name> --service raptor-kb --force-new-deployment --region <region>
-# For K8s:
-kubectl rollout restart deployment/raptor-kb -n incidentfox
+cd ultimate_rag
+docker buildx build --platform linux/arm64 -t <your-registry>/ultimate-rag:latest --push .
+kubectl rollout restart deployment/ultimate-rag -n incidentfox
 ```
-
-**See**: [knowledge_base/docs/DEPLOYMENT_OPTIONS.md](knowledge_base/docs/DEPLOYMENT_OPTIONS.md)
 
 ---
 
@@ -284,29 +245,15 @@ alembic upgrade head
 
 ## 🧪 Testing Quick Reference
 
-### Test Integration in Pod
-```bash
-kubectl exec -n incidentfox deploy/incidentfox-agent -- python -c "
-from ai_agent.tools.snowflake_tools import get_recent_incidents
-import json
-result = get_recent_incidents(limit=2)
-print(json.loads(result)['success'])
-"
-```
-
 ### Test Config Service
 ```bash
 kubectl port-forward -n incidentfox svc/incidentfox-config-service 8090:8080 &
 curl http://localhost:8090/health
 ```
 
-### Test Agent Health
+### Test SRE Agent Health
 ```bash
-# Via load balancer
-curl http://<your-load-balancer>/health
-
-# Via port-forward
-kubectl port-forward -n incidentfox svc/incidentfox-agent 8080:8080 &
+kubectl port-forward -n incidentfox svc/incidentfox-sre-agent 8080:8080 &
 curl http://localhost:8080/health
 ```
 
@@ -344,7 +291,8 @@ aws ecr describe-images --repository-name incidentfox-agent --region <region>
 
 ### Restart All Services
 ```bash
-kubectl rollout restart deployment/incidentfox-agent -n incidentfox
+kubectl rollout restart deployment/incidentfox-sre-agent -n incidentfox
+kubectl rollout restart deployment/incidentfox-slack-bot -n incidentfox
 kubectl rollout restart deployment/incidentfox-orchestrator -n incidentfox
 kubectl rollout restart deployment/incidentfox-config-service -n incidentfox
 kubectl rollout restart deployment/incidentfox-web-ui -n incidentfox
@@ -357,7 +305,7 @@ kubectl get pods -n incidentfox
 
 ### Rollback Deployment
 ```bash
-kubectl rollout undo deployment/incidentfox-agent -n incidentfox
+kubectl rollout undo deployment/incidentfox-sre-agent -n incidentfox
 ```
 
 **See**: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for detailed troubleshooting
@@ -372,13 +320,11 @@ kubectl rollout undo deployment/incidentfox-agent -n incidentfox
 | **System architecture** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | **How to deploy** | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | **Something is broken** | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
-| **Integration configuration** | [agent/docs/INTEGRATIONS.md](agent/docs/INTEGRATIONS.md) |
+| **Integration configuration** | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
 | **Webhook routing** | [orchestrator/docs/WEBHOOKS.md](orchestrator/docs/WEBHOOKS.md) |
 | **API endpoints** | [config_service/docs/API_REFERENCE.md](config_service/docs/API_REFERENCE.md) |
 | **Database schema** | [config_service/docs/DATABASE_SCHEMA.md](config_service/docs/DATABASE_SCHEMA.md) |
-| **Agent system** | [agent/docs/DYNAMIC_AGENT_SYSTEM.md](agent/docs/DYNAMIC_AGENT_SYSTEM.md) |
 | **SRE Agent (Claude SDK)** | [sre-agent/docs/README.md](sre-agent/docs/README.md) |
-| **Knowledge base** | [knowledge_base/docs/README.md](knowledge_base/docs/README.md) |
 
 ---
 

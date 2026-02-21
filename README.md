@@ -64,7 +64,7 @@ We're on a mission to make incident response faster and less painful for every o
 | **Cloud & Infra** | <img src="slack-bot/assets/processed/k8s.png" alt="Kubernetes" width="16"> Kubernetes (direct + agent) · <img src="slack-bot/assets/processed/aws.png" alt="AWS" width="16"> AWS *(coming soon)* · <img src="slack-bot/assets/processed/gcp.png" alt="GCP" width="16"> GCP *(coming soon)* · <img src="slack-bot/assets/processed/azure.png" alt="Azure" width="16"> Azure *(coming soon)* |
 | **Dev & Project Tools** | <img src="slack-bot/assets/processed/github.png" alt="GitHub" width="16"> GitHub · <img src="slack-bot/assets/processed/gitlab.png" alt="GitLab" width="16"> GitLab · Confluence · <img src="slack-bot/assets/processed/jira.png" alt="Jira" width="16"> Jira · ClickUp · <img src="slack-bot/assets/processed/linear.png" alt="Linear" width="16"> Linear *(coming soon)* · <img src="slack-bot/assets/processed/notion.png" alt="Notion" width="16"> Notion *(coming soon)* |
 | **LLM Providers** | Claude · OpenAI · Gemini · DeepSeek · Mistral · Groq · Ollama · Azure OpenAI · Amazon Bedrock · Vertex AI · and [14 more](docs/INTEGRATIONS.md) |
-| **Extensibility** | Connect to any MCP server — add new tools in minutes via config, not code |
+| **Extensibility** | Add new integrations as skills and scripts — no code changes needed |
 
 ### General Platform
 
@@ -112,7 +112,7 @@ The open-source agent is **fully featured** — same AI, same integrations, same
 
 | Feature | Open Source | Enterprise |
 |---------|:----------:|:----------:|
-| All 300+ integrations | Yes | Yes |
+| All 45+ integrations | Yes | Yes |
 | Auto-investigation on alerts | Yes | Yes |
 | Codebase & Slack history learning | Yes | Yes |
 | Knowledge base (RAPTOR) | Yes | Yes |

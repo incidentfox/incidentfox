@@ -20,11 +20,6 @@ exclude_from_public:
   - "ai_pipeline/**"
   - "!ai_pipeline/README.md"  # Keep the stub README
 
-  - "correlation_service/**"
-  - "!correlation_service/README.md"
-
-  - "dependency_service/**"
-  - "!dependency_service/README.md"
 
   - "telemetry_collector/**"
 
@@ -64,8 +59,6 @@ exclude_from_private:
 # Stub directories: Public gets only README.md, private has full content
 stub_directories:
   - "ai_pipeline"
-  - "correlation_service"
-  - "dependency_service"
 
 # Conflict resolution strategy
 conflict_resolution:

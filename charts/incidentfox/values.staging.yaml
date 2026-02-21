@@ -387,9 +387,6 @@ services:
     slack:
       enabled: true
 
-  dependencyService:
-    enabled: false  # Disabled due to architecture mismatch
-
   # K8s Gateway for SaaS mode (customer K8s agents)
   k8sGateway:
     enabled: true

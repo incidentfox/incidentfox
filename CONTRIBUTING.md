@@ -76,37 +76,32 @@ git clone https://github.com/incidentfox/incidentfox.git
 cd incidentfox
 ```
 
-2. **Install dependencies**
-
-```bash
-# Backend (Python)
-uv pip install -e ".[dev]"
-
-# Frontend (Node.js)
-cd frontend && npm install
-```
-
-3. **Set up environment**
+2. **Set up environment**
 
 ```bash
 cp .env.example .env
-# Edit .env with your API keys (see README for details)
+# Add your ANTHROPIC_API_KEY (see .env.example for all options)
 ```
 
-4. **Start services**
+3. **Start the local dev stack**
 
 ```bash
-docker-compose up -d postgres redis
-python -m incidentfox.orchestrator &
-python -m incidentfox.agent &
-cd frontend && npm run dev
+make dev
+# Starts Postgres, config-service, credential-resolver, envoy, sre-agent
+# Migrations run automatically
+```
+
+4. **Run the web UI** (separate terminal)
+
+```bash
+cd web_ui && pnpm install && pnpm dev
 ```
 
 5. **Run tests**
 
 ```bash
 pytest                          # Backend tests
-cd frontend && npm test        # Frontend tests
+cd web_ui && pnpm test         # Frontend tests
 ```
 
 See [DEVELOPMENT_KNOWLEDGE.md](DEVELOPMENT_KNOWLEDGE.md) for detailed architecture and development guide.
@@ -138,7 +133,7 @@ git checkout -b feature/your-feature-name
 ```bash
 pytest                                    # Run all tests
 pytest tests/test_your_feature.py        # Run specific tests
-black . && ruff check .                  # Format and lint
+ruff check .                              # Lint
 ```
 
 4. **Commit with clear messages**

@@ -30,13 +30,12 @@ Two entry points for running agents: **Slack** (via slack-bot) and **web_ui** (d
 
 ## Dead / deprecated code (do not extend)
 
-- **dependency_service/** — Stub only (README.md, no code). Placeholder for premium feature.
-- **correlation_service/** — Stub only (README.md, no code). Placeholder for premium feature.
-
 **Removed**:
 - `unified-agent/` — OpenHands SDK attempt. Deleted after all valuable tools were ported to sre-agent skills.
 - `agent/` — Original OpenAI SDK agent. Deleted after prompts were migrated to `config_service/scripts/prompts/` and all tools ported to sre-agent skills.
 - `knowledge_base/` — Original RAPTOR service. Deleted after raptor lib was copied to `ultimate_rag/raptor_lib/` and all imports updated. The Helm template (`knowledge-base.yaml`) remains but is disabled in all environments (`knowledgeBase.enabled: false`).
+- `dependency_service/` — Stub directory removed (was a premium placeholder with README only).
+- `correlation_service/` — Stub directory removed (was a premium placeholder with README only).
 
 **Not deprecated** (despite being disabled in staging/prod):
 - **ai_pipeline/** — Premium feature under active development. Disabled via `enabled: false` in all environments. Integrated with orchestrator, slack-bot, and web_ui.
@@ -127,7 +126,7 @@ The local stack builds all services from source. Config-service auto-runs alembi
 
 1. **Orchestrator integration**: sre-agent currently bypasses orchestrator and talks directly to slack-bot. This blocks non-Slack surfaces (MS Teams, Google Chat — secrets already in staging values). Need to abstract Slack-specific prompts and the file proxy server.
 2. **Config-driven agents**: Port agent_builder.py pattern to sre-agent so teams can customize agents via config-service.
-3. **Helm cleanup**: `knowledge-base.yaml` template still exists (disabled in all envs). Remove once confirmed no customer uses it. Also remove `knowledgeBase` sections from values files.
+3. **Helm cleanup**: `knowledge-base.yaml` template still exists (disabled in all envs). Remove once confirmed no customer uses it.
 
 ## Scratchpad
 
