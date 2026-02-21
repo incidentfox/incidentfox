@@ -176,7 +176,10 @@ class TestBlockKitExtraction:
                         "type": "rich_text_section",
                         "elements": [
                             {"type": "text", "text": "See dashboard: "},
-                            {"type": "link", "url": "https://grafana.example.com/d/abc"},
+                            {
+                                "type": "link",
+                                "url": "https://grafana.example.com/d/abc",
+                            },
                         ],
                     }
                 ],
