@@ -27,6 +27,55 @@ def _log(event: str, **fields) -> None:
     print(json.dumps(payload, default=str))
 
 
+def _extract_text_from_blocks(blocks: List[Dict[str, Any]]) -> str:
+    """Extract text content from Slack Block Kit blocks.
+
+    Slack messages have a plain `text` field (lossy fallback) and a `blocks`
+    field with richer structured content.  Code blocks, formatted sections,
+    and headers all live in blocks.  This function walks the block tree and
+    returns a single string with all textual content joined by newlines.
+    """
+    parts: List[str] = []
+
+    for block in blocks:
+        btype = block.get("type", "")
+
+        if btype in ("section", "header"):
+            text_obj = block.get("text", {})
+            if isinstance(text_obj, dict):
+                parts.append(text_obj.get("text", ""))
+
+        elif btype == "rich_text":
+            for element in block.get("elements", []):
+                for item in element.get("elements", []):
+                    if item.get("type") == "text":
+                        parts.append(item.get("text", ""))
+                    elif item.get("type") == "link":
+                        parts.append(item.get("url", ""))
+
+        elif btype == "context":
+            for element in block.get("elements", []):
+                if isinstance(element, dict):
+                    parts.append(element.get("text", ""))
+
+    return "\n".join(p for p in parts if p)
+
+
+def _get_message_text(msg: Dict[str, Any]) -> str:
+    """Get the best text representation of a Slack message.
+
+    Prefers block-extracted text (which includes code blocks, formatted
+    sections, etc.) over the plain ``text`` fallback.  Falls back to
+    ``text`` when no blocks are present or block extraction yields nothing.
+    """
+    blocks = msg.get("blocks")
+    if blocks:
+        block_text = _extract_text_from_blocks(blocks)
+        if block_text:
+            return block_text
+    return msg.get("text", "")
+
+
 @dataclass
 class Signal:
     """A discovered signal indicating tool/integration usage."""
@@ -433,7 +482,7 @@ class SlackEnvironmentScanner:
             if msg.get("ts") == parent_ts:
                 continue
 
-            text = msg.get("text", "")
+            text = _get_message_text(msg)
             if not text or len(text) < 20:
                 continue
 
@@ -483,7 +532,7 @@ class SlackEnvironmentScanner:
         messages_scanned = len(messages)
 
         for msg in messages:
-            text = msg.get("text", "")
+            text = _get_message_text(msg)
             if not text or len(text) < 5:
                 continue
 

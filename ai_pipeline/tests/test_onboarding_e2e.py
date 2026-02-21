@@ -25,6 +25,8 @@ from ai_learning_pipeline.tasks.scanners.slack_scanner import (
     CollectedMessage,
     Signal,
     SlackEnvironmentScanner,
+    _extract_text_from_blocks,
+    _get_message_text,
 )
 
 # ===================================================================
@@ -112,6 +114,138 @@ class TestSlackScanner:
         url_signals = [s for s in result.signals if s.signal_type == "url"]
         for s in url_signals:
             assert s.confidence >= 0.9
+
+
+# ===================================================================
+# 1a. Block Kit Text Extraction Tests
+# ===================================================================
+
+
+class TestBlockKitExtraction:
+    """Test _extract_text_from_blocks and _get_message_text helpers."""
+
+    def test_section_block_extracts_mrkdwn(self):
+        """Section blocks with mrkdwn text (e.g. code blocks) are extracted."""
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "Turned off feature flag:\n```flagctl set emailMemoryLeak off```",
+                },
+            }
+        ]
+        result = _extract_text_from_blocks(blocks)
+        assert "flagctl set emailMemoryLeak off" in result
+
+    def test_header_block_extracted(self):
+        blocks = [
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": "Incident Resolved"},
+            }
+        ]
+        result = _extract_text_from_blocks(blocks)
+        assert result == "Incident Resolved"
+
+    def test_rich_text_block_extracted(self):
+        blocks = [
+            {
+                "type": "rich_text",
+                "elements": [
+                    {
+                        "type": "rich_text_section",
+                        "elements": [
+                            {"type": "text", "text": "Ran "},
+                            {"type": "text", "text": "kubectl rollout restart"},
+                            {"type": "text", "text": " to fix it"},
+                        ],
+                    }
+                ],
+            }
+        ]
+        result = _extract_text_from_blocks(blocks)
+        assert "kubectl rollout restart" in result
+
+    def test_rich_text_link_extracted(self):
+        blocks = [
+            {
+                "type": "rich_text",
+                "elements": [
+                    {
+                        "type": "rich_text_section",
+                        "elements": [
+                            {"type": "text", "text": "See dashboard: "},
+                            {"type": "link", "url": "https://grafana.example.com/d/abc"},
+                        ],
+                    }
+                ],
+            }
+        ]
+        result = _extract_text_from_blocks(blocks)
+        assert "https://grafana.example.com/d/abc" in result
+
+    def test_context_block_extracted(self):
+        blocks = [
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": "Posted by AlertManager"},
+                ],
+            }
+        ]
+        result = _extract_text_from_blocks(blocks)
+        assert "Posted by AlertManager" in result
+
+    def test_empty_blocks_returns_empty(self):
+        assert _extract_text_from_blocks([]) == ""
+
+    def test_unknown_block_types_skipped(self):
+        blocks = [{"type": "divider"}, {"type": "image", "image_url": "http://x.png"}]
+        assert _extract_text_from_blocks(blocks) == ""
+
+    def test_get_message_text_prefers_blocks(self):
+        """_get_message_text returns block text when blocks are present."""
+        msg = {
+            "text": "plain fallback (no code block here)",
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Resolved via `flagctl set emailMemoryLeak off`",
+                    },
+                }
+            ],
+        }
+        result = _get_message_text(msg)
+        assert "flagctl set emailMemoryLeak off" in result
+
+    def test_get_message_text_falls_back_to_plain_text(self):
+        """Falls back to plain text when no blocks are present."""
+        msg = {"text": "simple message without blocks"}
+        assert _get_message_text(msg) == "simple message without blocks"
+
+    def test_get_message_text_falls_back_when_blocks_empty(self):
+        """Falls back when blocks exist but yield no text."""
+        msg = {"text": "fallback", "blocks": [{"type": "divider"}]}
+        assert _get_message_text(msg) == "fallback"
+
+    def test_multiple_blocks_joined_with_newlines(self):
+        blocks = [
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": "Alert: High Memory"},
+            },
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "email-service pod OOMKilled"},
+            },
+        ]
+        result = _extract_text_from_blocks(blocks)
+        assert "Alert: High Memory" in result
+        assert "email-service pod OOMKilled" in result
+        assert "\n" in result
 
 
 # ===================================================================
