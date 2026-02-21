@@ -106,8 +106,8 @@ def _build_slack_prompt(channel_name: str, formatted_messages: str) -> str:
         "  - temporal: What happened when (incidents, outages, deployments, changes)\n"
         "  - social: Who knows what (SMEs, escalation paths, team responsibilities, on-call info)\n"
         '- "content": A well-written summary that captures the operational knowledge.\n'
-        "  For PROCEDURAL items, include numbered steps.\n"
-        "  For TEMPORAL items, include timestamps and what happened.\n"
+        "  For PROCEDURAL items, include numbered steps with exact commands where available.\n"
+        "  For TEMPORAL items, include timestamps, what happened, and exact commands used to fix.\n"
         "  For RELATIONAL items, describe service dependencies or team ownership.\n"
         "  For SOCIAL items, identify SMEs, escalation paths, or team responsibilities.\n"
         '- "entities": Array of {"name": "...", "type": "service|team|person|technology|metric|environment"}\n'
@@ -122,6 +122,12 @@ def _build_slack_prompt(channel_name: str, formatted_messages: str) -> str:
         "  - A PROCEDURAL item extracting reusable troubleshooting steps\n"
         "- Pay attention to: root cause, tools/dashboards referenced, mitigation commands, "
         "service dependencies discovered during investigation\n"
+        "- CRITICAL: Preserve exact CLI commands, tool names, and specific identifiers "
+        "verbatim. For example, if someone ran `flagctl set myFlag off` or "
+        "`kubectl rollout restart deployment/foo`, include the exact command in the content. "
+        "These are the most actionable details for an AI agent.\n"
+        "- Include specific metric values, thresholds, and configuration names "
+        "(e.g., flag names, environment variables, pool sizes) when mentioned.\n"
         "- Keep each item's content concise but complete (100-300 words)\n\n"
         "Respond in JSON:\n"
         "{\n"
