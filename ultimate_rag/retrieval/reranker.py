@@ -10,7 +10,7 @@ Rerankers improve retrieval quality by:
 
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -18,7 +18,6 @@ from .strategies import RetrievedChunk
 
 if TYPE_CHECKING:
     from ..core.node import KnowledgeNode, TreeForest
-    from ..graph.graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
 

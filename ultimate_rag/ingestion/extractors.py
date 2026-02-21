@@ -11,12 +11,10 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
-    from ..graph.entities import Entity, EntityType
-    from ..graph.relationships import Relationship, RelationshipType
+    from ..graph.entities import EntityType
 
 logger = logging.getLogger(__name__)
 

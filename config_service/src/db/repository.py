@@ -866,7 +866,7 @@ def upsert_team_overrides(
     if existing is None:
         # Create new config
         new = NodeConfiguration(
-            id=f"cfg-{uuid.uuid4().hex[:12]}",
+            id=f"cfg-{uuid4().hex[:12]}",
             org_id=org_id,
             node_id=team_node_id,
             node_type="team",  # This function is only called for teams
@@ -885,7 +885,7 @@ def upsert_team_overrides(
 
     # Store in new audit table
     change = ConfigChangeHistory(
-        id=f"chg-{uuid.uuid4().hex[:12]}",
+        id=f"chg-{uuid4().hex[:12]}",
         org_id=org_id,
         node_id=team_node_id,
         previous_config=before,
@@ -1628,19 +1628,21 @@ def list_unified_audit(
 
     # --- Config Audit ---
     if "config" in all_sources:
-        stmt = select(NodeConfigAudit).where(NodeConfigAudit.org_id == org_id)
+        from .config_models import ConfigChangeHistory
+
+        stmt = select(ConfigChangeHistory).where(ConfigChangeHistory.org_id == org_id)
         if team_node_id:
-            stmt = stmt.where(NodeConfigAudit.node_id == team_node_id)
+            stmt = stmt.where(ConfigChangeHistory.node_id == team_node_id)
         if actor:
-            stmt = stmt.where(NodeConfigAudit.changed_by.ilike(f"%{actor}%"))
+            stmt = stmt.where(ConfigChangeHistory.changed_by.ilike(f"%{actor}%"))
         if since:
-            stmt = stmt.where(NodeConfigAudit.changed_at >= since)
+            stmt = stmt.where(ConfigChangeHistory.changed_at >= since)
         if until:
-            stmt = stmt.where(NodeConfigAudit.changed_at <= until)
+            stmt = stmt.where(ConfigChangeHistory.changed_at <= until)
 
         config_rows = session.execute(stmt).scalars().all()
         for row in config_rows:
-            changed_keys = list((row.diff_json or {}).get("changed", {}).keys())
+            changed_keys = list((row.change_diff or {}).get("changed", {}).keys())
             summary = (
                 f"Config updated: {', '.join(changed_keys[:3])}"
                 if changed_keys

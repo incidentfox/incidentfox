@@ -32,7 +32,7 @@ import mimetypes
 import os
 import re
 from pathlib import Path
-from typing import AsyncIterator, Optional, Union
+from typing import AsyncIterator
 
 # Claude SDK imports
 from claude_agent_sdk import (
@@ -43,7 +43,6 @@ from claude_agent_sdk import (
     ResultMessage,
     TextBlock,
 )
-from claude_agent_sdk.types import StreamEvent as SDKStreamEvent
 from dotenv import load_dotenv
 from events import (
     StreamEvent,
@@ -93,21 +92,29 @@ def _extract_images_from_text(text: str) -> tuple[str, list]:
         if path_str.startswith(("http://", "https://", "data:")):
             continue
 
-        # Resolve path
-        # Accept: ./path, /path, /workspace/path, attachments/path
+        # Resolve path — always relative to /workspace
+        # Reject absolute paths that don't start with /workspace
+        workspace = Path("/workspace")
         if path_str.startswith("./"):
-            full_path = Path("/workspace") / path_str[2:]
-        elif path_str.startswith("/"):
+            full_path = workspace / path_str[2:]
+        elif path_str.startswith("/workspace/"):
             full_path = Path(path_str)
-        elif path_str.startswith("attachments/"):
-            full_path = Path("/workspace") / path_str
+        elif path_str.startswith("/"):
+            # Reject other absolute paths (e.g. /var/run/secrets)
+            print(f"⚠️ [IMAGE] Rejecting absolute path: {path_str}")
+            continue
         else:
-            full_path = Path("/workspace") / path_str
+            full_path = workspace / path_str
 
-        # Security: only allow paths within /workspace
+        # Security: resolve symlinks and verify path is within /workspace
         try:
-            resolved = full_path.resolve()
-            if not str(resolved).startswith("/workspace"):
+            resolved = full_path.resolve(strict=False)
+            # Use Path containment check (not string prefix) to prevent
+            # bypass via paths like /workspacefoo
+            if (
+                workspace.resolve() not in resolved.parents
+                and resolved != workspace.resolve()
+            ):
                 print(f"⚠️ [IMAGE] Skipping path outside workspace: {path_str}")
                 continue
         except Exception:
@@ -209,20 +216,31 @@ def _extract_files_from_text(text: str) -> tuple[str, list]:
         if path_str.startswith("#"):
             continue
 
-        # Resolve path
+        # Resolve path — always relative to /workspace
+        # Reject absolute paths that don't start with /workspace
+        workspace = Path("/workspace")
         if path_str.startswith("./"):
-            full_path = Path("/workspace") / path_str[2:]
-        elif path_str.startswith("/"):
+            full_path = workspace / path_str[2:]
+        elif path_str.startswith("/workspace/"):
             full_path = Path(path_str)
+        elif path_str.startswith("/"):
+            # Reject other absolute paths (e.g. /var/run/secrets, /tmp/sandbox-jwt)
+            print(f"⚠️ [FILE] Rejecting absolute path: {path_str}")
+            continue
         elif path_str.startswith("attachments/"):
-            full_path = Path("/workspace") / path_str
+            full_path = workspace / path_str
         else:
-            full_path = Path("/workspace") / path_str
+            full_path = workspace / path_str
 
-        # Security: only allow paths within /workspace
+        # Security: resolve symlinks and verify path is within /workspace
         try:
-            resolved = full_path.resolve()
-            if not str(resolved).startswith("/workspace"):
+            resolved = full_path.resolve(strict=False)
+            # Use Path containment check (not string prefix) to prevent
+            # bypass via paths like /workspacefoo
+            if (
+                workspace.resolve() not in resolved.parents
+                and resolved != workspace.resolve()
+            ):
                 print(f"⚠️ [FILE] Skipping path outside workspace: {path_str}")
                 continue
         except Exception:
@@ -339,9 +357,7 @@ def init_observability() -> None:
             _observe = observe
             Laminar.initialize()
             _observability_initialized = True
-            print(
-                f"[OBSERVABILITY] Laminar initialized (key: {os.getenv('LMNR_PROJECT_API_KEY', '')[:10]}...)"
-            )
+            print("[OBSERVABILITY] Laminar initialized (key present)")
         except Exception as e:
             print(f"[OBSERVABILITY] Laminar init failed: {e}")
             _observability_backend = "none"
@@ -709,9 +725,8 @@ class InteractiveAgentSession:
             observability_set_session(self.thread_id, metadata)
 
     async def cleanup(self):
-        """Clean up the client session."""
-        if self.client:
-            await self.client.__aexit__(None, None, None)
+        """Clean up the client session. Alias for close()."""
+        await self.close()
 
     @observability_observe()
     async def execute(
@@ -735,6 +750,11 @@ class InteractiveAgentSession:
 
         if self.client is None:
             raise RuntimeError("Session not started. Call start() first.")
+
+        if self.is_running:
+            raise RuntimeError(
+                "Session already executing. Wait for current execution to complete."
+            )
 
         self.is_running = True
         self._was_interrupted = False
@@ -929,13 +949,20 @@ class InteractiveAgentSession:
             print(f"❌ [AGENT] Exception during execute: {error_msg}")
             traceback.print_exc()
 
-            # Provide user-friendly messages for known SDK issues
+            # Provide user-friendly messages for known issues; default to generic
             if "buffer size" in error_msg.lower() or "1048576" in error_msg:
                 error_msg = "Subagent produced too much output (SDK buffer limit). Try a simpler task."
             elif "decode" in error_msg.lower() and "json" in error_msg.lower():
                 error_msg = (
                     "SDK JSON parsing error. The response was too large or malformed."
                 )
+            elif "rate" in error_msg.lower() and "limit" in error_msg.lower():
+                error_msg = (
+                    "API rate limit reached. Please wait a moment and try again."
+                )
+            else:
+                # Don't leak internal details (file paths, DB strings, SDK state)
+                error_msg = "An internal error occurred during the investigation."
 
             yield error_event(self.thread_id, error_msg, recoverable=False)
             # Don't re-raise - let the error event be sent cleanly
@@ -986,8 +1013,9 @@ class InteractiveAgentSession:
                 subtype="interrupted",
             )
         except Exception as e:
+            print(f"❌ [AGENT] Interrupt failed: {str(e)}")
             yield error_event(
-                self.thread_id, f"Interrupt failed: {str(e)}", recoverable=False
+                self.thread_id, "Interrupt failed. Please try again.", recoverable=False
             )
             raise
 

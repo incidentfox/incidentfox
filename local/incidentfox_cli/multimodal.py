@@ -7,9 +7,7 @@ Provides:
 """
 
 import base64
-import io
 import os
-import re
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -206,15 +204,15 @@ class VoiceRecorder:
         """Get list of missing dependencies."""
         missing = []
         try:
-            import sounddevice
+            import sounddevice  # noqa: F401
         except ImportError:
             missing.append("sounddevice")
         try:
-            import soundfile
+            import soundfile  # noqa: F401
         except ImportError:
             missing.append("soundfile")
         try:
-            import openai
+            import openai  # noqa: F401
         except ImportError:
             missing.append("openai")
         return missing
@@ -238,8 +236,6 @@ class VoiceRecorder:
         """
         if not self.is_available():
             return None
-
-        import asyncio
 
         # Record audio
         if on_start:
@@ -301,7 +297,6 @@ class VoiceRecorder:
         if not self.is_available():
             return None
 
-        import queue
         import threading
 
         audio_chunks = []

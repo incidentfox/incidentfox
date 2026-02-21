@@ -957,7 +957,6 @@ def create_app() -> FastAPI:
         authorization: str = Header(default=""),
         x_admin_token: str = Header(default="", alias="X-Admin-Token"),
     ):
-        cfg: ConfigServiceClient = app.state.config_service
         raw = _extract_token(authorization, x_admin_token)
         if not raw:
             raise HTTPException(status_code=401, detail="Missing admin token")

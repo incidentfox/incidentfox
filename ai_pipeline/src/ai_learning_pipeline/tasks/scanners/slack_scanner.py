@@ -182,11 +182,13 @@ class SlackEnvironmentScanner:
         lookback_days: int = 30,
         max_channels: int = 20,
         max_messages_per_channel: int = 200,
+        channel_ids: Optional[List[str]] = None,
     ):
         self.bot_token = bot_token
         self.lookback_days = lookback_days
         self.max_channels = max_channels
         self.max_messages_per_channel = max_messages_per_channel
+        self.channel_ids = channel_ids  # Team-scoped filter (None = all)
 
     def scan(self) -> ScanResult:
         """Run the full Slack workspace scan."""
@@ -209,6 +211,24 @@ class SlackEnvironmentScanner:
                     scan_duration_ms=(time.time() - start) * 1000,
                     error="Could not list channels",
                 )
+
+            # Filter to team-scoped channels if specified
+            if self.channel_ids:
+                scoped_ids = set(self.channel_ids)
+                all_channels = [ch for ch in all_channels if ch.get("id") in scoped_ids]
+                _log(
+                    "channels_filtered_by_team",
+                    total_workspace=len(all_channels) + len(scoped_ids),
+                    team_channels=len(all_channels),
+                )
+                if not all_channels:
+                    return ScanResult(
+                        signals=[],
+                        channels_scanned=0,
+                        messages_scanned=0,
+                        scan_duration_ms=(time.time() - start) * 1000,
+                        error="No team-scoped channels found",
+                    )
 
             # 2. Extract signals from channel names
             for ch in all_channels:

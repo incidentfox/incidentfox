@@ -174,7 +174,7 @@ def call_orchestrator_slack_trigger(
     # Get admin token
     try:
         admin_token = get_secret("incidentfox/prod/orchestrator_internal_token")
-    except:
+    except Exception:
         admin_token = "test-admin-token"
 
     # Start port-forward (orchestrator uses port 8070)

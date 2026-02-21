@@ -13,9 +13,7 @@ Datadog Sites:
 - GOV: api.ddog-gov.com
 """
 
-import json
 import os
-import sys
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -223,10 +221,14 @@ def query_metrics(
     now = int(datetime.now(timezone.utc).timestamp())
     start = now - (time_range_minutes * 60)
 
-    url = get_api_url(f"/api/v1/query?from={start}&to={now}&query={query}")
+    url = get_api_url("/api/v1/query")
 
     with httpx.Client(timeout=60.0) as client:
-        response = client.get(url, headers=get_headers())
+        response = client.get(
+            url,
+            headers=get_headers(),
+            params={"from": start, "to": now, "query": query},
+        )
         response.raise_for_status()
         return response.json()
 

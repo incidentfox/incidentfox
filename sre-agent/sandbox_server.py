@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2026 IncidentFox, Inc.
+#
+# Licensed under the Business Source License 1.1 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://github.com/incidentfox/incidentfox/blob/main/LICENSE-ENTERPRISE
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Sandbox Server - Runs inside the sandbox container on port 8888
 
@@ -10,13 +24,14 @@ Streams structured events via SSE (Server-Sent Events) for slack-bot consumption
 
 import asyncio
 import os
+import secrets
 
 # Add /app to path for imports
 import sys
 from typing import Dict, List, Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 sys.path.insert(0, "/app")
@@ -136,8 +151,12 @@ async def list_sessions():
     }
 
 
+_CLAIM_AUTH_TOKEN = os.getenv("INVESTIGATE_AUTH_TOKEN", "")
+_claim_lock = asyncio.Lock()
+
+
 @app.post("/claim")
-async def claim_sandbox(request: ClaimRequest):
+async def claim_sandbox(request: ClaimRequest, raw_request: Request):
     """
     Claim a warm sandbox by injecting JWT and setting context.
 
@@ -152,18 +171,28 @@ async def claim_sandbox(request: ClaimRequest):
     import stat
     from pathlib import Path
 
+    # Require service-to-service auth (same token as /investigate)
+    if _CLAIM_AUTH_TOKEN:
+        auth_header = raw_request.headers.get("authorization", "")
+        if not auth_header.lower().startswith("bearer "):
+            raise HTTPException(status_code=401, detail="Missing Authorization header")
+        token = auth_header.split(" ", 1)[1].strip()
+        if not secrets.compare_digest(token, _CLAIM_AUTH_TOKEN):
+            raise HTTPException(status_code=403, detail="Invalid service token")
+
     jwt_path = Path("/tmp/sandbox-jwt")
 
-    # Prevent re-claiming an already-claimed sandbox
-    if jwt_path.exists() and jwt_path.read_text().strip():
-        raise HTTPException(
-            status_code=409,
-            detail="Sandbox already claimed",
-        )
+    # Atomic check-and-claim under lock to prevent race between concurrent requests
+    async with _claim_lock:
+        if jwt_path.exists() and jwt_path.read_text().strip():
+            raise HTTPException(
+                status_code=409,
+                detail="Sandbox already claimed",
+            )
 
-    # Write JWT to file (Envoy Lua filter reads this on each request)
-    jwt_path.write_text(request.jwt_token)
-    jwt_path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600 — owner only
+        # Write JWT to file (Envoy Lua filter reads this on each request)
+        jwt_path.write_text(request.jwt_token)
+        jwt_path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600 — owner only
 
     # Set environment variables for tenant context
     # These are used by the agent for logging and context
@@ -495,7 +524,6 @@ async def execute(request: ExecuteRequest):
             )
 
         except Exception as e:
-            import traceback
 
             error_msg = str(e)
 

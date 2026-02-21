@@ -760,7 +760,7 @@ Do these texts contradict each other?""",
                 action="Teaching not found",
             )
 
-        pending = self._pending.pop(teaching_id)
+        self._pending.pop(teaching_id)
 
         self._stats["rejected"] += 1
         self._stats["pending_review"] -= 1

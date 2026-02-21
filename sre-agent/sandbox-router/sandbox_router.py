@@ -81,7 +81,6 @@ async def proxy_request(request: Request, full_path: str):
     }
 
     # Retry loop with exponential backoff for DNS propagation and pod startup
-    last_error = None
     for attempt in range(RETRY_COUNT):
         try:
             req = client.build_request(
@@ -99,7 +98,6 @@ async def proxy_request(request: Request, full_path: str):
                 headers=resp.headers,
             )
         except httpx.ConnectError as e:
-            last_error = e
             if attempt < RETRY_COUNT - 1:
                 delay = min(
                     RETRY_BASE_DELAY * (2**attempt), 4.0

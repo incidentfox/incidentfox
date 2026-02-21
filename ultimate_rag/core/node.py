@@ -8,7 +8,7 @@ metadata, and knowledge graph integration.
 import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence, Set
+from typing import Any, Dict, List, Optional, Set
 
 from .metadata import NodeMetadata, SourceInfo, ValidationStatus
 from .types import ImportanceScore, ImportanceWeights, KnowledgeType

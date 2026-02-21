@@ -2474,9 +2474,6 @@ async def run_with_streaming(
     Returns:
         The last_response_id from the agent run, for chaining follow-up queries
     """
-    from rich.live import Live
-    from rich.spinner import Spinner
-    from rich.text import Text
 
     tool_calls = []
     final_result = None
@@ -2919,7 +2916,6 @@ async def handle_voice_recording(
         audio_chunks = []
 
         def record_audio():
-            import numpy as np
 
             try:
                 import sounddevice as sd
@@ -3462,7 +3458,7 @@ def _check_aws_config() -> tuple[str, str]:
 def _check_env_config(int_config: dict) -> tuple[str, str]:
     """Check if required env vars are set for an integration."""
     required = int_config.get("required", [])
-    optional = int_config.get("optional", [])
+    int_config.get("optional", [])
     env_hint = int_config.get("env_hint", "")
 
     if not required:

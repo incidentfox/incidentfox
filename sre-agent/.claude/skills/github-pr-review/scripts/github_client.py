@@ -257,6 +257,135 @@ def add_pr_comment(owner: str, repo: str, pr_number: int, body: str) -> dict[str
     )
 
 
+def create_branch(
+    owner: str, repo: str, branch: str, from_branch: str | None = None
+) -> dict[str, Any]:
+    """Create a new branch.
+
+    If from_branch is not specified, branches from the repo's default branch.
+    """
+    # Get source ref SHA
+    if from_branch:
+        ref_data = api_request(
+            "GET", f"/repos/{owner}/{repo}/git/ref/heads/{from_branch}"
+        )
+    else:
+        # Get default branch
+        repo_data = api_request("GET", f"/repos/{owner}/{repo}")
+        default_branch = repo_data.get("default_branch", "main")
+        ref_data = api_request(
+            "GET", f"/repos/{owner}/{repo}/git/ref/heads/{default_branch}"
+        )
+
+    sha = ref_data.get("object", {}).get("sha")
+    if not sha:
+        raise RuntimeError("Could not get SHA for source branch")
+
+    return api_request(
+        "POST",
+        f"/repos/{owner}/{repo}/git/refs",
+        json_data={"ref": f"refs/heads/{branch}", "sha": sha},
+    )
+
+
+def create_or_update_file(
+    owner: str,
+    repo: str,
+    path: str,
+    content: str,
+    message: str,
+    branch: str,
+    sha: str | None = None,
+) -> dict[str, Any]:
+    """Create or update a file in a repository.
+
+    For updates, pass the current file SHA (from read_file_with_sha).
+    Content should be the full file content (will be base64-encoded automatically).
+    """
+    import base64
+
+    payload = {
+        "message": message,
+        "content": base64.b64encode(content.encode()).decode(),
+        "branch": branch,
+    }
+    if sha:
+        payload["sha"] = sha
+
+    return api_request(
+        "PUT", f"/repos/{owner}/{repo}/contents/{path}", json_data=payload
+    )
+
+
+def create_pull_request(
+    owner: str,
+    repo: str,
+    title: str,
+    head: str,
+    body: str = "",
+    base: str | None = None,
+) -> dict[str, Any]:
+    """Create a pull request.
+
+    If base is not specified, uses the repo's default branch.
+    """
+    payload = {"title": title, "head": head, "body": body}
+    if base:
+        payload["base"] = base
+    else:
+        repo_data = api_request("GET", f"/repos/{owner}/{repo}")
+        payload["base"] = repo_data.get("default_branch", "main")
+
+    return api_request("POST", f"/repos/{owner}/{repo}/pulls", json_data=payload)
+
+
+def create_commit_status(
+    owner: str,
+    repo: str,
+    sha: str,
+    state: str,
+    description: str = "",
+    context: str = "IncidentFox",
+    target_url: str | None = None,
+) -> dict[str, Any]:
+    """Create a commit status (shows as check in PR UI).
+
+    Valid states: error, failure, pending, success.
+    """
+    payload = {"state": state, "description": description[:140], "context": context}
+    if target_url:
+        payload["target_url"] = target_url
+
+    return api_request(
+        "POST", f"/repos/{owner}/{repo}/statuses/{sha}", json_data=payload
+    )
+
+
+def read_file_with_sha(
+    owner: str, repo: str, path: str, ref: str | None = None
+) -> dict[str, Any]:
+    """Read a file's contents and SHA (needed for updates).
+
+    Returns dict with 'content' (decoded string) and 'sha'.
+    """
+    params = {}
+    if ref:
+        params["ref"] = ref
+
+    result = api_request("GET", f"/repos/{owner}/{repo}/contents/{path}", params=params)
+
+    if isinstance(result, list):
+        raise RuntimeError(f"{path} is a directory, not a file")
+
+    content = result.get("content", "")
+    encoding = result.get("encoding", "base64")
+
+    decoded = (
+        base64.b64decode(content).decode("utf-8") if encoding == "base64" else content
+    )
+    return {"content": decoded, "sha": result.get("sha", ""), "path": path}
+
+
 # =========================================================================
 # Formatting helpers
 # =========================================================================

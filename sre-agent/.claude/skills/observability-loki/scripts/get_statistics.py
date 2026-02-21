@@ -6,7 +6,7 @@ import json
 import sys
 from datetime import datetime, timedelta, timezone
 
-from loki_client import query, query_instant
+from loki_client import query_instant
 
 
 def main():
@@ -28,7 +28,7 @@ def main():
 
     try:
         now = datetime.now(timezone.utc)
-        start = now - timedelta(hours=args.lookback)
+        now - timedelta(hours=args.lookback)
 
         # Get total log count
         total_query = f"count_over_time({args.selector}[{args.lookback}h])"

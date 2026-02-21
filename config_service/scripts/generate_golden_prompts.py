@@ -24,17 +24,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from prompts.agent_capabilities import AGENT_CAPABILITIES
 from prompts.default_prompts import get_default_agent_prompt
 from prompts.layers import (
-    BEHAVIORAL_PRINCIPLES,
     DELEGATION_GUIDANCE,
-    ERROR_HANDLING_COMMON,
-    EVIDENCE_FORMAT_GUIDANCE,
     SUBAGENT_GUIDANCE,
-    TOOL_CALL_LIMITS_TEMPLATE,
-    TRANSPARENCY_AND_AUDITABILITY,
     build_agent_prompt_sections,
     build_capabilities_section,
-    get_integration_errors,
-    get_integration_tool_limits,
 )
 
 # =============================================================================
@@ -165,7 +158,7 @@ def determine_agent_role(agent_name: str, template: dict) -> tuple[bool, bool]:
     Returns:
         (is_subagent, is_master)
     """
-    entrance_agent = get_entrance_agent(template)
+    get_entrance_agent(template)
     agents = get_template_agents(template)
 
     # Check if this agent has sub_agents (makes it a master)

@@ -98,7 +98,6 @@ def split_markdown_semantic(
     parts: List[str] = []
     buf: List[str] = []
     in_fence = False
-    fence_delim = "```"
 
     heading_re = re.compile(r"^\s{0,3}#{1,6}\s+\S")
     fence_re = re.compile(r"^\s*```")

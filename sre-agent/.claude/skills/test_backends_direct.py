@@ -293,7 +293,7 @@ def test_jaeger():
                 else:
                     # HTML response = wrong path
                     continue
-        except Exception as e:
+        except Exception:
             continue
 
     test_result(

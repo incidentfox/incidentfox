@@ -149,7 +149,149 @@ async def _execute_agent_run(app, job: dict) -> dict:
         correlation_id=f"scheduled-{job['id']}",
     )
 
+    # Deliver output to configured destinations (Slack, etc.)
+    if result.get("success") and result.get("result"):
+        await _deliver_output(app, output_destinations, result["result"], job)
+
     return result
+
+
+async def _deliver_output(app, destinations: list[dict], text: str, job: dict) -> None:
+    """Post agent result to output destinations (Slack channels, etc.)."""
+    for dest in destinations:
+        dest_type = dest.get("type", "")
+        if dest_type == "slack":
+            await _deliver_to_slack(app, dest, text, job)
+        else:
+            _log(
+                "scheduler_output_unsupported_type",
+                dest_type=dest_type,
+                job_id=job["id"],
+            )
+
+
+async def _deliver_to_slack(app, dest: dict, text: str, job: dict) -> None:
+    """Post result to a Slack channel."""
+    channel_id = dest.get("channel_id")
+    if not channel_id:
+        _log("scheduler_slack_no_channel", job_id=job["id"])
+        return
+
+    # Resolve bot token with multiple fallback strategies
+    bot_token = dest.get("bot_token", "")
+
+    # 1. Try team config integrations.slack.bot_token
+    if not bot_token:
+        try:
+            admin_token = os.getenv("ORCHESTRATOR_INTERNAL_ADMIN_TOKEN", "")
+            if admin_token:
+                config_service = app.state.config_service
+                team_config = config_service.get_effective_config_for_node(
+                    admin_token,
+                    job["org_id"],
+                    job["team_node_id"],
+                )
+                bot_token = (
+                    team_config.get("integrations", {})
+                    .get("slack", {})
+                    .get("bot_token", "")
+                )
+        except Exception:
+            pass
+
+    # 2. Try Slack installation from config-service internal API
+    if not bot_token:
+        bot_token = await _get_slack_bot_token(app, dest.get("slack_team_id"))
+
+    # 3. Fall back to env var (legacy single-tenant)
+    if not bot_token:
+        bot_token = os.getenv("SLACK_BOT_TOKEN", "")
+
+    if not bot_token:
+        _log(
+            "scheduler_slack_no_token",
+            job_id=job["id"],
+            channel_id=channel_id,
+        )
+        return
+
+    channel_name = dest.get("channel_name", channel_id)
+
+    # Clean up agent output: strip narration before the report title.
+    # The agent accumulates all assistant text blocks, so early "I'll check..."
+    # narration gets prepended to the actual report. Strip it.
+    cleaned = text
+    title_marker = "*IncidentFox Automatic Status Report*"
+    idx = cleaned.find(title_marker)
+    if idx > 0:
+        cleaned = cleaned[idx:]
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                "https://slack.com/api/chat.postMessage",
+                headers={
+                    "Authorization": f"Bearer {bot_token}",
+                    "Content-Type": "application/json; charset=utf-8",
+                },
+                json={
+                    "channel": channel_id,
+                    "text": cleaned,
+                    "unfurl_links": False,
+                },
+            )
+            data = resp.json()
+            if data.get("ok"):
+                _log(
+                    "scheduler_slack_posted",
+                    job_id=job["id"],
+                    channel=channel_name,
+                )
+            else:
+                _log(
+                    "scheduler_slack_error",
+                    job_id=job["id"],
+                    error=data.get("error", "unknown"),
+                    channel=channel_name,
+                )
+    except Exception as e:
+        _log(
+            "scheduler_slack_failed",
+            job_id=job["id"],
+            error=str(e),
+        )
+
+
+async def _get_slack_bot_token(app, slack_team_id: str | None = None) -> str:
+    """Fetch a Slack bot token from config-service's installation store."""
+    config_service = app.state.config_service
+    base_url = config_service.base_url.rstrip("/")
+    url = f"{base_url}/api/v1/internal/slack/installations/find"
+
+    # If no specific team_id, try to find any installation for the default app
+    params: dict[str, str] = {"slack_app_slug": "incidentfox"}
+    if slack_team_id:
+        params["team_id"] = slack_team_id
+    else:
+        # Query the first available installation
+        params["team_id"] = ""  # Will need to list instead
+
+    try:
+        # Try finding installation by team_id if available
+        if slack_team_id:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    url,
+                    params={"team_id": slack_team_id, "slack_app_slug": "incidentfox"},
+                    headers={"X-Internal-Service": SERVICE_ID},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data and data.get("bot_token"):
+                        return data["bot_token"]
+    except Exception:
+        pass
+    return ""
 
 
 async def _get_team_token(app, org_id: str, team_node_id: str) -> str | None:

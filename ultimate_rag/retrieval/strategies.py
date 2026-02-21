@@ -8,7 +8,6 @@ Each strategy provides a different approach to finding relevant knowledge:
 - HybridGraphTreeStrategy: Combines graph traversal with tree search
 """
 
-import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -18,7 +17,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from ..core.node import KnowledgeNode, KnowledgeTree, TreeForest
-    from ..graph.entities import Entity
     from ..graph.graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
@@ -1117,7 +1115,7 @@ class HybridGraphTreeStrategy(RetrievalStrategy):
         3. Get RAPTOR nodes linked to those entities
         """
         chunks = []
-        analysis = self.analyze_query(query)
+        self.analyze_query(query)
 
         # Find starting entities (in production, use NER or entity linking)
         starting_entities = self._find_entities_in_query(query, graph)

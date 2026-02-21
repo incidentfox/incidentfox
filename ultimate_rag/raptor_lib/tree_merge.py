@@ -284,10 +284,12 @@ def merge_tree_files(
     """
     import pickle
 
+    from ultimate_rag.core.persistence import safe_pickle_load
+
     trees = []
     for path in tree_paths:
         with open(path, "rb") as f:
-            tree = pickle.load(f)
+            tree = safe_pickle_load(f)
             if not isinstance(tree, Tree):
                 raise ValueError(f"{path} does not contain a Tree object")
             trees.append(tree)

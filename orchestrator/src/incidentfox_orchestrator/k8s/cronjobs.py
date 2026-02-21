@@ -170,7 +170,7 @@ def create_pipeline_cronjob(
     try:
         # Try to create; if exists, update
         try:
-            result = kc.batch_v1.create_namespaced_cron_job(
+            kc.batch_v1.create_namespaced_cron_job(
                 namespace=namespace,
                 body=cronjob,
             )
@@ -184,7 +184,7 @@ def create_pipeline_cronjob(
             )
         except ApiException as e:
             if e.status == 409:  # Already exists
-                result = kc.batch_v1.replace_namespaced_cron_job(
+                kc.batch_v1.replace_namespaced_cron_job(
                     name=name,
                     namespace=namespace,
                     body=cronjob,
@@ -471,7 +471,7 @@ def create_dependency_discovery_cronjob(
     try:
         # Try to create; if exists, update
         try:
-            result = kc.batch_v1.create_namespaced_cron_job(
+            kc.batch_v1.create_namespaced_cron_job(
                 namespace=namespace,
                 body=cronjob,
             )
@@ -485,7 +485,7 @@ def create_dependency_discovery_cronjob(
             )
         except ApiException as e:
             if e.status == 409:  # Already exists
-                result = kc.batch_v1.replace_namespaced_cron_job(
+                kc.batch_v1.replace_namespaced_cron_job(
                     name=name,
                     namespace=namespace,
                     body=cronjob,

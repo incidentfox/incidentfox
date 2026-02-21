@@ -4,9 +4,8 @@ YAML Configuration Seeder
 Handles seeding the database from local.yaml on startup in local development mode.
 """
 
-import os
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from sqlalchemy import update
 from sqlalchemy.orm import Session

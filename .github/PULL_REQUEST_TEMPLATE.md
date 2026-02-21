@@ -62,6 +62,7 @@ Closes #
 - [ ] No new warnings introduced
 - [ ] Tests added/updated and passing
 - [ ] All CI checks passing
+- [ ] License headers added if modifying enterprise (BSL) files (see [LICENSING.md](LICENSING.md))
 - [ ] Branch is up to date with `main`
 
 ## Additional Context

@@ -39,7 +39,7 @@ def main():
                             - datetime.fromisoformat(c.replace("Z", "+00:00"))
                         ).total_seconds() / 60
                         mttr_values.append(mttr)
-                    except:
+                    except (ValueError, KeyError, TypeError):
                         pass
             page += 1
             if len(incidents) < params["limit"]:

@@ -17,13 +17,19 @@ Note: JWT validation is in credential-proxy/src/credential_resolver/jwt_auth.py
 """
 
 import os
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import jwt
 
 # Shared secret between server and credential-resolver
 # In production, load from K8s Secret (same secret in both deployments)
-JWT_SECRET = os.getenv("JWT_SECRET", "incidentfox-sandbox-jwt-secret-change-in-prod")
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+if not JWT_SECRET:
+    raise RuntimeError(
+        "JWT_SECRET environment variable is required. "
+        "Set it in .env for local dev or via K8s Secret in production."
+    )
 
 # JWT settings (must match credential-resolver/jwt_auth.py)
 JWT_ALGORITHM = "HS256"
@@ -57,6 +63,7 @@ def generate_sandbox_jwt(
         "aud": JWT_AUDIENCE,
         "iat": now,
         "exp": now + timedelta(hours=ttl_hours),
+        "jti": uuid.uuid4().hex,  # Unique ID for future revocation support
         # Custom claims
         "tenant_id": tenant_id,
         "team_id": team_id,

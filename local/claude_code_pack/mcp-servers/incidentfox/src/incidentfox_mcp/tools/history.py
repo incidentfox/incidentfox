@@ -5,7 +5,6 @@ Enables "what did I investigate last week?" and pattern learning.
 """
 
 import json
-import os
 import sqlite3
 import uuid
 from datetime import datetime

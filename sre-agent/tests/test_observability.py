@@ -8,7 +8,6 @@ Laminar, Langfuse, and disabled ("none") modes.
 Run: cd sre-agent && uv run python -m pytest tests/test_observability.py -v
 """
 
-import importlib
 import os
 import sys
 from pathlib import Path
@@ -335,7 +334,7 @@ class TestHelperFunctions:
         agent._observability_backend = "laminar"
         agent._observe = mock_observe
 
-        decorator = agent.observability_observe()
+        agent.observability_observe()
         mock_observe.assert_called_once()
 
 

@@ -161,6 +161,13 @@ externalSecrets:
       clientIdRemoteRefKey: incidentfox/prod/slack_client_id
       clientSecretRemoteRefKey: incidentfox/prod/slack_client_secret
       signingSecretRemoteRefKey: incidentfox/prod/slack_signing_secret
+  # Vercel integration (deployment webhooks and API access)
+  vercel:
+    enabled: false
+    secretPath: ""
+
+# Vercel webhook signature verification domain
+vercelVerify: ""
 
 services:
   configService:
@@ -256,7 +263,7 @@ services:
       # Warm pool name
       poolName: incidentfox-warmpool
       # Envoy image for sidecar
-      envoyImage: "envoyproxy/envoy:v1.28-latest"
+      envoyImage: "envoyproxy/envoy:v1.28.7"
       # Resource limits for warm pool agent container
       agentResources:
         requests:
@@ -731,7 +738,7 @@ services:
   # Runs periodically to garbage collect sandboxes past their TTL.
   sandboxCleanup:
     enabled: false  # Enable when using gVisor sandboxes
-    image: "bitnami/kubectl:latest"
+    image: "bitnami/kubectl:1.29.2"
     schedule: "*/15 * * * *"  # Every 15 minutes
     successfulJobsHistoryLimit: 3
     failedJobsHistoryLimit: 3

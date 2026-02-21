@@ -1,6 +1,6 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import sqlalchemy as sa
@@ -140,7 +140,13 @@ class TeamToken(Base):
         """Check if token has expired."""
         if self.expires_at is None:
             return False
-        return datetime.utcnow() > self.expires_at.replace(tzinfo=None)
+        now = datetime.now(timezone.utc)
+        expires = (
+            self.expires_at.replace(tzinfo=timezone.utc)
+            if self.expires_at.tzinfo is None
+            else self.expires_at
+        )
+        return now > expires
 
     def has_permission(self, permission: str) -> bool:
         """Check if token has a specific permission."""
@@ -188,7 +194,13 @@ class OrgAdminToken(Base):
         """Check if token has expired."""
         if self.expires_at is None:
             return False
-        return datetime.utcnow() > self.expires_at.replace(tzinfo=None)
+        now = datetime.now(timezone.utc)
+        expires = (
+            self.expires_at.replace(tzinfo=timezone.utc)
+            if self.expires_at.tzinfo is None
+            else self.expires_at
+        )
+        return now > expires
 
 
 class ImpersonationJTI(Base):

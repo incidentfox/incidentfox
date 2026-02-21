@@ -38,6 +38,8 @@ spec:
         app.kubernetes.io/name: incidentfox-ultimate-rag
     spec:
       serviceAccountName: incidentfox-ultimate-rag
+      securityContext:
+        fsGroup: 1000
       {{- if .Values.services.ultimateRag.nodeSelector }}
       nodeSelector:
 {{ toYaml .Values.services.ultimateRag.nodeSelector | indent 8 }}
@@ -73,10 +75,19 @@ spec:
             - name: trees-volume
               mountPath: /trees
       {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: ultimate-rag
           image: {{ required "services.ultimateRag.image is required" .Values.services.ultimateRag.image }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           command:
             - /bin/bash
             - -c
@@ -103,6 +114,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.agentOpenAI.secretName | quote }}
                   key: {{ .Values.externalSecrets.contract.agentOpenAI.apiKeyKey | quote }}
+            {{- if .Values.externalSecrets.contract.ragApiKey }}
+            - name: RAG_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.ragApiKey.secretName | quote }}
+                  key: {{ .Values.externalSecrets.contract.ragApiKey.apiKeyKey | quote }}
+            {{- end }}
           volumeMounts:
             - name: trees-volume
               mountPath: /app/trees

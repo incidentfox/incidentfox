@@ -2,7 +2,6 @@
 """Get the known database schema for incident enrichment tables."""
 
 import json
-import sys
 
 
 def main():

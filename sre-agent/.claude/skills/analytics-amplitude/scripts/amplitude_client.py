@@ -10,7 +10,6 @@ Amplitude Regions:
 """
 
 import base64
-import json
 import os
 import sys
 from typing import Any
@@ -136,8 +135,6 @@ def amplitude_request(
             print(
                 f"ERROR: Amplitude API returned {response.status_code}", file=sys.stderr
             )
-            print(f"URL: {url}", file=sys.stderr)
-            print(f"Response: {response.text[:500]}", file=sys.stderr)
             response.raise_for_status()
 
         return response.json()

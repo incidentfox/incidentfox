@@ -8,7 +8,6 @@ Provides bidirectional sync between YAML config files and the database:
 Uses ruamel.yaml to preserve comments and formatting.
 """
 
-import fcntl
 import os
 import tempfile
 import time

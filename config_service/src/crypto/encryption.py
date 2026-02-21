@@ -11,7 +11,6 @@ Security notes:
 - Each encryption includes a timestamp for key rotation support
 """
 
-import base64
 import os
 from typing import Optional
 

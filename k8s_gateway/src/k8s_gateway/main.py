@@ -15,14 +15,12 @@ from sse_starlette.sse import EventSourceResponse
 
 from .auth import (
     AuthError,
-    ClusterIdentity,
     validate_internal_service,
     validate_k8s_agent_token,
 )
 from .config import get_settings
 from .connection_manager import connection_manager
 from .models import (
-    AgentRegistration,
     ClusterConnectionInfo,
     ExecuteCommandRequest,
     ExecuteCommandResponse,

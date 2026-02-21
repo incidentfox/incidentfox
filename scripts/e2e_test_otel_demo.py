@@ -315,7 +315,7 @@ def run_fault_injection_test(fault_type: str = "cart"):
     # Get Slack token for notifications
     try:
         slack_token = get_secret("incidentfox/prod/slack_bot_token")
-    except:
+    except Exception:
         slack_token = None
         print("⚠️ No Slack token - skipping Slack notifications")
 

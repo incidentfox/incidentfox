@@ -18,3 +18,7 @@ pydantic>=2.0.0
 
 # Async support
 anyio>=4.0.0
+
+# API server
+fastapi>=0.115.0
+uvicorn>=0.32.0

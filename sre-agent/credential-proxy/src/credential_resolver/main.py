@@ -1,3 +1,17 @@
+# Copyright 2026 IncidentFox, Inc.
+#
+# Licensed under the Business Source License 1.1 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://github.com/incidentfox/incidentfox/blob/main/LICENSE-ENTERPRISE
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Credential resolver ext_authz service.
 
 Injects credentials for outgoing requests based on JWT-authenticated sandbox identity.
@@ -1317,13 +1331,11 @@ async def datadog_proxy(path: str, request: Request):
     target_url = f"https://api.{site}/{path}"
     logger.info(f"Datadog proxy: forwarding to {target_url}")
 
-    # Debug: Log credential presence (not values) for troubleshooting
+    # Log credential presence (not values) for troubleshooting
     api_key = creds.get("api_key", "")
     app_key = creds.get("app_key", "")
     logger.info(
-        f"Datadog credentials: api_key={len(api_key)}chars, app_key={len(app_key)}chars, "
-        f"api_key_prefix={api_key[:4] if len(api_key) >= 4 else 'N/A'}..., "
-        f"app_key_prefix={app_key[:4] if len(app_key) >= 4 else 'N/A'}..."
+        f"Datadog credentials: api_key={len(api_key)}chars, app_key={len(app_key)}chars"
     )
 
     # Build auth headers

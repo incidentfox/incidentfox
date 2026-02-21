@@ -8,7 +8,6 @@ Usage:
 import argparse
 import json
 import sys
-from datetime import datetime
 
 from opsgenie_client import opsgenie_request
 

@@ -4,6 +4,8 @@ These endpoints are not exposed externally and use internal auth.
 """
 
 import json
+import os
+import secrets
 import uuid as uuid_lib
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -16,13 +18,23 @@ from sqlalchemy.orm import Session
 from src.db import repository
 from src.db.config_models import NodeConfiguration
 from src.db.config_repository import get_or_create_node_configuration
-from src.db.models import GitHubInstallation, OrgNode, SlackApp, SlackInstallation
+from src.db.models import (
+    GitHubInstallation,
+    Integration,
+    OrgNode,
+    SlackApp,
+    SlackInstallation,
+)
 from src.db.session import get_db
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/v1/internal", tags=["internal"])
 
+# Internal service-to-service auth token.
+# In production, set via K8s Secret (shared between orchestrator, slack-bot, sre-agent).
+# If unset, auth check is header-presence-only (local dev with `make dev`).
+_INTERNAL_SERVICE_SECRET = os.getenv("INTERNAL_SERVICE_SECRET", "")
 
 # Priority order for routing identifiers (highest priority first)
 ROUTING_PRIORITY = [
@@ -30,6 +42,7 @@ ROUTING_PRIORITY = [
     "pagerduty_service_ids",
     "slack_channel_ids",
     "github_repos",
+    "vercel_project_ids",
     "coralogix_team_names",
     "incidentio_alert_source_ids",
     "services",
@@ -39,10 +52,17 @@ ROUTING_PRIORITY = [
 def require_internal_service(
     x_internal_service: str = Header(default="", alias="X-Internal-Service"),
 ) -> str:
-    """Validate internal service header."""
+    """Validate internal service header.
+
+    In production (INTERNAL_SERVICE_SECRET set), verifies the header value
+    matches the shared secret. In local dev (unset), only checks presence.
+    """
     if not x_internal_service:
         raise HTTPException(status_code=401, detail="Missing internal service header")
-    # Accept any internal service header for now - can add verification later
+    if _INTERNAL_SERVICE_SECRET and not secrets.compare_digest(
+        x_internal_service, _INTERNAL_SERVICE_SECRET
+    ):
+        raise HTTPException(status_code=403, detail="Invalid internal service token")
     return x_internal_service
 
 
@@ -656,6 +676,58 @@ def create_pending_change_internal(
     )
 
 
+# ==================== Integration Credentials ====================
+
+
+@router.get("/credentials/{org_id}/{integration_id}")
+def get_integration_credentials(
+    org_id: str,
+    integration_id: str,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    Return decrypted credentials for an integration.
+
+    Used by AI Pipeline (and other internal services) to call external APIs
+    directly — avoids per-integration proxy endpoints in config_service.
+    The EncryptedJSONB column auto-decrypts on read.
+    """
+    integration = (
+        session.query(Integration)
+        .filter(
+            Integration.org_id == org_id,
+            Integration.integration_id == integration_id,
+        )
+        .first()
+    )
+
+    if not integration:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Integration '{integration_id}' not found for org '{org_id}'",
+        )
+
+    if integration.status == "not_configured":
+        raise HTTPException(
+            status_code=404,
+            detail=f"Integration '{integration_id}' is not configured",
+        )
+
+    logger.info(
+        "credentials_fetched",
+        org_id=org_id,
+        integration_id=integration_id,
+        service=service,
+    )
+
+    return {
+        "integration_id": integration_id,
+        "status": integration.status,
+        "config": integration.config,  # Auto-decrypted by EncryptedJSONB
+    }
+
+
 # ==================== Routing Lookup ====================
 
 
@@ -682,7 +754,12 @@ def _normalize_identifier(identifier_type: str, value: str) -> str:
     """Normalize identifier value for comparison."""
     value = value.strip()
     # Lowercase for text-based identifiers
-    if identifier_type in ("coralogix_team_names", "github_repos", "services"):
+    if identifier_type in (
+        "coralogix_team_names",
+        "github_repos",
+        "vercel_project_ids",
+        "services",
+    ):
         value = value.lower()
     return value
 
@@ -706,6 +783,7 @@ def _check_routing_match(
         "teams_channel_id": "teams_channel_ids",
         "google_chat_space_id": "google_chat_space_ids",
         "github_repo": "github_repos",
+        "vercel_project_id": "vercel_project_ids",
         "coralogix_team_name": "coralogix_team_names",
         "incidentio_alert_source_id": "incidentio_alert_source_ids",
         "service": "services",
@@ -750,6 +828,7 @@ def lookup_routing(
         "teams_channel_id",
         "google_chat_space_id",
         "github_repo",
+        "vercel_project_id",
         "coralogix_team_name",
         "incidentio_alert_source_id",
         "service",

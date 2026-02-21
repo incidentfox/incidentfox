@@ -1,3 +1,17 @@
+# Copyright 2026 IncidentFox, Inc.
+#
+# Licensed under the Business Source License 1.1 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://github.com/incidentfox/incidentfox/blob/main/LICENSE-ENTERPRISE
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Config Service client for credential resolution.
 
 Fetches integration credentials from the IncidentFox Config Service.
@@ -292,18 +306,12 @@ class ConfigServiceClient:
 
         # Access gate: must have trial or subscription (even for BYOK).
         if not has_valid_trial and not has_active_subscription:
-            logger.warning(
-                f"Access denied for tenant={tenant_id}: "
-                f"trial_valid={has_valid_trial}, subscription={subscription_status}"
-            )
+            logger.warning(f"Access denied for tenant={tenant_id}: not authorized")
             return None
 
         # Authorized — use BYOK if available, else fall back to shared key.
         if customer_api_key:
-            logger.info(
-                f"Using BYOK Anthropic key for tenant={tenant_id} "
-                f"(trial={has_valid_trial}, subscription={subscription_status})"
-            )
+            logger.info(f"Using BYOK Anthropic key for tenant={tenant_id}")
             return {"api_key": customer_api_key}
 
         shared_key = get_shared_anthropic_key()
@@ -313,10 +321,7 @@ class ConfigServiceClient:
             )
             return None
 
-        logger.info(
-            f"Using shared Anthropic key for tenant={tenant_id} "
-            f"(trial={has_valid_trial}, subscription={subscription_status})"
-        )
+        logger.info(f"Using shared Anthropic key for tenant={tenant_id}")
         return {"api_key": shared_key, "workspace_attribution": tenant_id}
 
     def _extract_credentials(self, config: dict) -> dict:

@@ -196,7 +196,7 @@ def update_node_configuration(
                 for err in validation_errors:
                     all_dependents.extend(err.dependents)
 
-                error_detail = {
+                {
                     "error": "dependency_validation_failed",
                     "message": "Configuration change violates dependency constraints",
                     "errors": error_messages,

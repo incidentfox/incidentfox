@@ -20,6 +20,10 @@ spec:
       imagePullSecrets:
 {{ toYaml .Values.global.imagePullSecrets | indent 8 }}
       {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: config-service
           image: {{ required "services.configService.image is required" .Values.services.configService.image }}
@@ -28,6 +32,11 @@ spec:
             - containerPort: {{ .Values.services.configService.servicePort }}
           resources:
 {{ toYaml .Values.services.configService.resources | indent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: DATABASE_URL
               valueFrom:

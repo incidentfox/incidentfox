@@ -61,7 +61,7 @@ externalSecrets:
       enabled: true
       secretName: incidentfox-openai
       apiKeyKey: api_key
-      apiKeyRemoteRefKey: incidentfox/prod/openai_api_key  # Using prod key for staging
+      apiKeyRemoteRefKey: incidentfox/staging/openai_api_key
     webUiOidc:
       enabled: false
     slack:
@@ -70,7 +70,7 @@ externalSecrets:
       signingSecretKey: signing_secret
       botTokenKey: bot_token
       signingSecretRemoteRefKey: incidentfox/staging/slack_signing_secret
-      botTokenRemoteRefKey: incidentfox/prod/slack_bot_token  # Using prod token for staging
+      botTokenRemoteRefKey: incidentfox/staging/slack_bot_token
     github:
       enabled: true
       secretName: incidentfox-github
@@ -90,7 +90,7 @@ externalSecrets:
       enabled: true
       secretName: incidentfox-orchestrator-internal
       internalTokenKey: internal_token
-      internalTokenRemoteRefKey: incidentfox/prod/orchestrator_internal_token  # Using prod token for staging
+      internalTokenRemoteRefKey: incidentfox/staging/orchestrator_internal_token
     langfuse:
       enabled: true
       secretName: incidentfox-langfuse
@@ -103,23 +103,25 @@ externalSecrets:
       secretName: incidentfox-google-chat
       projectIdKey: project_id
       serviceAccountKeyKey: service_account_key
-      projectIdRemoteRefKey: incidentfox/prod/google_chat_project_id
-      serviceAccountKeyRemoteRefKey: incidentfox/prod/google_chat_service_account_key
+      projectIdRemoteRefKey: incidentfox/staging/google_chat_project_id
+      serviceAccountKeyRemoteRefKey: incidentfox/staging/google_chat_service_account_key
     teams:
       enabled: true
       secretName: incidentfox-teams
       appIdKey: app_id
       appPasswordKey: app_password
       tenantIdKey: tenant_id
-      appIdRemoteRefKey: incidentfox/prod/teams_app_id
-      appPasswordRemoteRefKey: incidentfox/prod/teams_app_password
-      tenantIdRemoteRefKey: incidentfox/prod/teams_tenant_id
+      appIdRemoteRefKey: incidentfox/staging/teams_app_id
+      appPasswordRemoteRefKey: incidentfox/staging/teams_app_password
+      tenantIdRemoteRefKey: incidentfox/staging/teams_tenant_id
     # JWT secret for sandbox credential injection
     jwtSecret:
       enabled: true
       secretName: incidentfox-jwt-secret
       secretKey: JWT_SECRET
       remoteRefKey: incidentfox/staging/jwt_secret
+      investigateAuthTokenKey: INVESTIGATE_AUTH_TOKEN
+      investigateAuthTokenRemoteRefKey: incidentfox/staging/investigate_auth_token
     # Shared Anthropic key for free trials
     sharedAnthropicKey:
       enabled: true
@@ -180,6 +182,13 @@ services:
     requireAdminStar: true
     slackAgentMaxTurns: "200"
     slackAgentTimeoutSeconds: "180"
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
 
   # Slack Bot - Multi-tenant Slack integration
   slackBot:
@@ -188,6 +197,13 @@ services:
     replicas: 1
     servicePort: 3000
     baseUrl: "https://slack-staging.incidentfox.ai"  # OAuth redirect base URL (staging)
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
     freeTrial:
       enabled: true
       days: 7
@@ -245,6 +261,13 @@ services:
             - type: Pods
               value: 1                     # Remove 1 pod at a time
               periodSeconds: 60
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "2000m"
+        memory: "4Gi"
     startupProbe:
       enabled: true
       path: "/health"
@@ -276,6 +299,13 @@ services:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/sandbox-router:latest"
     replicas: 1
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
     hpa:
       enabled: true
       minReplicas: 1
@@ -285,7 +315,7 @@ services:
   # Sandbox Cleanup for expired sandbox garbage collection
   sandboxCleanup:
     enabled: true
-    image: "bitnami/kubectl:latest"
+    image: "bitnami/kubectl:1.29.2"
     schedule: "*/15 * * * *"
 
   # Credential Resolver for sandbox credential injection
@@ -293,6 +323,13 @@ services:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/credential-resolver:latest"
     replicas: 1
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
     credentialSource: config_service
     jwtMode: strict
     sharedAnthropicKey:
@@ -301,7 +338,10 @@ services:
       secretKey: ANTHROPIC_API_KEY
 
   aiPipelineApi:
-    enabled: false  # Deprecated - use ultimateRag instead
+    enabled: true
+    image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ai-pipeline:latest"
+    replicas: 1
+    servicePort: 8085
 
   knowledgeBase:
     enabled: false  # Deprecated - use ultimateRag instead
@@ -311,6 +351,13 @@ services:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-ultimate-rag:latest"
     replicas: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "4Gi"
+      limits:
+        cpu: "2000m"
+        memory: "8Gi"
     serviceAccountRoleArn: "arn:aws:iam::103002841599:role/incidentfox-raptor-kb-role"
     defaultTree: "mega_ultra_v2"
     s3:
@@ -326,6 +373,13 @@ services:
   webUi:
     enabled: true
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-web-ui:latest"
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
     cookieSecure: true
     raptorApiUrl: "http://incidentfox-rag.incidentfox.svc.cluster.local:8000"
     oidc:
@@ -342,3 +396,10 @@ services:
     image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-k8s-gateway:latest"
     replicas: 1
     logLevel: "INFO"
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"

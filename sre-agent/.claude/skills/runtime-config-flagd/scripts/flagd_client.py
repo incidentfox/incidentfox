@@ -13,16 +13,32 @@ Environment variables:
 
 import json
 import os
+import re
 import subprocess
-import sys
+import tempfile
 from typing import Any
+
+_RFC1123_RE = re.compile(r"^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$")
+
+
+def _validate_k8s_name(value: str, label: str) -> str:
+    """Validate a Kubernetes resource name against RFC 1123."""
+    if not _RFC1123_RE.match(value):
+        raise ValueError(
+            f"Invalid {label} name '{value}': must be lowercase alphanumeric/hyphens, 1-63 chars"
+        )
+    return value
 
 
 def get_config() -> dict[str, str]:
     """Get flagd configuration from environment."""
+    ns = os.getenv("FLAGD_NAMESPACE", "otel-demo")
+    cm = os.getenv("FLAGD_CONFIGMAP", "flagd-config")
+    _validate_k8s_name(ns, "namespace")
+    _validate_k8s_name(cm, "configmap")
     return {
-        "namespace": os.getenv("FLAGD_NAMESPACE", "otel-demo"),
-        "configmap": os.getenv("FLAGD_CONFIGMAP", "flagd-config"),
+        "namespace": ns,
+        "configmap": cm,
         "key": os.getenv("FLAGD_KEY", "demo.flagd.json"),
     }
 
@@ -34,10 +50,10 @@ _SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 def _run_kubectl(args: list[str], input_data: str | None = None) -> str:
     """Run a kubectl command and return stdout.
 
-    When running in-cluster (SA token mounted), uses explicit SA token auth
-    instead of the kubeconfig. The kubeconfig uses AWS IAM auth which maps to
-    the node identity and lacks cross-namespace permissions, while the pod's
-    ServiceAccount has proper RBAC.
+    When running in-cluster (SA token mounted), creates a temporary kubeconfig
+    file with the SA token instead of passing --token on the command line.
+    Command-line args are visible via /proc/*/cmdline, so tokens must not
+    appear there.
 
     Args:
         args: kubectl arguments (without 'kubectl' prefix)
@@ -50,23 +66,69 @@ def _run_kubectl(args: list[str], input_data: str | None = None) -> str:
         RuntimeError: If kubectl fails
     """
     cmd = ["kubectl"]
+    env = os.environ.copy()
+
     if os.path.exists(_SA_TOKEN_PATH):
-        # In-cluster: use SA token auth explicitly (bypasses kubeconfig)
+        # In-cluster: build a temp kubeconfig with SA token (avoids exposing
+        # the token on the command line via /proc/*/cmdline)
         with open(_SA_TOKEN_PATH) as f:
             token = f.read().strip()
-        cmd += [
-            "--server=https://kubernetes.default.svc",
-            f"--certificate-authority={_SA_CA_PATH}",
-            f"--token={token}",
-        ]
-    cmd += args
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        input=input_data,
-    )
+        kubeconfig_data = json.dumps(
+            {
+                "apiVersion": "v1",
+                "kind": "Config",
+                "clusters": [
+                    {
+                        "name": "in-cluster",
+                        "cluster": {
+                            "server": "https://kubernetes.default.svc",
+                            "certificate-authority": _SA_CA_PATH,
+                        },
+                    }
+                ],
+                "users": [
+                    {
+                        "name": "sa-user",
+                        "user": {"token": token},
+                    }
+                ],
+                "contexts": [
+                    {
+                        "name": "default",
+                        "context": {"cluster": "in-cluster", "user": "sa-user"},
+                    }
+                ],
+                "current-context": "default",
+            }
+        )
+        # Write to temp file; pass via KUBECONFIG env var
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".kubeconfig", delete=False)
+        try:
+            tmp.write(kubeconfig_data)
+            tmp.close()
+            os.chmod(tmp.name, 0o600)
+            env["KUBECONFIG"] = tmp.name
+            cmd += args
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                input=input_data,
+                env=env,
+            )
+        finally:
+            os.unlink(tmp.name)
+    else:
+        cmd += args
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            input=input_data,
+        )
+
     if result.returncode != 0:
         raise RuntimeError(
             f"kubectl failed (exit {result.returncode}): {result.stderr.strip()}"

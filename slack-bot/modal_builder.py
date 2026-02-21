@@ -4,7 +4,7 @@ Modal Builder - Build Slack modals for detailed investigation views
 """
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from markdown_utils import slack_mrkdwn
 
@@ -486,10 +486,10 @@ def build_session_modal(
                     ):
                         try:
                             data = json.loads(task_output)
-                        except:
+                        except (ValueError, json.JSONDecodeError):
                             try:
                                 data = ast.literal_eval(task_output)
-                            except:
+                            except (ValueError, SyntaxError):
                                 pass
 
                     # Extract stats for header
@@ -1079,7 +1079,6 @@ def _format_websearch_output(tool_output, logger) -> str:
                 for idx, item in enumerate(url_list, 1):
                     if isinstance(item, dict):
                         title = item.get("title", "No title")
-                        url = item.get("url", "")
                         # Truncate long titles
                         if len(title) > 80:
                             title = title[:77] + "..."
@@ -1204,8 +1203,6 @@ def _extract_grep_output(tool_output, data: dict = None) -> str:
     - files_with_matches mode: {"files": list[str], "count": int}
     """
     if data and isinstance(data, dict):
-        mode = data.get("mode", data.get("output_mode", ""))
-
         # Content mode - has actual matching lines
         if "content" in data and data["content"]:
             content = data["content"]
@@ -1717,7 +1714,6 @@ def _format_taskoutput_output(tool_output, data: dict = None) -> str:
         lines.append(f"📌 Task ID: {task_id}")
 
     # Task status and exit code
-    status = task_data.get("status", "")
     exit_code = task_data.get("exitCode")
     if exit_code is not None:
         lines.append(f"🔢 Exit code: {exit_code}")
@@ -1793,9 +1789,6 @@ def _format_askuserquestion_output(
     for i, q in enumerate(questions):
         header = q.get("header", f"Question {i+1}")
         question_text = q.get("question", "")
-        is_multi = q.get("multiSelect", False)
-        options = q.get("options", [])
-
         # Get the user's answer for this question
         answer_key = f"question_{i}"
         user_answer = answers.get(answer_key, "")
@@ -1869,7 +1862,7 @@ def _format_tool_output_compact(
                                     + f"\n... +{len(lines) - MAX_LINES} lines```"
                                 )
                             return f"```{formatted}```"
-                    except:
+                    except (ValueError, json.JSONDecodeError):
                         # Not JSON, show as plain text
                         if len(text_content) > MAX_CHARS:
                             lines = text_content.split("\n")
@@ -1881,7 +1874,7 @@ def _format_tool_output_compact(
                                 )
                             return f"```{text_content[:MAX_CHARS]}...\n... +{len(text_content) - MAX_CHARS} chars```"
                         return f"```{text_content}```"
-        except:
+        except Exception:
             pass  # Fall through to default handling
 
     # Parse if needed
@@ -2122,8 +2115,6 @@ def build_full_output_modal(
         formatted_lines = [f"{i}→{line}" for i, line in enumerate(lines, 1)]
     else:
         formatted_lines = lines
-    full_text = "\n".join(formatted_lines)
-
     # Split into chunks
     chunks = []
     current_chunk = ""
@@ -2533,8 +2524,6 @@ def build_subagent_detail_modal(
     """
     import json
 
-    from markdown_utils import slack_mrkdwn
-
     # Use URL parameters (ignore deprecated file_id params)
     loading_icon = loading_url
     done_icon = done_url
@@ -2764,7 +2753,6 @@ def build_subagent_detail_modal(
     blocks = _ensure_text_block_limits(blocks)
 
     # Pagination if blocks exceed limit
-    MAX_MODAL_BLOCKS = 100
     BLOCKS_PER_PAGE = 95  # Leave room for pagination controls
 
     # Get the subagent_id for pagination buttons

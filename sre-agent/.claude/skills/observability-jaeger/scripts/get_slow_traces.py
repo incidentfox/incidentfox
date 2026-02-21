@@ -5,7 +5,7 @@ import argparse
 import json
 import sys
 
-from jaeger_client import extract_span_info, format_duration, search_traces
+from jaeger_client import extract_span_info, search_traces
 
 
 def main():

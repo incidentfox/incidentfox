@@ -1,6 +1,6 @@
 """Unit tests for Google Chat welcome message and help command."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from incidentfox_orchestrator.webhooks.google_chat_app import (

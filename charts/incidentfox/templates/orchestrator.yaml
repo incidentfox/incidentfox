@@ -18,6 +18,10 @@ spec:
       imagePullSecrets:
 {{ toYaml .Values.global.imagePullSecrets | indent 8 }}
       {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: orchestrator
           image: {{ required "services.orchestrator.image is required" .Values.services.orchestrator.image }}
@@ -26,6 +30,12 @@ spec:
             - containerPort: {{ .Values.services.orchestrator.servicePort }}
           resources:
 {{ toYaml .Values.services.orchestrator.resources | indent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -38,6 +48,14 @@ spec:
               value: {{ printf "http://incidentfox-ai-pipeline-api.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.aiPipelineApi.servicePort | int) | quote }}
             - name: AGENT_API_URL
               value: {{ printf "http://incidentfox-agent.%s.svc.cluster.local:%d" .Values.namespace (.Values.services.agent.servicePort | int) | quote }}
+            # Service-to-service auth for sre-agent /investigate (must match agent's INVESTIGATE_AUTH_TOKEN)
+            {{- if .Values.externalSecrets.contract.jwtSecret }}
+            - name: INVESTIGATE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.jwtSecret.secretName | default "incidentfox-jwt-secret" }}
+                  key: {{ .Values.externalSecrets.contract.jwtSecret.investigateAuthTokenKey | default "INVESTIGATE_AUTH_TOKEN" }}
+            {{- end }}
             - name: ORCHESTRATOR_ADMIN_AUTH_CACHE_TTL_SECONDS
               value: {{ default 15 .Values.services.orchestrator.adminAuthCacheTtlSeconds | int | quote }}
             - name: ORCHESTRATOR_REQUIRE_ADMIN_STAR
@@ -143,6 +161,15 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.externalSecrets.contract.teams.secretName | quote }}
                   key: {{ .Values.externalSecrets.contract.teams.tenantIdKey | quote }}
+            {{- end }}
+            {{- if .Values.externalSecrets.vercel.enabled }}
+            - name: VERCEL_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: incidentfox-vercel
+                  key: webhook_secret
+            - name: VERCEL_VERIFY
+              value: {{ .Values.vercelVerify | default "" | quote }}
             {{- end }}
             # Slack-triggered agent run parameters (enterprise defaults)
             - name: ORCHESTRATOR_SLACK_AGENT_MAX_TURNS

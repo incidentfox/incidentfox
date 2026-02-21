@@ -5,11 +5,10 @@ This module defines the fundamental types used throughout the system,
 including knowledge classification and importance scoring.
 """
 
-import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 
 class KnowledgeType(str, Enum):

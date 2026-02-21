@@ -7,7 +7,6 @@ Usage:
 """
 
 import asyncio
-import os
 import sys
 
 # Load .env

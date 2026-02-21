@@ -30,14 +30,20 @@ if os.path.isdir(_raptor_dir) and "raptor" not in sys.modules:
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from ..core.node import KnowledgeTree
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+import hmac
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+
+# ==================== Auth ====================
+
+RAG_API_KEY = os.environ.get("RAG_API_KEY", "")
 
 logger = logging.getLogger(__name__)
 
@@ -829,13 +835,38 @@ class UltimateRAGServer:
             lifespan=lifespan,
         )
 
-        # Add CORS
+        # Auth middleware — skip for health/docs endpoints
+        if RAG_API_KEY:
+
+            @app.middleware("http")
+            async def api_key_auth_middleware(request: Request, call_next):
+                if request.url.path in ("/health", "/docs", "/openapi.json"):
+                    return await call_next(request)
+                auth = request.headers.get("authorization", "")
+                api_key = request.headers.get("x-api-key", "")
+                token = ""
+                if auth.startswith("Bearer "):
+                    token = auth[7:]
+                elif api_key:
+                    token = api_key
+                if not token or not hmac.compare_digest(token, RAG_API_KEY):
+                    from starlette.responses import JSONResponse
+
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "Invalid or missing API key"},
+                    )
+                return await call_next(request)
+
+        # Add CORS — restrict origins to known internal callers
+        allowed_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+        allowed_origins = [o.strip() for o in allowed_origins if o.strip()]
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_origins=allowed_origins or ["*"],
+            allow_credentials=bool(allowed_origins),
+            allow_methods=["GET", "POST"],
+            allow_headers=["Authorization", "X-API-Key", "Content-Type"],
         )
 
         # Register routes
@@ -988,10 +1019,23 @@ class UltimateRAGServer:
                     }
                 )
             elif request.file_path:
-                # File path - read and process
+                # File path - validate within allowed directory, then process
+                allowed_base = Path(RAPTOR_TREES_DIR).resolve()
+                try:
+                    resolved = Path(request.file_path).resolve()
+                except (ValueError, OSError):
+                    raise HTTPException(400, "Invalid file path")
+                if (
+                    not str(resolved).startswith(str(allowed_base) + os.sep)
+                    and resolved != allowed_base
+                ):
+                    raise HTTPException(
+                        403,
+                        "File path must be within the configured trees directory",
+                    )
                 try:
                     result = self.processor.process_file(
-                        file_path=request.file_path,
+                        file_path=str(resolved),
                         content_type=self._get_content_type(request.content_type),
                         extra_metadata=request.metadata,
                     )
@@ -1005,8 +1049,11 @@ class UltimateRAGServer:
                                 "metadata": request.metadata,
                             }
                         )
+                except HTTPException:
+                    raise
                 except Exception as e:
-                    raise HTTPException(400, f"Failed to read file: {e}")
+                    logger.error(f"Failed to read file: {e}")
+                    raise HTTPException(400, "Failed to read file")
             else:
                 raise HTTPException(400, "Provide content, documents, or file_path")
 
@@ -1371,7 +1418,9 @@ class UltimateRAGServer:
                             kt_str = doc_meta.get("knowledge_type")
                             if kt_str:
                                 try:
-                                    doc_knowledge_type = KnowledgeType.from_string(kt_str)
+                                    doc_knowledge_type = KnowledgeType.from_string(
+                                        kt_str
+                                    )
                                 except (ValueError, KeyError):
                                     pass
 

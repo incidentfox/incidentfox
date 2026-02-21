@@ -7,7 +7,6 @@ and importance scores from content.
 """
 
 import hashlib
-import json
 import logging
 from datetime import datetime
 from typing import Optional

@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from incidentfox_orchestrator.output_handlers import (
     OutputHandlerRegistry,
-    OutputResult,
     get_output_registry,
     post_to_destinations,
 )

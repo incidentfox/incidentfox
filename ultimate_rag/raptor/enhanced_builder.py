@@ -10,20 +10,18 @@ Adds to standard RAPTOR tree building:
 
 import hashlib
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
     # Note: raptor module is at /app/raptor/ in the container
     from raptor.cluster_tree_builder import (
         ClusterTreeBuilder,
-        ClusterTreeConfig,
     )
 
 from ..core.metadata import NodeMetadata, SourceInfo, ValidationStatus
 from ..core.node import KnowledgeNode, KnowledgeTree
-from ..core.types import ImportanceScore, KnowledgeType
+from ..core.types import KnowledgeType
 from ..graph.entities import Entity, EntityType
 from ..graph.graph import KnowledgeGraph
 

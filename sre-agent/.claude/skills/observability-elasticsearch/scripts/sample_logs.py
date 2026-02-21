@@ -21,7 +21,7 @@ Examples:
 import argparse
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from elasticsearch_client import (
     build_time_range_query,

@@ -21,7 +21,7 @@ Examples:
 import argparse
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from datadog_client import format_log_entry, search_logs
 

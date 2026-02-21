@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
-import time
+import os
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -602,6 +600,9 @@ class AgentApiClient:
     ) -> dict[str, Any]:
         """Call the agent service's /investigate endpoint and consume the SSE stream."""
         base = agent_base_url.rstrip("/") if agent_base_url else self.base_url
+        # Validate URL scheme to prevent SSRF via config injection
+        if not base.startswith(("http://", "https://")):
+            raise ValueError(f"Invalid agent base URL scheme: {base[:30]}")
         url = f"{base}/investigate"
 
         # Build payload matching InvestigateRequest schema
@@ -621,13 +622,20 @@ class AgentApiClient:
         if team_id:
             payload["team_id"] = team_id
 
-        # HTTP timeout should be >= agent timeout
-        request_timeout = 30.0
+        # HTTP timeout should be generous for SSE streaming (agent runs can take minutes)
+        # Default to 10 minutes for scheduled jobs / multi-turn investigations
+        request_timeout = 600.0
         try:
             if timeout is not None:
-                request_timeout = max(30.0, float(timeout) + 10.0)
+                request_timeout = max(60.0, float(timeout) + 30.0)
         except Exception:
-            request_timeout = 30.0
+            request_timeout = 600.0
+
+        # Service-to-service auth token (sre-agent requires this in production)
+        headers: dict[str, str] = {}
+        auth_token = os.getenv("INVESTIGATE_AUTH_TOKEN", "")
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
 
         # Stream the SSE response and collect the final result
         result_text = ""
@@ -635,7 +643,7 @@ class AgentApiClient:
         thread_id = correlation_id or ""
 
         with httpx.Client(timeout=request_timeout) as c:
-            with c.stream("POST", url, json=payload) as r:
+            with c.stream("POST", url, json=payload, headers=headers) as r:
                 r.raise_for_status()
                 # Extract thread_id from response header if available
                 thread_id = r.headers.get("X-Thread-ID", thread_id)

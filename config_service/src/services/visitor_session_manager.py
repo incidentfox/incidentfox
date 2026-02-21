@@ -11,13 +11,12 @@ Manages visitor access to the playground with queue-based fairness:
 
 from __future__ import annotations
 
-import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import structlog
-from sqlalchemy import and_, func
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..db.models import VisitorEmail, VisitorSession

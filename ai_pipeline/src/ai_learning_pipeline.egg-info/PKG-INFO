@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: ai-learning-pipeline
+Version: 1.0.0
+Requires-Python: >=3.9
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.25.0; extra == "dev"
+Requires-Dist: pytest-mock>=3.14.0; extra == "dev"
+Requires-Dist: respx>=0.22.0; extra == "dev"

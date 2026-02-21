@@ -31,11 +31,6 @@ python .claude/skills/infrastructure-docker/scripts/container_logs.py --containe
 python .claude/skills/infrastructure-docker/scripts/container_inspect.py --container NAME_OR_ID
 ```
 
-### container_exec.py - Execute Command in Container
-```bash
-python .claude/skills/infrastructure-docker/scripts/container_exec.py --container NAME_OR_ID --command "ls -la /app"
-```
-
 ### container_stats.py - Resource Usage Statistics
 ```bash
 python .claude/skills/infrastructure-docker/scripts/container_stats.py [--container NAME_OR_ID]
@@ -66,7 +61,6 @@ python .claude/skills/infrastructure-docker/scripts/compose_logs.py [--services 
 2. Check logs: container_logs.py --container <name> --tail 200
 3. Check resources: container_stats.py --container <name>
 4. Inspect config: container_inspect.py --container <name>
-5. Run diagnostics: container_exec.py --container <name> --command "curl -s localhost:8080/health"
 ```
 
 ### Docker Compose Debugging

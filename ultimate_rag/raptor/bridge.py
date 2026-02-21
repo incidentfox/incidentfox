@@ -8,9 +8,10 @@ Provides bidirectional conversion between:
 
 import logging
 import pickle
-from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Set, Union
+
+from ultimate_rag.core.persistence import safe_pickle_load
 
 if TYPE_CHECKING:
     # Import RAPTOR types for type hints only
@@ -404,9 +405,9 @@ def import_raptor_tree(
     bridge = RaptorBridge()
 
     if isinstance(source, (str, Path)):
-        # Load from pickle
+        # Load from pickle (restricted unpickler for safety)
         with open(source, "rb") as f:
-            raptor_tree = pickle.load(f)
+            raptor_tree = safe_pickle_load(f)
     else:
         raptor_tree = source
 
@@ -459,7 +460,7 @@ def import_forest_from_directory(
     for pkl_file in directory.glob(pattern):
         try:
             with open(pkl_file, "rb") as f:
-                raptor_tree = pickle.load(f)
+                raptor_tree = safe_pickle_load(f)
 
             tree_name = pkl_file.stem
             knowledge_tree = bridge.import_tree(raptor_tree, tree_name)

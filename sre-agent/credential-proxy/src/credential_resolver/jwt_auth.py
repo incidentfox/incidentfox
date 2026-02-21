@@ -1,3 +1,17 @@
+# Copyright 2026 IncidentFox, Inc.
+#
+# Licensed under the Business Source License 1.1 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://github.com/incidentfox/incidentfox/blob/main/LICENSE-ENTERPRISE
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """JWT validation for sandbox authentication.
 
 This module handles resolver-side JWT validation. The sre-agent server
@@ -20,7 +34,15 @@ import jwt
 
 # Shared secret with sre-agent server
 # In production, load from K8s Secret (same secret in both deployments)
-JWT_SECRET = os.getenv("JWT_SECRET", "incidentfox-sandbox-jwt-secret-change-in-prod")
+# In permissive mode (local dev), JWT validation is optional so empty is allowed.
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+_JWT_MODE = os.getenv("JWT_MODE", "strict")
+if not JWT_SECRET and _JWT_MODE == "strict":
+    raise RuntimeError(
+        "JWT_SECRET environment variable is required in strict mode. "
+        "Set it in .env for local dev or via K8s Secret in production. "
+        "Set JWT_MODE=permissive to disable (local dev only)."
+    )
 
 # JWT settings (must match sre-agent/auth.py)
 JWT_ALGORITHM = "HS256"

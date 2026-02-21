@@ -121,7 +121,7 @@ async def exchange_auth_code(
 
             tokens = token_resp.json()
             access_token = tokens.get("access_token")
-            id_token = tokens.get("id_token")
+            tokens.get("id_token")
 
             if not access_token:
                 raise HTTPException(status_code=400, detail="No access token received")

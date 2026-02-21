@@ -271,6 +271,7 @@ spec:
         app: incidentfox-agent
         component: warmpool
         warmpool: "true"
+        incidentfox.io/isolation: sandbox
     spec:
       serviceAccountName: {{ .Release.Name }}-sandbox-pod
       {{- if .Values.services.agent.sandbox.useGvisor }}
@@ -324,6 +325,8 @@ spec:
           value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/datadog"
         - name: AMPLITUDE_BASE_URL
           value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/amplitude"
+        - name: VERCEL_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/vercel"
         # RAPTOR knowledge base: internal K8s service (no auth needed)
         - name: RAPTOR_URL
           value: "http://incidentfox-rag.{{ .Values.namespace }}.svc.cluster.local:8000"

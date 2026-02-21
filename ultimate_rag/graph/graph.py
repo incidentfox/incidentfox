@@ -8,7 +8,7 @@ capabilities for hybrid RAPTOR+Graph retrieval.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .entities import Entity, EntityType
 from .relationships import Relationship, RelationshipType

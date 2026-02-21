@@ -35,6 +35,7 @@ INTEGRATION_LOGOS = {
     "victoriametrics": f"{ASSETS_BASE_URL}/integrations/victoria-metrics.png",
     "kloudfuse": f"{ASSETS_BASE_URL}/integrations/kloudfuse.png",
     "sentry": f"{ASSETS_BASE_URL}/integrations/sentry.png",
+    "amplitude": f"{ASSETS_BASE_URL}/integrations/amplitude.png",
     "loki": f"{ASSETS_BASE_URL}/integrations/loki.png",
     # Incident management
     "incident_io": f"{ASSETS_BASE_URL}/integrations/incident_io.png",

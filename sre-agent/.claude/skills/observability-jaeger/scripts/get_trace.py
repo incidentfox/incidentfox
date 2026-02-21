@@ -6,7 +6,7 @@ import json
 import sys
 from datetime import datetime, timezone
 
-from jaeger_client import extract_span_info, format_duration, get_trace
+from jaeger_client import extract_span_info, get_trace
 
 
 def build_span_tree(spans: list[dict], processes: dict) -> list[dict]:

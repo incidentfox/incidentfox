@@ -1,6 +1,8 @@
 import logging
 import pickle
 
+from ultimate_rag.core.persistence import safe_pickle_load
+
 from .cluster_tree_builder import ClusterTreeBuilder, ClusterTreeConfig
 from .EmbeddingModels import BaseEmbeddingModel
 from .incremental import IncrementalUpdateConfig, incremental_insert_leaf_nodes_layer1
@@ -192,7 +194,7 @@ class RetrievalAugmentation:
         if isinstance(tree, str):
             try:
                 with open(tree, "rb") as file:
-                    self.tree = pickle.load(file)
+                    self.tree = safe_pickle_load(file)
                 if not isinstance(self.tree, Tree):
                     raise ValueError("The loaded object is not an instance of Tree")
             except Exception as e:

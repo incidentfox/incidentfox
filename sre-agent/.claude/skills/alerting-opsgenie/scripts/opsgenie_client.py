@@ -5,7 +5,6 @@ Credentials are injected transparently by the proxy layer.
 """
 
 import os
-import sys
 
 import httpx
 

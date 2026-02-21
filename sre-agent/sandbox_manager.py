@@ -1,3 +1,17 @@
+# Copyright 2026 IncidentFox, Inc.
+#
+# Licensed under the Business Source License 1.1 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://github.com/incidentfox/incidentfox/blob/main/LICENSE-ENTERPRISE
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Kubernetes Sandbox Manager
 
@@ -11,6 +25,7 @@ sandboxes can request credentials for their designated tenant/team.
 
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -21,6 +36,17 @@ from auth import generate_sandbox_jwt
 from kubernetes import client
 from kubernetes import config as k8s_config
 from kubernetes.client.rest import ApiException
+
+# K8s names must be lowercase alphanumeric + hyphens, 1-63 chars
+_K8S_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$")
+
+
+def _validate_thread_id(thread_id: str) -> None:
+    """Validate thread_id is safe for use in K8s names and labels."""
+    if not thread_id or not _K8S_NAME_RE.match(thread_id):
+        raise ValueError(
+            f"Invalid thread_id '{thread_id}': must be lowercase alphanumeric/hyphens, 2-63 chars"
+        )
 
 
 def fetch_configured_integrations(jwt_token: str, tenant_id: str, team_id: str) -> str:
@@ -389,6 +415,7 @@ static_resources:
                     "sandbox": sandbox_name,
                 },
             ),
+            immutable=True,
             data={"envoy.yaml": envoy_config},
         )
 
@@ -398,9 +425,12 @@ static_resources:
             )
         except ApiException as e:
             if e.status == 409:
-                # ConfigMap already exists, update it
-                self.core_api.replace_namespaced_config_map(
-                    name=configmap_name, namespace=self.namespace, body=configmap
+                # ConfigMap already exists — delete and recreate (immutable ConfigMaps can't be patched)
+                self.core_api.delete_namespaced_config_map(
+                    name=configmap_name, namespace=self.namespace
+                )
+                self.core_api.create_namespaced_config_map(
+                    namespace=self.namespace, body=configmap
                 )
             else:
                 raise
@@ -445,6 +475,7 @@ static_resources:
         Returns:
             SandboxInfo with details about the created sandbox
         """
+        _validate_thread_id(thread_id)
         sandbox_name = f"investigation-{thread_id}"
 
         # Calculate shutdown time (TTL-based cleanup)
@@ -493,6 +524,7 @@ static_resources:
                     "metadata": {
                         "labels": {
                             "app": "incidentfox-sandbox",  # Different from incidentfox-agent to avoid service routing
+                            "incidentfox.io/isolation": "sandbox",  # NetworkPolicy selector
                             "thread-id": thread_id,
                         }
                     },
@@ -538,28 +570,9 @@ static_resources:
                                         "name": "ANTHROPIC_API_KEY",
                                         "value": "sk-ant-placeholder-proxy-will-inject-real-key",
                                     },
-                                    # Gemini API key (used by credential-proxy for gemini/* models)
-                                    {
-                                        "name": "GEMINI_API_KEY",
-                                        "valueFrom": {
-                                            "secretKeyRef": {
-                                                "name": "incidentfox-secrets",
-                                                "key": "gemini-api-key",
-                                                "optional": True,
-                                            }
-                                        },
-                                    },
-                                    # OpenAI API key (used by credential-proxy for openai/* models)
-                                    {
-                                        "name": "OPENAI_API_KEY",
-                                        "valueFrom": {
-                                            "secretKeyRef": {
-                                                "name": "incidentfox-secrets",
-                                                "key": "openai-api-key",
-                                                "optional": True,
-                                            }
-                                        },
-                                    },
+                                    # NOTE: Gemini and OpenAI API keys are NOT mounted here.
+                                    # They are injected by credential-resolver's LLM proxy
+                                    # (same as Anthropic). Sandboxes never see real LLM keys.
                                     # Coralogix SDK: route API requests through proxy
                                     # (proxy injects Authorization header for Coralogix)
                                     {
@@ -629,16 +642,17 @@ static_resources:
                                         "value": configured_integrations,
                                     },
                                     # NOTE: Observability (Laminar/Langfuse) runs on the sre-agent server,
-                                    # not in sandbox pods. See agent.py init_observability().
+                                    # not in sandbox pods. No API keys should reach sandboxes.
                                     # Kubernetes: use in-cluster SA auth (incidentfox-sandbox-pod)
                                     # NOT kubeconfig — that resolves to EC2 node IAM identity
                                     # Dynamic values
                                     {"name": "THREAD_ID", "value": thread_id},
                                     {"name": "SANDBOX_NAME", "value": sandbox_name},
                                     {"name": "NAMESPACE", "value": self.namespace},
-                                    # JWT for authenticating with credential-resolver
-                                    # (used by scripts that call credential-resolver directly)
-                                    {"name": "SANDBOX_JWT", "value": jwt_token},
+                                    # NOTE: SANDBOX_JWT is NOT set as an env var to avoid
+                                    # exposure via `kubectl get pod -o yaml` or /proc/*/environ.
+                                    # The /claim endpoint writes it to /tmp/sandbox-jwt and
+                                    # sets os.environ["SANDBOX_JWT"] for skill scripts.
                                 ],
                                 "resources": {
                                     "requests": {
@@ -685,7 +699,7 @@ static_resources:
                             # Envoy sidecar - handles credential injection via ext_authz
                             {
                                 "name": "envoy",
-                                "image": "envoyproxy/envoy:v1.28-latest",
+                                "image": "envoyproxy/envoy:v1.28.7",
                                 "args": [
                                     "--config-path",
                                     "/etc/envoy/envoy.yaml",
@@ -708,6 +722,7 @@ static_resources:
                                     "runAsNonRoot": True,
                                     "runAsUser": 1000,
                                     "allowPrivilegeEscalation": False,
+                                    "capabilities": {"drop": ["ALL"]},
                                 },
                             },
                         ],
@@ -726,8 +741,9 @@ static_resources:
             },
         }
 
-        # Add gVisor runtime for production (optional for local dev)
-        if os.getenv("USE_GVISOR", "false").lower() == "true":
+        # gVisor runtime is mandatory for sandbox isolation.
+        # Only disable for local dev where gVisor runtime class is unavailable.
+        if os.getenv("DISABLE_GVISOR", "false").lower() != "true":
             sandbox_manifest["spec"]["podTemplate"]["spec"][
                 "runtimeClassName"
             ] = "gvisor"
@@ -748,6 +764,13 @@ static_resources:
                 namespace=self.namespace,
             )
         except ApiException as e:
+            # Clean up the ConfigMap (contains JWT) to prevent orphaning
+            try:
+                self.core_api.delete_namespaced_config_map(
+                    name=envoy_configmap_name, namespace=self.namespace
+                )
+            except Exception:
+                pass  # Best-effort cleanup
             raise Exception(f"Failed to create sandbox: {e}")
 
     def get_sandbox(self, thread_id: str) -> Optional[SandboxInfo]:
@@ -1132,6 +1155,7 @@ static_resources:
         Returns:
             Tuple of (claim_name, jwt_token)
         """
+        _validate_thread_id(thread_id)
         claim_name = f"claim-{thread_id}"
         sandbox_name = f"investigation-{thread_id}"
 
@@ -1360,6 +1384,12 @@ static_resources:
         if configured_integrations:
             payload["configured_integrations"] = configured_integrations
 
+        # Build auth headers for /claim endpoint
+        claim_headers = {}
+        auth_token = os.getenv("INVESTIGATE_AUTH_TOKEN", "")
+        if auth_token:
+            claim_headers["Authorization"] = f"Bearer {auth_token}"
+
         # Try direct pod IP first (avoids DNS propagation delays)
         for attempt in range(5):
             pod_ip = self._get_sandbox_pod_ip(sandbox_name)
@@ -1368,6 +1398,7 @@ static_resources:
                     response = requests.post(
                         f"http://{pod_ip}:8888/claim",
                         json=payload,
+                        headers=claim_headers,
                         timeout=10,
                     )
                     response.raise_for_status()

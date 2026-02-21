@@ -1,7 +1,6 @@
 """Connection manager for K8s agent connections."""
 
 import asyncio
-import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -10,7 +9,6 @@ from typing import Any, Dict, Optional
 import structlog
 
 from .auth import ClusterIdentity
-from .config import get_settings
 from .models import K8sCommand, K8sCommandResponse
 
 logger = structlog.get_logger(__name__)

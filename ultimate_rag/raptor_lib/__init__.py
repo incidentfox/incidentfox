@@ -1,6 +1,6 @@
-# raptor/__init__.py
-from .cluster_tree_builder import ClusterTreeBuilder, ClusterTreeConfig
-from .EmbeddingModels import (
+# raptor/__init__.py — public API re-exports
+from .cluster_tree_builder import ClusterTreeBuilder, ClusterTreeConfig  # noqa: F401
+from .EmbeddingModels import (  # noqa: F401
     BaseEmbeddingModel,
     OpenAIEmbeddingModel,
     SBertEmbeddingModel,
@@ -13,26 +13,29 @@ try:
 except Exception:  # pragma: no cover
     FaissRetriever = None
     FaissRetrieverConfig = None
-from .QAModels import (
+from .QAModels import (  # noqa: F401
     BaseQAModel,
     GPT3QAModel,
     GPT3TurboQAModel,
     GPT4QAModel,
     UnifiedQAModel,
 )
-from .RetrievalAugmentation import RetrievalAugmentation, RetrievalAugmentationConfig
-from .Retrievers import BaseRetriever
-from .SummarizationModels import (
+from .RetrievalAugmentation import (  # noqa: F401
+    RetrievalAugmentation,
+    RetrievalAugmentationConfig,
+)
+from .Retrievers import BaseRetriever  # noqa: F401
+from .SummarizationModels import (  # noqa: F401
     BaseSummarizationModel,
     CachedSummarizationModel,
     GPT3SummarizationModel,
     GPT3TurboSummarizationModel,
     OpenAILayeredSummarizationModel,
 )
-from .summary_cache import SummaryCache
-from .tree_builder import TreeBuilder, TreeBuilderConfig
-from .tree_retriever import TreeRetriever, TreeRetrieverConfig
-from .tree_structures import Node, Tree
+from .summary_cache import SummaryCache  # noqa: F401
+from .tree_builder import TreeBuilder, TreeBuilderConfig  # noqa: F401
+from .tree_retriever import TreeRetriever, TreeRetrieverConfig  # noqa: F401
+from .tree_structures import Node, Tree  # noqa: F401
 
 # Enhanced keyword models (optional)
 try:

@@ -7,7 +7,6 @@ including login, session management, and heartbeat functionality.
 
 from __future__ import annotations
 
-import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException

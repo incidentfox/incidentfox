@@ -334,7 +334,7 @@ class EnhancedKeywordModel(BaseKeywordModel):
         This ensures hierarchical consistency - parent keywords reflect child content.
         """
         # Combine child keywords
-        child_kw_set = set(child_keywords)
+        set(child_keywords)
 
         # Extract keywords from parent text
         parent_keywords = self.extract_keywords(text, max_keywords=max_keywords * 2)

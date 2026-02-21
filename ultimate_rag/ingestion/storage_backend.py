@@ -118,7 +118,7 @@ class UltimateRAGStorageBackend:
         )
 
         # Build metadata from analysis
-        metadata = {
+        {
             "source": source,
             "chunk_id": analysis.chunk_id,
             "knowledge_type": analysis.knowledge_type.knowledge_type.value,
@@ -212,7 +212,7 @@ class UltimateRAGStorageBackend:
 
         # Re-teach with updated content (teaching interface handles updates)
         try:
-            result = await self.teaching.teach(
+            await self.teaching.teach(
                 content=content,
                 knowledge_type=kt,
                 source=f"{source} (updated)",

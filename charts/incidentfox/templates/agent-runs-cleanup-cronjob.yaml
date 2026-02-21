@@ -45,6 +45,15 @@ spec:
                     "${CONFIG_SERVICE_URL}/api/v1/internal/agent-runs/cleanup-stale")
 
                   echo "$(date -Iseconds) Cleanup result: ${RESULT}"
+
+                  # Clean up expired session cache entries (3-day TTL)
+                  echo "$(date -Iseconds) Cleaning up expired session cache..."
+                  SESSION_RESULT=$(curl -sf \
+                    -X DELETE \
+                    -H "X-Internal-Service: cleanup-cronjob" \
+                    "${CONFIG_SERVICE_URL}/api/v1/internal/session-cache/expired?max_age_hours=72" || echo '{"error": "failed"}')
+                  echo "$(date -Iseconds) Session cache cleanup: ${SESSION_RESULT}"
+
                   echo "$(date -Iseconds) Done"
               env:
                 - name: CONFIG_SERVICE_URL

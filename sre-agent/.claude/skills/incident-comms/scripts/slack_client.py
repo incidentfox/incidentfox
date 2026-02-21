@@ -251,7 +251,7 @@ def format_message(message: dict[str, Any], include_user: bool = True) -> str:
     ts = message.get("ts", "")
     text = message.get("text", "")[:500]  # Truncate long messages
     user = message.get("user", "unknown")
-    channel = message.get("channel", {})
+    message.get("channel", {})
 
     # Convert timestamp to readable format
     if ts:

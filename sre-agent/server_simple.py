@@ -26,7 +26,6 @@ from typing import Dict, List, Optional
 
 import httpx
 from dotenv import load_dotenv
-from events import error_event, result_event
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -41,12 +40,14 @@ _file_download_tokens: Dict[str, dict] = {}
 _FILE_TOKEN_TTL_SECONDS = 3600  # 1 hour
 
 import asyncio
-from typing import AsyncIterator
 
 # Thread ID -> background task mapping
 _background_tasks: Dict[str, asyncio.Task] = {}
 _message_queues: Dict[str, asyncio.Queue] = {}  # Queue for sending prompts
 _response_queues: Dict[str, asyncio.Queue] = {}  # Queue for receiving events
+_active_sessions: Dict[str, object] = (
+    {}
+)  # Thread ID -> agent session (for interrupt/answer)
 
 app = FastAPI(
     title="IncidentFox Investigation Server (Simple Mode)",
@@ -115,7 +116,7 @@ def _get_proxy_base_url() -> str:
     return f"http://{service_name}.{namespace}.svc.cluster.local:8000"
 
 
-@app.post("/proxy/files/{token}")
+@app.get("/proxy/files/{token}")
 async def proxy_file(token: str, request: Request):
     """
     File proxy endpoint - streams files from external sources (e.g., Slack).
@@ -166,7 +167,6 @@ async def agent_background_task(thread_id: str):
     Background task that keeps ClaudeSDKClient alive for multi-turn conversations.
     Processes messages from queue and sends responses back.
     """
-    import json
 
     from agent import InteractiveAgentSession
 
@@ -204,13 +204,16 @@ async def agent_background_task(thread_id: str):
                 break
 
             prompt = message.get("prompt")
+            images = message.get("images")
             logger.info(
                 f"[BG] Processing message for thread {thread_id}: {prompt[:50]}..."
             )
+            if images:
+                logger.info(f"[BG] Including {len(images)} image(s) in message")
 
             # Execute and stream events to response queue
             event_count = 0
-            async for event in session.execute(prompt):
+            async for event in session.execute(prompt, images=images):
                 event_count += 1
                 event_type = event.type
                 data = event.data
@@ -234,6 +237,67 @@ async def agent_background_task(thread_id: str):
         if session.client:
             await session.cleanup()
         logger.info(f"[BG] Background task ended for thread {thread_id}")
+
+
+def _download_file_attachments(file_downloads: list, thread_id: str):
+    """
+    Download file attachments directly using stored token info.
+
+    In simple mode there's no sandbox, so we download files in-process
+    using the credentials stored in _file_download_tokens. Files are saved
+    to the agent's session directory at /tmp/sessions/{thread_id}/attachments/
+    to match what the enriched prompt tells the agent.
+    """
+    from pathlib import Path
+
+    # Must match agent.py's session directory for simple mode
+    attachments_dir = Path(f"/tmp/sessions/{thread_id}/attachments")
+    attachments_dir.mkdir(parents=True, exist_ok=True)
+
+    for download in file_downloads:
+        token = download["token"]
+        token_info = _file_download_tokens.pop(token, None)
+        if not token_info:
+            logger.warning(f"Token not found for file {download['filename']}, skipping")
+            continue
+
+        safe_filename = Path(download["filename"]).name or "unnamed_file"
+        file_path = attachments_dir / safe_filename
+
+        # Handle duplicate filenames
+        counter = 1
+        original_stem = file_path.stem
+        original_suffix = file_path.suffix
+        while file_path.exists():
+            file_path = attachments_dir / f"{original_stem}_{counter}{original_suffix}"
+            counter += 1
+
+        try:
+            logger.info(
+                f"Downloading {safe_filename} ({download.get('size', '?')} bytes) from Slack..."
+            )
+            with httpx.Client(timeout=httpx.Timeout(300.0)) as client:
+                with client.stream(
+                    "GET",
+                    token_info["download_url"],
+                    headers={"Authorization": token_info["auth_header"]},
+                ) as response:
+                    response.raise_for_status()
+                    with open(file_path, "wb") as f:
+                        for chunk in response.iter_bytes(chunk_size=65536):
+                            f.write(chunk)
+
+            logger.info(f"Saved: {file_path}")
+        except Exception as e:
+            logger.error(f"Failed to download {safe_filename}: {e}")
+            # Write error file so agent knows what happened
+            error_path = attachments_dir / f"{file_path.name}.error"
+            error_path.write_text(
+                f"Download failed for: {safe_filename}\n"
+                f"Error: {e}\n"
+                f"\nThe file could not be downloaded from Slack. "
+                f"Please ask the user to re-upload or share the content directly.\n"
+            )
 
 
 async def create_investigation_stream(
@@ -262,12 +326,16 @@ async def create_investigation_stream(
             # Give it a moment to start
             await asyncio.sleep(0.1)
 
+        # Download file attachments directly (no sandbox, so download in-process)
+        if file_downloads:
+            _download_file_attachments(file_downloads, thread_id)
+
         # Send message to background task
         message_queue = _message_queues[thread_id]
         response_queue = _response_queues[thread_id]
 
         logger.info(f"Sending message to background task for thread {thread_id}")
-        await message_queue.put({"prompt": prompt})
+        await message_queue.put({"prompt": prompt, "images": images})
 
         # Stream responses
         event_count = 0
@@ -432,7 +500,7 @@ async def answer(request: AnswerRequest):
 
     print(f"📬 Forwarding answer to thread {request.thread_id}")
 
-    session = _active_sessions[request.thread_id]
+    _active_sessions[request.thread_id]
     # TODO: Implement answer forwarding when InteractiveAgentSession supports it
 
     return {"status": "ok", "thread_id": request.thread_id}

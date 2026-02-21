@@ -1,6 +1,5 @@
 """K8s cluster management API routes for SaaS model."""
 
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import structlog
@@ -9,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ...core.security import get_token_pepper
-from ...db.models import K8sCluster, K8sClusterStatus
+from ...db.models import K8sClusterStatus
 from ...db.repository import (
     get_k8s_cluster,
     issue_k8s_agent_token,

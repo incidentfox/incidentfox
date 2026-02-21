@@ -389,12 +389,12 @@ def score_result(scenario_config: Dict, agent_output: Dict) -> Dict[str, int]:
     if isinstance(output, str):
         try:
             output = json.loads(output)
-        except:
+        except (ValueError, KeyError):
             output = {"summary": output}
 
     # Convert to lowercase string for matching
     output_str = json.dumps(output).lower()
-    summary = str(output.get("summary", "")).lower()
+    str(output.get("summary", "")).lower()
     root_cause = output.get("root_cause", {})
     if isinstance(root_cause, dict):
         root_cause_str = json.dumps(root_cause).lower()

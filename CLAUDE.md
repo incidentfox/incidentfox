@@ -16,7 +16,7 @@ config-service ← used by web_ui, slack-bot, orchestrator, credential-resolver
 
 Two entry points for running agents: **Slack** (via slack-bot) and **web_ui** (directly). Both stream SSE from sre-agent.
 
-**sre-agent** is the active agent. Runs in isolated gVisor K8s sandbox pods — each investigation gets its own sandbox. Uses Claude SDK with skills (progressive knowledge loading) and scripts (Python/Bash integrations). No MCP tools — everything is skills + scripts.
+**sre-agent** is the active agent. Runs in isolated gVisor K8s sandbox pods — each investigation gets its own sandbox. Uses Claude SDK with 45 skills (progressive knowledge loading) and scripts (Python/Bash integrations). No MCP tools — everything is skills + scripts.
 
 **slack-bot** is the Slack UI layer. Connects via Socket Mode. Streams SSE from sre-agent. Handles multi-workspace OAuth, onboarding, feedback. Currently talks directly to sre-agent (not through orchestrator).
 
@@ -24,7 +24,7 @@ Two entry points for running agents: **Slack** (via slack-bot) and **web_ui** (d
 
 **config-service** is the control plane. Hierarchical org→team config with deep merge (dicts merge, lists replace). Manages tokens, audit logging, RBAC. Teams authenticate with bearer tokens.
 
-**orchestrator** routes webhooks (Slack, GitHub, PagerDuty, Incident.io) and handles team provisioning. Currently NOT in the active Slack path — slack-bot talks directly to sre-agent. web_ui can optionally route through orchestrator. Long-term, all surfaces should go through orchestrator.
+**orchestrator** routes webhooks (Slack, GitHub, PagerDuty, Incident.io, Blameless, FireHydrant) and handles team provisioning. Has output_handlers for posting agent results to GitHub PR/issue comments. Currently NOT in the active Slack path — slack-bot talks directly to sre-agent. web_ui can optionally route through orchestrator. Long-term, all surfaces should go through orchestrator.
 
 **credential-proxy** (Envoy + credential-resolver) injects API keys into outbound requests so sandboxes never see secrets. JWT-based sandbox identity.
 
@@ -45,12 +45,16 @@ The history: agent/ (OpenAI SDK) → sre-agent (Claude SDK) → unified-agent (O
 
 ## Remaining work (agent/ and unified-agent/ are deleted)
 
-All tools have been ported to sre-agent skills. Prompts migrated to `config_service/scripts/prompts/`. Remaining items:
+All 45 tools have been ported to sre-agent skills. Prompts migrated to `config_service/scripts/prompts/`. GitHub output handler ported to orchestrator. Remaining items:
 
 - **Config-driven subagents**: Port `agent_builder.py` pattern (topological sort, agent-as-tool, model alias resolution) to sre-agent for per-team agent customization via config-service.
-- **Output handlers for Teams & Google Chat**: Port Adaptive Cards (Teams) and Card v2 (Google Chat) handlers. GitHub handler already ported to orchestrator.
+- **Output handlers for Teams & Google Chat**: Port Adaptive Cards (Teams) and Card v2 (Google Chat) handlers to orchestrator (GitHub handler already done).
 - **DB migration tools**: Flyway, Alembic, Prisma (low priority).
 - **Schema Registry & Debezium tools** (low priority).
+
+## Security audit status
+
+A comprehensive 8-phase security audit was completed (see `.context/CODEBASE_AUDIT_PLAN.md`). 204 findings across P0–P3. 69 fixed, 135 deferred. All findings documented in `.context/findings/phase-{1..8}-*.md`. Key fixes: sandbox auth, pickle RCE prevention, XSS/CSRF fixes, securityContext on all Helm deployments, SQL injection prevention, path traversal guards.
 
 ## Environments & Clusters
 
@@ -93,7 +97,8 @@ The local stack builds all services from source. Config-service auto-runs alembi
 | slack-bot/config_client.py | Config service client |
 | slack-bot/modal_builder.py | Interactive modals (103KB) |
 | config_service/src/api/main.py | Config API with hierarchical merge |
-| orchestrator/src/.../api/main.py | Webhook router |
+| orchestrator/src/.../webhooks/router.py | Webhook router (GitHub, PagerDuty, Incident.io, Blameless, FireHydrant) |
+| orchestrator/src/.../output_handlers/ | Post agent results to GitHub PRs/issues |
 | web_ui/src/app/ | Next.js app router pages (team + admin modes) |
 | web_ui/src/app/api/ | API routes proxying to config-service, sre-agent, ultimate_rag |
 | charts/incidentfox/ | Helm chart for all services |

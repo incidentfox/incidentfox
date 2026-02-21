@@ -366,7 +366,7 @@ def _execute_action(action_type: str, target: str, parameters: dict) -> dict:
 
     try:
         config.load_incluster_config()
-    except:
+    except Exception:
         config.load_kube_config()
 
     namespace = parameters.get("namespace", "default")
@@ -467,7 +467,7 @@ def _execute_rollback_action(
 
     try:
         config.load_incluster_config()
-    except:
+    except Exception:
         config.load_kube_config()
 
     namespace = parameters.get("namespace", "default")

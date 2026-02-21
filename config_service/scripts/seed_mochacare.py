@@ -115,24 +115,47 @@ Format your report as:
 Keep reports concise. If everything is healthy, say so briefly. Only go into detail when there are actual issues.
 """
 
-MORNING_REPORT_PROMPT = """Generate a status report for the last 12 hours (overnight, 8PM to 8AM).
+MORNING_REPORT_PROMPT = """\
+Check Grafana and Amplitude for the last 12 hours (8PM-8AM overnight). \
+Output ONLY the final result — no narration, no "I will check", no process description.
 
-Focus on:
-- Any errors or agent failures that occurred overnight
-- System health during low-traffic hours
-- Anything that needs attention before the workday starts
+Always start with: "*IncidentFox Automatic Status Report*"
 
-Query Grafana dashboards for the time range and summarize findings. Post the report to Slack."""
+If healthy: one sentence. Example:
+*IncidentFox Automatic Status Report*
+All clear overnight — 142 agent runs, 0 failures, 99.8% uptime, p95 latency 320ms.
 
-EVENING_REPORT_PROMPT = """Generate a status report for the last 12 hours (daytime, 8AM to 8PM).
+If issues found: 2-3 bullets with numbers, then a short "Suggested action" line. Example:
+*IncidentFox Automatic Status Report*
+- 20/142 agent runs failed (14%) — top error: tool_error (12), timeout (8)
+- p95 latency spiked to 1.2s (normally 300ms)
+- Grafana: 3 alerts fired in us-west-2
 
-Focus on:
-- Error trends during peak hours
-- Agent success/failure rates
-- Any latency issues or degradation
-- Summary of the day's system health
+Suggested action: Investigate tool_error spike — likely downstream API degradation. Check recent deploys.
 
-Query Grafana dashboards for the time range and summarize findings. Post the report to Slack."""
+Rules: Always include total runs, failure count with %, top error types. \
+Never repeat the same number twice. Keep suggested action to one sentence."""
+
+EVENING_REPORT_PROMPT = """\
+Check Grafana and Amplitude for the last 12 hours (8AM-8PM daytime). \
+Output ONLY the final result — no narration, no "I will check", no process description.
+
+Always start with: "*IncidentFox Automatic Status Report*"
+
+If healthy: one sentence. Example:
+*IncidentFox Automatic Status Report*
+Healthy day — 1,203 agent runs, 2 failures (0.2%), p95 latency 280ms.
+
+If issues found: 2-3 bullets with numbers, then a short "Suggested action" line. Example:
+*IncidentFox Automatic Status Report*
+- 45/1,203 agent runs failed (3.7%) — top error: timeout (30), tool_error (15)
+- Error spike at 2:15 PM, resolved by 2:40 PM
+- Grafana: elevated 5xx rate on /api/chat endpoint
+
+Suggested action: Monitor timeout trend — may need to increase agent execution limits or check downstream latency.
+
+Rules: Always include total runs, failure count with %, top error types. \
+Never repeat the same number twice. Keep suggested action to one sentence."""
 
 
 def main() -> None:
@@ -311,7 +334,10 @@ def main() -> None:
             output_cfg.default_destinations = default_destinations
 
         # 5. Create scheduled jobs (morning + evening reports)
-        now = datetime.now(timezone.utc)
+        import zoneinfo
+
+        job_tz = zoneinfo.ZoneInfo(tz)
+        now = datetime.now(job_tz)
 
         job_defs = [
             {
@@ -337,16 +363,20 @@ def main() -> None:
 
             cron = croniter(job_def["schedule"], now)
             next_run = cron.get_next(datetime)
+            if next_run.tzinfo is None:
+                next_run = next_run.replace(tzinfo=job_tz)
+            next_run = next_run.astimezone(timezone.utc)
 
             job_config = {
                 "prompt": job_def["prompt"],
                 "agent_name": "planner",
-                "max_turns": 15,
+                "max_turns": 8,
                 "output_destinations": [
                     {
                         "type": "slack",
                         "channel_id": slack_channel_id,
                         "channel_name": slack_channel_name,
+                        "slack_team_id": os.getenv("MOCHACARE_SLACK_TEAM_ID", ""),
                     }
                 ],
             }
@@ -392,7 +422,7 @@ def main() -> None:
     print("  Evening: 8:00 PM — covers daytime (8AM-8PM)")
     print("\nAgent Config:")
     print("  Model: claude-sonnet-4 (temperature=0.3)")
-    print("  Max turns: 20 (reports: 15)")
+    print("  Max turns: 20 (reports: 8)")
     print("  Mode: planner + investigation")
     print("\n" + "=" * 60)
     print("\nNext steps:")
