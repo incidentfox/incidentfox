@@ -12,6 +12,7 @@ Triggered by:
 - Integration configuration save (progressive scan)
 """
 
+import asyncio
 import json
 import os
 import uuid
@@ -460,7 +461,7 @@ class OnboardingScanTask:
         scanner = SlackEnvironmentScanner(
             bot_token=slack_bot_token, channel_ids=self.channel_ids
         )
-        scan_result = scanner.scan()
+        scan_result = await asyncio.to_thread(scanner.scan)
 
         result["channels_scanned"] = scan_result.channels_scanned
         result["messages_scanned"] = scan_result.messages_scanned
