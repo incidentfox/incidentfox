@@ -789,7 +789,7 @@ class OnboardingScanTask:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(
                     f"{self.rag_url}/ingest/batch",
                     json=payload,
@@ -828,6 +828,12 @@ class OnboardingScanTask:
                     }
 
         except Exception as e:
+            _log(
+                "ingest_error",
+                tree=tree,
+                documents_sent=len(documents),
+                error=str(e),
+            )
             return {
                 "status": "ingest_error",
                 "documents_sent": len(documents),
