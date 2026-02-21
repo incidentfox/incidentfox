@@ -84,6 +84,13 @@ def _build_slack_prompt(channel_name: str, formatted_messages: str) -> str:
         "could use when investigating production incidents. Discard chitchat, social "
         "messages, and anything not related to infrastructure, services, incidents, "
         "deployments, or operations.\n\n"
+        "Some messages are grouped in [THREAD]...[/THREAD] blocks. These represent "
+        "Slack threads where a team discussed an alert or incident. Thread structure "
+        "is important:\n"
+        "- The first message in a thread is typically the alert or trigger\n"
+        "- Subsequent replies contain the investigation: diagnostics, root cause, "
+        "mitigation steps, tools used, and resolution\n"
+        "- Threads are the richest source of operational knowledge\n\n"
         "## Messages\n\n" + formatted_messages + "\n\n"
         "## Instructions\n\n"
         "Analyze these messages and extract KNOWLEDGE ITEMS. Each item should be a "
@@ -110,6 +117,11 @@ def _build_slack_prompt(channel_name: str, formatted_messages: str) -> str:
         "- If the channel has NO operational knowledge, return an empty items array\n"
         "- Merge related messages into single items (e.g., a troubleshooting thread -> one PROCEDURAL item)\n"
         "- For incident discussions, extract the resolution steps as a separate PROCEDURAL item\n"
+        "- For [THREAD] blocks, synthesize the thread into 1-2 knowledge items:\n"
+        "  - A TEMPORAL item capturing what happened (incident timeline, root cause, resolution)\n"
+        "  - A PROCEDURAL item extracting reusable troubleshooting steps\n"
+        "- Pay attention to: root cause, tools/dashboards referenced, mitigation commands, "
+        "service dependencies discovered during investigation\n"
         "- Keep each item's content concise but complete (100-300 words)\n\n"
         "Respond in JSON:\n"
         "{\n"
@@ -237,6 +249,65 @@ class KnowledgeExtractor:
         )
         return items
 
+    @staticmethod
+    def _format_ts(ts: str) -> str:
+        """Format a Slack timestamp for display."""
+        return ts.split(".")[0] if "." in ts else ts
+
+    def _format_messages_with_threads(
+        self, messages: List[CollectedMessage]
+    ) -> str:
+        """Format messages with thread grouping for LLM consumption.
+
+        Thread parents and their replies are grouped in [THREAD]...[/THREAD]
+        blocks. Non-threaded messages appear inline. All sorted chronologically.
+        """
+        # Index thread parents by ts
+        thread_parents: Dict[str, CollectedMessage] = {}
+        thread_replies: Dict[str, List[CollectedMessage]] = defaultdict(list)
+        standalone: List[CollectedMessage] = []
+
+        parent_tss = {m.ts for m in messages if m.is_thread_parent}
+
+        for msg in messages:
+            if msg.is_thread_parent:
+                thread_parents[msg.ts] = msg
+            elif msg.thread_ts and msg.thread_ts in parent_tss:
+                thread_replies[msg.thread_ts].append(msg)
+            else:
+                standalone.append(msg)
+
+        # Build (ts, formatted_block) pairs for chronological sorting
+        events: List[tuple] = []
+
+        for msg in standalone:
+            ts_str = self._format_ts(msg.ts)
+            events.append(
+                (msg.ts, "[%s] %s: %s" % (ts_str, msg.user, msg.text))
+            )
+
+        for parent_ts, parent_msg in thread_parents.items():
+            replies = sorted(
+                thread_replies.get(parent_ts, []), key=lambda m: m.ts
+            )
+            ts_str = self._format_ts(parent_msg.ts)
+
+            block_lines = []
+            block_lines.append("[THREAD] (%d replies)" % len(replies))
+            block_lines.append(
+                "  [%s] %s: %s" % (ts_str, parent_msg.user, parent_msg.text)
+            )
+            for reply in replies:
+                reply_ts = self._format_ts(reply.ts)
+                block_lines.append(
+                    "  [%s] %s: %s" % (reply_ts, reply.user, reply.text)
+                )
+            block_lines.append("[/THREAD]")
+            events.append((parent_msg.ts, "\n".join(block_lines)))
+
+        events.sort(key=lambda e: e[0])
+        return "\n\n".join(e[1] for e in events)
+
     async def _extract_from_channel(
         self,
         channel_name: str,
@@ -244,14 +315,18 @@ class KnowledgeExtractor:
         org_id: str,
     ) -> List[KnowledgeItem]:
         """Extract knowledge items from a single channel's messages."""
-        # Format messages as text
-        sorted_msgs = sorted(messages, key=lambda m: m.ts)
-        lines = []
-        for msg in sorted_msgs:
-            ts_str = msg.ts.split(".")[0] if "." in msg.ts else msg.ts
-            lines.append("[%s] %s: %s" % (ts_str, msg.user, msg.text))
+        # Format messages — use thread-grouped format when threads are present
+        has_threads = any(m.is_thread_parent for m in messages)
 
-        formatted = "\n".join(lines)
+        if has_threads:
+            formatted = self._format_messages_with_threads(messages)
+        else:
+            sorted_msgs = sorted(messages, key=lambda m: m.ts)
+            lines = []
+            for msg in sorted_msgs:
+                ts_str = msg.ts.split(".")[0] if "." in msg.ts else msg.ts
+                lines.append("[%s] %s: %s" % (ts_str, msg.user, msg.text))
+            formatted = "\n".join(lines)
 
         # Truncate to ~80K chars (same limit as architecture map)
         if len(formatted) > 80_000:
@@ -302,23 +377,26 @@ class KnowledgeExtractor:
         org_id: str,
     ) -> KnowledgeItem:
         """Create a raw fallback knowledge item from channel messages."""
-        sorted_msgs = sorted(messages, key=lambda m: m.ts)
-        participants = set()
-        lines = []
-        for msg in sorted_msgs:
-            try:
-                ts_float = float(msg.ts) if msg.ts else 0
-                ts_str = (
-                    datetime.fromtimestamp(ts_float).strftime("%Y-%m-%d %H:%M")
-                    if ts_float
-                    else "unknown"
-                )
-            except (ValueError, OSError):
-                ts_str = msg.ts
-            lines.append("[%s] %s: %s" % (ts_str, msg.user, msg.text))
-            participants.add(msg.user)
+        has_threads = any(m.is_thread_parent for m in messages)
+        participants = {msg.user for msg in messages}
 
-        content = "\n".join(lines)
+        if has_threads:
+            content = self._format_messages_with_threads(messages)
+        else:
+            sorted_msgs = sorted(messages, key=lambda m: m.ts)
+            lines = []
+            for msg in sorted_msgs:
+                try:
+                    ts_float = float(msg.ts) if msg.ts else 0
+                    ts_str = (
+                        datetime.fromtimestamp(ts_float).strftime("%Y-%m-%d %H:%M")
+                        if ts_float
+                        else "unknown"
+                    )
+                except (ValueError, OSError):
+                    ts_str = msg.ts
+                lines.append("[%s] %s: %s" % (ts_str, msg.user, msg.text))
+            content = "\n".join(lines)
 
         return KnowledgeItem(
             content=content,

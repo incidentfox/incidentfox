@@ -88,6 +88,100 @@ def slack_messages() -> List[Dict[str, Any]]:
     ]
 
 
+# Fixed base timestamp for thread fixtures (avoids drift between fixtures)
+_THREAD_BASE_TS = 1700000000.0
+
+
+@pytest.fixture
+def slack_messages_with_threads() -> List[Dict[str, Any]]:
+    """Mock Slack messages where some have reply_count (threaded)."""
+    return [
+        {
+            "user": "U001",
+            "text": "Check the Grafana dashboard for payment-service latency: <https://grafana.company.com/d/abc123|payment dashboard>",
+            "ts": str(_THREAD_BASE_TS - 100),
+        },
+        {
+            "user": "U002",
+            "text": "PagerDuty alert fired for high error rate on user-service",
+            "ts": str(_THREAD_BASE_TS - 200),
+            "reply_count": 3,
+            "thread_ts": str(_THREAD_BASE_TS - 200),
+        },
+        {
+            "user": "U003",
+            "text": "Sentry is showing a spike in 500 errors from the payment endpoint",
+            "ts": str(_THREAD_BASE_TS - 400),
+            "reply_count": 2,
+            "thread_ts": str(_THREAD_BASE_TS - 400),
+        },
+        {
+            "user": "U002",
+            "text": "Looking at Datadog APM traces, the db queries are slow",
+            "ts": str(_THREAD_BASE_TS - 500),
+        },
+        {
+            "user": "U001",
+            "text": "Updated the runbook in Confluence for this failure mode",
+            "ts": str(_THREAD_BASE_TS - 600),
+        },
+    ]
+
+
+@pytest.fixture
+def slack_thread_replies() -> Dict[str, List[Dict[str, Any]]]:
+    """Mock conversations.replies responses keyed by parent ts."""
+    return {
+        str(_THREAD_BASE_TS - 200): [
+            # Parent message (always first in conversations.replies)
+            {
+                "user": "U002",
+                "text": "PagerDuty alert fired for high error rate on user-service",
+                "ts": str(_THREAD_BASE_TS - 200),
+                "thread_ts": str(_THREAD_BASE_TS - 200),
+            },
+            {
+                "user": "U001",
+                "text": "Looking at Grafana, latency spiked at 14:30 UTC. DB connection pool looks saturated.",
+                "ts": str(_THREAD_BASE_TS - 190),
+                "thread_ts": str(_THREAD_BASE_TS - 200),
+            },
+            {
+                "user": "U003",
+                "text": "Root cause: connection pool exhaustion in the PostgreSQL layer. user-service was opening new connections on every request.",
+                "ts": str(_THREAD_BASE_TS - 180),
+                "thread_ts": str(_THREAD_BASE_TS - 200),
+            },
+            {
+                "user": "U001",
+                "text": "Increased pool size from 10 to 50, error rate recovering. Will deploy a proper fix with connection reuse tomorrow.",
+                "ts": str(_THREAD_BASE_TS - 170),
+                "thread_ts": str(_THREAD_BASE_TS - 200),
+            },
+        ],
+        str(_THREAD_BASE_TS - 400): [
+            {
+                "user": "U003",
+                "text": "Sentry is showing a spike in 500 errors from the payment endpoint",
+                "ts": str(_THREAD_BASE_TS - 400),
+                "thread_ts": str(_THREAD_BASE_TS - 400),
+            },
+            {
+                "user": "U001",
+                "text": "Checked the payment-service logs, it's a timeout to the Stripe API. Their status page shows degraded.",
+                "ts": str(_THREAD_BASE_TS - 390),
+                "thread_ts": str(_THREAD_BASE_TS - 400),
+            },
+            {
+                "user": "U003",
+                "text": "Added circuit breaker config, retries with backoff. Stripe recovered, errors cleared.",
+                "ts": str(_THREAD_BASE_TS - 380),
+                "thread_ts": str(_THREAD_BASE_TS - 400),
+            },
+        ],
+    }
+
+
 # --- GitHub API mock data ---
 
 

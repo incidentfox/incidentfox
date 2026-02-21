@@ -1018,6 +1018,8 @@ class TestRealisticOnboardingE2E:
                 return {"ok": True, "channels": channels, "response_metadata": {}}
             elif method == "conversations.history":
                 return {"ok": True, "messages": messages}
+            elif method == "conversations.replies":
+                return {"ok": True, "messages": []}
             return None
 
         scanner._api_request = mock_api

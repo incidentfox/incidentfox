@@ -7,6 +7,7 @@ the team uses, by analyzing channel names, message content, and shared URLs.
 
 import json
 import re
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -49,6 +50,8 @@ class CollectedMessage:
     text: str
     ts: str
     thread_ts: Optional[str] = None
+    is_thread_parent: bool = False
+    reply_count: int = 0
 
 
 @dataclass
@@ -183,12 +186,18 @@ class SlackEnvironmentScanner:
         max_channels: int = 20,
         max_messages_per_channel: int = 200,
         channel_ids: Optional[List[str]] = None,
+        max_threads_per_channel: int = 30,
+        max_replies_per_thread: int = 50,
     ):
         self.bot_token = bot_token
         self.lookback_days = lookback_days
         self.max_channels = max_channels
         self.max_messages_per_channel = max_messages_per_channel
         self.channel_ids = channel_ids  # Team-scoped filter (None = all)
+        self.max_threads_per_channel = max_threads_per_channel
+        self.max_replies_per_thread = max_replies_per_thread
+        self._last_replies_call = 0.0
+        self._replies_interval = 1.2  # seconds between replies calls (~50/min)
 
     def scan(self) -> ScanResult:
         """Run the full Slack workspace scan."""
@@ -387,6 +396,60 @@ class SlackEnvironmentScanner:
 
         return signals
 
+    def _rate_limit_replies(self) -> None:
+        """Simple rate limiter for conversations.replies (Tier 3: ~50 req/min)."""
+        if self._replies_interval <= 0:
+            return
+        elapsed = time.time() - self._last_replies_call
+        if elapsed < self._replies_interval:
+            time.sleep(self._replies_interval - elapsed)
+        self._last_replies_call = time.time()
+
+    def _fetch_thread_replies(
+        self,
+        channel_id: str,
+        channel_name: str,
+        parent_ts: str,
+    ) -> List[CollectedMessage]:
+        """Fetch thread replies for a parent message via conversations.replies.
+
+        Returns reply messages (excluding the parent, which is already collected).
+        """
+        result = self._api_request(
+            "conversations.replies",
+            {
+                "channel": channel_id,
+                "ts": parent_ts,
+                "limit": self.max_replies_per_thread,
+            },
+        )
+
+        if not result:
+            return []
+
+        replies = []
+        for msg in result.get("messages", []):
+            # Skip the parent message (included as first entry in replies response)
+            if msg.get("ts") == parent_ts:
+                continue
+
+            text = msg.get("text", "")
+            if not text or len(text) < 20:
+                continue
+
+            replies.append(
+                CollectedMessage(
+                    channel_name=channel_name,
+                    channel_id=channel_id,
+                    user=msg.get("user", "unknown"),
+                    text=text,
+                    ts=msg.get("ts", ""),
+                    thread_ts=parent_ts,
+                )
+            )
+
+        return replies
+
     def _scan_channel_messages(
         self,
         channel_id: str,
@@ -480,6 +543,49 @@ class SlackEnvironmentScanner:
                             },
                         )
                     )
+
+        # Fetch thread replies for messages with threads (RAG-relevant channels only)
+        if collect_for_rag:
+            threaded = [
+                msg
+                for msg in messages
+                if msg.get("reply_count", 0) > 0
+            ]
+            threaded.sort(key=lambda m: m.get("reply_count", 0), reverse=True)
+            threaded = threaded[: self.max_threads_per_channel]
+
+            # Mark collected parent messages
+            thread_parent_tss = {msg.get("ts") for msg in threaded}
+            for cm in collected:
+                if cm.ts in thread_parent_tss:
+                    cm.is_thread_parent = True
+                    for msg in threaded:
+                        if msg.get("ts") == cm.ts:
+                            cm.reply_count = msg.get("reply_count", 0)
+                            break
+
+            # Fetch replies for each thread
+            threads_fetched = 0
+            for msg in threaded:
+                self._rate_limit_replies()
+                replies = self._fetch_thread_replies(
+                    channel_id, channel_name, msg["ts"]
+                )
+                collected.extend(replies)
+                threads_fetched += 1
+
+            if threads_fetched > 0:
+                reply_count = sum(
+                    1
+                    for cm in collected
+                    if cm.thread_ts and not cm.is_thread_parent
+                )
+                _log(
+                    "thread_replies_fetched",
+                    channel=channel_name,
+                    threads_fetched=threads_fetched,
+                    replies_collected=reply_count,
+                )
 
         return signals, messages_scanned, collected
 
