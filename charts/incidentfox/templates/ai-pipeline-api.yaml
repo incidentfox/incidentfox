@@ -64,6 +64,8 @@ spec:
               port: {{ .Values.services.aiPipelineApi.servicePort }}
             initialDelaySeconds: {{ .Values.services.aiPipelineApi.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.services.aiPipelineApi.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.services.aiPipelineApi.livenessProbe.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.services.aiPipelineApi.livenessProbe.failureThreshold | default 5 }}
           {{- end }}
 ---
 apiVersion: v1

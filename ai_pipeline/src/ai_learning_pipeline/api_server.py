@@ -5,12 +5,13 @@ Exposes HTTP endpoints for triggering pipeline tasks on-demand,
 including the onboarding scan triggered by the Slack bot.
 """
 
+import asyncio
 import json
 import os
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 app = FastAPI(
@@ -206,16 +207,17 @@ async def health():
 
 
 @app.post("/api/v1/scan/trigger", response_model=ScanTriggerResponse)
-async def trigger_scan(
-    request: ScanTriggerRequest,
-    background_tasks: BackgroundTasks,
-):
+async def trigger_scan(request: ScanTriggerRequest):
     """
     Trigger an onboarding environment scan.
 
     Called by the Slack bot after:
     - OAuth installation (trigger=initial)
     - Integration configuration save (trigger=integration)
+
+    Uses asyncio.create_task() instead of BackgroundTasks to fully decouple
+    scans from the ASGI connection lifecycle, preventing GIL contention from
+    long-running scans from starving health check responses.
     """
     if request.trigger in ("initial", "team_joined", "team_created"):
         if not request.slack_team_id:
@@ -225,12 +227,13 @@ async def trigger_scan(
                 message="slack_team_id is required for initial/team scan",
             )
 
-        background_tasks.add_task(
-            _run_initial_scan,
-            org_id=request.org_id,
-            team_node_id=request.team_node_id,
-            slack_team_id=request.slack_team_id,
-            channel_ids=request.channel_ids,
+        asyncio.create_task(
+            _run_initial_scan(
+                org_id=request.org_id,
+                team_node_id=request.team_node_id,
+                slack_team_id=request.slack_team_id,
+                channel_ids=request.channel_ids,
+            )
         )
 
         _log(
@@ -254,11 +257,12 @@ async def trigger_scan(
                 message="integration_id is required for integration scan",
             )
 
-        background_tasks.add_task(
-            _run_integration_scan,
-            org_id=request.org_id,
-            team_node_id=request.team_node_id,
-            integration_id=request.integration_id,
+        asyncio.create_task(
+            _run_integration_scan(
+                org_id=request.org_id,
+                team_node_id=request.team_node_id,
+                integration_id=request.integration_id,
+            )
         )
 
         _log(
