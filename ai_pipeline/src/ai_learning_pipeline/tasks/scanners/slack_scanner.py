@@ -546,11 +546,7 @@ class SlackEnvironmentScanner:
 
         # Fetch thread replies for messages with threads (RAG-relevant channels only)
         if collect_for_rag:
-            threaded = [
-                msg
-                for msg in messages
-                if msg.get("reply_count", 0) > 0
-            ]
+            threaded = [msg for msg in messages if msg.get("reply_count", 0) > 0]
             threaded.sort(key=lambda m: m.get("reply_count", 0), reverse=True)
             threaded = threaded[: self.max_threads_per_channel]
 
@@ -576,9 +572,7 @@ class SlackEnvironmentScanner:
 
             if threads_fetched > 0:
                 reply_count = sum(
-                    1
-                    for cm in collected
-                    if cm.thread_ts and not cm.is_thread_parent
+                    1 for cm in collected if cm.thread_ts and not cm.is_thread_parent
                 )
                 _log(
                     "thread_replies_fetched",

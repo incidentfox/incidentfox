@@ -318,13 +318,9 @@ class TestKnowledgeExtractorThreads:
         lines = formatted.split("\n")
 
         # Find positions
-        early_pos = next(
-            i for i, l in enumerate(lines) if "Early standalone" in l
-        )
+        early_pos = next(i for i, l in enumerate(lines) if "Early standalone" in l)
         thread_pos = next(i for i, l in enumerate(lines) if "[THREAD]" in l)
-        late_pos = next(
-            i for i, l in enumerate(lines) if "Late standalone" in l
-        )
+        late_pos = next(i for i, l in enumerate(lines) if "Late standalone" in l)
 
         assert early_pos < thread_pos < late_pos
 

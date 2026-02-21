@@ -254,9 +254,7 @@ class KnowledgeExtractor:
         """Format a Slack timestamp for display."""
         return ts.split(".")[0] if "." in ts else ts
 
-    def _format_messages_with_threads(
-        self, messages: List[CollectedMessage]
-    ) -> str:
+    def _format_messages_with_threads(self, messages: List[CollectedMessage]) -> str:
         """Format messages with thread grouping for LLM consumption.
 
         Thread parents and their replies are grouped in [THREAD]...[/THREAD]
@@ -282,14 +280,10 @@ class KnowledgeExtractor:
 
         for msg in standalone:
             ts_str = self._format_ts(msg.ts)
-            events.append(
-                (msg.ts, "[%s] %s: %s" % (ts_str, msg.user, msg.text))
-            )
+            events.append((msg.ts, "[%s] %s: %s" % (ts_str, msg.user, msg.text)))
 
         for parent_ts, parent_msg in thread_parents.items():
-            replies = sorted(
-                thread_replies.get(parent_ts, []), key=lambda m: m.ts
-            )
+            replies = sorted(thread_replies.get(parent_ts, []), key=lambda m: m.ts)
             ts_str = self._format_ts(parent_msg.ts)
 
             block_lines = []
@@ -299,9 +293,7 @@ class KnowledgeExtractor:
             )
             for reply in replies:
                 reply_ts = self._format_ts(reply.ts)
-                block_lines.append(
-                    "  [%s] %s: %s" % (reply_ts, reply.user, reply.text)
-                )
+                block_lines.append("  [%s] %s: %s" % (reply_ts, reply.user, reply.text))
             block_lines.append("[/THREAD]")
             events.append((parent_msg.ts, "\n".join(block_lines)))
 
