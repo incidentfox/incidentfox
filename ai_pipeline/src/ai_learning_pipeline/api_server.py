@@ -102,7 +102,9 @@ async def _run_initial_scan(
         # Notify the installer via Slack DM with scan results
         recommendations = result.get("recommendations", [])
         rag_result = result.get("rag_ingestion", {})
-        knowledge_items = rag_result.get("items_extracted", 0) if isinstance(rag_result, dict) else 0
+        knowledge_items = (
+            rag_result.get("items_extracted", 0) if isinstance(rag_result, dict) else 0
+        )
         channels_scanned = result.get("channels_scanned", 0)
 
         await _notify_scan_results(
@@ -154,9 +156,7 @@ async def _run_integration_scan(org_id: str, team_node_id: str, integration_id: 
         )
 
 
-async def _get_slack_installation(
-    org_id: str, slack_team_id: str
-) -> Optional[dict]:
+async def _get_slack_installation(org_id: str, slack_team_id: str) -> Optional[dict]:
     """Fetch Slack installation data from config service.
 
     Returns the full installation dict (bot_token, user_id, etc.)
@@ -224,7 +224,10 @@ async def _notify_scan_results(
         )
 
     if recommendations:
-        names = [r.get("integration_name", r.get("integration_id", "?")) for r in recommendations]
+        names = [
+            r.get("integration_name", r.get("integration_id", "?"))
+            for r in recommendations
+        ]
         parts.append(
             f"\n:bulb: Found *{len(recommendations)}* integration recommendation(s): "
             + ", ".join(f"*{n}*" for n in names)
