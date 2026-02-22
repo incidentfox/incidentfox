@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useIdentity } from '@/lib/useIdentity';
 import {
   Server,
@@ -172,7 +173,24 @@ export default function TeamToolsPage() {
   const [filteringMcp, setFilteringMcp] = useState<ToolItem | null>(null);
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set());
 
+  const searchParams = useSearchParams();
   const teamId = identity?.team_node_id;
+
+  // Deep-link: ?configure=<integration_id> auto-opens the configure modal
+  useEffect(() => {
+    const configureId = searchParams.get('configure');
+    if (!configureId || loading || items.length === 0) return;
+
+    const target = items.find(
+      (item) => item.type === 'integration' && item.id === configureId
+    );
+    if (target) {
+      // Expand the Integrations section and open the configure modal
+      setExpandedCategories((prev) => new Set([...prev, 'integration']));
+      setEditingItem(target);
+      setEditValues(target.config_values || {});
+    }
+  }, [searchParams, loading, items]);
 
   const loadItems = useCallback(async () => {
     if (!teamId) return;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useIdentity } from '@/lib/useIdentity';
 import { apiFetch } from '@/lib/apiClient';
 import {
@@ -115,6 +116,7 @@ const getSourceTypeLabel = (sourceType: string) => {
 
 export default function TeamPendingChangesPage() {
   const { identity } = useIdentity();
+  const router = useRouter();
   const [changes, setChanges] = useState<PendingChange[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -168,12 +170,11 @@ export default function TeamPendingChangesPage() {
           )
         );
 
-        // For integration recommendations, navigate to integration config
+        // For integration recommendations, redirect to the tools page
+        // with the configure modal pre-opened for this integration
         if (data.action === 'configure_integration' && data.integration_id) {
-          setMessage({
-            type: 'success',
-            text: `Recommendation accepted! Configure ${data.integration_id} in Settings.`,
-          });
+          router.push(`/team/tools?configure=${encodeURIComponent(data.integration_id)}`);
+          return;
         } else {
           setMessage({ type: 'success', text: 'Change approved!' });
         }

@@ -85,25 +85,34 @@ async def _run_initial_scan(
     _log("background_initial_scan_started", org_id=org_id, slack_team_id=slack_team_id)
 
     try:
-        # Fetch bot token from config service
-        bot_token = await _get_bot_token(org_id, slack_team_id)
-        if not bot_token:
+        # Fetch installation data (bot token + installer user_id)
+        installation = await _get_slack_installation(org_id, slack_team_id)
+        if not installation:
             _log("bot_token_not_found", org_id=org_id)
             return
+
+        bot_token = installation["bot_token"]
+        installer_user_id = installation.get("user_id")
 
         task = OnboardingScanTask(
             org_id=org_id, team_node_id=team_node_id, channel_ids=channel_ids
         )
         result = await task.run_initial_scan(slack_bot_token=bot_token)
 
-        # If recommendations were generated, notify via Slack DM
+        # Notify the installer via Slack DM with scan results
         recommendations = result.get("recommendations", [])
-        if recommendations:
-            await _notify_scan_results(
-                org_id=org_id,
-                slack_team_id=slack_team_id,
-                recommendations=recommendations,
-            )
+        rag_result = result.get("rag_ingestion", {})
+        knowledge_items = rag_result.get("items_extracted", 0) if isinstance(rag_result, dict) else 0
+        channels_scanned = result.get("channels_scanned", 0)
+
+        await _notify_scan_results(
+            bot_token=bot_token,
+            user_id=installer_user_id,
+            org_id=org_id,
+            recommendations=recommendations,
+            knowledge_items=knowledge_items,
+            channels_scanned=channels_scanned,
+        )
 
         _log(
             "background_initial_scan_completed",
@@ -145,8 +154,14 @@ async def _run_integration_scan(org_id: str, team_node_id: str, integration_id: 
         )
 
 
-async def _get_bot_token(org_id: str, slack_team_id: str) -> Optional[str]:
-    """Fetch bot token from config service's Slack installation data."""
+async def _get_slack_installation(
+    org_id: str, slack_team_id: str
+) -> Optional[dict]:
+    """Fetch Slack installation data from config service.
+
+    Returns the full installation dict (bot_token, user_id, etc.)
+    or None if not found.
+    """
     import httpx
 
     config_url = os.getenv("CONFIG_SERVICE_URL", "http://config-service:8080")
@@ -154,7 +169,6 @@ async def _get_bot_token(org_id: str, slack_team_id: str) -> Optional[str]:
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            # Look up installation by Slack team_id
             response = await client.get(
                 f"{config_url}/api/v1/internal/slack/installations/find",
                 params={"team_id": slack_team_id},
@@ -162,15 +176,13 @@ async def _get_bot_token(org_id: str, slack_team_id: str) -> Optional[str]:
             )
             if response.status_code == 200:
                 data = response.json()
-                if data:
-                    token = data.get("bot_token")
-                    if token:
-                        _log(
-                            "bot_token_found",
-                            org_id=org_id,
-                            slack_team_id=slack_team_id,
-                        )
-                        return token
+                if data and data.get("bot_token"):
+                    _log(
+                        "bot_token_found",
+                        org_id=org_id,
+                        slack_team_id=slack_team_id,
+                    )
+                    return data
 
             _log(
                 "bot_token_installation_lookup_failed",
@@ -185,15 +197,86 @@ async def _get_bot_token(org_id: str, slack_team_id: str) -> Optional[str]:
     return None
 
 
-async def _notify_scan_results(org_id: str, slack_team_id: str, recommendations: list):
-    """Notify scan results — placeholder for Slack DM notification."""
-    # This will be handled by the slackbot polling pending changes
-    # or via a callback. For now, just log.
-    _log(
-        "scan_results_ready",
-        org_id=org_id,
-        recommendations_count=len(recommendations),
-    )
+async def _notify_scan_results(
+    bot_token: str,
+    user_id: Optional[str],
+    org_id: str,
+    recommendations: list,
+    knowledge_items: int = 0,
+    channels_scanned: int = 0,
+):
+    """Send a Slack DM to the installer with scan results summary."""
+    import httpx
+
+    if not user_id:
+        _log("scan_notification_skipped", reason="no_user_id", org_id=org_id)
+        return
+
+    # Build a concise summary message
+    parts = [":white_check_mark: *Environment scan complete*\n"]
+
+    if channels_scanned:
+        parts.append(f"Scanned *{channels_scanned}* channels.")
+
+    if knowledge_items:
+        parts.append(
+            f"Extracted *{knowledge_items}* knowledge items into your team's knowledge base."
+        )
+
+    if recommendations:
+        names = [r.get("integration_name", r.get("integration_id", "?")) for r in recommendations]
+        parts.append(
+            f"\n:bulb: Found *{len(recommendations)}* integration recommendation(s): "
+            + ", ".join(f"*{n}*" for n in names)
+            + ".\nReview them in *Pending Changes* on the web dashboard."
+        )
+
+    if not recommendations and not knowledge_items:
+        parts.append("No new recommendations or knowledge items found this time.")
+
+    text = "\n".join(parts)
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Open a DM conversation with the installer
+            dm_resp = await client.post(
+                "https://slack.com/api/conversations.open",
+                headers={"Authorization": f"Bearer {bot_token}"},
+                json={"users": user_id},
+            )
+            dm_data = dm_resp.json()
+            if not dm_data.get("ok"):
+                _log(
+                    "scan_notification_dm_open_failed",
+                    error=dm_data.get("error"),
+                    user_id=user_id,
+                )
+                return
+
+            channel_id = dm_data["channel"]["id"]
+
+            # Post the message
+            msg_resp = await client.post(
+                "https://slack.com/api/chat.postMessage",
+                headers={"Authorization": f"Bearer {bot_token}"},
+                json={
+                    "channel": channel_id,
+                    "text": text,
+                    "unfurl_links": False,
+                },
+            )
+            msg_data = msg_resp.json()
+            if msg_data.get("ok"):
+                _log("scan_notification_sent", user_id=user_id, org_id=org_id)
+            else:
+                _log(
+                    "scan_notification_send_failed",
+                    error=msg_data.get("error"),
+                    user_id=user_id,
+                )
+
+    except Exception as e:
+        _log("scan_notification_error", error=str(e), org_id=org_id)
 
 
 # ---------------------------------------------------------------------------
