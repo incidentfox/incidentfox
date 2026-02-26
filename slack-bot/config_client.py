@@ -550,8 +550,8 @@ class ConfigServiceClient:
         """
         expires_at = datetime.utcnow() + timedelta(days=FREE_TRIAL_DAYS)
 
-        # Store trial metadata at org level (not nested under integrations)
-        # The credential-resolver checks these fields at the top level
+        # Store trial metadata at ORG level so all teams inherit it.
+        # The credential-resolver checks these fields at the top level.
         config = {
             "is_trial": True,
             "trial_expires_at": expires_at.isoformat(),
@@ -564,7 +564,8 @@ class ConfigServiceClient:
             },
         }
 
-        self._update_config(org_id, team_node_id, config)
+        # Use org_id as team_node_id to store on the org node itself
+        self._update_config(org_id, org_id, config)
 
         return {
             "enabled": True,
