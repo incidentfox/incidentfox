@@ -109,6 +109,7 @@ RUN useradd -m -u 1000 agent && \
     # Configure git credential helper — sends sandbox JWT as Basic auth password
     # to credential-resolver's /git/ proxy (URL rewriting set via GIT_CONFIG_* env vars)
     git config --system credential.helper incidentfox && \
+    git config --system credential.useHttpPath false && \
     chown -R agent:agent /app /workspace /home/agent/.kube /home/agent/.aws
 
 USER agent
