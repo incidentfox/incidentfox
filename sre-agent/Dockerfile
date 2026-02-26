@@ -34,14 +34,16 @@ RUN echo "Building for architecture: ${TARGETARCH}"
 # Preinstalled integrations:
 # - kubectl (~50MB): Kubernetes cluster management
 # - aws CLI (~150MB): AWS resource inspection & management
+# - gh (~30MB): GitHub CLI for repository operations
 # - Node.js + claude-code: Claude Code CLI for agent framework
 #
 # Tools only execute if credentials are configured, no security risk from presence.
 # ==============================================================================
 
-# Install Node.js (required by Claude Code CLI), kubectl, AWS CLI, and utilities
-# Pin kubectl version for reproducible builds (avoids flaky dl.k8s.io/release/stable.txt)
+# Install Node.js (required by Claude Code CLI), kubectl, AWS CLI, gh CLI, and utilities
+# Pin versions for reproducible builds
 ARG KUBECTL_VERSION=v1.31.0
+ARG GH_VERSION=2.65.0
 RUN apt-get update && apt-get install -y \
     curl \
     git \
@@ -60,10 +62,17 @@ RUN apt-get update && apt-get install -y \
     && unzip awscliv2.zip \
     && ./aws/install \
     && rm -rf aws awscliv2.zip \
+    # Install GitHub CLI for correct architecture (pinned version)
+    && GH_ARCH=$([ "${TARGETARCH}" = "arm64" ] && echo "arm64" || echo "amd64") \
+    && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${GH_ARCH}.tar.gz" \
+       | tar xz \
+    && install -o root -g root -m 0755 "gh_${GH_VERSION}_linux_${GH_ARCH}/bin/gh" /usr/local/bin/gh \
+    && rm -rf "gh_${GH_VERSION}_linux_${GH_ARCH}" \
     && rm -rf /var/lib/apt/lists/* \
     # Verify installations
     && kubectl version --client \
-    && aws --version
+    && aws --version \
+    && gh --version
 
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
