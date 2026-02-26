@@ -1887,10 +1887,53 @@ def handle_integration_config_submission(ack, body, client, view):
         try:
             config_client = get_config_client()
 
-            # Special handling for GitHub App integration
-            if integration_id == "github" and "github_org" in config:
+            # Special handling for GitHub integration (App or PAT)
+            if integration_id == "github":
                 github_org = config.get("github_org", "").strip()
-                if not github_org:
+                api_key = config.get("api_key", "").strip()
+
+                if api_key:
+                    # PAT flow: save api_key + default_org to standard integration config
+                    pat_config = {"api_key": api_key}
+                    if config.get("default_org", "").strip():
+                        pat_config["default_org"] = config["default_org"].strip()
+                    if "context_prompt" in config:
+                        pat_config["context_prompt"] = config["context_prompt"]
+                    if "enabled" in config:
+                        pat_config["enabled"] = config["enabled"]
+                    config_client.save_integration_config(
+                        slack_team_id=team_id,
+                        integration_id=integration_id,
+                        config=pat_config,
+                    )
+                    logger.info(
+                        f"Saved GitHub PAT config for team {team_id}"
+                    )
+                elif github_org:
+                    # GitHub App flow: link the installation
+                    result = config_client.link_github_installation(
+                        slack_team_id=team_id,
+                        github_org=github_org,
+                    )
+                    logger.info(
+                        f"Linked GitHub org '{github_org}' for team {team_id}: {result.get('message')}"
+                    )
+
+                    # Also save context_prompt if provided
+                    if config.get("context_prompt") or config.get("enabled") is not None:
+                        integration_config = {}
+                        if "context_prompt" in config:
+                            integration_config["context_prompt"] = config["context_prompt"]
+                        if "enabled" in config:
+                            integration_config["enabled"] = config["enabled"]
+                        if integration_config:
+                            config_client.save_integration_config(
+                                slack_team_id=team_id,
+                                integration_id=integration_id,
+                                config=integration_config,
+                            )
+                else:
+                    # Neither provided — show error
                     error_modal = {
                         "type": "modal",
                         "title": {"type": "plain_text", "text": "Missing Info"},
@@ -1900,37 +1943,15 @@ def handle_integration_config_submission(ack, body, client, view):
                                 "type": "section",
                                 "text": {
                                     "type": "mrkdwn",
-                                    "text": ":warning: *Please enter your GitHub organization/username*\n\n"
-                                    "This should be the org or user you installed the IncidentFox GitHub App on.",
+                                    "text": ":warning: *Please provide either:*\n\n"
+                                    "1. A GitHub organization/username (for GitHub App), or\n"
+                                    "2. A Personal Access Token",
                                 },
                             },
                         ],
                     }
                     ack(response_action="push", view=error_modal)
                     return
-
-                # Link the GitHub installation
-                result = config_client.link_github_installation(
-                    slack_team_id=team_id,
-                    github_org=github_org,
-                )
-                logger.info(
-                    f"Linked GitHub org '{github_org}' for team {team_id}: {result.get('message')}"
-                )
-
-                # Also save context_prompt if provided (standard integration config)
-                if config.get("context_prompt") or config.get("enabled") is not None:
-                    integration_config = {}
-                    if "context_prompt" in config:
-                        integration_config["context_prompt"] = config["context_prompt"]
-                    if "enabled" in config:
-                        integration_config["enabled"] = config["enabled"]
-                    if integration_config:
-                        config_client.save_integration_config(
-                            slack_team_id=team_id,
-                            integration_id=integration_id,
-                            config=integration_config,
-                        )
             else:
                 # Standard integration config save
                 config_client.save_integration_config(

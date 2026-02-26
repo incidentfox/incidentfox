@@ -605,7 +605,7 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "icon": ":github:",
         "icon_fallback": ":octocat:",
         "description": "Search code, PRs, commits, and deployments.",
-        "auth_type": "github_app",  # Uses GitHub App OAuth flow
+        "auth_type": "github_app",  # Uses GitHub App OAuth flow (primary)
         "github_app_url": "https://github.com/apps/incidentfox/installations/new",
         "setup_instructions": (
             "*Setup Instructions:*\n"
@@ -621,9 +621,25 @@ INTEGRATIONS: List[Dict[str, Any]] = [
                 "id": "github_org",
                 "name": "GitHub Organization/Username",
                 "type": "string",
-                "required": True,
+                "required": False,  # Not required when using PAT
                 "placeholder": "acme-corp",
-                "hint": "The GitHub org or username you installed the app on",
+                "hint": "The GitHub org or username you installed the app on.",
+            },
+            {
+                "id": "api_key",
+                "name": "Personal Access Token",
+                "type": "secret",
+                "required": False,
+                "placeholder": "ghp_...",
+                "hint": "Alternative to GitHub App. Use a fine-grained PAT with repo and read:org scopes.",
+            },
+            {
+                "id": "default_org",
+                "name": "Default Organization",
+                "type": "string",
+                "required": False,
+                "placeholder": "acme-corp",
+                "hint": "Default GitHub org for searches (used with PAT auth).",
             },
         ],
     },
@@ -4307,6 +4323,24 @@ def build_integration_config_modal(
         field_type = field.get("type", "string")
         field_hint = field.get("hint", "")
         field_required = field.get("required", False)
+
+        # Add a visual separator before PAT fields for GitHub
+        if int_id == "github" and field_id == "api_key":
+            blocks.append({"type": "divider"})
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            "*Or use a Personal Access Token*\n"
+                            "Simpler setup for quick trials or self-hosted environments. "
+                            "Create a <https://github.com/settings/tokens?type=beta|fine-grained PAT> "
+                            "with _Contents_ and _Metadata_ repository permissions."
+                        ),
+                    },
+                }
+            )
         field_placeholder = field.get("placeholder", "")
 
         field_names.append(field_id)
