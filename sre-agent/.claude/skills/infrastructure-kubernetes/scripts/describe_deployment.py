@@ -134,7 +134,9 @@ def main():
                 r.metadata.annotations.get("deployment.kubernetes.io/revision", "0")
             ),
             reverse=True,
-        )[:5]:  # Last 5 revisions
+        )[
+            :5
+        ]:  # Last 5 revisions
             rev = {
                 "revision": rs.metadata.annotations.get(
                     "deployment.kubernetes.io/revision", "?"

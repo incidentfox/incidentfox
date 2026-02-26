@@ -129,9 +129,7 @@ def describe_node(core_v1, custom_api, node_name):
     # Taints
     taints = []
     for t in node.spec.taints or []:
-        taints.append(
-            {"key": t.key, "value": t.value or "", "effect": t.effect}
-        )
+        taints.append({"key": t.key, "value": t.value or "", "effect": t.effect})
     info["taints"] = taints
 
     # Pod count on this node
@@ -157,14 +155,14 @@ def describe_node(core_v1, custom_api, node_name):
         info["usage"] = {
             "cpu": metrics["usage"]["cpu"],
             "cpu_millicores": int(cpu_usage),
-            "cpu_percent": round(cpu_usage / cpu_capacity * 100, 1)
-            if cpu_capacity
-            else 0,
+            "cpu_percent": (
+                round(cpu_usage / cpu_capacity * 100, 1) if cpu_capacity else 0
+            ),
             "memory": metrics["usage"]["memory"],
             "memory_mib": int(mem_usage),
-            "memory_percent": round(mem_usage / mem_capacity * 100, 1)
-            if mem_capacity
-            else 0,
+            "memory_percent": (
+                round(mem_usage / mem_capacity * 100, 1) if mem_capacity else 0
+            ),
         }
     except Exception:
         pass
@@ -213,12 +211,18 @@ def main():
                         or (c["type"] != "Ready" and c["status"] == "False")
                         else "PROBLEM"
                     )
-                    print(f"  {c['type']}: {c['status']} [{status_icon}] - {c['reason']}")
+                    print(
+                        f"  {c['type']}: {c['status']} [{status_icon}] - {c['reason']}"
+                    )
                 print()
 
                 # Resources
-                print(f"Capacity:    cpu={info['capacity']['cpu']}, memory={info['capacity']['memory']}, pods={info['capacity']['pods']}")
-                print(f"Allocatable: cpu={info['allocatable']['cpu']}, memory={info['allocatable']['memory']}, pods={info['allocatable']['pods']}")
+                print(
+                    f"Capacity:    cpu={info['capacity']['cpu']}, memory={info['capacity']['memory']}, pods={info['capacity']['pods']}"
+                )
+                print(
+                    f"Allocatable: cpu={info['allocatable']['cpu']}, memory={info['allocatable']['memory']}, pods={info['allocatable']['pods']}"
+                )
                 print(f"Running pods: {info['running_pods']}")
                 print()
 
