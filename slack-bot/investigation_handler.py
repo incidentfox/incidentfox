@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import threading
+import time
 from typing import Dict, Optional
 
 import requests
@@ -64,6 +65,310 @@ def get_onboarding_modules():
     import onboarding
 
     return onboarding
+
+
+# ---------------------------------------------------------------------------
+# Auto-investigate channel cache
+# ---------------------------------------------------------------------------
+# Cache: slack_team_id -> set of channel_ids that have auto-investigate enabled.
+# On cache hit (< 5 min old) the check is a pure dict+set lookup — zero latency.
+_auto_investigate_cache: Dict[str, set] = {}
+_auto_investigate_cache_ts: Dict[str, float] = {}
+_AUTO_INVESTIGATE_CACHE_TTL = 300  # 5 minutes
+
+
+def _is_auto_investigate_channel(slack_team_id: str, channel_id: str) -> bool:
+    """Check if a channel has auto-investigate enabled. Cached for 5 minutes."""
+    now = time.time()
+    if (
+        slack_team_id in _auto_investigate_cache
+        and now - _auto_investigate_cache_ts.get(slack_team_id, 0)
+        < _AUTO_INVESTIGATE_CACHE_TTL
+    ):
+        return channel_id in _auto_investigate_cache[slack_team_id]
+
+    # Cache miss — fetch config via routing lookup
+    try:
+        cc = get_config_client()
+        routing = cc.lookup_routing(channel_id, workspace_id=slack_team_id)
+        if routing:
+            config = (
+                cc.get_team_config(routing["org_id"], routing["team_node_id"]) or {}
+            )
+        else:
+            config = {}
+        auto_channels = set(
+            config.get("auto_investigate", {}).get("channel_ids", [])
+        )
+        _auto_investigate_cache[slack_team_id] = auto_channels
+        _auto_investigate_cache_ts[slack_team_id] = now
+        return channel_id in auto_channels
+    except Exception as e:
+        logger.warning(f"Failed to check auto_investigate config: {e}")
+        return False
+
+
+def _extract_text_from_event(event: dict) -> str:
+    """Extract readable text from a Slack message event.
+
+    Handles plain text and Block Kit blocks (section, rich_text, header, context).
+    Bot messages from alerting tools (PagerDuty, Datadog, etc.) often use Block Kit
+    instead of plain text.
+    """
+    text = event.get("text", "")
+    blocks = event.get("blocks", [])
+
+    if not blocks:
+        return text.strip()
+
+    # Extract text from blocks for richer context
+    parts = []
+    for block in blocks:
+        block_type = block.get("type")
+
+        if block_type == "section":
+            bt = block.get("text", {})
+            if bt.get("text"):
+                parts.append(bt["text"])
+            # Also check fields (some alerting tools use field layouts)
+            for field in block.get("fields", []):
+                if field.get("text"):
+                    parts.append(field["text"])
+
+        elif block_type == "header":
+            ht = block.get("text", {})
+            if ht.get("text"):
+                parts.append(ht["text"])
+
+        elif block_type == "rich_text":
+            # Recursively extract text from rich_text elements
+            for element in block.get("elements", []):
+                for sub in element.get("elements", []):
+                    if sub.get("type") == "text" and sub.get("text"):
+                        parts.append(sub["text"])
+                    elif sub.get("type") == "link" and sub.get("url"):
+                        label = sub.get("text", sub["url"])
+                        parts.append(label)
+
+        elif block_type == "context":
+            for el in block.get("elements", []):
+                if el.get("type") == "mrkdwn" and el.get("text"):
+                    parts.append(el["text"])
+
+    block_text = "\n".join(parts).strip()
+    # Prefer block text if substantially richer, otherwise use plain text
+    if len(block_text) > len(text.strip()):
+        return block_text
+    return text.strip() or block_text
+
+
+def _trigger_auto_investigate(event, client, context):
+    """
+    Trigger an automatic investigation for a message in an auto-investigate channel.
+    Called for both bot messages (alerts) and human messages posted in channels
+    configured for auto-investigation.
+    """
+    channel_id = event.get("channel")
+    message_ts = event.get("ts")
+    slack_team_id = event.get("team") or context.get("team_id")
+
+    if not channel_id or not message_ts:
+        logger.warning("Auto-investigate triggered with missing fields, skipping")
+        return
+
+    # Extract text from message (handles Block Kit for rich bot messages)
+    message_text = _extract_text_from_event(event)
+    if not message_text:
+        logger.debug("Auto-investigate skipped: empty message text")
+        return
+
+    logger.info(
+        f"🔔 Auto-investigate starting: channel={channel_id}, "
+        f"ts={message_ts}, text={message_text[:100]}"
+    )
+
+    # Check if trial has expired
+    try:
+        config_client = get_config_client()
+        trial_info = config_client.get_trial_status(slack_team_id)
+        if trial_info and trial_info.get("expired"):
+            logger.info(
+                f"Trial expired for team {slack_team_id}, skipping auto-investigation"
+            )
+            return
+    except Exception as e:
+        logger.warning(f"Failed to check trial status (continuing): {e}")
+
+    # Build investigation prompt
+    investigation_prompt = f"""A new message was posted in an auto-investigate channel:
+
+{message_text}
+
+Please investigate this and provide:
+1. Root cause analysis
+2. Impact assessment
+3. Recommended remediation steps
+4. Any relevant logs or metrics
+
+Use all available tools to gather context about this issue."""
+
+    # Thread context: start a new thread from this message
+    thread_ts = message_ts  # Reply in a thread under the original message
+
+    # Generate thread_id for sre-agent
+    sanitized_thread_ts = thread_ts.replace(".", "-")
+    sanitized_channel = channel_id.lower()
+    thread_id = f"slack-{sanitized_channel}-{sanitized_thread_ts}"
+
+    # Post initial "Investigating..." message in-thread
+    from assets_config import get_asset_url
+
+    loading_url = get_asset_url("loading")
+
+    initial_blocks = (
+        [
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "image",
+                        "image_url": loading_url,
+                        "alt_text": "Loading",
+                    },
+                    {"type": "mrkdwn", "text": "Investigating..."},
+                ],
+            }
+        ]
+        if loading_url
+        else [
+            {
+                "type": "context",
+                "elements": [{"type": "mrkdwn", "text": "Investigating..."}],
+            }
+        ]
+    )
+
+    try:
+        initial_response = client.chat_postMessage(
+            channel=channel_id,
+            thread_ts=thread_ts,
+            text="Investigating...",
+            blocks=initial_blocks,
+        )
+    except Exception as e:
+        logger.error(f"Failed to post initial auto-investigate message: {e}")
+        return
+
+    response_message_ts = initial_response["ts"]
+
+    # Initialize state
+    state = MessageState(
+        channel_id=channel_id,
+        message_ts=response_message_ts,
+        thread_ts=thread_ts,
+        thread_id=thread_id,
+    )
+
+    # Enable auto-listen for this thread (users can follow up without @mention)
+    _auto_listen_threads[(channel_id, thread_ts)] = True
+    logger.info(
+        f"🔔 Auto-listen enabled for auto-investigate thread {thread_ts} in {channel_id}"
+    )
+
+    try:
+        # Get team token and routing info
+        routing_result = None
+        try:
+            config_client = get_config_client()
+            routing_result = config_client.get_team_token_for_channel(
+                slack_team_id, channel_id
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to get team token for {slack_team_id}/{channel_id}: {e}"
+            )
+
+        resolved_org_id = routing_result["org_id"] if routing_result else None
+        resolved_team_node_id = (
+            routing_result["team_node_id"] if routing_result else None
+        )
+        team_token = routing_result["token"] if routing_result else None
+
+        # Call sre-agent to investigate
+        request_payload = {
+            "prompt": investigation_prompt,
+            "thread_id": thread_id,
+            "tenant_id": resolved_org_id,
+            "team_id": resolved_team_node_id,
+        }
+
+        if team_token:
+            request_payload["team_token"] = team_token
+
+        response = requests.post(
+            f"{SRE_AGENT_URL}/investigate",
+            json=request_payload,
+            stream=True,
+            timeout=300,
+            headers=_sre_agent_headers(),
+        )
+
+        if response.status_code != 200:
+            error_detail = response.text[:200] if response.text else "Unknown error"
+            state.error = f"Server error ({response.status_code}): {error_detail}"
+            update_slack_message(client, state, slack_team_id, final=True)
+            return
+
+        # Process SSE stream
+        event_count = 0
+        for line in response.iter_lines(decode_unicode=True):
+            if line:
+                sse_event = parse_sse_event(line)
+                if sse_event:
+                    event_count += 1
+                    handle_stream_event(state, sse_event, client, slack_team_id)
+
+        # Cache state for modal view
+        _investigation_cache[state.message_ts] = state
+        _cache_timestamps[state.message_ts] = time.time()
+        _persist_session_to_db(
+            state, org_id=resolved_org_id, team_node_id=resolved_team_node_id
+        )
+
+        logger.info(
+            f"✅ Auto-investigation completed (processed {event_count} events, "
+            f"final_result={'present' if state.final_result else 'missing'})"
+        )
+
+        if event_count == 0 and not state.error:
+            state.error = "No response received from agent"
+
+        # Final update with feedback buttons
+        update_slack_message(client, state, slack_team_id, final=True)
+
+        # Save snapshot
+        save_investigation_snapshot(state)
+
+    except requests.exceptions.ChunkedEncodingError:
+        logger.warning(
+            "Auto-investigation stream interrupted (server may be restarting)"
+        )
+        state.error = "Investigation was interrupted (service may be restarting). Please try again."
+        update_slack_message(client, state, slack_team_id, final=True)
+    except requests.exceptions.Timeout:
+        logger.error("Auto-investigation request timed out")
+        state.error = "Investigation timed out after 5 minutes"
+        update_slack_message(client, state, slack_team_id, final=True)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Auto-investigation request failed: {e}")
+        state.error = f"Failed to connect to investigation service: {str(e)}"
+        update_slack_message(client, state, slack_team_id, final=True)
+    except Exception as e:
+        logger.error(
+            f"Unexpected error during auto-investigation: {e}", exc_info=True
+        )
+        state.error = f"Unexpected error: {str(e)}"
+        update_slack_message(client, state, slack_team_id, final=True)
 
 
 def _build_full_thread_context(messages, current_message_ts, bot_user_id, client):
@@ -2108,12 +2413,46 @@ def handle_message(event, client, context):
         return
 
     # Skip bot messages (prevents infinite loop in auto-listen threads)
+    # BUT: allow auto-investigate for bot messages in configured channels
     if event.get("bot_id"):
+        channel_id = event.get("channel")
+        slack_team_id = context.get("team_id")
+        thread_ts = event.get("thread_ts")
+        if (
+            not thread_ts
+            and channel_id
+            and slack_team_id
+            and _is_auto_investigate_channel(slack_team_id, channel_id)
+        ):
+            logger.info(
+                f"🔔 Auto-investigate triggered (bot message) in channel {channel_id}"
+            )
+            threading.Thread(
+                target=_trigger_auto_investigate,
+                args=(event, client, context),
+                daemon=True,
+            ).start()
         return
 
     # Only handle threaded messages (not top-level channel messages)
     thread_ts = event.get("thread_ts")
     if not thread_ts:
+        # Check auto-investigate for human messages in configured channels
+        channel_id = event.get("channel")
+        slack_team_id = context.get("team_id")
+        if (
+            channel_id
+            and slack_team_id
+            and _is_auto_investigate_channel(slack_team_id, channel_id)
+        ):
+            logger.info(
+                f"🔔 Auto-investigate triggered (human message) in channel {channel_id}"
+            )
+            threading.Thread(
+                target=_trigger_auto_investigate,
+                args=(event, client, context),
+                daemon=True,
+            ).start()
         return
 
     user_id = event.get("user")

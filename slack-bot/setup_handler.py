@@ -278,6 +278,34 @@ def _build_team_setup_modal(
     }
     blocks.append(create_block)
 
+    # Auto-investigate option
+    blocks.append({"type": "divider"})
+    blocks.append(
+        {
+            "type": "input",
+            "block_id": "auto_investigate_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Auto-Investigate"},
+            "element": {
+                "type": "checkboxes",
+                "action_id": "auto_investigate_check",
+                "options": [
+                    {
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Auto-investigate all messages in #{channel_name}*",
+                        },
+                        "description": {
+                            "type": "plain_text",
+                            "text": "Bot will automatically investigate every new message without @mention",
+                        },
+                        "value": "enabled",
+                    }
+                ],
+            },
+        }
+    )
+
     return {
         "type": "modal",
         "callback_id": "team_setup_choice",
@@ -433,6 +461,16 @@ def handle_team_setup_choice(ack, body, client, view):
         or ""
     ).strip()
 
+    # Check auto-investigate checkbox
+    auto_investigate_opts = (
+        values.get("auto_investigate_block", {})
+        .get("auto_investigate_check", {})
+        .get("selected_options", [])
+    )
+    auto_investigate_enabled = any(
+        opt.get("value") == "enabled" for opt in auto_investigate_opts
+    )
+
     # Validate: user must pick exactly one option
     if selected_team and new_team_name:
         ack(
@@ -469,6 +507,26 @@ def handle_team_setup_choice(ack, body, client, view):
         team_node_id = selected_team
         try:
             cc.add_channel_to_team(org_id, team_node_id, channel_id)
+
+            # Save auto-investigate config if enabled
+            if auto_investigate_enabled:
+                try:
+                    existing_cfg = cc.get_team_config(org_id, team_node_id) or {}
+                    current = existing_cfg.get("auto_investigate", {}).get(
+                        "channel_ids", []
+                    )
+                    if channel_id not in current:
+                        current.append(channel_id)
+                    cc._update_config(
+                        org_id,
+                        team_node_id,
+                        {"auto_investigate": {"channel_ids": current}},
+                    )
+                    logger.info(
+                        f"Auto-investigate enabled for channel {channel_id} in team {team_node_id}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to save auto-investigate config: {e}")
 
             import threading
 
@@ -580,6 +638,20 @@ def handle_team_setup_choice(ack, body, client, view):
 
         token = result.get("token", "")
         web_ui_url = os.environ.get("WEB_UI_URL", "")
+
+        # Save auto-investigate config if enabled
+        if auto_investigate_enabled:
+            try:
+                cc._update_config(
+                    org_id,
+                    team_node_id,
+                    {"auto_investigate": {"channel_ids": [channel_id]}},
+                )
+                logger.info(
+                    f"Auto-investigate enabled for channel {channel_id} in new team {team_node_id}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to save auto-investigate config: {e}")
 
         import threading
 
