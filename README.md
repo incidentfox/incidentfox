@@ -102,7 +102,7 @@ Then edit `.env` to add your `ANTHROPIC_API_KEY` (or any other LLM provider — 
 
 That's it. IncidentFox starts Postgres, config-service, sre-agent, and the web console. Migrations run automatically.
 
-**Want to test via Slack?** [Create a Slack app](https://api.slack.com/apps?new_app=1) using the [manifest](slack-bot/slack-manifest.json), add `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` to `.env`, and run `make dev-slack`. [Full Slack setup guide](docs/SLACK_SETUP.md).
+**Want to test via Slack?** [Create a Slack app](https://api.slack.com/apps?new_app=1) using the [manifest](slack-bot/slack-manifest.json), add `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` to `.env`, and restart with `make dev`. [Full Slack setup guide](docs/SLACK_SETUP.md).
 
 ## Open-source vs. paid
 
