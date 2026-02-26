@@ -751,42 +751,118 @@ async def get_integration_credentials(integration_id: str, request: Request):
     return creds
 
 
-@app.get("/api/git-token")
-async def get_git_token(request: Request):
-    """Return a GitHub token for git HTTPS credential helper.
+@app.api_route("/git/{path:path}", methods=["GET", "POST"])
+async def git_proxy(path: str, request: Request):
+    """Reverse proxy for git smart HTTP protocol (clone, fetch, push).
 
-    Used by the sandbox git credential helper to authenticate git clone/push/pull
-    through the standard git HTTPS transport. Returns a token that works as the
-    password in HTTPS basic auth (username is ignored by GitHub).
+    Allows sandboxes to use native git commands with HTTPS URLs.
+    Git URL rewriting (insteadOf) routes requests here instead of github.com.
+    The sandbox credential helper sends the sandbox JWT as a Basic auth password.
 
-    Security: JWT-authenticated. Token is short-lived (GitHub App) or scoped (PAT).
+    Security: Real GitHub tokens never reach the sandbox. The sandbox only has
+    its JWT (which it already possesses). This endpoint validates the JWT and
+    injects real GitHub credentials when forwarding to github.com.
     """
     import asyncio
+    import base64
 
-    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+    import httpx
+
+    # Extract JWT from Basic auth (git credential helper sends JWT as password)
+    # or fall back to X-Sandbox-JWT header
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Basic "):
+        try:
+            decoded = base64.b64decode(auth_header[6:]).decode()
+            _, jwt_token = decoded.split(":", 1)
+            claims = validate_sandbox_jwt(jwt_token)
+            if not claims:
+                raise HTTPException(status_code=401, detail="Invalid sandbox JWT")
+            tenant_id, team_id, sandbox_name = (
+                claims.tenant_id,
+                claims.team_id,
+                claims.sandbox_name,
+            )
+        except (ValueError, UnicodeDecodeError):
+            raise HTTPException(status_code=401, detail="Invalid Basic auth")
+    else:
+        # No auth provided — return 401 to trigger git credential helper
+        if not request.headers.get("x-sandbox-jwt"):
+            return Response(
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="git"'},
+            )
+        tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
     logger.info(
-        f"Git token request: tenant={tenant_id}, team={team_id}, sandbox={sandbox_name}"
+        f"Git proxy: {request.method} /{path} "
+        f"(tenant={tenant_id}, sandbox={sandbox_name})"
     )
 
+    # Get GitHub credentials and resolve token
     creds = await get_credentials(tenant_id, team_id, "github")
     if not creds or not is_integration_configured("github", creds):
-        raise HTTPException(
-            status_code=404,
-            detail="GitHub integration not configured",
-        )
+        raise HTTPException(status_code=404, detail="GitHub integration not configured")
 
-    # Resolve token: prefer GitHub App installation token, fall back to PAT
-    token = await asyncio.to_thread(_get_github_app_token, creds)
-    if not token:
-        token = creds.get("api_key")
-    if not token:
-        raise HTTPException(
-            status_code=404,
-            detail="GitHub integration not configured",
-        )
+    api_token = await asyncio.to_thread(_get_github_app_token, creds)
+    if not api_token:
+        api_token = creds.get("api_key")
+    if not api_token:
+        raise HTTPException(status_code=404, detail="GitHub integration not configured")
 
-    # Return plain token — credential helper parses this
-    return {"token": token}
+    # Proxy to github.com (not api.github.com — git uses the main domain)
+    # Support GitHub Enterprise via optional domain field
+    domain = creds.get("domain", "https://github.com")
+    if domain.rstrip("/").endswith("/api/v3"):
+        # GHE API URL → strip /api/v3 for git transport
+        domain = domain.rstrip("/").removesuffix("/api/v3")
+    if not domain.startswith(("http://", "https://")):
+        domain = f"https://{domain}"
+    target_url = f"{domain.rstrip('/')}/{path}"
+
+    query_string = str(request.query_params)
+    if query_string:
+        target_url = f"{target_url}?{query_string}"
+
+    # Forward with real GitHub credentials (never exposed to sandbox)
+    forward_headers = {
+        "Authorization": f"Bearer {api_token}",
+        "User-Agent": "git/incidentfox-proxy",
+    }
+    # Preserve content-type for git pack data
+    content_type = request.headers.get("Content-Type")
+    if content_type:
+        forward_headers["Content-Type"] = content_type
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            body = None
+            if request.method == "POST":
+                body = await request.body()
+
+            resp = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                content=body,
+            )
+
+            # Return response preserving headers important for git protocol
+            response_headers = {}
+            for header in ["Content-Type", "Cache-Control", "Expires", "Pragma"]:
+                if header in resp.headers:
+                    response_headers[header] = resp.headers[header]
+
+            return Response(
+                content=resp.content,
+                status_code=resp.status_code,
+                headers=response_headers,
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Git request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"Git proxy error: {e}")
+        raise HTTPException(status_code=502, detail=f"Git request failed: {e}")
 
 
 # IMPORTANT: Route ordering matters in FastAPI/Starlette!

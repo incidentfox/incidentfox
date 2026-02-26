@@ -1,9 +1,10 @@
 #!/bin/sh
 # Git credential helper for IncidentFox sandbox environment.
 #
-# Fetches a GitHub token from the credential-resolver service using the
-# sandbox JWT. This lets the agent use native git commands (clone, push, pull)
-# with HTTPS URLs, authenticated transparently through the credential proxy.
+# Returns the sandbox JWT as a Basic auth password. The credential-resolver's
+# /git/ proxy validates the JWT and injects real GitHub credentials when
+# forwarding to github.com. This way, actual GitHub tokens never reach the
+# sandbox — only the JWT (which the sandbox already possesses) is used.
 #
 # Git calls this script with "get" when it needs credentials.
 # Protocol: https://git-scm.com/docs/gitcredentials#_custom_helpers
@@ -14,22 +15,11 @@ case "$1" in
     *) exit 0 ;;
 esac
 
-# Read input (host, protocol, etc.) — we only care about github.com hosts
-HOST=""
+# Read and discard stdin (git sends host/protocol info, we don't need it
+# since URL rewriting already routes to credential-resolver)
 while IFS='=' read -r key value; do
-    case "$key" in
-        host) HOST="$value" ;;
-    esac
+    :
 done
-
-# Only provide credentials for GitHub hosts
-case "$HOST" in
-    github.com|*.github.com|*.githubusercontent.com) ;;
-    *) exit 0 ;;
-esac
-
-# Credential-resolver URL (set by sandbox_manager.py)
-CR_URL="${CREDENTIAL_RESOLVER_URL:-http://credential-resolver-svc:8002}"
 
 # SANDBOX_JWT may be in env or written to file by /claim endpoint
 JWT="${SANDBOX_JWT}"
@@ -40,17 +30,6 @@ if [ -z "$JWT" ]; then
     exit 1
 fi
 
-# Fetch token from credential-resolver
-RESPONSE=$(curl -sf -H "X-Sandbox-JWT: ${JWT}" "${CR_URL}/api/git-token" 2>/dev/null)
-if [ $? -ne 0 ] || [ -z "$RESPONSE" ]; then
-    exit 1
-fi
-
-# Extract token from JSON response {"token": "..."}
-TOKEN=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])" 2>/dev/null)
-if [ -z "$TOKEN" ]; then
-    exit 1
-fi
-
-# Output in git credential format
-printf 'protocol=https\nhost=%s\nusername=x-access-token\npassword=%s\n' "$HOST" "$TOKEN"
+# Return JWT as password — credential-resolver validates it and injects
+# real GitHub credentials when proxying to github.com
+printf 'username=x-access-token\npassword=%s\n' "$JWT"

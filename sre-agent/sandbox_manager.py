@@ -632,6 +632,21 @@ static_resources:
                                         "name": "CREDENTIAL_RESOLVER_URL",
                                         "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002",
                                     },
+                                    # Git URL rewriting: route github.com HTTPS through credential-resolver's
+                                    # /git/ proxy so native git commands work without exposing tokens to sandbox.
+                                    # Uses GIT_CONFIG_* env vars (git 2.31+) to set url.<base>.insteadOf.
+                                    {
+                                        "name": "GIT_CONFIG_COUNT",
+                                        "value": "1",
+                                    },
+                                    {
+                                        "name": "GIT_CONFIG_KEY_0",
+                                        "value": f"url.http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/git/.insteadOf",
+                                    },
+                                    {
+                                        "name": "GIT_CONFIG_VALUE_0",
+                                        "value": "https://github.com/",
+                                    },
                                     # RAPTOR knowledge base: internal K8s service (no auth needed)
                                     {
                                         "name": "RAPTOR_URL",
