@@ -622,6 +622,10 @@ static_resources:
                                         "name": "AMPLITUDE_BASE_URL",
                                         "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/amplitude",
                                     },
+                                    {
+                                        "name": "SLACK_BASE_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/slack",
+                                    },
                                     # Credential resolver URL for SDK-based integrations (AWS, Azure, GCP)
                                     # Scripts call /api/credentials/{id} to fetch creds at runtime
                                     {
