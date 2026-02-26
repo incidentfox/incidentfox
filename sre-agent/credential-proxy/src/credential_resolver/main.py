@@ -447,6 +447,7 @@ async def list_integrations(request: Request):
         "amplitude",
         "cloudwatch",
         "aws",
+        "slack",
     ]
 
     available = []
@@ -582,6 +583,10 @@ def is_integration_configured(integration_id: str, creds: dict | None) -> bool:
     if integration_id == "amplitude":
         return bool(creds.get("api_key") and creds.get("secret_key"))
 
+    # Slack: bot_token required (used by agent to search/post in Slack)
+    if integration_id == "slack":
+        return bool(creds.get("bot_token"))
+
     # CloudWatch / AWS: IAM access key + secret required
     if integration_id in ["cloudwatch", "aws"]:
         return bool(
@@ -698,6 +703,10 @@ def get_integration_metadata(integration_id: str, creds: dict) -> dict:
         return {
             "region": creds.get("region") or creds.get("aws_region_name") or "us-east-1"
         }
+
+    elif integration_id == "slack":
+        # SaaS-only at slack.com, no non-sensitive metadata to expose
+        return {}
 
     # Default: just indicate it's configured (incident_io, etc.)
     return {}
@@ -2108,6 +2117,79 @@ async def victoriametrics_proxy(path: str, request: Request):
 
 
 @app.api_route(
+    "/slack/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def slack_proxy(path: str, request: Request):
+    """Reverse proxy for Slack API requests.
+
+    Slack is SaaS-only at slack.com/api. The bot_token is stored in the
+    team's integration config and injected as a Bearer token.
+    """
+    import httpx
+
+    logger.info(f"Slack proxy: {request.method} /{path}")
+
+    # Validate JWT and extract tenant context
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+
+    # Get Slack credentials
+    creds = await get_credentials(tenant_id, team_id, "slack")
+    if not creds or not creds.get("bot_token"):
+        logger.error(f"Slack not configured for tenant={tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Slack integration not configured",
+        )
+
+    # Build Slack API URL (always slack.com/api)
+    target_url = f"https://slack.com/api/{path}"
+    logger.info(f"Slack proxy: forwarding to {target_url}")
+
+    # Build auth headers
+    auth_headers = build_auth_headers("slack", creds)
+
+    forward_headers = {
+        "Content-Type": request.headers.get("Content-Type", "application/json"),
+        "Accept": request.headers.get("Accept", "application/json"),
+        **auth_headers,
+    }
+
+    query_params = dict(request.query_params)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                params=query_params,
+                content=body,
+            )
+
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    "Content-Type": response.headers.get(
+                        "Content-Type", "application/json"
+                    )
+                },
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"Slack request timeout: {target_url}")
+        raise HTTPException(status_code=504, detail="Slack request timed out")
+    except httpx.RequestError as e:
+        logger.error(f"Slack request error: {e}")
+        raise HTTPException(status_code=502, detail=f"Slack request failed: {e}")
+
+
+@app.api_route(
     "/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 )
 async def ext_authz_check(request: Request, path: str = ""):
@@ -2408,6 +2490,11 @@ def build_auth_headers(integration_id: str, creds: dict) -> dict[str, str]:
         auth_string = f"{api_key}:{secret_key}"
         encoded = base64.b64encode(auth_string.encode()).decode()
         return {"Authorization": f"Basic {encoded}"}
+
+    elif integration_id == "slack":
+        # Slack uses Bearer token (bot_token)
+        bot_token = creds.get("bot_token", "")
+        return {"Authorization": f"Bearer {bot_token}"}
 
     elif integration_id in [
         "openai",
