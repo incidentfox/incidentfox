@@ -24,7 +24,7 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
-      {{- if not (eq (toString (default true .Values.services.configService.migrations.enabled)) "false") }}
+      {{- if not (eq (toString (dig "migrations" "enabled" true .Values.services.configService)) "false") }}
       initContainers:
         - name: run-migrations
           image: {{ required "services.configService.image is required" .Values.services.configService.image }}
