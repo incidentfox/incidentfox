@@ -15,7 +15,9 @@ from aws_client import format_output, get_client
 
 def main():
     parser = argparse.ArgumentParser(description="List CloudWatch alarms")
-    parser.add_argument("--state", choices=["OK", "ALARM", "INSUFFICIENT_DATA"], help="Filter by state")
+    parser.add_argument(
+        "--state", choices=["OK", "ALARM", "INSUFFICIENT_DATA"], help="Filter by state"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -29,30 +31,34 @@ def main():
         alarms = []
         response = cw.describe_alarms(**kwargs)
         for alarm in response.get("MetricAlarms", []):
-            alarms.append({
-                "name": alarm["AlarmName"],
-                "state": alarm["StateValue"],
-                "metric": alarm.get("MetricName", ""),
-                "namespace": alarm.get("Namespace", ""),
-                "description": alarm.get("AlarmDescription", ""),
-                "state_reason": alarm.get("StateReason", ""),
-                "state_updated": str(alarm.get("StateUpdatedTimestamp", "")),
-                "threshold": alarm.get("Threshold"),
-                "comparison": alarm.get("ComparisonOperator", ""),
-                "period": alarm.get("Period"),
-            })
+            alarms.append(
+                {
+                    "name": alarm["AlarmName"],
+                    "state": alarm["StateValue"],
+                    "metric": alarm.get("MetricName", ""),
+                    "namespace": alarm.get("Namespace", ""),
+                    "description": alarm.get("AlarmDescription", ""),
+                    "state_reason": alarm.get("StateReason", ""),
+                    "state_updated": str(alarm.get("StateUpdatedTimestamp", "")),
+                    "threshold": alarm.get("Threshold"),
+                    "comparison": alarm.get("ComparisonOperator", ""),
+                    "period": alarm.get("Period"),
+                }
+            )
 
         # Also include composite alarms
         for alarm in response.get("CompositeAlarms", []):
-            alarms.append({
-                "name": alarm["AlarmName"],
-                "state": alarm["StateValue"],
-                "metric": "(composite)",
-                "namespace": "",
-                "description": alarm.get("AlarmDescription", ""),
-                "state_reason": alarm.get("StateReason", ""),
-                "state_updated": str(alarm.get("StateUpdatedTimestamp", "")),
-            })
+            alarms.append(
+                {
+                    "name": alarm["AlarmName"],
+                    "state": alarm["StateValue"],
+                    "metric": "(composite)",
+                    "namespace": "",
+                    "description": alarm.get("AlarmDescription", ""),
+                    "state_reason": alarm.get("StateReason", ""),
+                    "state_updated": str(alarm.get("StateUpdatedTimestamp", "")),
+                }
+            )
 
         if args.json:
             print(format_output({"count": len(alarms), "alarms": alarms}))

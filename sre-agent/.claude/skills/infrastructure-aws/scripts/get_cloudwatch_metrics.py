@@ -26,12 +26,26 @@ def parse_dimensions(dim_str: str) -> list[dict]:
 
 def main():
     parser = argparse.ArgumentParser(description="Get CloudWatch metrics")
-    parser.add_argument("--namespace", required=True, help="Metric namespace (e.g., AWS/EC2)")
-    parser.add_argument("--metric", required=True, help="Metric name (e.g., CPUUtilization)")
-    parser.add_argument("--dimension", required=True, help="Dimensions (e.g., InstanceId=i-1234)")
-    parser.add_argument("--hours", type=float, default=1, help="Hours to look back (default: 1)")
-    parser.add_argument("--period", type=int, default=60, help="Period in seconds (default: 60)")
-    parser.add_argument("--stat", default="Average", help="Statistic: Average, Sum, Maximum, Minimum, SampleCount (default: Average)")
+    parser.add_argument(
+        "--namespace", required=True, help="Metric namespace (e.g., AWS/EC2)"
+    )
+    parser.add_argument(
+        "--metric", required=True, help="Metric name (e.g., CPUUtilization)"
+    )
+    parser.add_argument(
+        "--dimension", required=True, help="Dimensions (e.g., InstanceId=i-1234)"
+    )
+    parser.add_argument(
+        "--hours", type=float, default=1, help="Hours to look back (default: 1)"
+    )
+    parser.add_argument(
+        "--period", type=int, default=60, help="Period in seconds (default: 60)"
+    )
+    parser.add_argument(
+        "--stat",
+        default="Average",
+        help="Statistic: Average, Sum, Maximum, Minimum, SampleCount (default: Average)",
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -66,16 +80,20 @@ def main():
         ]
 
         if args.json:
-            print(format_output({
-                "namespace": args.namespace,
-                "metric": args.metric,
-                "dimension": args.dimension,
-                "stat": args.stat,
-                "period": args.period,
-                "hours": args.hours,
-                "count": len(formatted_points),
-                "datapoints": formatted_points,
-            }))
+            print(
+                format_output(
+                    {
+                        "namespace": args.namespace,
+                        "metric": args.metric,
+                        "dimension": args.dimension,
+                        "stat": args.stat,
+                        "period": args.period,
+                        "hours": args.hours,
+                        "count": len(formatted_points),
+                        "datapoints": formatted_points,
+                    }
+                )
+            )
         else:
             print(f"Namespace: {args.namespace}")
             print(f"Metric: {args.metric} ({args.stat})")
@@ -87,7 +105,9 @@ def main():
                 print(f"{'TIMESTAMP':<28} {'VALUE':>12} {'UNIT':<10}")
                 print("-" * 50)
                 for dp in formatted_points:
-                    print(f"{dp['timestamp']:<28} {dp['value']:>12.2f} {dp['unit']:<10}")
+                    print(
+                        f"{dp['timestamp']:<28} {dp['value']:>12.2f} {dp['unit']:<10}"
+                    )
             else:
                 print("No datapoints found for the specified time range.")
 

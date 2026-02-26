@@ -29,17 +29,19 @@ def main():
                 name = fn["FunctionName"]
                 if args.prefix and not name.startswith(args.prefix):
                     continue
-                functions.append({
-                    "name": name,
-                    "runtime": fn.get("Runtime", ""),
-                    "memory": fn.get("MemorySize", 0),
-                    "timeout": fn.get("Timeout", 0),
-                    "code_size_mb": round(fn.get("CodeSize", 0) / 1024 / 1024, 1),
-                    "last_modified": fn.get("LastModified", ""),
-                    "handler": fn.get("Handler", ""),
-                    "description": fn.get("Description", ""),
-                    "architecture": fn.get("Architectures", ["x86_64"])[0],
-                })
+                functions.append(
+                    {
+                        "name": name,
+                        "runtime": fn.get("Runtime", ""),
+                        "memory": fn.get("MemorySize", 0),
+                        "timeout": fn.get("Timeout", 0),
+                        "code_size_mb": round(fn.get("CodeSize", 0) / 1024 / 1024, 1),
+                        "last_modified": fn.get("LastModified", ""),
+                        "handler": fn.get("Handler", ""),
+                        "description": fn.get("Description", ""),
+                        "architecture": fn.get("Architectures", ["x86_64"])[0],
+                    }
+                )
 
         if args.json:
             print(format_output({"count": len(functions), "functions": functions}))
@@ -47,7 +49,9 @@ def main():
             print(f"Lambda Functions: {len(functions)}")
             print()
             if functions:
-                print(f"{'NAME':<40} {'RUNTIME':<16} {'MEMORY':>8} {'TIMEOUT':>8} {'LAST MODIFIED':<26}")
+                print(
+                    f"{'NAME':<40} {'RUNTIME':<16} {'MEMORY':>8} {'TIMEOUT':>8} {'LAST MODIFIED':<26}"
+                )
                 print("-" * 98)
                 for fn in functions:
                     print(

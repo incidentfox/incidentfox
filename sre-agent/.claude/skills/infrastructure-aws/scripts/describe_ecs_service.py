@@ -26,7 +26,10 @@ def main():
         )
 
         if not response.get("services"):
-            print(f"Service {args.service} not found in cluster {args.cluster}", file=sys.stderr)
+            print(
+                f"Service {args.service} not found in cluster {args.cluster}",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
         svc = response["services"][0]

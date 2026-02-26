@@ -47,9 +47,7 @@ def get_boto3_session() -> boto3.Session:
             print("[aws-auth] Falling back to default boto3 chain", file=sys.stderr)
 
     # Local dev: boto3 auto-discovers from env/profile
-    return boto3.Session(
-        region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-    )
+    return boto3.Session(region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
 
 
 def get_client(service_name: str):
