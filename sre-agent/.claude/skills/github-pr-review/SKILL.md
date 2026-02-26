@@ -8,20 +8,13 @@ allowed-tools: Bash(python *)
 
 ## Sandbox Environment
 
-You are running inside an isolated sandbox. Three ways to interact with GitHub, all authenticated automatically via the credential proxy:
+**IMPORTANT**: You are running inside an isolated sandbox — this is NOT a cloned git repository. Do not use `git clone`, `git commit`, `git push`, or other local git commands. Instead, use the Python scripts below which interact with GitHub via the REST API through the credential proxy.
 
-1. **Native git** — `git clone`, `git commit`, `git push` work with HTTPS URLs. A credential helper fetches tokens from the credential-resolver transparently.
-2. **gh CLI** — `gh pr view`, `gh issue list`, etc. authenticate via `GITHUB_BASE_URL`.
-3. **Python scripts** (below) — REST API wrappers for PR reviews, file reads, and code search.
-
+For quick CLI operations, `gh` (GitHub CLI) is also available:
 ```bash
-# Native git (credentials injected automatically)
-git clone https://github.com/acme/webapp.git
-cd webapp && git checkout -b fix/bug && git push -u origin fix/bug
-
-# gh CLI
-gh pr view acme/webapp --json title,body
-gh issue list -R acme/webapp
+# gh authenticates automatically via GITHUB_BASE_URL + credential proxy
+gh pr view OWNER/REPO --json title,body
+gh issue list -R OWNER/REPO
 ```
 
 ## Authentication
