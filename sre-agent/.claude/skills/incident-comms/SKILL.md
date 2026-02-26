@@ -8,35 +8,39 @@ allowed-tools: Bash(python *)
 
 ## Authentication
 
-**IMPORTANT**: Credentials are injected automatically by a proxy layer. Do NOT check for `SLACK_BOT_TOKEN` in environment variables - it won't be visible to you. Just run the scripts directly; authentication is handled transparently.
+**IMPORTANT**: Credentials are injected automatically by a proxy layer. Do NOT check for `SLACK_BOT_TOKEN` in environment variables — it won't be visible to you. Just run the scripts directly; authentication is handled transparently.
+
+## Bot Token Permissions
+
+You authenticate as a **bot** (not a user). This means:
+
+| Can do | Cannot do |
+|--------|-----------|
+| List channels (`conversations.list`) | **Search messages** (`search.messages` — requires user token) |
+| Read channel history (if bot is a member) | Read channels the bot hasn't been added to |
+| Read thread replies | Access DMs between other users |
+| Post messages and thread replies | |
+| Look up user profiles | |
+
+**If search is requested**: Do NOT attempt `search_messages.py` — it will fail with a `missing_scope` error. Instead, use the channel-scanning workflow below.
 
 ---
-
-## Why Slack Context Matters
-
-Before diving into technical investigation:
-- **Has anyone else seen this?** Search for related discussions
-- **What's been tried already?** Check incident thread history
-- **Who's working on it?** Find active responders
-- **What's the impact?** Look for customer reports
 
 ## Available Scripts
 
 All scripts are in `.claude/skills/incident-comms/scripts/`
 
-### search_messages.py - Search Across Channels
-> **Note**: Requires a Slack **user token** (xoxu-*), not a bot token. Bot tokens cannot use the search API.
-
+### list_channels.py — List Channels
 ```bash
-python .claude/skills/incident-comms/scripts/search_messages.py --query SEARCH_QUERY [--count N]
+python .claude/skills/incident-comms/scripts/list_channels.py [--types TYPE] [--limit N] [--filter NAME]
 
 # Examples:
-python .claude/skills/incident-comms/scripts/search_messages.py --query "error timeout"
-python .claude/skills/incident-comms/scripts/search_messages.py --query "in:#incidents api error"
-python .claude/skills/incident-comms/scripts/search_messages.py --query "from:@oncall database" --count 30
+python .claude/skills/incident-comms/scripts/list_channels.py
+python .claude/skills/incident-comms/scripts/list_channels.py --filter incident
+python .claude/skills/incident-comms/scripts/list_channels.py --types public_channel --limit 500
 ```
 
-### get_channel_history.py - Read Channel Messages
+### get_channel_history.py — Read Channel Messages
 ```bash
 python .claude/skills/incident-comms/scripts/get_channel_history.py --channel CHANNEL_ID [--limit N]
 
@@ -45,7 +49,15 @@ python .claude/skills/incident-comms/scripts/get_channel_history.py --channel C1
 python .claude/skills/incident-comms/scripts/get_channel_history.py --channel C123ABC456 --limit 100
 ```
 
-### post_message.py - Post Status Updates
+### get_thread_replies.py — Read Thread Replies
+```bash
+python .claude/skills/incident-comms/scripts/get_thread_replies.py --channel CHANNEL_ID --thread THREAD_TS [--limit N]
+
+# Examples:
+python .claude/skills/incident-comms/scripts/get_thread_replies.py --channel C123ABC456 --thread 1705320123.456789
+```
+
+### post_message.py — Post Status Updates
 ```bash
 python .claude/skills/incident-comms/scripts/post_message.py --channel CHANNEL_ID --text MESSAGE [--thread THREAD_TS]
 
@@ -56,51 +68,42 @@ python .claude/skills/incident-comms/scripts/post_message.py --channel C123ABC45
 
 ---
 
-## Slack Search Operators
+## Workflows
 
-| Operator | Example | Purpose |
-|----------|---------|---------|
-| `in:#channel` | `in:#incidents` | Search specific channel |
-| `from:@user` | `from:@jane` | Messages from a user |
-| `has:reaction` | `has::eyes:` | Messages with reactions |
-| `after:date` | `after:2024-01-15` | After a date |
-| `before:date` | `before:2024-01-16` | Before a date |
+### Finding Recent Activity (Bot-Compatible Search Alternative)
 
----
-
-## Common Workflows
-
-### 1. Gather Context for New Incident
+Since `search.messages` requires a user token, use this workflow instead:
 
 ```bash
-# Step 1: Search for similar issues
-python search_messages.py --query "api timeout in:#incidents"
+# Step 1: Find relevant channels
+python .claude/skills/incident-comms/scripts/list_channels.py --filter incident
 
-# Step 2: Check the incident channel for recent activity
-python get_channel_history.py --channel C_INCIDENTS --limit 50
+# Step 2: Read recent history from channels the bot is in (★ in list)
+python .claude/skills/incident-comms/scripts/get_channel_history.py --channel C_INCIDENTS --limit 50
 
-# Step 3: Read a specific thread
-python get_thread_replies.py --channel C_INCIDENTS --thread 1705320123.456789
+# Step 3: Dive into interesting threads
+python .claude/skills/incident-comms/scripts/get_thread_replies.py --channel C_INCIDENTS --thread 1705320123.456789
 ```
 
-### 2. Find What's Been Tried
+Scan multiple channels to build context. Focus on channels with names like `#incidents`, `#alerts`, `#engineering`, `#support`.
+
+### Gather Context for New Incident
 
 ```bash
-# Search for actions taken during this incident
-python search_messages.py --query "in:#incident-123 (restart OR rollback OR revert OR tried)"
+# Find incident-related channels
+python .claude/skills/incident-comms/scripts/list_channels.py --filter incident
+
+# Check the incident channel for recent activity
+python .claude/skills/incident-comms/scripts/get_channel_history.py --channel C_INCIDENTS --limit 50
+
+# Read a specific thread
+python .claude/skills/incident-comms/scripts/get_thread_replies.py --channel C_INCIDENTS --thread 1705320123.456789
 ```
 
-### 3. Check Customer Impact
+### Post Investigation Summary
 
 ```bash
-# Search support/customer channels
-python search_messages.py --query "in:#support error OR issue"
-```
-
-### 4. Post Investigation Summary
-
-```bash
-python post_message.py --channel C_INCIDENTS --thread 1705320123.456789 --text ":clipboard: *Investigation Summary*
+python .claude/skills/incident-comms/scripts/post_message.py --channel C_INCIDENTS --thread 1705320123.456789 --text ":clipboard: *Investigation Summary*
 
 *Timeline:*
 • 14:00 - Alerts started firing
@@ -117,12 +120,14 @@ Rolled back to v2.3.4, deployed fix in v2.3.5."
 
 ---
 
-## Quick Commands Reference
+## Quick Reference
 
 | Goal | Command |
 |------|---------|
-| Search messages | `search_messages.py --query "error"` |
+| List channels | `list_channels.py` |
+| Filter channels by name | `list_channels.py --filter incident` |
 | Channel history | `get_channel_history.py --channel C123ABC` |
+| Thread replies | `get_thread_replies.py --channel C123ABC --thread TS` |
 | Post update | `post_message.py --channel C123ABC --text "Update"` |
 | Reply to thread | `post_message.py --channel C123ABC --text "..." --thread TS` |
 
@@ -167,25 +172,17 @@ Follow-up: [Next steps, postmortem timing]
 
 ## Best Practices
 
-### Searching
-- **Be specific**: Use channel filters (`in:#channel`) to reduce noise
-- **Use operators**: Combine `from:`, `after:`, `has:` for precision
-- **Check multiple channels**: Incidents might be discussed in #support, #engineering, etc.
+### Reading Channels
+- **List first**: Use `list_channels.py` to find channel IDs — don't guess
+- **Check membership**: Only channels marked ★ can be read (bot must be a member)
+- **Scan multiple**: Check `#incidents`, `#alerts`, `#engineering`, `#support`, etc.
 
 ### Posting Updates
 - **Use threads**: Keep updates in the incident thread, not the main channel
 - **Be concise**: Busy responders scan updates quickly
 - **Include next steps**: Always say what's happening next
 
-### Finding Channel IDs
-- Channel IDs look like `C123ABC456`
-- Get them from channel settings or by right-clicking → "Copy link"
-
----
-
-## Anti-Patterns to Avoid
-
-1. ❌ **Posting before reading** - Check what's already been discussed
-2. ❌ **Top-posting in threads** - Reply in the thread, not the channel
-3. ❌ **Vague updates** - "Working on it" tells responders nothing
-4. ❌ **Missing timestamps** - Include when things happened
+### Anti-Patterns
+1. Do NOT use `search_messages.py` — it requires a user token and will fail
+2. Do NOT post before reading — check what's already been discussed
+3. Do NOT guess channel IDs — use `list_channels.py` to find them
