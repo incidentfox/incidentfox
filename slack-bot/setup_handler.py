@@ -1192,13 +1192,54 @@ def handle_k8s_saas_clusters_modal_close(ack, body, client, view):
 
 
 def handle_k8s_saas_cluster_created_close(ack, body, client, view):
-    """Handle Done on cluster created modal."""
-    ack()
-
+    """Handle Done on cluster created modal — return to clusters list."""
     private_metadata = json.loads(view.get("private_metadata", "{}"))
     team_id = private_metadata.get("team_id")
+    category_filter = private_metadata.get("category_filter", "all")
+    entry_point = private_metadata.get("entry_point", "integrations")
 
     logger.info(f"Closed K8s cluster created modal for team {team_id}")
+
+    # Return to clusters list with fresh data so user can add more clusters
+    try:
+        config_client = get_config_client()
+        clusters = config_client.list_k8s_clusters(team_id)
+
+        onboarding = get_onboarding_modules()
+        clusters_modal = onboarding.build_k8s_saas_clusters_modal(
+            team_id=team_id,
+            clusters=clusters,
+            category_filter=category_filter,
+            entry_point=entry_point,
+        )
+
+        ack(response_action="update", view=clusters_modal)
+        logger.info(
+            f"Returned to clusters list after creation for team {team_id} "
+            f"({len(clusters)} clusters)"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to refresh clusters list: {e}")
+        ack()
+
+    # Also refresh the Home Tab in the background
+    try:
+        user_id = body.get("user", {}).get("id")
+        if user_id and team_id:
+            config_client = get_config_client()
+            trial_info = config_client.get_trial_status(team_id)
+            configured = config_client.get_configured_integrations(team_id)
+
+            from home_tab import build_home_tab_view
+
+            home_view = build_home_tab_view(
+                team_id=team_id,
+                trial_info=trial_info,
+                configured_integrations=configured,
+            )
+            client.views_publish(user_id=user_id, view=home_view)
+    except Exception as e:
+        logger.warning(f"Failed to refresh Home Tab after cluster creation: {e}")
 
 
 # =============================================================================
@@ -2321,26 +2362,19 @@ def handle_home_integration_action(ack, body, client):
                 entry_point="home",
             )
 
-        try:
-            client.views_open(trigger_id=body["trigger_id"], view=modal)
-        except Exception as views_err:
-            # Modal open failed — most likely due to the video block requiring
-            # the video_url domain to be registered as a Slack media domain.
-            # Retry without the video block.
-            logger.warning(
-                f"views_open failed for {integration_id}, retrying without video: {views_err}"
+        # Always build without video on initial open — video blocks require
+        # the domain to be registered as a Slack media domain, and the retry
+        # approach fails because Slack consumes the trigger_id on first attempt.
+        if custom_flow != "k8s_saas":
+            modal = onboarding.build_integration_config_modal(
+                team_id=team_id,
+                integration_id=integration_id,
+                existing_config=existing_config,
+                entry_point="home",
+                include_video=False,
             )
-            if custom_flow != "k8s_saas":
-                modal = onboarding.build_integration_config_modal(
-                    team_id=team_id,
-                    integration_id=integration_id,
-                    existing_config=existing_config,
-                    entry_point="home",
-                    include_video=False,
-                )
-                client.views_open(trigger_id=body["trigger_id"], view=modal)
-            else:
-                raise
+
+        client.views_open(trigger_id=body["trigger_id"], view=modal)
 
         logger.info(f"Opened {action_type} modal for {integration_id} from Home Tab")
 

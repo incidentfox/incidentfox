@@ -4914,6 +4914,6 @@ def build_k8s_saas_cluster_created_modal(
         "callback_id": "k8s_saas_cluster_created_modal",
         "private_metadata": private_metadata,
         "title": {"type": "plain_text", "text": "Deploy Agent"},
-        "close": {"type": "plain_text", "text": "Done"},
+        "submit": {"type": "plain_text", "text": "Done"},
         "blocks": blocks,
     }

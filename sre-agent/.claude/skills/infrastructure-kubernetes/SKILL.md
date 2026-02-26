@@ -53,14 +53,22 @@ python .claude/skills/infrastructure-kubernetes/scripts/describe_pod.py <pod-nam
 python .claude/skills/infrastructure-kubernetes/scripts/get_resources.py <pod-name> -n <namespace>
 ```
 
-### describe_deployment.py - Deployment status
+### describe_deployment.py - Deployment status and rollout history
 ```bash
 python .claude/skills/infrastructure-kubernetes/scripts/describe_deployment.py <deployment-name> -n <namespace>
+
+# Example:
+python .claude/skills/infrastructure-kubernetes/scripts/describe_deployment.py payment -n otel-demo
 ```
 
-### get_history.py - Rollout history
+### describe_node.py - Node status, conditions, and resource usage
 ```bash
-python .claude/skills/infrastructure-kubernetes/scripts/get_history.py <deployment-name> -n <namespace>
+python .claude/skills/infrastructure-kubernetes/scripts/describe_node.py <node-name>
+python .claude/skills/infrastructure-kubernetes/scripts/describe_node.py --all
+
+# Examples:
+python .claude/skills/infrastructure-kubernetes/scripts/describe_node.py ip-10-0-1-42.ec2.internal
+python .claude/skills/infrastructure-kubernetes/scripts/describe_node.py --all --json
 ```
 
 ## Debugging Workflows
@@ -78,10 +86,15 @@ python .claude/skills/infrastructure-kubernetes/scripts/get_history.py <deployme
 4. `describe_pod.py` - Check restart count and state
 
 ### Deployment Not Progressing
-1. `describe_deployment.py` - Check replica counts
+1. `describe_deployment.py` - Check replica counts and rollout history
 2. `list_pods.py` - Find stuck pods
 3. `get_events.py` - Check events on stuck pods
-4. `get_history.py` - Check rollout history for rollback
+
+### Node Resource Issues (High CPU/Memory, FailedScheduling)
+1. `describe_node.py --all` - Check all nodes for conditions and resource usage
+2. `describe_node.py <node>` - Deep dive into specific node
+3. `list_pods.py` - Check if pods are Pending/FailedScheduling
+4. `get_events.py` - Look for FailedScheduling with resource reasons
 
 ## Common Issues & Solutions
 
@@ -92,6 +105,7 @@ python .claude/skills/infrastructure-kubernetes/scripts/get_history.py <deployme
 | CrashLoopBackOff | Container keeps crashing | Check logs for startup errors |
 | FailedScheduling | No node can run pod | Check node resources, taints |
 | Unhealthy | Liveness probe failed | Check probe config, app health |
+| FailedScheduling | No node can run pod | Use `describe_node.py --all` to check node CPU/memory usage |
 
 ## Output Format
 
