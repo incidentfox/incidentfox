@@ -613,6 +613,61 @@ async def get_config_schema():
 # =============================================================================
 
 
+def _inject_github_app_credentials(
+    effective: Dict[str, Any], org_id: str, team_node_id: str, db: Session
+) -> Dict[str, Any]:
+    """Inject GitHub App credentials into effective config if a linked installation exists.
+
+    The GitHub App flow stores credentials separately from the team config:
+    - app_id + private_key: config-service env vars (shared across all installations)
+    - installation_id: GitHubInstallation DB table (per-customer)
+
+    This bridges the gap so credential-resolver can find GitHub credentials via
+    the standard integrations.github config path.
+    """
+    from ...db.models import GitHubInstallation
+
+    integrations = effective.get("integrations", {})
+    github_config = integrations.get("github", {})
+
+    # Skip if GitHub is already configured (PAT or manual App credentials)
+    if github_config.get("api_key") or github_config.get("app_id"):
+        return effective
+
+    # Check for a linked GitHub App installation
+    installation = (
+        db.query(GitHubInstallation)
+        .filter(
+            GitHubInstallation.org_id == org_id,
+            GitHubInstallation.status == "active",
+        )
+        .first()
+    )
+
+    if not installation:
+        return effective
+
+    # Get GitHub App credentials from env vars
+    app_id = os.getenv("GITHUB_APP_ID")
+    private_key = os.getenv("GITHUB_APP_PRIVATE_KEY")
+
+    if not app_id or not private_key:
+        return effective
+
+    # Inject into effective config
+    effective = dict(effective)  # shallow copy to avoid mutating cached config
+    effective["integrations"] = dict(integrations)
+    effective["integrations"]["github"] = {
+        **github_config,
+        "app_id": app_id,
+        "private_key": private_key,
+        "installation_id": str(installation.installation_id),
+        "default_org": installation.account_login,
+    }
+
+    return effective
+
+
 @router.get("/me", response_model=EffectiveConfigResponse)
 @router.get("/me/effective", response_model=EffectiveConfigResponse)
 async def get_my_config(
@@ -637,6 +692,9 @@ async def get_my_config(
     effective = repo.get_effective_config(db, org_id, team_node_id)
     hierarchy = repo.get_node_hierarchy(db, org_id, team_node_id)
     config = repo.get_node_configuration(db, org_id, team_node_id)
+
+    # Inject GitHub App credentials if a linked installation exists
+    effective = _inject_github_app_credentials(effective, org_id, team_node_id, db)
 
     return EffectiveConfigResponse(
         node_id=team_node_id,
