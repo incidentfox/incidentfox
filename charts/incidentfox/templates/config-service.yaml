@@ -24,6 +24,32 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
+      {{- if not (eq (toString (default true .Values.services.configService.migrations.enabled)) "false") }}
+      initContainers:
+        - name: run-migrations
+          image: {{ required "services.configService.image is required" .Values.services.configService.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          workingDir: /app
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.database.databaseUrlSecretName }}
+                  key: {{ .Values.global.database.databaseUrlSecretKey }}
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      {{- end }}
       containers:
         - name: config-service
           image: {{ required "services.configService.image is required" .Values.services.configService.image }}

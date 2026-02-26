@@ -124,6 +124,16 @@ class ConfigServiceClient:
             )
             logger.info(f"Created team node: {team_response}")
 
+            # Step 2.5: Set workspace routing so lookup can resolve this org
+            self._update_config(
+                org_id,
+                team_node_id,
+                {"routing": {"slack_workspace_ids": [slack_team_id]}},
+            )
+            logger.info(
+                f"Set workspace routing for {org_id}: slack_workspace_ids=[{slack_team_id}]"
+            )
+
             # Step 3: Issue team token
             token_response = self._issue_team_token(
                 org_id=org_id,

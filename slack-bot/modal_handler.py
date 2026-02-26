@@ -903,7 +903,5 @@ def handle_github_app_install_button(ack, body):
     """
     ack()
     logger.info(
-        "GitHub App install button clicked",
-        user_id=body.get("user", {}).get("id"),
-        team_id=body.get("team", {}).get("id"),
+        f"GitHub App install button clicked: user_id={body.get('user', {}).get('id')}, team_id={body.get('team', {}).get('id')}"
     )
