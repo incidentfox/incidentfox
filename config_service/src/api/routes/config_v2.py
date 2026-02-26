@@ -613,6 +613,53 @@ async def get_config_schema():
 # =============================================================================
 
 
+def _inject_slack_bot_token(
+    effective: Dict[str, Any], org_id: str, db: Session
+) -> Dict[str, Any]:
+    """Inject Slack bot_token from slack_installations if not already in config.
+
+    The slack-bot stores its OAuth bot_token in the slack_installations table.
+    Credential-resolver needs it in integrations.slack.bot_token to proxy
+    Slack API calls from sandboxes.
+    """
+    from ...db.models import SlackInstallation
+
+    integrations = effective.get("integrations", {})
+    slack_config = integrations.get("slack", {})
+
+    # Skip if already configured
+    if slack_config.get("bot_token"):
+        return effective
+
+    # org_id format is "slack-{TEAM_ID}" — extract the Slack team_id
+    if not org_id.startswith("slack-"):
+        return effective
+    slack_team_id = org_id[len("slack-"):]
+
+    # Look up the most recent bot installation for this workspace
+    installation = (
+        db.query(SlackInstallation)
+        .filter(
+            SlackInstallation.team_id == slack_team_id,
+            SlackInstallation.bot_token.isnot(None),
+        )
+        .order_by(SlackInstallation.installed_at.desc())
+        .first()
+    )
+
+    if not installation or not installation.bot_token:
+        return effective
+
+    effective = dict(effective)
+    effective["integrations"] = dict(integrations)
+    effective["integrations"]["slack"] = {
+        **slack_config,
+        "bot_token": installation.bot_token,
+    }
+
+    return effective
+
+
 def _inject_github_app_credentials(
     effective: Dict[str, Any], org_id: str, team_node_id: str, db: Session
 ) -> Dict[str, Any]:
@@ -693,7 +740,9 @@ async def get_my_config(
     hierarchy = repo.get_node_hierarchy(db, org_id, team_node_id)
     config = repo.get_node_configuration(db, org_id, team_node_id)
 
-    # Inject GitHub App credentials if a linked installation exists
+    # Inject credentials from OAuth installations into effective config
+    # so credential-resolver can find them via the standard integrations path
+    effective = _inject_slack_bot_token(effective, org_id, db)
     effective = _inject_github_app_credentials(effective, org_id, team_node_id, db)
 
     return EffectiveConfigResponse(

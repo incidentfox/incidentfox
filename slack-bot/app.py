@@ -481,6 +481,23 @@ if __name__ == "__main__":
                     )
                     provision_result = None
 
+                # Save Slack bot_token to config-service integration config
+                # so credential-resolver can proxy Slack API calls from sandboxes
+                try:
+                    cc = get_config_client()
+                    cc.save_integration_config(
+                        slack_team_id=team_id,
+                        integration_id="slack",
+                        config={"bot_token": bot_token},
+                    )
+                    logger.info(
+                        f"Saved Slack integration config for team {team_id}"
+                    )
+                except Exception as slack_config_error:
+                    logger.warning(
+                        f"Failed to save Slack integration config: {slack_config_error}"
+                    )
+
                 # Send welcome DM to installer
                 installer_user_id = authed_user.get("id")
                 if installer_user_id and bot_token:
