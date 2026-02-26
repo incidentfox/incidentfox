@@ -19,9 +19,13 @@ from slack_client import format_message, get_thread_replies
 
 def main():
     parser = argparse.ArgumentParser(description="Get replies in a Slack thread")
-    parser.add_argument("--channel", required=True, help="Channel ID (e.g., C123ABC456)")
     parser.add_argument(
-        "--thread", required=True, help="Thread parent timestamp (e.g., 1705320123.456789)"
+        "--channel", required=True, help="Channel ID (e.g., C123ABC456)"
+    )
+    parser.add_argument(
+        "--thread",
+        required=True,
+        help="Thread parent timestamp (e.g., 1705320123.456789)",
     )
     parser.add_argument(
         "--limit", type=int, default=100, help="Max replies to return (default: 100)"
