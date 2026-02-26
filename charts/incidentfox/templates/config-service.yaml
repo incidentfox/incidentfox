@@ -160,6 +160,10 @@ spec:
               value: {{ .Values.services.configService.githubApp.setupRedirectUrl | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.services.k8sGateway.enabled }}
+            - name: K8S_GATEWAY_PUBLIC_URL
+              value: {{ printf "https://%s/gateway" .Values.ingress.host | quote }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /health

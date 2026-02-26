@@ -9,7 +9,7 @@ apiKey: ""
 clusterName: ""
 
 # IncidentFox K8s Gateway URL (SaaS endpoint)
-gatewayUrl: "https://orchestrator.incidentfox.ai/gateway"
+gatewayUrl: "https://ui.incidentfox.ai/gateway"
 
 # Image configuration
 image:

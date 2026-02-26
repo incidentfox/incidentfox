@@ -1,5 +1,6 @@
 """K8s cluster management API routes for SaaS model."""
 
+import os
 from typing import Any, Dict, List, Optional
 
 import structlog
@@ -25,6 +26,23 @@ from ..auth import (
 )
 
 logger = structlog.get_logger(__name__)
+
+# OCI registry for the k8s-agent Helm chart (published via helm-publish workflow)
+_K8S_AGENT_OCI_CHART = "oci://registry-1.docker.io/incidentfox/incidentfox-k8s-agent"
+
+
+def _build_helm_command(token: str, cluster_name: str) -> str:
+    """Build the Helm install command shown to users."""
+    gateway_url = os.environ.get(
+        "K8S_GATEWAY_PUBLIC_URL", "https://ui.incidentfox.ai/gateway"
+    )
+    return (
+        f"helm install incidentfox-agent {_K8S_AGENT_OCI_CHART} "
+        f"--set apiKey={token} "
+        f"--set clusterName={cluster_name} "
+        f"--set gatewayUrl={gateway_url} "
+        f"--namespace incidentfox --create-namespace"
+    )
 
 
 def require_admin(
@@ -183,15 +201,7 @@ async def create_k8s_cluster(
     )
 
     # Generate Helm install command
-    gateway_url = "https://orchestrator.incidentfox.ai/gateway"
-    helm_command = (
-        f"helm repo add incidentfox https://charts.incidentfox.io && "
-        f"helm install incidentfox-agent incidentfox/k8s-agent "
-        f"--set apiKey={result.token} "
-        f"--set clusterName={body.cluster_name} "
-        f"--set gatewayUrl={gateway_url} "
-        f"--namespace incidentfox --create-namespace"
-    )
+    helm_command = _build_helm_command(result.token, body.cluster_name)
 
     return K8sClusterCreatedResponse(
         cluster_id=result.cluster_id,
@@ -477,15 +487,7 @@ async def admin_create_k8s_cluster(
     )
 
     # Generate Helm install command
-    gateway_url = "https://orchestrator.incidentfox.ai/gateway"
-    helm_command = (
-        f"helm repo add incidentfox https://charts.incidentfox.io && "
-        f"helm install incidentfox-agent incidentfox/k8s-agent "
-        f"--set apiKey={result.token} "
-        f"--set clusterName={body.cluster_name} "
-        f"--set gatewayUrl={gateway_url} "
-        f"--namespace incidentfox --create-namespace"
-    )
+    helm_command = _build_helm_command(result.token, body.cluster_name)
 
     return K8sClusterCreatedResponse(
         cluster_id=result.cluster_id,

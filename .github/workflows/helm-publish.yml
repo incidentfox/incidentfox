@@ -1,7 +1,7 @@
-name: Publish Helm Chart
+name: Publish Helm Charts
 
-# Packages the Helm chart and pushes it to Docker Hub OCI registry.
-# Artifact Hub indexes the chart from there.
+# Packages Helm charts and pushes them to Docker Hub OCI registry.
+# Artifact Hub indexes the charts from there.
 
 on:
   release:
@@ -12,14 +12,24 @@ on:
         description: 'Chart version (e.g., 0.2.0). Leave empty to use Chart.yaml version.'
         required: false
         type: string
+      charts:
+        description: 'Which charts to publish'
+        required: false
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - umbrella
+          - k8s-agent
 
 env:
   OCI_REGISTRY: oci://registry-1.docker.io/incidentfox
 
 jobs:
-  publish:
-    name: Package & Push Helm Chart
+  publish-umbrella:
+    name: Package & Push Umbrella Chart
     runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.charts != 'k8s-agent' }}
     permissions:
       contents: read
 
@@ -77,13 +87,81 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## Helm Chart Published" >> $GITHUB_STEP_SUMMARY
+          echo "## Umbrella Chart Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Chart**: incidentfox" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Registry**: \`${{ env.OCI_REGISTRY }}/incidentfox\`" >> $GITHUB_STEP_SUMMARY
+
+  publish-k8s-agent:
+    name: Package & Push K8s Agent Chart
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.charts != 'umbrella' }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Determine chart version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            VERSION=$(grep '^version:' k8s_agent/charts/incidentfox-k8s-agent/Chart.yaml | awk '{print $2}')
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Chart.yaml version
+        run: |
+          sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" k8s_agent/charts/incidentfox-k8s-agent/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.version }}\"/" k8s_agent/charts/incidentfox-k8s-agent/Chart.yaml
+          echo "Chart.yaml after version update:"
+          cat k8s_agent/charts/incidentfox-k8s-agent/Chart.yaml
+
+      - name: Lint chart
+        run: helm lint k8s_agent/charts/incidentfox-k8s-agent/
+
+      - name: Package chart
+        run: helm package k8s_agent/charts/incidentfox-k8s-agent/ --destination .helm-packages/
+
+      - name: Login to Docker Hub OCI registry
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | helm registry login registry-1.docker.io \
+            --username "${{ secrets.DOCKERHUB_USERNAME }}" \
+            --password-stdin
+
+      - name: Push chart to OCI registry
+        run: |
+          helm push .helm-packages/incidentfox-k8s-agent-${{ steps.version.outputs.version }}.tgz ${{ env.OCI_REGISTRY }}
+
+      - name: Verify published chart
+        run: |
+          helm show chart ${{ env.OCI_REGISTRY }}/incidentfox-k8s-agent --version ${{ steps.version.outputs.version }}
+
+      - name: Summary
+        run: |
+          echo "## K8s Agent Chart Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Chart**: incidentfox-k8s-agent" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry**: \`${{ env.OCI_REGISTRY }}/incidentfox-k8s-agent\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Install with:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "helm install incidentfox ${{ env.OCI_REGISTRY }}/incidentfox --version ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "helm install incidentfox-agent ${{ env.OCI_REGISTRY }}/incidentfox-k8s-agent --version ${{ steps.version.outputs.version }} \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --set apiKey=<YOUR_API_KEY> \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --set clusterName=<CLUSTER_NAME> \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --namespace incidentfox --create-namespace" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

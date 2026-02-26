@@ -20,6 +20,7 @@ on:
           - all
           - ai-pipeline
           - config-service
+          - k8s-agent
           - ultimate-rag
           - web-ui
   release:
@@ -44,6 +45,10 @@ jobs:
             context: ./config_service
             dockerfile: ./config_service/Dockerfile
             image: incidentfox/config-service
+          - service: k8s-agent
+            context: ./k8s_agent
+            dockerfile: ./k8s_agent/Dockerfile
+            image: incidentfox/k8s-agent
           - service: ultimate-rag
             context: ./ultimate_rag
             dockerfile: ./ultimate_rag/Dockerfile
