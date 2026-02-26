@@ -699,6 +699,48 @@ INTEGRATION_SCHEMAS: Dict[str, IntegrationSchema] = {
             "Option B: Create an IAM user with bedrock:InvokeModel permission and provide access keys"
         ),
     ),
+    "aws": IntegrationSchema(
+        id="aws",
+        name="AWS",
+        description="AWS cloud infrastructure access (EC2, ECS, Lambda, CloudWatch)",
+        level=IntegrationLevel.ORG,
+        locked=False,
+        required=False,
+        org_fields=[
+            IntegrationFieldSchema(
+                name="aws_access_key_id",
+                type="secret",
+                required=True,
+                display_name="AWS Access Key ID",
+                description="IAM access key with read permissions for EC2, ECS, Lambda, CloudWatch",
+                placeholder="AKIA...",
+            ),
+            IntegrationFieldSchema(
+                name="aws_secret_access_key",
+                type="secret",
+                required=True,
+                display_name="AWS Secret Access Key",
+                description="IAM secret access key",
+            ),
+            IntegrationFieldSchema(
+                name="region",
+                type="string",
+                required=False,
+                default="us-east-1",
+                display_name="AWS Region",
+                description="Default AWS region",
+                placeholder="us-east-1",
+            ),
+        ],
+        team_fields=[],
+        docs_url="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html",
+        setup_instructions=(
+            "1. Go to IAM > Users > select or create a user\n"
+            "2. Attach ReadOnlyAccess or specific policies (EC2, ECS, Lambda, CloudWatch)\n"
+            "3. Go to Security credentials > Create access key\n"
+            "4. Copy the Access Key ID and Secret Access Key"
+        ),
+    ),
     "vertex_ai": IntegrationSchema(
         id="vertex_ai",
         name="Google Vertex AI",

@@ -622,6 +622,12 @@ static_resources:
                                         "name": "AMPLITUDE_BASE_URL",
                                         "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/amplitude",
                                     },
+                                    # Credential resolver URL for SDK-based integrations (AWS, Azure, GCP)
+                                    # Scripts call /api/credentials/{id} to fetch creds at runtime
+                                    {
+                                        "name": "CREDENTIAL_RESOLVER_URL",
+                                        "value": f"http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002",
+                                    },
                                     # RAPTOR knowledge base: internal K8s service (no auth needed)
                                     {
                                         "name": "RAPTOR_URL",

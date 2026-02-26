@@ -273,6 +273,11 @@ def load_env_credentials() -> dict[str, dict]:
             "secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
             "region": os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
         },
+        "aws": {
+            "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID"),
+            "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
+            "region": os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+        },
         "opensearch": {
             "domain": os.getenv("OPENSEARCH_URL"),
             "username": os.getenv("OPENSEARCH_USERNAME"),
@@ -440,6 +445,8 @@ async def list_integrations(request: Request):
         "firehydrant",
         "victoriametrics",
         "amplitude",
+        "cloudwatch",
+        "aws",
     ]
 
     available = []
@@ -575,6 +582,14 @@ def is_integration_configured(integration_id: str, creds: dict | None) -> bool:
     if integration_id == "amplitude":
         return bool(creds.get("api_key") and creds.get("secret_key"))
 
+    # CloudWatch / AWS: IAM access key + secret required
+    if integration_id in ["cloudwatch", "aws"]:
+        return bool(
+            creds.get("aws_access_key_id") and creds.get("aws_secret_access_key")
+        ) or bool(
+            creds.get("access_key_id") and creds.get("secret_access_key")
+        )
+
     # Default: api_key required (coralogix, incident_io, etc.)
     return bool(creds.get("api_key"))
 
@@ -680,8 +695,55 @@ def get_integration_metadata(integration_id: str, creds: dict) -> dict:
         # Return region (US/EU) for API endpoint construction
         return {"region": creds.get("region", "US")}
 
+    elif integration_id in ["cloudwatch", "aws"]:
+        # Return region for API endpoint construction
+        return {
+            "region": creds.get("region")
+            or creds.get("aws_region_name")
+            or "us-east-1"
+        }
+
     # Default: just indicate it's configured (incident_io, etc.)
     return {}
+
+
+# SDK-based credential endpoint for integrations that use native SDKs
+# (e.g., boto3 for AWS, azure-identity for Azure) rather than HTTP headers.
+SDK_CREDENTIAL_INTEGRATIONS = {"aws", "cloudwatch", "azure"}
+
+
+@app.get("/api/credentials/{integration_id}")
+async def get_integration_credentials(integration_id: str, request: Request):
+    """Serve credentials for SDK-based integrations.
+
+    For integrations that use SDK auth (AWS SigV4, Azure AD) rather than
+    HTTP headers, sandbox scripts need direct access to credentials.
+    Scripts fetch creds on-demand; they live only in process memory.
+
+    Security: JWT-authenticated, restricted to SDK-based integrations only.
+    """
+    if integration_id not in SDK_CREDENTIAL_INTEGRATIONS:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Credential fetch not supported for {integration_id}. "
+            f"Only SDK-based integrations: {SDK_CREDENTIAL_INTEGRATIONS}",
+        )
+
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+    logger.info(
+        f"Credential fetch: integration={integration_id}, "
+        f"tenant={tenant_id}, team={team_id}, sandbox={sandbox_name}"
+    )
+
+    creds = await get_credentials(tenant_id, team_id, integration_id)
+    if not creds or not is_integration_configured(integration_id, creds):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Integration {integration_id} not configured for "
+            f"tenant={tenant_id}, team={team_id}",
+        )
+
+    return creds
 
 
 # IMPORTANT: Route ordering matters in FastAPI/Starlette!

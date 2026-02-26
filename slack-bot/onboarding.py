@@ -1460,10 +1460,46 @@ INTEGRATIONS: List[Dict[str, Any]] = [
         "id": "aws",
         "name": "AWS",
         "category": "cloud",
-        "status": "coming_soon",
+        "status": "active",
         "icon": ":aws:",
         "icon_fallback": ":cloud:",
         "description": "Query EC2, ECS, Lambda, and other AWS services.",
+        "setup_instructions": (
+            "*Setup Instructions:*\n"
+            "1. Log into your AWS console\n"
+            "2. Go to *IAM* > *Users* > select or create a user\n"
+            "3. Attach *ReadOnlyAccess* or specific policies (EC2, ECS, Lambda, CloudWatch)\n"
+            "4. Go to *Security credentials* tab > *Create access key*\n"
+            "5. Copy the Access Key ID and Secret Access Key below"
+        ),
+        "docs_url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html",
+        "context_prompt_placeholder": "e.g., 'Our ECS cluster is prod-api in us-west-2. EC2 instances are tagged with env=production. Lambda functions start with api-.'",
+        "fields": [
+            {
+                "id": "aws_access_key_id",
+                "name": "AWS Access Key ID",
+                "type": "secret",
+                "required": True,
+                "placeholder": "AKIA...",
+                "hint": "IAM access key with read permissions for EC2, ECS, Lambda, CloudWatch",
+            },
+            {
+                "id": "aws_secret_access_key",
+                "name": "AWS Secret Access Key",
+                "type": "secret",
+                "required": True,
+                "placeholder": "your-secret-key",
+                "hint": "IAM secret access key",
+            },
+            {
+                "id": "region",
+                "name": "AWS Region",
+                "type": "string",
+                "required": False,
+                "placeholder": "us-east-1",
+                "hint": "Default AWS region (leave blank for us-east-1)",
+            },
+        ],
     },
     {
         "id": "splunk",

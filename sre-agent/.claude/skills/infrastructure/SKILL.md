@@ -11,9 +11,9 @@ description: Infrastructure debugging for Kubernetes and AWS. Use when investiga
 For pod crashes, deployment issues, resource problems, container failures.
 Use: `/infrastructure-kubernetes`
 
-### AWS (future)
+### AWS
 For EC2, ECS, Lambda, and CloudWatch issues.
-Coming soon.
+Use: `/infrastructure-aws`
 
 ## Quick Reference
 
