@@ -17,9 +17,15 @@ from aws_client import format_output, format_timestamp, get_client
 def main():
     parser = argparse.ArgumentParser(description="Query CloudWatch Logs")
     parser.add_argument("--log-group", required=True, help="Log group name")
-    parser.add_argument("--filter", default="", help="Filter pattern (CloudWatch filter syntax)")
-    parser.add_argument("--hours", type=float, default=1, help="Hours to look back (default: 1)")
-    parser.add_argument("--limit", type=int, default=100, help="Max events to return (default: 100)")
+    parser.add_argument(
+        "--filter", default="", help="Filter pattern (CloudWatch filter syntax)"
+    )
+    parser.add_argument(
+        "--hours", type=float, default=1, help="Hours to look back (default: 1)"
+    )
+    parser.add_argument(
+        "--limit", type=int, default=100, help="Max events to return (default: 100)"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -61,13 +67,17 @@ def main():
         ]
 
         if args.json:
-            print(format_output({
-                "log_group": args.log_group,
-                "filter": args.filter,
-                "hours": args.hours,
-                "count": len(formatted_events),
-                "events": formatted_events,
-            }))
+            print(
+                format_output(
+                    {
+                        "log_group": args.log_group,
+                        "filter": args.filter,
+                        "hours": args.hours,
+                        "count": len(formatted_events),
+                        "events": formatted_events,
+                    }
+                )
+            )
         else:
             print(f"Log Group: {args.log_group}")
             print(f"Filter: {args.filter or '(none)'}")

@@ -586,9 +586,7 @@ def is_integration_configured(integration_id: str, creds: dict | None) -> bool:
     if integration_id in ["cloudwatch", "aws"]:
         return bool(
             creds.get("aws_access_key_id") and creds.get("aws_secret_access_key")
-        ) or bool(
-            creds.get("access_key_id") and creds.get("secret_access_key")
-        )
+        ) or bool(creds.get("access_key_id") and creds.get("secret_access_key"))
 
     # Default: api_key required (coralogix, incident_io, etc.)
     return bool(creds.get("api_key"))
@@ -698,9 +696,7 @@ def get_integration_metadata(integration_id: str, creds: dict) -> dict:
     elif integration_id in ["cloudwatch", "aws"]:
         # Return region for API endpoint construction
         return {
-            "region": creds.get("region")
-            or creds.get("aws_region_name")
-            or "us-east-1"
+            "region": creds.get("region") or creds.get("aws_region_name") or "us-east-1"
         }
 
     # Default: just indicate it's configured (incident_io, etc.)

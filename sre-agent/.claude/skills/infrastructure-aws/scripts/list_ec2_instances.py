@@ -8,7 +8,6 @@ Usage:
 """
 
 import argparse
-import json
 import sys
 
 from aws_client import format_output, get_client
@@ -46,7 +45,9 @@ def get_instance_name(instance: dict) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="List EC2 instances")
-    parser.add_argument("--filters", help="AWS filters (e.g., 'Name=tag:env,Values=production')")
+    parser.add_argument(
+        "--filters", help="AWS filters (e.g., 'Name=tag:env,Values=production')"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -61,23 +62,27 @@ def main():
         instances = []
         for reservation in response.get("Reservations", []):
             for inst in reservation.get("Instances", []):
-                instances.append({
-                    "instance_id": inst["InstanceId"],
-                    "name": get_instance_name(inst),
-                    "state": inst["State"]["Name"],
-                    "type": inst["InstanceType"],
-                    "private_ip": inst.get("PrivateIpAddress", ""),
-                    "public_ip": inst.get("PublicIpAddress", ""),
-                    "az": inst.get("Placement", {}).get("AvailabilityZone", ""),
-                    "launch_time": str(inst.get("LaunchTime", "")),
-                })
+                instances.append(
+                    {
+                        "instance_id": inst["InstanceId"],
+                        "name": get_instance_name(inst),
+                        "state": inst["State"]["Name"],
+                        "type": inst["InstanceType"],
+                        "private_ip": inst.get("PrivateIpAddress", ""),
+                        "public_ip": inst.get("PublicIpAddress", ""),
+                        "az": inst.get("Placement", {}).get("AvailabilityZone", ""),
+                        "launch_time": str(inst.get("LaunchTime", "")),
+                    }
+                )
 
         if args.json:
             print(format_output({"count": len(instances), "instances": instances}))
         else:
             print(f"EC2 Instances: {len(instances)}")
             print()
-            print(f"{'INSTANCE ID':<22} {'NAME':<30} {'STATE':<12} {'TYPE':<14} {'PRIVATE IP':<16} {'PUBLIC IP':<16}")
+            print(
+                f"{'INSTANCE ID':<22} {'NAME':<30} {'STATE':<12} {'TYPE':<14} {'PRIVATE IP':<16} {'PUBLIC IP':<16}"
+            )
             print("-" * 110)
             for inst in instances:
                 print(

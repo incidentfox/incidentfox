@@ -17,8 +17,12 @@ def main():
     parser = argparse.ArgumentParser(description="Get Lambda function logs")
     parser.add_argument("--function-name", required=True, help="Lambda function name")
     parser.add_argument("--filter", default="", help="Filter pattern")
-    parser.add_argument("--hours", type=float, default=1, help="Hours to look back (default: 1)")
-    parser.add_argument("--limit", type=int, default=50, help="Max events to return (default: 50)")
+    parser.add_argument(
+        "--hours", type=float, default=1, help="Hours to look back (default: 1)"
+    )
+    parser.add_argument(
+        "--limit", type=int, default=50, help="Max events to return (default: 50)"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -50,7 +54,10 @@ def main():
                 response = logs.filter_log_events(**kwargs)
                 events.extend(response.get("events", []))
         except logs.exceptions.ResourceNotFoundException:
-            print(f"Log group {log_group} not found. Function may not have been invoked yet.", file=sys.stderr)
+            print(
+                f"Log group {log_group} not found. Function may not have been invoked yet.",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
         events = events[: args.limit]
@@ -64,14 +71,18 @@ def main():
         ]
 
         if args.json:
-            print(format_output({
-                "function_name": args.function_name,
-                "log_group": log_group,
-                "filter": args.filter,
-                "hours": args.hours,
-                "count": len(formatted_events),
-                "events": formatted_events,
-            }))
+            print(
+                format_output(
+                    {
+                        "function_name": args.function_name,
+                        "log_group": log_group,
+                        "filter": args.filter,
+                        "hours": args.hours,
+                        "count": len(formatted_events),
+                        "events": formatted_events,
+                    }
+                )
+            )
         else:
             print(f"Function: {args.function_name}")
             print(f"Log Group: {log_group}")

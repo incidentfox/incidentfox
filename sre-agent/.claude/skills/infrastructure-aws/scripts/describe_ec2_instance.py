@@ -6,7 +6,6 @@ Usage:
 """
 
 import argparse
-import json
 import sys
 
 from aws_client import format_output, get_client
@@ -42,8 +41,12 @@ def main():
         if status_response.get("InstanceStatuses"):
             status = status_response["InstanceStatuses"][0]
             status_info = {
-                "instance_status": status.get("InstanceStatus", {}).get("Status", "unknown"),
-                "system_status": status.get("SystemStatus", {}).get("Status", "unknown"),
+                "instance_status": status.get("InstanceStatus", {}).get(
+                    "Status", "unknown"
+                ),
+                "system_status": status.get("SystemStatus", {}).get(
+                    "Status", "unknown"
+                ),
             }
 
         # Build output
@@ -67,10 +70,7 @@ def main():
                 for sg in inst.get("SecurityGroups", [])
             ],
             "iam_role": inst.get("IamInstanceProfile", {}).get("Arn", ""),
-            "tags": {
-                tag["Key"]: tag["Value"]
-                for tag in inst.get("Tags", [])
-            },
+            "tags": {tag["Key"]: tag["Value"] for tag in inst.get("Tags", [])},
             "status_checks": status_info,
             "root_device": {
                 "type": inst.get("RootDeviceType", ""),

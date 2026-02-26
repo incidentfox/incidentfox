@@ -97,9 +97,7 @@ def _is_auto_investigate_channel(slack_team_id: str, channel_id: str) -> bool:
             )
         else:
             config = {}
-        auto_channels = set(
-            config.get("auto_investigate", {}).get("channel_ids", [])
-        )
+        auto_channels = set(config.get("auto_investigate", {}).get("channel_ids", []))
         _auto_investigate_cache[slack_team_id] = auto_channels
         _auto_investigate_cache_ts[slack_team_id] = now
         return channel_id in auto_channels
@@ -364,9 +362,7 @@ Use all available tools to gather context about this issue."""
         state.error = f"Failed to connect to investigation service: {str(e)}"
         update_slack_message(client, state, slack_team_id, final=True)
     except Exception as e:
-        logger.error(
-            f"Unexpected error during auto-investigation: {e}", exc_info=True
-        )
+        logger.error(f"Unexpected error during auto-investigation: {e}", exc_info=True)
         state.error = f"Unexpected error: {str(e)}"
         update_slack_message(client, state, slack_team_id, final=True)
 
