@@ -558,6 +558,22 @@ def handle_mention(event, say, client, context):
     logger.info(
         f"🔔 APP_MENTION EVENT RECEIVED: channel={event.get('channel')}, user={event.get('user')}, ts={event.get('ts')}"
     )
+
+    # Skip if this is a top-level message in an auto-investigate channel —
+    # the message handler already triggered auto-investigate for it.
+    if not event.get("thread_ts"):
+        channel_id = event.get("channel")
+        slack_team_id = context.get("team_id")
+        if (
+            channel_id
+            and slack_team_id
+            and _is_auto_investigate_channel(slack_team_id, channel_id)
+        ):
+            logger.info(
+                f"⏭️  Skipping app_mention — auto-investigate already handling top-level message in {channel_id}"
+            )
+            return
+
     thread = threading.Thread(
         target=_handle_mention_impl,
         args=(event, say, client, context),
