@@ -559,6 +559,11 @@ static_resources:
                                     else []
                                 )
                                 + [
+                                    # Config Service URL (must use correct namespace)
+                                    {
+                                        "name": "CONFIG_SERVICE_URL",
+                                        "value": f"http://incidentfox-config-service.{self.namespace}.svc.cluster.local:8080",
+                                    },
                                     # Claude SDK: route API requests through proxy
                                     # (proxy injects x-api-key header for Anthropic)
                                     {
