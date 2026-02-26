@@ -751,6 +751,44 @@ async def get_integration_credentials(integration_id: str, request: Request):
     return creds
 
 
+@app.get("/api/git-token")
+async def get_git_token(request: Request):
+    """Return a GitHub token for git HTTPS credential helper.
+
+    Used by the sandbox git credential helper to authenticate git clone/push/pull
+    through the standard git HTTPS transport. Returns a token that works as the
+    password in HTTPS basic auth (username is ignored by GitHub).
+
+    Security: JWT-authenticated. Token is short-lived (GitHub App) or scoped (PAT).
+    """
+    import asyncio
+
+    tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
+    logger.info(
+        f"Git token request: tenant={tenant_id}, team={team_id}, sandbox={sandbox_name}"
+    )
+
+    creds = await get_credentials(tenant_id, team_id, "github")
+    if not creds or not is_integration_configured("github", creds):
+        raise HTTPException(
+            status_code=404,
+            detail="GitHub integration not configured",
+        )
+
+    # Resolve token: prefer GitHub App installation token, fall back to PAT
+    token = await asyncio.to_thread(_get_github_app_token, creds)
+    if not token:
+        token = creds.get("api_key")
+    if not token:
+        raise HTTPException(
+            status_code=404,
+            detail="GitHub integration not configured",
+        )
+
+    # Return plain token — credential helper parses this
+    return {"token": token}
+
+
 # IMPORTANT: Route ordering matters in FastAPI/Starlette!
 # More specific routes MUST be declared BEFORE catch-all routes.
 # /confluence/{path:path} must come before /{path:path}

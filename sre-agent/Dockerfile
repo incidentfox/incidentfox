@@ -95,6 +95,7 @@ COPY pyproject.toml .
 COPY uv.lock .
 COPY .claude/ ./.claude/
 COPY kubeconfig-demo.yaml /app/kubeconfig-demo.yaml
+COPY git-credential-helper.sh /usr/local/bin/git-credential-incidentfox
 
 # Install Python dependencies using uv with lock file for deterministic builds
 # --system: Install to system Python (not venv, we're in a container)
@@ -105,6 +106,9 @@ RUN uv pip install --system --no-cache .
 RUN useradd -m -u 1000 agent && \
     mkdir -p /workspace /home/agent/.kube /home/agent/.aws && \
     cp /app/kubeconfig-demo.yaml /home/agent/.kube/config && \
+    # Configure git credential helper for GitHub HTTPS auth via credential-resolver
+    git config --system credential.helper incidentfox && \
+    git config --system credential.useHttpPath false && \
     chown -R agent:agent /app /workspace /home/agent/.kube /home/agent/.aws
 
 USER agent
