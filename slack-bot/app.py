@@ -490,9 +490,7 @@ if __name__ == "__main__":
                         integration_id="slack",
                         config={"bot_token": bot_token},
                     )
-                    logger.info(
-                        f"Saved Slack integration config for team {team_id}"
-                    )
+                    logger.info(f"Saved Slack integration config for team {team_id}")
                 except Exception as slack_config_error:
                     logger.warning(
                         f"Failed to save Slack integration config: {slack_config_error}"

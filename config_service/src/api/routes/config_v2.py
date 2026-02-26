@@ -634,7 +634,7 @@ def _inject_slack_bot_token(
     # org_id format is "slack-{TEAM_ID}" — extract the Slack team_id
     if not org_id.startswith("slack-"):
         return effective
-    slack_team_id = org_id[len("slack-"):]
+    slack_team_id = org_id[len("slack-") :]
 
     # Look up the most recent bot installation for this workspace
     installation = (
