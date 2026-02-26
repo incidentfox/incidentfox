@@ -1906,9 +1906,7 @@ def handle_integration_config_submission(ack, body, client, view):
                         integration_id=integration_id,
                         config=pat_config,
                     )
-                    logger.info(
-                        f"Saved GitHub PAT config for team {team_id}"
-                    )
+                    logger.info(f"Saved GitHub PAT config for team {team_id}")
                 elif github_org:
                     # GitHub App flow: link the installation
                     result = config_client.link_github_installation(
@@ -1920,10 +1918,15 @@ def handle_integration_config_submission(ack, body, client, view):
                     )
 
                     # Also save context_prompt if provided
-                    if config.get("context_prompt") or config.get("enabled") is not None:
+                    if (
+                        config.get("context_prompt")
+                        or config.get("enabled") is not None
+                    ):
                         integration_config = {}
                         if "context_prompt" in config:
-                            integration_config["context_prompt"] = config["context_prompt"]
+                            integration_config["context_prompt"] = config[
+                                "context_prompt"
+                            ]
                         if "enabled" in config:
                             integration_config["enabled"] = config["enabled"]
                         if integration_config:
