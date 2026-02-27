@@ -261,7 +261,6 @@ Sub-orchestrator for incident investigation. Coordinates specialized agents (Git
 **Do NOT use when:**
 - You just need to write code fixes (use coding agent)
 - You just need to write a postmortem (use writeup agent)
-- Simple K8s queries you can handle directly via K8s skill scripts (list namespaces, check pods)
 
 **Example delegations:**
 - "Investigate the elevated error rate in checkout service. Check pods, dependencies, recent deployments, and any correlated events. Build a timeline and identify root cause."
