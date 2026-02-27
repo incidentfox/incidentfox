@@ -1121,9 +1121,7 @@ def handle_k8s_saas_add_cluster_submission(ack, body, client, view):
             logger.error(f"Failed to create K8s cluster: {e}", exc_info=True)
             ack(
                 response_action="errors",
-                errors={
-                    "cluster_name": "Failed to create cluster. Please try again."
-                },
+                errors={"cluster_name": "Failed to create cluster. Please try again."},
             )
 
 
