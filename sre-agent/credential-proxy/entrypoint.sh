@@ -4,6 +4,7 @@
 trap 'kill 0' TERM INT
 
 uvicorn credential_resolver.main:app --host 0.0.0.0 --port 8002 &
+HTTP_PID=$!
 
 if [ -f /app/certs/credential-resolver.crt ] && [ -f /app/certs/credential-resolver.key ]; then
     uvicorn credential_resolver.main:app --host 0.0.0.0 --port 8443 \
@@ -11,4 +12,7 @@ if [ -f /app/certs/credential-resolver.crt ] && [ -f /app/certs/credential-resol
         --ssl-certfile /app/certs/credential-resolver.crt &
 fi
 
-wait
+# Wait only for the HTTP process (the critical one).
+# If the HTTPS process crashes, the container stays alive for the
+# liveness probe on port 8002.
+wait $HTTP_PID
