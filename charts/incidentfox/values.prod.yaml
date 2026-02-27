@@ -93,7 +93,12 @@ externalSecrets:
       internalTokenKey: internal_token
       internalTokenRemoteRefKey: incidentfox/prod/orchestrator_internal_token
     langfuse:
-      enabled: false  # Using OpenAI tracing UI instead
+      enabled: true
+      secretName: incidentfox-langfuse
+      publicKeyKey: LANGFUSE_PUBLIC_KEY
+      secretKeyKey: LANGFUSE_SECRET_KEY
+      publicKeyRemoteRefKey: incidentfox/prod/langfuse_public_key
+      secretKeyRemoteRefKey: incidentfox/prod/langfuse_secret_key
     googleChat:
       enabled: true
     teams:
@@ -262,9 +267,14 @@ services:
         value: "http://incidentfox-k8s-gateway.incidentfox-prod.svc.cluster.local:8085"
       - name: SANDBOX_TTL_MINUTES
         value: "20"
-    # Agent observability — disabled in production
+    # Agent observability — Langfuse for production tracing
     agentObservability:
-      backend: "none"
+      backend: "langfuse"
+      langfuse:
+        host: "https://us.cloud.langfuse.com"
+        secretName: "incidentfox-langfuse"
+        publicKeyKey: "LANGFUSE_PUBLIC_KEY"
+        secretKeyKey: "LANGFUSE_SECRET_KEY"
 
   # Sandbox Router for routing to sandbox pods
   sandboxRouter:
