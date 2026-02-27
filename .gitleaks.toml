@@ -44,6 +44,9 @@ paths = [
     # Config service auth routes - oidc_claims=principal.claims is code, not a secret
     '''config_service/src/api/routes/auth_me\.py''',
 
+    # Credential-resolver dev/local TLS cert (self-signed, not used in production)
+    '''sre-agent/credential-proxy/certs/.*''',
+
     # Files removed from main but still in git history on some branches
     '''claude_runtime/.*''',
     '''CORALOGIX_TEST_RESULTS\.md''',
