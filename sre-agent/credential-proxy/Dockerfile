@@ -18,14 +18,22 @@ COPY src/ src/
 # Install dependencies
 RUN uv pip install --system --no-cache .
 
+# Self-signed TLS cert for HTTPS listener (gh CLI requires HTTPS).
+# Not a real secret — just satisfies gh's HTTPS requirement for pod-internal traffic.
+COPY certs/ /app/certs/
+
+# Entrypoint script for dual HTTP/HTTPS serving
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Create non-root user
 RUN useradd -m -u 1000 resolver && chown -R resolver:resolver /app
 USER resolver
 
-# Expose port
-EXPOSE 8002
+# Expose ports: HTTP (ext_authz, proxy APIs) + HTTPS (gh CLI)
+EXPOSE 8002 8443
 
-# Run the service (use uvicorn directly to avoid dual-import of main.py
+# Run via entrypoint (uses uvicorn CLI directly to avoid dual-import of main.py
 # as both __main__ and credential_resolver.main — llm_proxy.py uses
 # relative imports that must resolve to the same module instance)
-CMD ["uvicorn", "credential_resolver.main:app", "--host", "0.0.0.0", "--port", "8002"]
+CMD ["/app/entrypoint.sh"]

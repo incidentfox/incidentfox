@@ -1322,6 +1322,22 @@ async def github_proxy(path: str, request: Request):
         raise HTTPException(status_code=502, detail=f"GitHub request failed: {e}")
 
 
+# GitHub Enterprise-style aliases — gh CLI sends requests to /api/v3/... and /api/graphql
+@app.api_route(
+    "/api/v3/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def github_api_v3_proxy(path: str, request: Request):
+    """Alias for /github/ — gh CLI sends REST API requests to /api/v3/..."""
+    return await github_proxy(path, request)
+
+
+@app.api_route("/api/graphql", methods=["POST"])
+async def github_graphql_proxy(request: Request):
+    """Alias for /github/graphql — gh CLI GraphQL endpoint."""
+    return await github_proxy("graphql", request)
+
+
 @app.api_route(
     "/honeycomb/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH"],

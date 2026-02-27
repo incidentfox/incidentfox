@@ -102,17 +102,10 @@ COPY git-credential-helper.sh /usr/local/bin/git-credential-incidentfox
 # --no-cache: Don't cache downloads (keeps image size down)
 RUN uv pip install --system --no-cache .
 
-# Generate self-signed cert for localhost — used by Envoy TLS listener
-# so that gh CLI (which requires HTTPS) can route through credential-resolver.
-# Not a real secret: just satisfies gh's HTTPS requirement for pod-internal traffic.
-RUN mkdir -p /etc/certs && \
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-      -keyout /etc/certs/localhost.key \
-      -out /etc/certs/localhost.crt \
-      -subj '/CN=localhost' \
-      -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' && \
-    cp /etc/certs/localhost.crt /usr/local/share/ca-certificates/localhost.crt && \
-    update-ca-certificates
+# Trust credential-resolver's self-signed TLS cert so gh CLI can connect via HTTPS.
+# The cert is shared between credential-resolver (serves HTTPS) and sandbox (trusts it).
+COPY credential-proxy/certs/credential-resolver.crt /usr/local/share/ca-certificates/credential-resolver.crt
+RUN update-ca-certificates
 
 # Create non-root user and workspace directory
 RUN useradd -m -u 1000 agent && \

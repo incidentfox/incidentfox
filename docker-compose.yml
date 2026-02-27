@@ -152,6 +152,11 @@ services:
       - INCIDENTFOX_TEAM_ID=default
       # Coralogix config (no API key - injected by proxy)
       - CORALOGIX_DOMAIN=${CORALOGIX_DOMAIN:-}
+      # GitHub integration (credential-resolver proxies to GitHub API)
+      - GITHUB_BASE_URL=http://credential-resolver:8002/github
+      - CREDENTIAL_RESOLVER_URL=http://credential-resolver:8002
+      - GH_HOST=credential-resolver:8443
+      - GH_TOKEN=local-dev-placeholder
       # Other services
       - LMNR_PROJECT_API_KEY=${LMNR_PROJECT_API_KEY:-}
     depends_on:
