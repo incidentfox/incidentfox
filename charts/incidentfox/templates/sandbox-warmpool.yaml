@@ -507,6 +507,14 @@ spec:
         # gh CLI: route HTTPS API calls through Envoy TLS listener (localhost)
         - name: GH_HOST
           value: "localhost:8443"
+        # gh CLI: placeholder token — Envoy ext_authz injects the real one
+        # (same pattern as ANTHROPIC_API_KEY placeholder above)
+        - name: GH_ENTERPRISE_TOKEN
+          value: "placeholder-proxy-will-inject-real-token"
+        # Trust the self-signed TLS cert used by the Envoy gh proxy listener.
+        # Safe in sandbox: all external HTTPS is proxied through HTTP.
+        - name: SSL_CERT_FILE
+          value: "/etc/ssl/gh-proxy/credential-resolver.crt"
         # K8s Gateway: route K8s commands to customer clusters via k8s-agent
         - name: K8S_GATEWAY_URL
           value: "http://incidentfox-k8s-gateway.{{ .Values.namespace }}.svc.cluster.local:8085"
@@ -563,6 +571,10 @@ spec:
         # Shared volume for JWT injection (Envoy reads, /claim writes)
         - name: jwt-volume
           mountPath: /tmp
+        # Self-signed TLS cert for gh CLI → Envoy proxy (agent needs to trust it)
+        - name: gh-tls-cert
+          mountPath: /etc/ssl/gh-proxy
+          readOnly: true
         resources:
 {{ toYaml .Values.services.agent.warmPool.agentResources | indent 10 }}
         securityContext:

@@ -2333,11 +2333,23 @@ async def ext_authz_check(request: Request, path: str = ""):
     """
     logger.info(f"ext_authz check: {request.method} {request.url.path}")
 
+    # Distinguish ext_authz requests (from Envoy, have x-original-host) from
+    # direct requests (agent accidentally hitting the catch-all route).
+    target_host = request.headers.get("x-original-host", "")
+    if not target_host:
+        # Direct request to an unregistered path — not an ext_authz call.
+        # Return a clear error instead of a confusing empty 200.
+        logger.warning(f"Direct request to catch-all: {request.method} /{path}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown endpoint: /{path}. "
+            "If this is a proxy request, use the dedicated /<integration>/... path.",
+        )
+
     # 1. Validate JWT and extract tenant context
     tenant_id, team_id, sandbox_name = await extract_tenant_context(request)
 
     # 2. Determine integration from target host and path
-    target_host = request.headers.get("x-original-host", "")
     request_path = request.url.path
     # Strip ext_authz path_prefix if present (envoy prepends /extauthz to avoid
     # hitting LLM proxy routes, but we need the original path for integration mapping)

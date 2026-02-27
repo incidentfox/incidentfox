@@ -41,6 +41,9 @@ DOMAIN_TO_INTEGRATION: dict[str, str] = {
     "sentry.io": "sentry",
     # PagerDuty
     "api.pagerduty.com": "pagerduty",
+    # GitHub (gh CLI ext_authz sends x-original-host: github.com)
+    "github.com": "github",
+    "api.github.com": "github",
     # GitLab
     "gitlab.com": "gitlab",
     # New Relic

@@ -732,10 +732,20 @@ static_resources:
                                         "name": "K8S_GATEWAY_URL",
                                         "value": f"http://incidentfox-k8s-gateway.{self.namespace}.svc.cluster.local:8085",
                                     },
-                                    # gh CLI: route HTTPS API calls through credential-resolver
+                                    # gh CLI: route HTTPS API calls through Envoy TLS listener
                                     {
                                         "name": "GH_HOST",
                                         "value": "localhost:8443",
+                                    },
+                                    # gh CLI: placeholder token — ext_authz injects real one
+                                    {
+                                        "name": "GH_ENTERPRISE_TOKEN",
+                                        "value": "placeholder-proxy-will-inject-real-token",
+                                    },
+                                    # Trust the self-signed TLS cert for gh CLI proxy
+                                    {
+                                        "name": "SSL_CERT_FILE",
+                                        "value": "/etc/ssl/gh-proxy/credential-resolver.crt",
                                     },
                                     # RAPTOR knowledge base: internal K8s service (no auth needed)
                                     {
@@ -773,6 +783,13 @@ static_resources:
                                     # exposure via `kubectl get pod -o yaml` or /proc/*/environ.
                                     # The /claim endpoint writes it to /tmp/sandbox-jwt and
                                     # sets os.environ["SANDBOX_JWT"] for skill scripts.
+                                ],
+                                "volumeMounts": [
+                                    {
+                                        "name": "gh-tls-cert",
+                                        "mountPath": "/etc/ssl/gh-proxy",
+                                        "readOnly": True,
+                                    },
                                 ],
                                 "resources": {
                                     "requests": {
