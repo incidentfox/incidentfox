@@ -5,31 +5,31 @@ description: Kubernetes debugging methodology and scripts. Use for pod crashes, 
 
 # Kubernetes Debugging
 
-## Core Principle: Events Before Logs
+## Core Principle: Gateway First, Events Before Logs
+
+**ALWAYS start by discovering clusters via the gateway.** Do NOT use kubectl directly — this sandbox has no direct k8s API access. All k8s queries go through the k8s-gateway.
+
+### Step 1: Discover clusters (MANDATORY first step)
+```bash
+python .claude/skills/infrastructure-kubernetes/scripts/list_clusters.py
+```
+
+### Step 2: Use --cluster-id on all scripts
+```bash
+python .claude/skills/infrastructure-kubernetes/scripts/list_namespaces.py --cluster-id <CLUSTER_ID>
+python .claude/skills/infrastructure-kubernetes/scripts/list_pods.py -n production --cluster-id <CLUSTER_ID>
+```
+
+**NEVER run kubectl directly.** NEVER run scripts without `--cluster-id`. If `list_clusters.py` returns no clusters, tell the user they need to install the k8s-agent on their cluster first.
+
+**Gateway-capable scripts:** list_pods, get_events, get_logs, describe_pod, describe_deployment, list_namespaces.
+**Direct-only scripts (not available in SaaS):** describe_node, get_resources.
 
 **ALWAYS check pod events BEFORE logs.** Events explain 80% of issues faster:
 - OOMKilled → Memory limit exceeded
 - ImagePullBackOff → Image not found or auth issue
 - FailedScheduling → No nodes with enough resources
 - CrashLoopBackOff → Container crashing repeatedly
-
-## Remote Clusters (k8s-gateway)
-
-When the team has deployed the IncidentFox k8s-agent to their clusters, you can query remote clusters via the k8s-gateway. **Always start by listing available clusters:**
-
-```bash
-python .claude/skills/infrastructure-kubernetes/scripts/list_clusters.py
-```
-
-Then pass `--cluster-id <CLUSTER_ID>` to any gateway-capable script:
-```bash
-python .claude/skills/infrastructure-kubernetes/scripts/list_pods.py -n production --cluster-id abc123
-```
-
-**Gateway-capable scripts:** list_pods, get_events, get_logs, describe_pod, describe_deployment, list_namespaces.
-**Direct-only scripts (require in-cluster access):** describe_node, get_resources.
-
-If no `--cluster-id` is given, scripts use direct K8s API access (in-cluster service account or kubeconfig).
 
 ## Available Scripts
 
