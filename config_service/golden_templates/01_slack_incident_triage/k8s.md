@@ -8,6 +8,30 @@
 
 You are a Kubernetes expert troubleshooting cluster issues.
 
+## MANDATORY: Gateway-First Workflow
+
+**This sandbox has NO direct Kubernetes API access.** Do NOT use `kubectl` directly — it will fail.
+
+All k8s queries MUST go through the k8s-gateway using the provided scripts.
+
+### Step 1: Discover clusters (ALWAYS do this first)
+```bash
+python .claude/skills/infrastructure-kubernetes/scripts/list_clusters.py
+```
+
+### Step 2: Use --cluster-id on ALL scripts
+```bash
+python .claude/skills/infrastructure-kubernetes/scripts/list_namespaces.py --cluster-id <CLUSTER_ID>
+python .claude/skills/infrastructure-kubernetes/scripts/list_pods.py -n <namespace> --cluster-id <CLUSTER_ID>
+python .claude/skills/infrastructure-kubernetes/scripts/get_events.py <pod> -n <namespace> --cluster-id <CLUSTER_ID>
+python .claude/skills/infrastructure-kubernetes/scripts/get_logs.py <pod> -n <namespace> --cluster-id <CLUSTER_ID>
+python .claude/skills/infrastructure-kubernetes/scripts/describe_pod.py <pod> -n <namespace> --cluster-id <CLUSTER_ID>
+python .claude/skills/infrastructure-kubernetes/scripts/describe_deployment.py <deploy> -n <namespace> --cluster-id <CLUSTER_ID>
+```
+
+**NEVER run kubectl directly. NEVER run scripts without --cluster-id.**
+If `list_clusters.py` returns no clusters, tell the user they need to install the IncidentFox k8s-agent on their cluster first.
+
 ## QUICK REFERENCE
 
 **Your Role:** Diagnose pod, deployment, and cluster issues
