@@ -962,17 +962,17 @@ class ConfigServiceClient:
         Raises:
             ConfigServiceError: If the config service request fails.
         """
-        # In local mode, use 'local' org instead of per-workspace orgs
+        # Integration config is org-scoped: write to org root node
+        # so all teams inherit. team_node_id = org_id targets the root.
         if CONFIG_MODE == "local":
             org_id = "local"
         else:
             org_id = f"slack-{slack_team_id}"
-        team_node_id = "default"
 
         update = {"integrations": {integration_id: config}}
 
         try:
-            self._update_config(org_id, team_node_id, update)
+            self._update_config(org_id, org_id, update)
             logger.info(f"Saved {integration_id} config for workspace {slack_team_id}")
         except requests.exceptions.RequestException as e:
             logger.error(
@@ -1011,10 +1011,14 @@ class ConfigServiceClient:
         Raises:
             ConfigServiceError: If the request fails or cluster name already exists.
         """
-        org_id = f"slack-{slack_team_id}"
-        team_node_id = "default"
+        # K8s clusters are org-scoped: store under org root node
+        # so all teams in the org can see them
+        if CONFIG_MODE == "local":
+            org_id = "local"
+        else:
+            org_id = f"slack-{slack_team_id}"
 
-        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{team_node_id}/k8s-clusters"
+        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{org_id}/k8s-clusters"
 
         payload = {
             "cluster_name": cluster_name,
@@ -1061,7 +1065,7 @@ class ConfigServiceClient:
         include_revoked: bool = False,
     ) -> list:
         """
-        List all K8s clusters for a workspace.
+        List all K8s clusters for a workspace (org-scoped).
 
         Args:
             slack_team_id: Slack team ID
@@ -1074,10 +1078,13 @@ class ConfigServiceClient:
         Raises:
             ConfigServiceError: If the request fails.
         """
-        org_id = f"slack-{slack_team_id}"
-        team_node_id = "default"
+        # K8s clusters are org-scoped: list all clusters in the org
+        if CONFIG_MODE == "local":
+            org_id = "local"
+        else:
+            org_id = f"slack-{slack_team_id}"
 
-        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{team_node_id}/k8s-clusters"
+        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{org_id}/k8s-clusters"
         params = {}
         if include_revoked:
             params["include_revoked"] = "true"
@@ -1107,7 +1114,7 @@ class ConfigServiceClient:
         cluster_id: str,
     ) -> None:
         """
-        Revoke a K8s cluster's access.
+        Revoke a K8s cluster's access (org-scoped).
 
         This disconnects the agent and revokes its API token.
         The cluster record is kept for audit purposes.
@@ -1119,10 +1126,12 @@ class ConfigServiceClient:
         Raises:
             ConfigServiceError: If the request fails or cluster not found.
         """
-        org_id = f"slack-{slack_team_id}"
-        team_node_id = "default"
+        if CONFIG_MODE == "local":
+            org_id = "local"
+        else:
+            org_id = f"slack-{slack_team_id}"
 
-        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{team_node_id}/k8s-clusters/{cluster_id}"
+        url = f"{self.base_url}/api/v1/admin/orgs/{org_id}/teams/{org_id}/k8s-clusters/{cluster_id}"
 
         try:
             response = self._session.delete(url, headers=self._headers(), timeout=10)

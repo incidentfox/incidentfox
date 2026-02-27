@@ -529,6 +529,9 @@ static_resources:
                         }
                     },
                     "spec": {
+                        # Prevent sandbox from accessing the host cluster's K8s API.
+                        # All k8s queries must go through the k8s-gateway to customer clusters.
+                        "automountServiceAccountToken": False,
                         "containers": [
                             # Main agent container - NO SECRETS, only proxy config
                             {

@@ -274,6 +274,9 @@ spec:
         incidentfox.io/isolation: sandbox
     spec:
       serviceAccountName: {{ .Release.Name }}-sandbox-pod
+      # Prevent sandbox from accessing the host cluster's K8s API.
+      # All k8s queries must go through the k8s-gateway to customer clusters.
+      automountServiceAccountToken: false
       {{- if .Values.services.agent.sandbox.useGvisor }}
       runtimeClassName: gvisor
       {{- end }}

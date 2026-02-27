@@ -1022,6 +1022,7 @@ def handle_k8s_saas_add_cluster(ack, body, client):
     # Extract metadata from parent view
     category_filter = "all"
     entry_point = "integrations"
+    channel_id = None
     try:
         parent_metadata = body.get("view", {}).get("private_metadata", "{}")
         parent_data = json.loads(parent_metadata)
@@ -1086,7 +1087,7 @@ def handle_k8s_saas_add_cluster_submission(ack, body, client, view):
     try:
         config_client = get_config_client()
 
-        # Create the cluster
+        # Create the cluster (org-scoped)
         result = config_client.create_k8s_cluster(
             slack_team_id=team_id,
             cluster_name=cluster_name,
@@ -1157,7 +1158,7 @@ def handle_k8s_saas_remove_cluster(ack, body, client):
     try:
         config_client = get_config_client()
 
-        # Delete the cluster
+        # Delete the cluster (org-scoped)
         config_client.delete_k8s_cluster(
             slack_team_id=team_id,
             cluster_id=cluster_id,

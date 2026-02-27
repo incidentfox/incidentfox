@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -58,6 +58,36 @@ def check_org_access(principal: AdminPrincipal, org_id: str) -> None:
             status_code=403,
             detail=f"Access denied: you can only access org '{principal.org_id}'",
         )
+
+
+def resolve_team_principal(
+    authorization: str = Header(default=""),
+    x_org_id: Optional[str] = Header(default=None),
+    x_team_node_id: Optional[str] = Header(default=None),
+) -> TeamPrincipal:
+    """Resolve team from Bearer token or X-Org-Id/X-Team-Node-Id headers.
+
+    Supports two auth methods (matching config_v2 pattern):
+    1. Bearer token: team token or OIDC JWT
+    2. Headers: X-Org-Id + X-Team-Node-Id (used by sre-agent sandbox)
+    """
+    if authorization and authorization.strip():
+        try:
+            return require_team_auth(authorization)
+        except HTTPException:
+            pass
+
+    if x_org_id and x_team_node_id:
+        return TeamPrincipal(
+            auth_kind="header",
+            org_id=x_org_id,
+            team_node_id=x_team_node_id,
+        )
+
+    raise HTTPException(
+        status_code=401,
+        detail="Authentication required: provide Bearer token or X-Org-Id/X-Team-Node-Id headers",
+    )
 
 
 router = APIRouter(prefix="/api/v1/team/k8s-clusters", tags=["k8s-clusters"])
@@ -152,7 +182,7 @@ class K8sClusterStatusUpdate(BaseModel):
 async def create_k8s_cluster(
     body: CreateK8sClusterRequest,
     db: Session = Depends(get_db),
-    team: TeamPrincipal = Depends(require_team_auth),
+    team: TeamPrincipal = Depends(resolve_team_principal),
 ):
     """
     Register a new K8s cluster and generate an API key.
@@ -166,11 +196,14 @@ async def create_k8s_cluster(
     """
     pepper = get_token_pepper()
 
-    # Check for duplicate cluster name
+    # K8s clusters are org-scoped: store under org root so all teams can access
+    # The org root node's node_id equals the org_id (e.g., "slack-T12345")
+    cluster_team_node_id = team.org_id
+
+    # Check for duplicate cluster name (org-wide)
     existing_clusters = list_k8s_clusters(
         db,
         org_id=team.org_id,
-        team_node_id=team.team_node_id,
     )
     for cluster in existing_clusters:
         if cluster.cluster_name == body.cluster_name:
@@ -183,7 +216,7 @@ async def create_k8s_cluster(
     result = issue_k8s_agent_token(
         db,
         org_id=team.org_id,
-        team_node_id=team.team_node_id,
+        team_node_id=cluster_team_node_id,
         cluster_name=body.cluster_name,
         display_name=body.display_name,
         issued_by=team.subject,
@@ -216,17 +249,17 @@ async def create_k8s_cluster(
 async def list_clusters(
     include_revoked: bool = False,
     db: Session = Depends(get_db),
-    team: TeamPrincipal = Depends(require_team_auth),
+    team: TeamPrincipal = Depends(resolve_team_principal),
 ):
     """
-    List all K8s clusters for the team.
+    List all K8s clusters for the org.
 
+    K8s clusters are org-scoped: any team in the org can see all clusters.
     By default, only active (non-revoked) clusters are returned.
     """
     clusters = list_k8s_clusters(
         db,
         org_id=team.org_id,
-        team_node_id=team.team_node_id,
         include_revoked=include_revoked,
     )
 
@@ -254,7 +287,7 @@ async def list_clusters(
 async def get_cluster_detail(
     cluster_id: str,
     db: Session = Depends(get_db),
-    team: TeamPrincipal = Depends(require_team_auth),
+    team: TeamPrincipal = Depends(resolve_team_principal),
 ):
     """
     Get detailed information about a specific K8s cluster.
@@ -264,8 +297,8 @@ async def get_cluster_detail(
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster not found")
 
-    # Verify ownership
-    if cluster.org_id != team.org_id or cluster.team_node_id != team.team_node_id:
+    # Verify ownership (org-scoped: any team in the org can access)
+    if cluster.org_id != team.org_id:
         raise HTTPException(status_code=404, detail="Cluster not found")
 
     return K8sClusterDetail(
@@ -296,7 +329,7 @@ async def get_cluster_detail(
 async def delete_cluster(
     cluster_id: str,
     db: Session = Depends(get_db),
-    team: TeamPrincipal = Depends(require_team_auth),
+    team: TeamPrincipal = Depends(resolve_team_principal),
 ):
     """
     Revoke a K8s cluster's access.
@@ -309,8 +342,8 @@ async def delete_cluster(
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster not found")
 
-    # Verify ownership
-    if cluster.org_id != team.org_id or cluster.team_node_id != team.team_node_id:
+    # Verify ownership (org-scoped: any team in the org can delete)
+    if cluster.org_id != team.org_id:
         raise HTTPException(status_code=404, detail="Cluster not found")
 
     success = revoke_k8s_cluster(
@@ -451,11 +484,10 @@ async def admin_create_k8s_cluster(
     check_org_access(principal, org_id)
     pepper = get_token_pepper()
 
-    # Check for duplicate cluster name
+    # Check for duplicate cluster name (org-wide)
     existing_clusters = list_k8s_clusters(
         db,
         org_id=org_id,
-        team_node_id=team_node_id,
     )
     for cluster in existing_clusters:
         if cluster.cluster_name == body.cluster_name:
@@ -510,16 +542,16 @@ async def admin_list_k8s_clusters(
     principal: AdminPrincipal = Depends(require_admin),
 ):
     """
-    List all K8s clusters for a team (admin endpoint).
+    List all K8s clusters for an org (admin endpoint).
 
-    Used by slack-bot to show cluster list to users.
+    K8s clusters are org-scoped. team_node_id in the URL is accepted
+    for backward compatibility but ignored for listing.
     """
     check_org_access(principal, org_id)
 
     clusters = list_k8s_clusters(
         db,
         org_id=org_id,
-        team_node_id=team_node_id,
         include_revoked=include_revoked,
     )
 

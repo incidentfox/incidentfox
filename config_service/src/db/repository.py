@@ -2263,18 +2263,19 @@ def list_k8s_clusters(
     session: Session,
     *,
     org_id: str,
-    team_node_id: str,
+    team_node_id: Optional[str] = None,
     include_revoked: bool = False,
 ) -> List[K8sCluster]:
     """
-    List all K8s clusters for a team.
+    List K8s clusters for an org (optionally filtered by team).
 
+    When team_node_id is None, returns all clusters in the org.
     By default excludes clusters whose tokens have been revoked.
     """
-    stmt = select(K8sCluster).where(
-        K8sCluster.org_id == org_id,
-        K8sCluster.team_node_id == team_node_id,
-    )
+    stmt = select(K8sCluster).where(K8sCluster.org_id == org_id)
+
+    if team_node_id is not None:
+        stmt = stmt.where(K8sCluster.team_node_id == team_node_id)
 
     if not include_revoked:
         # Join with TeamToken to exclude revoked
