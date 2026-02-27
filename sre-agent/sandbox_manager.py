@@ -318,6 +318,68 @@ static_resources:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
+  # TLS listener for gh CLI (requires HTTPS)
+  # Terminates TLS locally, forwards to credential-resolver HTTP
+  - name: gh_tls_proxy
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 8443
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: gh_tls_proxy
+          codec_type: AUTO
+          route_config:
+            name: gh_routes
+            virtual_hosts:
+            - name: gh_proxy
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: credential_resolver_github
+                  timeout: 30s
+          http_filters:
+          - name: envoy.filters.http.ext_authz
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+              transport_api_version: V3
+              http_service:
+                server_uri:
+                  uri: http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/check
+                  cluster: ext_authz
+                  timeout: 2s
+                path_prefix: "/extauthz"
+                authorization_request:
+                  headers_to_add:
+                  - key: "x-sandbox-jwt"
+                    value: "{jwt_token}"
+                  - key: "x-original-host"
+                    value: "github.com"
+                authorization_response:
+                  allowed_upstream_headers:
+                    patterns:
+                    - exact: "authorization"
+                    - exact: "x-api-key"
+              failure_mode_allow: false
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          common_tls_context:
+            tls_certificates:
+            - certificate_chain:
+                filename: /etc/envoy/gh-tls/credential-resolver.crt
+              private_key:
+                filename: /etc/envoy/gh-tls/credential-resolver.key
+
   clusters:
   # ext_authz cluster (credential-resolver service)
   - name: ext_authz
@@ -401,6 +463,20 @@ static_resources:
               socket_address:
                 address: localhost
                 port_value: 9999
+
+  # GitHub API via credential-resolver (for gh CLI TLS proxy)
+  - name: credential_resolver_github
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: credential_resolver_github
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local
+                port_value: 8002
 """
 
         configmap = client.V1ConfigMap(
@@ -659,7 +735,7 @@ static_resources:
                                     # gh CLI: route HTTPS API calls through credential-resolver
                                     {
                                         "name": "GH_HOST",
-                                        "value": f"credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8443",
+                                        "value": "localhost:8443",
                                     },
                                     # RAPTOR knowledge base: internal K8s service (no auth needed)
                                     {
@@ -750,13 +826,21 @@ static_resources:
                                     "--log-level",
                                     "warn",
                                 ],
-                                "ports": [{"containerPort": 8001, "name": "proxy"}],
+                                "ports": [
+                                    {"containerPort": 8001, "name": "proxy"},
+                                    {"containerPort": 8443, "name": "gh-tls"},
+                                ],
                                 "volumeMounts": [
                                     {
                                         "name": "envoy-config",
                                         "mountPath": "/etc/envoy",
                                         "readOnly": True,
-                                    }
+                                    },
+                                    {
+                                        "name": "gh-tls-cert",
+                                        "mountPath": "/etc/envoy/gh-tls",
+                                        "readOnly": True,
+                                    },
                                 ],
                                 "resources": {
                                     "requests": {"cpu": "50m", "memory": "64Mi"},
@@ -774,7 +858,11 @@ static_resources:
                             {
                                 "name": "envoy-config",
                                 "configMap": {"name": envoy_configmap_name},
-                            }
+                            },
+                            {
+                                "name": "gh-tls-cert",
+                                "configMap": {"name": "envoy-gh-tls-cert"},
+                            },
                         ],
                     },
                 },
