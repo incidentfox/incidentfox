@@ -299,9 +299,7 @@ def ensure_slack_integration_config(slack_team_id: str, bot_token: str):
             integration_id="slack",
             config={"bot_token": bot_token},
         )
-        logger.info(
-            f"Synced Slack bot_token to integration config for {slack_team_id}"
-        )
+        logger.info(f"Synced Slack bot_token to integration config for {slack_team_id}")
     except Exception as e:
         logger.warning(f"Failed to sync Slack token for {slack_team_id}: {e}")
         _synced_slack_teams.discard(slack_team_id)
