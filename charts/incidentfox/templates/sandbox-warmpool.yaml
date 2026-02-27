@@ -342,6 +342,9 @@ spec:
           value: "url.http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/git/.insteadOf"
         - name: GIT_CONFIG_VALUE_0
           value: "https://github.com/"
+        # gh CLI: route HTTPS API calls through credential-resolver
+        - name: GH_HOST
+          value: "credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8443"
         # K8s Gateway: route K8s commands to customer clusters via k8s-agent
         - name: K8S_GATEWAY_URL
           value: "http://incidentfox-k8s-gateway.{{ .Values.namespace }}.svc.cluster.local:8085"
