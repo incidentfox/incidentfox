@@ -67,7 +67,8 @@
                 "app_home_opened",
                 "app_mention",
                 "link_shared",
-                "message.channels"
+                "message.channels",
+                "message.groups"
             ]
         },
         "interactivity": {

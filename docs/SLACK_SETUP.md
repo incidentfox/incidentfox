@@ -82,7 +82,8 @@ Connect IncidentFox to your Slack workspace. Takes about 5 minutes.
                 "app_home_opened",
                 "app_mention",
                 "link_shared",
-                "message.channels"
+                "message.channels",
+                "message.groups"
             ]
         },
         "interactivity": {

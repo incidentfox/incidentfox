@@ -341,7 +341,7 @@ curl -X PUT "http://config-service:8080/api/v1/config/me" \
 1. Go to https://api.slack.com/apps
 2. Select your app → Event Subscriptions
 3. Set Request URL: `https://on3vboii0g.execute-api.us-west-2.amazonaws.com/webhooks/slack/events`
-4. Subscribe to events: `app_mention`, `message.channels`
+4. Subscribe to events: `app_mention`, `message.channels`, `message.groups`
 
 ### GitHub App
 

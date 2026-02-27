@@ -43,6 +43,7 @@ python app.py
 7. Subscribe to events (Event Subscriptions → Subscribe to bot events):
    - `app_mention`
    - `message.channels`
+   - `message.groups`
 
 ## Socket Mode vs HTTP Mode
 
@@ -154,7 +155,7 @@ After deployment, configure your Slack app:
 4. **Enable Event Subscriptions**:
    - Toggle ON
    - Request URL: `http://<LOADBALANCER_URL>/slack/events`
-   - Subscribe to bot events: `app_mention`, `message.channels`
+   - Subscribe to bot events: `app_mention`, `message.channels`, `message.groups`
 5. **OAuth & Permissions**: Ensure bot scopes are configured:
    - `app_mentions:read`
    - `chat:write`

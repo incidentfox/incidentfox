@@ -70,24 +70,26 @@ def get_onboarding_modules():
 # ---------------------------------------------------------------------------
 # Auto-investigate channel cache
 # ---------------------------------------------------------------------------
-# Cache: slack_team_id -> set of channel_ids that have auto-investigate enabled.
-# On cache hit (< 5 min old) the check is a pure dict+set lookup — zero latency.
-_auto_investigate_cache: Dict[str, set] = {}
-_auto_investigate_cache_ts: Dict[str, float] = {}
+# Cache: (slack_team_id, channel_id) -> bool indicating auto-investigate enabled.
+# Keyed per-channel so different teams in the same workspace don't poison each
+# other's cache entries.
+_auto_investigate_cache: Dict[tuple, bool] = {}
+_auto_investigate_cache_ts: Dict[tuple, float] = {}
 _AUTO_INVESTIGATE_CACHE_TTL = 300  # 5 minutes
 
 
 def _is_auto_investigate_channel(slack_team_id: str, channel_id: str) -> bool:
     """Check if a channel has auto-investigate enabled. Cached for 5 minutes."""
     now = time.time()
+    cache_key = (slack_team_id, channel_id)
     if (
-        slack_team_id in _auto_investigate_cache
-        and now - _auto_investigate_cache_ts.get(slack_team_id, 0)
+        cache_key in _auto_investigate_cache
+        and now - _auto_investigate_cache_ts.get(cache_key, 0)
         < _AUTO_INVESTIGATE_CACHE_TTL
     ):
-        return channel_id in _auto_investigate_cache[slack_team_id]
+        return _auto_investigate_cache[cache_key]
 
-    # Cache miss — fetch config via routing lookup
+    # Cache miss — fetch config via routing lookup for this specific channel
     try:
         cc = get_config_client()
         routing = cc.lookup_routing(channel_id, workspace_id=slack_team_id)
@@ -98,9 +100,10 @@ def _is_auto_investigate_channel(slack_team_id: str, channel_id: str) -> bool:
         else:
             config = {}
         auto_channels = set(config.get("auto_investigate", {}).get("channel_ids", []))
-        _auto_investigate_cache[slack_team_id] = auto_channels
-        _auto_investigate_cache_ts[slack_team_id] = now
-        return channel_id in auto_channels
+        result = channel_id in auto_channels
+        _auto_investigate_cache[cache_key] = result
+        _auto_investigate_cache_ts[cache_key] = now
+        return result
     except Exception as e:
         logger.warning(f"Failed to check auto_investigate config: {e}")
         return False
