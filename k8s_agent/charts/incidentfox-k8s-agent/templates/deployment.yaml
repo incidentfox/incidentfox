@@ -35,6 +35,8 @@ spec:
           image: "{{ .Values.image.repository }}:{{ include "incidentfox-k8s-agent.imageTag" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
             - name: INCIDENTFOX_API_KEY
               valueFrom:
                 secretKeyRef:

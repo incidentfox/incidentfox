@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     cluster_name: str = ""  # Name to identify this cluster
 
     # Gateway connection (default is IncidentFox SaaS gateway)
-    gateway_url: str = "https://orchestrator.incidentfox.ai/gateway"
+    gateway_url: str = "https://ui.incidentfox.ai/gateway"
 
     # Reconnection settings
     initial_reconnect_delay: float = 1.0
