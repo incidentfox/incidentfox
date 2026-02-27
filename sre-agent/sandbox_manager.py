@@ -318,6 +318,70 @@ static_resources:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
+  # gh CLI TLS proxy: terminates HTTPS on localhost:8443, forwards to
+  # credential-resolver HTTP. gh CLI requires HTTPS for GH_HOST.
+  - name: gh_tls_proxy
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 8443
+    filter_chains:
+    - transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          common_tls_context:
+            tls_certificates:
+            - certificate_chain:
+                filename: /etc/envoy/tls/tls.crt
+              private_key:
+                filename: /etc/envoy/tls/tls.key
+      filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: gh_tls_proxy
+          codec_type: AUTO
+          route_config:
+            name: gh_routes
+            virtual_hosts:
+            - name: gh_proxy
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: credential_resolver_github
+                  timeout: 30s
+          http_filters:
+          - name: envoy.filters.http.ext_authz
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+              transport_api_version: V3
+              http_service:
+                server_uri:
+                  uri: http://credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8002/check
+                  cluster: ext_authz
+                  timeout: 2s
+                path_prefix: "/extauthz"
+                authorization_request:
+                  headers_to_add:
+                  - key: "x-sandbox-jwt"
+                    value: "{jwt_token}"
+                  - key: "x-original-host"
+                    value: "%REQ(:authority)%"
+                authorization_response:
+                  allowed_upstream_headers:
+                    patterns:
+                    - exact: "authorization"
+                    - exact: "x-api-key"
+                    - exact: "x-tenant-id"
+                    - exact: "x-team-id"
+              failure_mode_allow: false
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
   clusters:
   # ext_authz cluster (credential-resolver service)
   - name: ext_authz
@@ -386,6 +450,20 @@ static_resources:
       typed_config:
         "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
         sni: api.us2.coralogix.com
+
+  # credential-resolver GitHub API proxy (used by gh_tls_proxy listener)
+  - name: credential_resolver_github
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: credential_resolver_github
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local
+                port_value: 8002
 
   # Passthrough cluster (placeholder)
   - name: passthrough_cluster
@@ -656,10 +734,10 @@ static_resources:
                                         "name": "K8S_GATEWAY_URL",
                                         "value": f"http://incidentfox-k8s-gateway.{self.namespace}.svc.cluster.local:8085",
                                     },
-                                    # gh CLI: route HTTPS API calls through credential-resolver
+                                    # gh CLI: route HTTPS API calls through local Envoy TLS proxy
                                     {
                                         "name": "GH_HOST",
-                                        "value": f"credential-resolver-svc.{cred_resolver_ns}.svc.cluster.local:8443",
+                                        "value": "localhost:8443",
                                     },
                                     # RAPTOR knowledge base: internal K8s service (no auth needed)
                                     {
