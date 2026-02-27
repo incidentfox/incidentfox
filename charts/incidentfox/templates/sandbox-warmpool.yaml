@@ -330,6 +330,9 @@ spec:
           value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/amplitude"
         - name: VERCEL_BASE_URL
           value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/vercel"
+        # K8s Gateway: route K8s commands to customer clusters via k8s-agent
+        - name: K8S_GATEWAY_URL
+          value: "http://incidentfox-k8s-gateway.{{ .Values.namespace }}.svc.cluster.local:8085"
         # RAPTOR knowledge base: internal K8s service (no auth needed)
         - name: RAPTOR_URL
           value: "http://incidentfox-rag.{{ .Values.namespace }}.svc.cluster.local:8000"
