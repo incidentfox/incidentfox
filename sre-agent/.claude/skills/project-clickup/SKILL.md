@@ -185,7 +185,7 @@ ClickUp integrates with the investigation workflow:
 1. **Start**: Check ClickUp for existing incident tickets
 2. **Investigate**: Use observability skills to find root cause
 3. **Document**: Add findings to ClickUp task as comments
-4. **Correlate**: Link with deployment-correlation skill for change analysis
+4. **Correlate**: Link with git log and curl $GITHUB_BASE_URL for change analysis
 
 ## Tips
 
