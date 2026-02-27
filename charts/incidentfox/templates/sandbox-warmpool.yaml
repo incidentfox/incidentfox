@@ -336,13 +336,34 @@ spec:
         # RAPTOR knowledge base: internal K8s service (no auth needed)
         - name: RAPTOR_URL
           value: "http://incidentfox-rag.{{ .Values.namespace }}.svc.cluster.local:8000"
-        # Laminar tracing (platform observability)
+        # =================================================================
+        # Agent Observability (LLM tracing — Langfuse / Laminar)
+        # =================================================================
+        {{- $obs := .Values.services.agent.agentObservability }}
+        {{- if and $obs (ne ($obs.backend | default "none") "none") }}
+        - name: OBSERVABILITY_BACKEND
+          value: {{ $obs.backend | quote }}
+        {{- if eq $obs.backend "langfuse" }}
+        - name: LANGFUSE_HOST
+          value: {{ $obs.langfuse.host | default "https://us.cloud.langfuse.com" | quote }}
+        - name: LANGFUSE_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $obs.langfuse.secretName }}
+              key: {{ $obs.langfuse.publicKeyKey }}
+        - name: LANGFUSE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $obs.langfuse.secretName }}
+              key: {{ $obs.langfuse.secretKeyKey }}
+        {{- else if eq $obs.backend "laminar" }}
         - name: LMNR_PROJECT_API_KEY
           valueFrom:
             secretKeyRef:
-              name: incidentfox-secrets
-              key: laminar-api-key
-              optional: true
+              name: {{ $obs.laminar.secretName }}
+              key: {{ $obs.laminar.apiKeyKey }}
+        {{- end }}
+        {{- end }}
         # Disable Laminar's claude-agent-sdk instrumentation
         - name: DISABLE_LAMINAR
           value: "true"

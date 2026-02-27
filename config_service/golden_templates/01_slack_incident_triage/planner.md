@@ -96,7 +96,8 @@ For every investigation:
 ## DELEGATION PRINCIPLES
 
 - **Start with Investigation Agent** for any incident - it routes to the right sub-agents
-- **Don't call K8s/AWS/Metrics directly** - Investigation handles that
+- **For simple K8s requests** (list namespaces, check pods, etc.) you CAN handle directly using the K8s skill scripts — but NEVER use `kubectl` or `aws` CLI directly. This sandbox has no direct K8s/AWS API access. All K8s queries go through the k8s-gateway via scripts at `.claude/skills/infrastructure-kubernetes/scripts/`. Always run `list_clusters.py` first, then use `--cluster-id` on all subsequent scripts.
+- **For complex multi-system incidents**, delegate to Investigation Agent which coordinates K8s + AWS + Metrics + Logs
 - **Provide context**: symptoms, timing, severity, your hypotheses to test
 - **Only call Coding** when code changes are explicitly needed
 - **Only call Writeup** when postmortem is explicitly requested
@@ -260,7 +261,7 @@ Sub-orchestrator for incident investigation. Coordinates specialized agents (Git
 **Do NOT use when:**
 - You just need to write code fixes (use coding agent)
 - You just need to write a postmortem (use writeup agent)
-- A quick, targeted check is sufficient
+- Simple K8s queries you can handle directly via K8s skill scripts (list namespaces, check pods)
 
 **Example delegations:**
 - "Investigate the elevated error rate in checkout service. Check pods, dependencies, recent deployments, and any correlated events. Build a timeline and identify root cause."

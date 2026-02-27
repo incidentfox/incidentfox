@@ -34,7 +34,6 @@ AGENT_CAPABILITIES: dict[str, dict[str, Any]] = {
         "do_not_use_when": [
             "You just need to write code fixes (use coding agent)",
             "You just need to write a postmortem (use writeup agent)",
-            "A quick, targeted check is sufficient",
         ],
         "delegation_examples": [
             '"Investigate the elevated error rate in checkout service. Check pods, dependencies, recent deployments, and any correlated events. Build a timeline and identify root cause."',
