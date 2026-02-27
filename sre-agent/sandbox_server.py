@@ -202,7 +202,9 @@ async def claim_sandbox(request: ClaimRequest, raw_request: Request):
     os.environ["SANDBOX_JWT"] = (
         request.jwt_token
     )  # For skill scripts hitting credential-resolver directly
-    os.environ["GH_TOKEN"] = request.jwt_token  # gh CLI auth via Envoy TLS → credential-resolver
+    os.environ["GH_TOKEN"] = (
+        request.jwt_token
+    )  # gh CLI auth via Envoy TLS → credential-resolver
     if request.team_token:
         os.environ["TEAM_TOKEN"] = request.team_token
     if request.configured_integrations:
