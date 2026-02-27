@@ -269,6 +269,44 @@ def register_all_handlers(bolt_app):
     bolt_app.options("input_model_id")(handle_model_options)
 
 
+_synced_slack_teams: set = set()
+
+
+def ensure_slack_integration_config(slack_team_id: str, bot_token: str):
+    """Ensure Slack bot_token is saved in config-service integration config.
+
+    Workspaces installed before the save_integration_config call was added
+    to the OAuth flow have bot_tokens in the installation store (DB) but
+    NOT in the integration config that credential-resolver reads.
+
+    Called lazily when processing events. Checks once per team per process
+    lifetime (cached in _synced_slack_teams).
+    """
+    if slack_team_id in _synced_slack_teams:
+        return
+    _synced_slack_teams.add(slack_team_id)
+
+    try:
+        cc = get_config_client()
+        existing = cc.get_integration_config(
+            slack_team_id=slack_team_id, integration_id="slack"
+        )
+        if existing and existing.get("bot_token"):
+            return  # Already configured
+
+        cc.save_integration_config(
+            slack_team_id=slack_team_id,
+            integration_id="slack",
+            config={"bot_token": bot_token},
+        )
+        logger.info(
+            f"Synced Slack bot_token to integration config for {slack_team_id}"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to sync Slack token for {slack_team_id}: {e}")
+        _synced_slack_teams.discard(slack_team_id)
+
+
 if __name__ == "__main__":
     logger.info("=" * 50)
     logger.info("IncidentFox Slack Bot v2.0.0")

@@ -592,6 +592,14 @@ def _handle_mention_impl(event, say, client, context):
     channel_id = event["channel"]
     team_id = event.get("team") or context.get("team_id", "unknown")
 
+    # Ensure Slack bot_token is in config-service integration config
+    # (retroactive sync for workspaces installed before this was automated)
+    bot_token = context.get("bot_token")
+    if team_id and bot_token:
+        from app import ensure_slack_integration_config
+
+        ensure_slack_integration_config(team_id, bot_token)
+
     # Check if trial has expired
     try:
         config_client = get_config_client()

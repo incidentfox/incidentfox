@@ -116,6 +116,16 @@ def api_request(
                 f"Slack API error {response.status_code}: {response.text}"
             )
 
+        if not response.text:
+            # Empty response from credential-resolver means the Slack proxy
+            # endpoint is not deployed. The catch-all ext_authz handler returns
+            # 200 with empty body for unrecognized paths.
+            raise RuntimeError(
+                "Slack proxy returned empty response. "
+                "The credential-resolver may need to be redeployed, "
+                "or Slack credentials are not configured for this workspace."
+            )
+
         data = response.json()
         if not data.get("ok"):
             raise RuntimeError(f"Slack API error: {data.get('error', 'unknown')}")
