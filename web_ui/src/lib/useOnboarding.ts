@@ -35,6 +35,35 @@ const DEFAULT_STATE: OnboardingState = {
 
 const LOCALSTORAGE_KEY = 'incidentfox_onboarding';
 
+/** Read onboarding state from localStorage, returning DEFAULT_STATE on missing/corrupt data. */
+function readLocalStorage(): OnboardingState {
+  try {
+    const cached = localStorage.getItem(LOCALSTORAGE_KEY);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return DEFAULT_STATE;
+}
+
+/** Merge two onboarding states, keeping the "more progressed" value (true wins over false). */
+function mergeStates(a: OnboardingState, b: OnboardingState): OnboardingState {
+  return {
+    welcomeModalSeen: a.welcomeModalSeen || b.welcomeModalSeen,
+    firstAgentRunCompleted: a.firstAgentRunCompleted || b.firstAgentRunCompleted,
+    completedAt: a.completedAt || b.completedAt,
+    quickStartStep: a.quickStartStep ?? b.quickStartStep,
+    step4Progress: {
+      visitedIntegrations:
+        (a.step4Progress?.visitedIntegrations || b.step4Progress?.visitedIntegrations) ?? false,
+      visitedAgentConfig:
+        (a.step4Progress?.visitedAgentConfig || b.step4Progress?.visitedAgentConfig) ?? false,
+    },
+  };
+}
+
 interface UseOnboardingOptions {
   /** When true, uses localStorage only (no server calls). Used for visitors. */
   isVisitor?: boolean;
@@ -49,21 +78,24 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load onboarding state from localStorage
-  const loadFromLocalStorage = useCallback(() => {
-    const cached = localStorage.getItem(LOCALSTORAGE_KEY);
-    if (cached) {
-      try {
-        setState(JSON.parse(cached));
-      } catch {
-        setState(DEFAULT_STATE);
-      }
-    } else {
-      setState(DEFAULT_STATE);
-    }
+  // Ref tracks the latest committed state so updateState can read it
+  // outside the React render cycle (for localStorage + server writes).
+  const stateRef = useRef<OnboardingState>(DEFAULT_STATE);
+
+  // Keep stateRef in sync with React state
+  const setStateAndRef = useCallback((next: OnboardingState) => {
+    stateRef.current = next;
+    setState(next);
   }, []);
 
-  // Load onboarding state
+  // Load onboarding state from localStorage
+  const loadFromLocalStorage = useCallback(() => {
+    const localState = readLocalStorage();
+    setStateAndRef(localState);
+  }, [setStateAndRef]);
+
+  // Load onboarding state — merges server + localStorage so completed
+  // steps are never lost even if one source is stale.
   const loadState = useCallback(async () => {
     // Visitors use localStorage only - no server calls
     if (isVisitorRef.current) {
@@ -77,21 +109,30 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
       setLoading(true);
       const res = await apiFetch('/api/team/preferences');
 
+      // Always read localStorage as a baseline
+      const localState = readLocalStorage();
+
       if (res.ok) {
         const data = await res.json();
-        setState({
+        const serverState: OnboardingState = {
           welcomeModalSeen: data.onboarding?.welcomeModalSeen ?? false,
           firstAgentRunCompleted: data.onboarding?.firstAgentRunCompleted ?? false,
           completedAt: data.onboarding?.completedAt,
           quickStartStep: data.onboarding?.quickStartStep ?? null,
           step4Progress: data.onboarding?.step4Progress ?? DEFAULT_STEP4_PROGRESS,
-        });
+        };
+
+        // Merge: true (completed) wins over false — if either source
+        // says a step is done we trust it.
+        const merged = mergeStates(serverState, localState);
+        setStateAndRef(merged);
+        localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(merged));
       } else if (res.status === 401) {
         // Not authenticated - use default state
-        setState(DEFAULT_STATE);
+        setStateAndRef(DEFAULT_STATE);
       } else {
         // On error, use localStorage fallback
-        loadFromLocalStorage();
+        setStateAndRef(localState);
       }
     } catch (e) {
       // Use localStorage fallback
@@ -99,36 +140,37 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
     } finally {
       setLoading(false);
     }
-  }, [loadFromLocalStorage]);
+  }, [loadFromLocalStorage, setStateAndRef]);
 
-  // Save onboarding state
-  const updateState = useCallback(async (updates: Partial<OnboardingState>) => {
-    const newState = { ...state, ...updates };
-    setState(newState);
+  // Save onboarding state.
+  // Uses a functional setState so rapid successive calls (e.g. markWelcomeSeen +
+  // markFirstAgentRunCompleted in the same tick) merge correctly instead of
+  // the second call overwriting the first with stale closure state.
+  const updateState = useCallback((updates: Partial<OnboardingState>) => {
+    setState(prev => {
+      const newState = { ...prev, ...updates };
+      stateRef.current = newState;
 
-    // Save to localStorage
-    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(newState));
+      // Save to localStorage synchronously so other components/tabs pick it up
+      localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(newState));
 
-    // Dispatch custom event for same-tab listeners
-    window.dispatchEvent(new CustomEvent('onboarding-state-change', { detail: newState }));
+      // Dispatch custom event for same-tab listeners
+      window.dispatchEvent(new CustomEvent('onboarding-state-change', { detail: newState }));
 
-    // Visitors don't sync to server - localStorage only
-    if (isVisitorRef.current) {
-      return;
-    }
+      // Async server sync — fire-and-forget but log failures
+      if (!isVisitorRef.current) {
+        apiFetch('/api/team/preferences', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ onboarding: newState }),
+        }).catch(e => {
+          console.warn('[onboarding] Failed to save to server:', e);
+        });
+      }
 
-    try {
-      await apiFetch('/api/team/preferences', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          onboarding: newState,
-        }),
-      });
-    } catch (e) {
-      // Silently fail - localStorage is the fallback
-    }
-  }, [state]);
+      return newState;
+    });
+  }, []);
 
   // Mark welcome modal as seen
   const markWelcomeSeen = useCallback(() => {
@@ -146,7 +188,7 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
   // Reset onboarding (for testing)
   const resetOnboarding = useCallback(() => {
     localStorage.removeItem(LOCALSTORAGE_KEY);
-    setState(DEFAULT_STATE);
+    setStateAndRef(DEFAULT_STATE);
 
     // Visitors don't sync to server
     if (isVisitorRef.current) {
@@ -159,8 +201,10 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
       body: JSON.stringify({
         onboarding: DEFAULT_STATE,
       }),
-    }).catch(() => {});
-  }, []);
+    }).catch(e => {
+      console.warn('[onboarding] Failed to reset on server:', e);
+    });
+  }, [setStateAndRef]);
 
   // Save quick start step (call when user navigates away mid-wizard)
   const setQuickStartStep = useCallback((step: number | null) => {
@@ -174,31 +218,37 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
 
   // Mark Step 4 Integrations as visited
   const markStep4IntegrationsVisited = useCallback(() => {
-    const currentProgress = state.step4Progress ?? DEFAULT_STEP4_PROGRESS;
-    const newProgress = { ...currentProgress, visitedIntegrations: true };
+    setState(prev => {
+      const currentProgress = prev.step4Progress ?? DEFAULT_STEP4_PROGRESS;
+      const newProgress = { ...currentProgress, visitedIntegrations: true };
 
-    // If both are now visited, advance to step 5
-    if (newProgress.visitedIntegrations && newProgress.visitedAgentConfig) {
-      updateState({ quickStartStep: 5, step4Progress: newProgress });
-    } else {
-      // Stay on step 4, but save progress
-      updateState({ quickStartStep: 4, step4Progress: newProgress });
-    }
-  }, [state.step4Progress, updateState]);
+      // If both are now visited, advance to step 5
+      if (newProgress.visitedIntegrations && newProgress.visitedAgentConfig) {
+        updateState({ quickStartStep: 5, step4Progress: newProgress });
+      } else {
+        // Stay on step 4, but save progress
+        updateState({ quickStartStep: 4, step4Progress: newProgress });
+      }
+      return prev; // updateState handles the actual state change
+    });
+  }, [updateState]);
 
   // Mark Step 4 Agent Config as visited
   const markStep4AgentConfigVisited = useCallback(() => {
-    const currentProgress = state.step4Progress ?? DEFAULT_STEP4_PROGRESS;
-    const newProgress = { ...currentProgress, visitedAgentConfig: true };
+    setState(prev => {
+      const currentProgress = prev.step4Progress ?? DEFAULT_STEP4_PROGRESS;
+      const newProgress = { ...currentProgress, visitedAgentConfig: true };
 
-    // If both are now visited, advance to step 5
-    if (newProgress.visitedIntegrations && newProgress.visitedAgentConfig) {
-      updateState({ quickStartStep: 5, step4Progress: newProgress });
-    } else {
-      // Stay on step 4, but save progress
-      updateState({ quickStartStep: 4, step4Progress: newProgress });
-    }
-  }, [state.step4Progress, updateState]);
+      // If both are now visited, advance to step 5
+      if (newProgress.visitedIntegrations && newProgress.visitedAgentConfig) {
+        updateState({ quickStartStep: 5, step4Progress: newProgress });
+      } else {
+        // Stay on step 4, but save progress
+        updateState({ quickStartStep: 4, step4Progress: newProgress });
+      }
+      return prev; // updateState handles the actual state change
+    });
+  }, [updateState]);
 
   // Get what action to show next for Step 4
   const getStep4NextAction = useCallback((): Step4NextAction => {
