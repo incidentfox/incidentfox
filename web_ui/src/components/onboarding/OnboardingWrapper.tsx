@@ -16,7 +16,9 @@ interface OnboardingWrapperProps {
  */
 export function OnboardingWrapper({ children }: OnboardingWrapperProps) {
   const { identity } = useIdentity();
-  const isVisitor = identity?.auth_kind === 'visitor';
+  // Admin users don't have team context, so treat them like visitors
+  // (localStorage-only) to avoid 401 from team-scoped /api/team/preferences
+  const isVisitor = identity?.auth_kind === 'visitor' || identity?.role === 'admin';
   const [showWizard, setShowWizard] = useState(false);
   const [wizardInitialStep, setWizardInitialStep] = useState(1);
 

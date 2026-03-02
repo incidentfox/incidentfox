@@ -263,7 +263,10 @@ export default function AdminConfigPage() {
   const [loadingSchemas, setLoadingSchemas] = useState(true);
 
   const loadNodes = useCallback(async () => {
-    if (!identity?.org_id) return;
+    if (!identity?.org_id) {
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch(`/api/admin/orgs/${identity.org_id}/nodes`);
       if (res.ok) {
@@ -786,6 +789,16 @@ export default function AdminConfigPage() {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
         <div className="animate-pulse">Loading configuration...</div>
+      </div>
+    );
+  }
+
+  if (!identity?.org_id) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
+        <div className="text-red-400">
+          No organization found. Use an org-scoped admin token to access configurations.
+        </div>
       </div>
     );
   }
