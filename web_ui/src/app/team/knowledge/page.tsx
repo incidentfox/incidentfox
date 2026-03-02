@@ -24,7 +24,6 @@ import {
 import { TreeSelector, type EffectiveTree, type TreeStats } from '@/components/knowledge/TreeSelector';
 import { CreateTreeModal } from '@/components/knowledge/CreateTreeModal';
 import { UploadDocumentModal } from '@/components/knowledge/UploadDocumentModal';
-import { HelpTip } from '@/components/onboarding/HelpTip';
 
 // Lazy load the TreeExplorer since it's heavy
 const TreeExplorer = lazy(() =>
@@ -349,151 +348,7 @@ export default function TeamKnowledgePage() {
     }
   };
 
-  // Full-page layout for Tree Explorer
-  if (activeTab === 'explorer') {
-    return (
-      <div className="h-[calc(100vh-64px)] flex flex-col">
-        {/* Header */}
-        <div className="flex-shrink-0 px-6 py-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
-                <Layers className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  Knowledge Base
-                  <HelpTip id="knowledge-base" position="right">
-                    <strong>Knowledge Base</strong> stores your team's documentation, runbooks, and learned patterns. The AI uses this to provide context-aware incident investigations.
-                  </HelpTip>
-                </h1>
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  RAPTOR Tree Explorer • Semantic Search & Q&A
-                  <HelpTip id="raptor-tree" position="right">
-                    <strong>RAPTOR</strong> organizes knowledge hierarchically using AI clustering. Higher nodes summarize groups of related documents, enabling fast semantic search across large knowledge bases.
-                  </HelpTip>
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {/* Add Document Button */}
-              {selectedTree && (
-                <button
-                  onClick={() => setShowUploadModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Upload className="w-4 h-4" />
-                  Add Document
-                </button>
-              )}
-
-              {/* Tab switcher */}
-              <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-                <button
-                  onClick={() => setActiveTab('explorer')}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
-                  activeTab === 'explorer'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                <Network className="w-4 h-4" />
-                Explorer
-              </button>
-              <button
-                onClick={() => setActiveTab('documents')}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
-                  (activeTab as TabType) === 'documents'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                <FileText className="w-4 h-4" />
-                Documents
-              </button>
-              <button
-                onClick={() => setActiveTab('proposed')}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
-                  (activeTab as TabType) === 'proposed'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                <Sparkles className="w-4 h-4" />
-                AI Proposed
-                {proposedChanges.length > 0 && (
-                  <span className="w-5 h-5 rounded-full bg-gray-500 text-white text-xs flex items-center justify-center">
-                    {proposedChanges.length}
-                  </span>
-                )}
-                <HelpTip id="ai-proposed" position="bottom">
-                  AI learns from your incidents and proposes new knowledge entries. Review and approve them to improve future investigations.
-                </HelpTip>
-              </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tree Cards Section */}
-        <div className="flex-shrink-0 px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-800">
-          <TreeSelector
-            trees={effectiveTrees}
-            treeStats={treeStats}
-            selectedTree={selectedTree}
-            onSelectTree={setSelectedTree}
-            loading={treesLoading}
-            onCreateTree={() => setShowCreateTreeModal(true)}
-          />
-        </div>
-
-        {/* Tree Explorer */}
-        <div className="flex-1 min-h-0">
-          {selectedTree ? (
-            <Suspense
-              fallback={
-                <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-                  <div className="text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-500">Loading Tree Explorer...</p>
-                  </div>
-                </div>
-              }
-            >
-              <TreeExplorer treeName={selectedTree} />
-            </Suspense>
-          ) : (
-            <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-              <div className="text-center">
-                <Layers className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-500">Select a tree to explore</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Create Tree Modal */}
-        {showCreateTreeModal && (
-          <CreateTreeModal
-            onClose={() => setShowCreateTreeModal(false)}
-            onCreated={handleTreeCreated}
-          />
-        )}
-
-        {/* Upload Document Modal */}
-        {showUploadModal && selectedTree && (
-          <UploadDocumentModal
-            treeName={selectedTree}
-            onClose={() => setShowUploadModal(false)}
-            onUploaded={handleDocumentUploaded}
-          />
-        )}
-      </div>
-    );
-  }
-
-  // Standard layout for Documents and Proposed tabs
+  // Unified layout for all tabs
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
@@ -591,6 +446,64 @@ export default function TeamKnowledgePage() {
         </div>
       ) : (
         <>
+          {activeTab === 'explorer' && (
+            <>
+              {/* Tree Cards Section */}
+              <div className="mb-6">
+                <TreeSelector
+                  trees={effectiveTrees}
+                  treeStats={treeStats}
+                  selectedTree={selectedTree}
+                  onSelectTree={setSelectedTree}
+                  loading={treesLoading}
+                  onCreateTree={() => setShowCreateTreeModal(true)}
+                />
+              </div>
+
+              {/* Tree Explorer */}
+              <div className="h-[600px] rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                {selectedTree ? (
+                  <Suspense
+                    fallback={
+                      <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                        <div className="text-center">
+                          <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto mb-3" />
+                          <p className="text-gray-500">Loading Tree Explorer...</p>
+                        </div>
+                      </div>
+                    }
+                  >
+                    <TreeExplorer treeName={selectedTree} />
+                  </Suspense>
+                ) : (
+                  <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                    <div className="text-center">
+                      <Layers className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                      <p className="text-gray-500">Select a tree to explore</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Create Tree Modal */}
+              {showCreateTreeModal && (
+                <CreateTreeModal
+                  onClose={() => setShowCreateTreeModal(false)}
+                  onCreated={handleTreeCreated}
+                />
+              )}
+
+              {/* Upload Document Modal */}
+              {showUploadModal && selectedTree && (
+                <UploadDocumentModal
+                  treeName={selectedTree}
+                  onClose={() => setShowUploadModal(false)}
+                  onUploaded={handleDocumentUploaded}
+                />
+              )}
+            </>
+          )}
+
           {activeTab === 'documents' && (
             <>
               {/* Search */}
