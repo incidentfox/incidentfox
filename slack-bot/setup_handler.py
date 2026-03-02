@@ -1153,6 +1153,8 @@ def handle_k8s_saas_remove_cluster(ack, body, client):
     except (json.JSONDecodeError, TypeError):
         pass
 
+    view_id = body.get("view", {}).get("id")
+
     try:
         config_client = get_config_client()
 
@@ -1161,6 +1163,7 @@ def handle_k8s_saas_remove_cluster(ack, body, client):
             slack_team_id=team_id,
             cluster_id=cluster_id,
         )
+        logger.info(f"Deleted K8s cluster {cluster_id} for team {team_id}")
 
         # Refresh the clusters list
         clusters = config_client.list_k8s_clusters(team_id)
@@ -1174,14 +1177,30 @@ def handle_k8s_saas_remove_cluster(ack, body, client):
         )
 
         # Update the modal
-        client.views_update(
-            view_id=body.get("view", {}).get("id"),
-            view=modal,
-        )
+        client.views_update(view_id=view_id, view=modal)
         logger.info(f"Removed K8s cluster {cluster_id} for team {team_id}")
 
     except Exception as e:
         logger.error(f"Failed to remove K8s cluster: {e}", exc_info=True)
+        # Show error to user instead of failing silently
+        try:
+            if view_id:
+                onboarding = get_onboarding_modules()
+                clusters = []
+                try:
+                    clusters = get_config_client().list_k8s_clusters(team_id)
+                except Exception:
+                    pass
+                error_modal = onboarding.build_k8s_saas_clusters_modal(
+                    team_id=team_id,
+                    clusters=clusters,
+                    category_filter=category_filter,
+                    entry_point=entry_point,
+                    error_message="Failed to remove cluster. Please try again.",
+                )
+                client.views_update(view_id=view_id, view=error_modal)
+        except Exception:
+            pass  # Last resort — original error is already logged
 
 
 def handle_k8s_saas_clusters_modal_close(ack, body, client, view):

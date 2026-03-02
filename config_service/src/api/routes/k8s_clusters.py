@@ -590,6 +590,8 @@ async def admin_delete_k8s_cluster(
     Revoke a K8s cluster's access (admin endpoint).
 
     Used by slack-bot to disconnect clusters on behalf of users.
+    K8s clusters are org-scoped. team_node_id in the URL is accepted
+    for backward compatibility but ignored for ownership checks.
     """
     check_org_access(principal, org_id)
 
@@ -598,8 +600,8 @@ async def admin_delete_k8s_cluster(
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster not found")
 
-    # Verify ownership
-    if cluster.org_id != org_id or cluster.team_node_id != team_node_id:
+    # Verify ownership (org-scoped, team_node_id ignored for backward compat)
+    if cluster.org_id != org_id:
         raise HTTPException(status_code=404, detail="Cluster not found")
 
     success = revoke_k8s_cluster(

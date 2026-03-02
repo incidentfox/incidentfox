@@ -4589,6 +4589,7 @@ def build_k8s_saas_clusters_modal(
     clusters: List[Dict[str, Any]],
     category_filter: str = "all",
     entry_point: str = "integrations",
+    error_message: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Build the K8s SaaS clusters management modal.
@@ -4600,11 +4601,24 @@ def build_k8s_saas_clusters_modal(
         clusters: List of cluster summary dicts from config_client
         category_filter: Category filter to preserve on back navigation
         entry_point: Entry point to preserve on back navigation
+        error_message: Optional error message to display at top of modal
 
     Returns:
         Slack modal view object
     """
     blocks = []
+
+    if error_message:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":warning: {error_message}",
+                },
+            }
+        )
+        blocks.append({"type": "divider"})
 
     # Header
     logo_url = get_integration_logo_url("kubernetes_saas")
