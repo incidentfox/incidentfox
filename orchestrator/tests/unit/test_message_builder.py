@@ -1,10 +1,10 @@
 """Unit tests for message_builder IR and builder functions."""
 
 from incidentfox_orchestrator.message_builder import (
+    _parse_markdown_to_sections,
     build_final_content,
     build_progress_content,
     build_question_content,
-    _parse_markdown_to_sections,
 )
 from incidentfox_orchestrator.message_state import (
     InvestigationState,
@@ -27,16 +27,23 @@ class TestBuildProgressContent:
         assert content.sections[0].type == "header"
 
     def test_with_thoughts_and_tools(self):
-        state = _make_state(thoughts=[
-            ThoughtSection(
-                text="Analyzing logs",
-                completed=True,
-                tools=[
-                    ToolInfo(name="Bash", command="kubectl logs", running=False, success=True),
-                ],
-            ),
-            ThoughtSection(text="Checking metrics", completed=False),
-        ])
+        state = _make_state(
+            thoughts=[
+                ThoughtSection(
+                    text="Analyzing logs",
+                    completed=True,
+                    tools=[
+                        ToolInfo(
+                            name="Bash",
+                            command="kubectl logs",
+                            running=False,
+                            success=True,
+                        ),
+                    ],
+                ),
+                ThoughtSection(text="Checking metrics", completed=False),
+            ]
+        )
         state.current_tool = ToolInfo(name="Grep", pattern="error", running=True)
 
         content = build_progress_content(state)
@@ -80,7 +87,9 @@ class TestBuildFinalContent:
 
     def test_web_ui_link(self):
         state = _make_state(final_result="Done")
-        content = build_final_content(state, run_id="r1", web_ui_url="https://app.incidentfox.ai")
+        content = build_final_content(
+            state, run_id="r1", web_ui_url="https://app.incidentfox.ai"
+        )
         url_actions = [a for a in content.actions if a.action_id == "view_result"]
         assert len(url_actions) == 1
         assert url_actions[0].value == "https://app.incidentfox.ai"
@@ -132,7 +141,9 @@ class TestBuildFinalContentPhase5:
     def test_result_with_image_url(self):
         state = _make_state(
             final_result="Here's the chart",
-            result_images=[{"url": "https://files.example.com/chart.png", "alt": "CPU usage"}],
+            result_images=[
+                {"url": "https://files.example.com/chart.png", "alt": "CPU usage"}
+            ],
         )
         content = build_final_content(state, run_id="r1")
         image_sections = [s for s in content.sections if s.type == "image"]
@@ -143,7 +154,9 @@ class TestBuildFinalContentPhase5:
     def test_result_with_base64_image(self):
         state = _make_state(
             final_result="Chart below",
-            result_images=[{"data": "iVBORw0KGg==", "media_type": "image/png", "alt": "Memory"}],
+            result_images=[
+                {"data": "iVBORw0KGg==", "media_type": "image/png", "alt": "Memory"}
+            ],
         )
         content = build_final_content(state, run_id="r1")
         image_sections = [s for s in content.sections if s.type == "image"]
@@ -154,12 +167,14 @@ class TestBuildFinalContentPhase5:
     def test_result_with_file_attachment(self):
         state = _make_state(
             final_result="Report attached",
-            result_files=[{
-                "filename": "report.txt",
-                "description": "Thread dump analysis",
-                "url": "https://files.example.com/report.txt",
-                "size": 51200,
-            }],
+            result_files=[
+                {
+                    "filename": "report.txt",
+                    "description": "Thread dump analysis",
+                    "url": "https://files.example.com/report.txt",
+                    "size": 51200,
+                }
+            ],
         )
         content = build_final_content(state, run_id="r1")
         file_sections = [s for s in content.sections if s.type == "file"]
@@ -174,13 +189,19 @@ class TestBuildFinalContentPhase5:
             result_files=[{"filename": "data.csv", "description": "Export data"}],
         )
         content = build_final_content(state, run_id="r1")
-        text_sections = [s for s in content.sections if s.type == "text" and "Attached file" in s.text]
+        text_sections = [
+            s
+            for s in content.sections
+            if s.type == "text" and "Attached file" in s.text
+        ]
         assert len(text_sections) == 1
 
 
 class TestMarkdownParsing:
     def test_headings(self):
-        sections = _parse_markdown_to_sections("# Title\nSome text\n## Subtitle\nMore text")
+        sections = _parse_markdown_to_sections(
+            "# Title\nSome text\n## Subtitle\nMore text"
+        )
         types = [s.type for s in sections]
         assert "header" in types
         headers = [s for s in sections if s.type == "header"]

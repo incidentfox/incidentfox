@@ -9,9 +9,7 @@ from incidentfox_orchestrator.message_state import (
 
 class TestInvestigationState:
     def test_empty_state(self):
-        state = InvestigationState(
-            session_id="s1", run_id="r1", correlation_id="c1"
-        )
+        state = InvestigationState(session_id="s1", run_id="r1", correlation_id="c1")
         assert state.thought_count == 0
         assert state.tool_count == 0
         assert state.is_complete is False

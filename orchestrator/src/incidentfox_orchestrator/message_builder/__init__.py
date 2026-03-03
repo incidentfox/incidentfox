@@ -15,7 +15,6 @@ from typing import Any, Dict, List, Optional
 
 from incidentfox_orchestrator.message_state import InvestigationState, ToolInfo
 
-
 # ---------------------------------------------------------------------------
 # Intermediate Representation
 # ---------------------------------------------------------------------------
@@ -101,37 +100,45 @@ def build_progress_content(state: InvestigationState) -> MessageContent:
     """
     sections: List[ContentSection] = []
 
-    sections.append(ContentSection(
-        type="header",
-        text="Investigation in progress",
-        level=2,
-    ))
+    sections.append(
+        ContentSection(
+            type="header",
+            text="Investigation in progress",
+            level=2,
+        )
+    )
 
     # Show completed thoughts
     for i, thought in enumerate(state.thoughts):
         icon = ICON_DONE if thought.completed else ICON_THINKING
         thought_text = _truncate(thought.text, 200)
-        sections.append(ContentSection(
-            type="progress",
-            text=f"{icon} {thought_text}",
-        ))
+        sections.append(
+            ContentSection(
+                type="progress",
+                text=f"{icon} {thought_text}",
+            )
+        )
 
         # Show tools for this thought (summarized)
         for tool in thought.tools:
             tool_text = _format_tool_summary(tool)
-            sections.append(ContentSection(
-                type="text",
-                text=f"    {tool_text}",
-            ))
+            sections.append(
+                ContentSection(
+                    type="text",
+                    text=f"    {tool_text}",
+                )
+            )
 
     # Show current tool if any
     if state.current_tool and state.current_tool.running:
         tool_name = state.current_tool.name
         detail = _tool_detail(state.current_tool)
-        sections.append(ContentSection(
-            type="progress",
-            text=f"{ICON_LOADING} Running {tool_name}{detail}...",
-        ))
+        sections.append(
+            ContentSection(
+                type="progress",
+                text=f"{ICON_LOADING} Running {tool_name}{detail}...",
+            )
+        )
 
     # Stats footer
     stats = f"{state.thought_count} thoughts, {state.tool_count} tools"
@@ -151,18 +158,22 @@ def build_final_content(
     sections: List[ContentSection] = []
 
     if state.error:
-        sections.append(ContentSection(
-            type="header",
-            text=f"{ICON_ERROR} Investigation Error",
-            level=2,
-        ))
+        sections.append(
+            ContentSection(
+                type="header",
+                text=f"{ICON_ERROR} Investigation Error",
+                level=2,
+            )
+        )
         sections.append(ContentSection(type="text", text=state.error))
     else:
-        sections.append(ContentSection(
-            type="header",
-            text="Investigation Result",
-            level=2,
-        ))
+        sections.append(
+            ContentSection(
+                type="header",
+                text="Investigation Result",
+                level=2,
+            )
+        )
 
         # Parse the markdown result into sections
         result_text = state.final_result or ""
@@ -177,19 +188,23 @@ def build_final_content(
             media_type = img.get("media_type", "image/png")
             alt = img.get("alt", "Investigation image")
             if url:
-                sections.append(ContentSection(
-                    type="image",
-                    image_url=url,
-                    alt_text=alt,
-                ))
+                sections.append(
+                    ContentSection(
+                        type="image",
+                        image_url=url,
+                        alt_text=alt,
+                    )
+                )
             elif data:
                 # Base64-encoded image from agent sandbox
-                sections.append(ContentSection(
-                    type="image",
-                    image_data=data,
-                    image_media_type=media_type,
-                    alt_text=alt,
-                ))
+                sections.append(
+                    ContentSection(
+                        type="image",
+                        image_data=data,
+                        image_media_type=media_type,
+                        alt_text=alt,
+                    )
+                )
 
     # File attachments
     if state.result_files:
@@ -200,19 +215,23 @@ def build_final_content(
             size = f.get("size", 0)
             display = description or filename
             if url:
-                sections.append(ContentSection(
-                    type="file",
-                    text=display,
-                    filename=filename,
-                    file_url=url,
-                    file_size=size,
-                ))
+                sections.append(
+                    ContentSection(
+                        type="file",
+                        text=display,
+                        filename=filename,
+                        file_url=url,
+                        file_size=size,
+                    )
+                )
             else:
                 # No URL available — just mention the file
-                sections.append(ContentSection(
-                    type="text",
-                    text=f"Attached file: {display}",
-                ))
+                sections.append(
+                    ContentSection(
+                        type="text",
+                        text=f"Attached file: {display}",
+                    )
+                )
 
     # Summary stats
     stats = f"{state.thought_count} thoughts, {state.tool_count} tools used"
@@ -245,12 +264,14 @@ def build_final_content(
 
     # Optional: link to web UI for full investigation view
     if web_ui_url:
-        actions.append(ActionButton(
-            label="View Full Result",
-            action_id="view_result",
-            value=web_ui_url,
-            style="primary",
-        ))
+        actions.append(
+            ActionButton(
+                label="View Full Result",
+                action_id="view_result",
+                value=web_ui_url,
+                style="primary",
+            )
+        )
 
     return MessageContent(sections=sections, actions=actions)
 
@@ -268,18 +289,22 @@ def build_question_content(
             if isinstance(opt, str):
                 options.append(QuestionOption(label=opt, value=opt))
             elif isinstance(opt, dict):
-                options.append(QuestionOption(
-                    label=opt.get("label", ""),
-                    value=opt.get("value", opt.get("label", "")),
-                    description=opt.get("description", ""),
-                ))
+                options.append(
+                    QuestionOption(
+                        label=opt.get("label", ""),
+                        value=opt.get("value", opt.get("label", "")),
+                        description=opt.get("description", ""),
+                    )
+                )
 
-        parsed_questions.append(Question(
-            text=q.get("question", q.get("text", "")),
-            options=options,
-            multi_select=q.get("multiSelect", False),
-            question_id=f"q{i}",
-        ))
+        parsed_questions.append(
+            Question(
+                text=q.get("question", q.get("text", "")),
+                options=options,
+                multi_select=q.get("multiSelect", False),
+                question_id=f"q{i}",
+            )
+        )
 
     sections = [
         ContentSection(
@@ -340,11 +365,13 @@ def _parse_markdown_to_sections(text: str) -> List[ContentSection]:
             language = parts[i + 1]
             code = parts[i + 2]
             if code.strip():
-                sections.append(ContentSection(
-                    type="code_block",
-                    text=code.strip(),
-                    language=language,
-                ))
+                sections.append(
+                    ContentSection(
+                        type="code_block",
+                        text=code.strip(),
+                        language=language,
+                    )
+                )
             i += 3
         else:
             # Remaining text after last code block
@@ -368,11 +395,13 @@ def _parse_text_segment(text: str, sections: List[ContentSection]) -> None:
             # Flush paragraph
             _flush_paragraph(current_paragraph, sections)
             level = len(heading_match.group(1))
-            sections.append(ContentSection(
-                type="header",
-                text=heading_match.group(2).strip(),
-                level=level,
-            ))
+            sections.append(
+                ContentSection(
+                    type="header",
+                    text=heading_match.group(2).strip(),
+                    level=level,
+                )
+            )
         else:
             current_paragraph.append(line)
 

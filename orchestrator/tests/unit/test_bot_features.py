@@ -12,7 +12,9 @@ class TestGChatWelcomeAndSetup:
     def test_welcome_message_includes_setup_mention(self):
         with patch.dict(os.environ, {"WEB_UI_URL": "https://app.incidentfox.ai"}):
             import importlib
+
             import incidentfox_orchestrator.webhooks.google_chat_app as gca
+
             importlib.reload(gca)
 
             assert "setup" in gca.WELCOME_MESSAGE.lower()
@@ -21,7 +23,9 @@ class TestGChatWelcomeAndSetup:
     def test_welcome_message_without_web_ui_url(self):
         with patch.dict(os.environ, {"WEB_UI_URL": ""}, clear=False):
             import importlib
+
             import incidentfox_orchestrator.webhooks.google_chat_app as gca
+
             importlib.reload(gca)
 
             assert "setup" in gca.WELCOME_MESSAGE.lower()
@@ -30,7 +34,9 @@ class TestGChatWelcomeAndSetup:
     def test_web_ui_url_strips_trailing_slash(self):
         with patch.dict(os.environ, {"WEB_UI_URL": "https://app.incidentfox.ai/"}):
             import importlib
+
             import incidentfox_orchestrator.webhooks.google_chat_app as gca
+
             importlib.reload(gca)
 
             assert "https://app.incidentfox.ai/team/integrations" in gca.WELCOME_MESSAGE
@@ -44,7 +50,9 @@ class TestGChatCardClicked:
     async def test_handle_card_clicked_submit_answer(self):
         with patch.dict(os.environ, {"WEB_UI_URL": ""}):
             import importlib
+
             import incidentfox_orchestrator.webhooks.google_chat_app as gca
+
             importlib.reload(gca)
 
             mock_config = MagicMock()
@@ -88,7 +96,9 @@ class TestGChatCardClicked:
     async def test_handle_card_clicked_feedback(self):
         with patch.dict(os.environ, {"WEB_UI_URL": ""}):
             import importlib
+
             import incidentfox_orchestrator.webhooks.google_chat_app as gca
+
             importlib.reload(gca)
 
             mock_config = MagicMock()

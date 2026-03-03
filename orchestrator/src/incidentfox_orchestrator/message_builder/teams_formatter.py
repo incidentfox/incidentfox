@@ -50,13 +50,15 @@ def to_adaptive_card(content: MessageContent) -> Dict[str, Any]:
 
     # Footer
     if content.footer:
-        body.append({
-            "type": "TextBlock",
-            "text": content.footer,
-            "size": "Small",
-            "color": "Light",
-            "wrap": True,
-        })
+        body.append(
+            {
+                "type": "TextBlock",
+                "text": content.footer,
+                "size": "Small",
+                "color": "Light",
+                "wrap": True,
+            }
+        )
 
     card: Dict[str, Any] = {
         "type": "AdaptiveCard",
@@ -143,7 +145,11 @@ def _section_to_element(section: ContentSection) -> Dict[str, Any] | None:
             size_str = ""
             if section.file_size:
                 size_kb = section.file_size / 1024
-                size_str = f" ({size_kb:.0f} KB)" if size_kb < 1024 else f" ({size_kb / 1024:.1f} MB)"
+                size_str = (
+                    f" ({size_kb:.0f} KB)"
+                    if size_kb < 1024
+                    else f" ({size_kb / 1024:.1f} MB)"
+                )
             return {
                 "type": "TextBlock",
                 "text": f"\U0001f4ce [{section.filename or 'Download'}]({section.file_url}){size_str}",
@@ -168,7 +174,9 @@ def _section_to_element(section: ContentSection) -> Dict[str, Any] | None:
     elif section.type == "list":
         # Render as markdown list in a TextBlock
         if section.style == "ordered":
-            items_text = "\n".join(f"{i + 1}. {item}" for i, item in enumerate(section.items))
+            items_text = "\n".join(
+                f"{i + 1}. {item}" for i, item in enumerate(section.items)
+            )
         else:
             items_text = "\n".join(f"- {item}" for item in section.items)
         return {
@@ -185,34 +193,37 @@ def _question_to_elements(question: Question) -> List[Dict[str, Any]]:
     elements: List[Dict[str, Any]] = []
 
     # Question text
-    elements.append({
-        "type": "TextBlock",
-        "text": question.text,
-        "wrap": True,
-        "weight": "Bolder",
-    })
+    elements.append(
+        {
+            "type": "TextBlock",
+            "text": question.text,
+            "wrap": True,
+            "weight": "Bolder",
+        }
+    )
 
     if question.options:
         # Use Input.ChoiceSet for options
-        choices = [
-            {"title": opt.label, "value": opt.value}
-            for opt in question.options
-        ]
-        elements.append({
-            "type": "Input.ChoiceSet",
-            "id": question.question_id,
-            "isMultiSelect": question.multi_select,
-            "style": "expanded",
-            "choices": choices,
-        })
+        choices = [{"title": opt.label, "value": opt.value} for opt in question.options]
+        elements.append(
+            {
+                "type": "Input.ChoiceSet",
+                "id": question.question_id,
+                "isMultiSelect": question.multi_select,
+                "style": "expanded",
+                "choices": choices,
+            }
+        )
     else:
         # Free-form text input
-        elements.append({
-            "type": "Input.Text",
-            "id": question.question_id,
-            "placeholder": "Type your answer...",
-            "isMultiline": True,
-        })
+        elements.append(
+            {
+                "type": "Input.Text",
+                "id": question.question_id,
+                "placeholder": "Type your answer...",
+                "isMultiline": True,
+            }
+        )
 
     return elements
 

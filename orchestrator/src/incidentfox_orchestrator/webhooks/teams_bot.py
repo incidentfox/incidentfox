@@ -101,7 +101,11 @@ WELCOME_MESSAGE = (
     "- `@IncidentFox setup` — configure integrations\n\n"
     "I'll analyze logs, metrics, and infrastructure to help you "
     "triage incidents faster."
-    + (f"\n\nConfigure your team at: {WEB_UI_URL}/team/integrations" if WEB_UI_URL else "")
+    + (
+        f"\n\nConfigure your team at: {WEB_UI_URL}/team/integrations"
+        if WEB_UI_URL
+        else ""
+    )
 )
 
 HELP_MESSAGE = (
@@ -544,10 +548,16 @@ class TeamsIntegration:
             )
 
             # Set up investigation state for streaming progress
+            from incidentfox_orchestrator.message_builder import (
+                build_final_content,
+                build_progress_content,
+                build_question_content,
+            )
+            from incidentfox_orchestrator.message_builder.teams_formatter import (
+                to_adaptive_card,
+            )
             from incidentfox_orchestrator.message_state import InvestigationState
             from incidentfox_orchestrator.stream_handler import handle_event
-            from incidentfox_orchestrator.message_builder import build_progress_content, build_final_content, build_question_content
-            from incidentfox_orchestrator.message_builder.teams_formatter import to_adaptive_card
 
             state = InvestigationState(
                 session_id=session_id,
@@ -581,12 +591,14 @@ class TeamsIntegration:
                         thread_id=session_id,
                     )
                     card_json = to_adaptive_card(content)
-                    update_queue.put({
-                        "card": card_json,
-                        "text": "IncidentFox needs your input",
-                        "is_final": False,
-                        "is_question": True,
-                    })
+                    update_queue.put(
+                        {
+                            "card": card_json,
+                            "text": "IncidentFox needs your input",
+                            "is_final": False,
+                            "is_question": True,
+                        }
+                    )
                     return
 
                 # Question timeout — update the progress card
@@ -594,11 +606,13 @@ class TeamsIntegration:
                     state.last_update_time = now
                     content = build_progress_content(state)
                     card_json = to_adaptive_card(content)
-                    update_queue.put({
-                        "card": card_json,
-                        "text": "Agent continued without your response",
-                        "is_final": False,
-                    })
+                    update_queue.put(
+                        {
+                            "card": card_json,
+                            "text": "Agent continued without your response",
+                            "is_final": False,
+                        }
+                    )
                     return
 
                 # Rate limit non-final updates
@@ -615,11 +629,13 @@ class TeamsIntegration:
                 card_json = to_adaptive_card(content)
                 fallback = state.final_result or "Investigation in progress..."
 
-                update_queue.put({
-                    "card": card_json,
-                    "text": fallback,
-                    "is_final": is_final,
-                })
+                update_queue.put(
+                    {
+                        "card": card_json,
+                        "text": fallback,
+                        "is_final": is_final,
+                    }
+                )
 
             # Background task to drain update queue and send Teams message updates
             async def _drain_updates() -> None:

@@ -23,29 +23,33 @@ class TestToAdaptiveCard:
         assert len(card["body"]) >= 1
 
     def test_header_sizing(self):
-        content = MessageContent(sections=[
-            ContentSection(type="header", text="H1", level=1),
-            ContentSection(type="header", text="H2", level=2),
-            ContentSection(type="header", text="H3", level=3),
-        ])
+        content = MessageContent(
+            sections=[
+                ContentSection(type="header", text="H1", level=1),
+                ContentSection(type="header", text="H2", level=2),
+                ContentSection(type="header", text="H3", level=3),
+            ]
+        )
         card = to_adaptive_card(content)
         assert card["body"][0]["size"] == "ExtraLarge"
         assert card["body"][1]["size"] == "Large"
         assert card["body"][2]["size"] == "Medium"
 
     def test_text_section(self):
-        content = MessageContent(sections=[
-            ContentSection(type="text", text="Hello world")
-        ])
+        content = MessageContent(
+            sections=[ContentSection(type="text", text="Hello world")]
+        )
         card = to_adaptive_card(content)
         assert card["body"][0]["type"] == "TextBlock"
         assert card["body"][0]["text"] == "Hello world"
         assert card["body"][0]["wrap"] is True
 
     def test_code_block(self):
-        content = MessageContent(sections=[
-            ContentSection(type="code_block", text="print('hi')", language="python")
-        ])
+        content = MessageContent(
+            sections=[
+                ContentSection(type="code_block", text="print('hi')", language="python")
+            ]
+        )
         card = to_adaptive_card(content)
         container = card["body"][0]
         assert container["type"] == "Container"
@@ -53,16 +57,20 @@ class TestToAdaptiveCard:
         assert container["items"][0]["fontType"] == "Monospace"
 
     def test_divider(self):
-        content = MessageContent(sections=[
-            ContentSection(type="divider")
-        ])
+        content = MessageContent(sections=[ContentSection(type="divider")])
         card = to_adaptive_card(content)
         assert card["body"][0]["separator"] is True
 
     def test_image(self):
-        content = MessageContent(sections=[
-            ContentSection(type="image", image_url="https://example.com/img.png", alt_text="Chart")
-        ])
+        content = MessageContent(
+            sections=[
+                ContentSection(
+                    type="image",
+                    image_url="https://example.com/img.png",
+                    alt_text="Chart",
+                )
+            ]
+        )
         card = to_adaptive_card(content)
         assert card["body"][0]["type"] == "Image"
         assert card["body"][0]["url"] == "https://example.com/img.png"
@@ -72,12 +80,22 @@ class TestToAdaptiveCard:
             sections=[ContentSection(type="text", text="Result")],
             actions=[
                 ActionButton(
-                    label="\U0001f44d", action_id="feedback_positive",
-                    data={"action_type": "feedback", "feedback": "positive", "run_id": "r1"},
+                    label="\U0001f44d",
+                    action_id="feedback_positive",
+                    data={
+                        "action_type": "feedback",
+                        "feedback": "positive",
+                        "run_id": "r1",
+                    },
                 ),
                 ActionButton(
-                    label="\U0001f44e", action_id="feedback_negative",
-                    data={"action_type": "feedback", "feedback": "negative", "run_id": "r1"},
+                    label="\U0001f44e",
+                    action_id="feedback_negative",
+                    data={
+                        "action_type": "feedback",
+                        "feedback": "negative",
+                        "run_id": "r1",
+                    },
                 ),
             ],
         )
@@ -90,7 +108,11 @@ class TestToAdaptiveCard:
     def test_url_action_becomes_open_url(self):
         content = MessageContent(
             sections=[],
-            actions=[ActionButton(label="View", action_id="view", value="https://app.example.com")],
+            actions=[
+                ActionButton(
+                    label="View", action_id="view", value="https://app.example.com"
+                )
+            ],
         )
         card = to_adaptive_card(content)
         assert card["actions"][0]["type"] == "Action.OpenUrl"
@@ -138,14 +160,16 @@ class TestToAdaptiveCard:
     # --- Phase 5: File/Image support ---
 
     def test_base64_image(self):
-        content = MessageContent(sections=[
-            ContentSection(
-                type="image",
-                image_data="iVBORw0KGgoAAAANSUhEU",
-                image_media_type="image/png",
-                alt_text="CPU chart",
-            ),
-        ])
+        content = MessageContent(
+            sections=[
+                ContentSection(
+                    type="image",
+                    image_data="iVBORw0KGgoAAAANSUhEU",
+                    image_media_type="image/png",
+                    alt_text="CPU chart",
+                ),
+            ]
+        )
         card = to_adaptive_card(content)
         img = card["body"][0]
         assert img["type"] == "Image"
@@ -153,15 +177,17 @@ class TestToAdaptiveCard:
         assert img["altText"] == "CPU chart"
 
     def test_file_with_url(self):
-        content = MessageContent(sections=[
-            ContentSection(
-                type="file",
-                text="Thread dump analysis",
-                filename="thread_dump.txt",
-                file_url="https://files.example.com/dump.txt",
-                file_size=51200,
-            ),
-        ])
+        content = MessageContent(
+            sections=[
+                ContentSection(
+                    type="file",
+                    text="Thread dump analysis",
+                    filename="thread_dump.txt",
+                    file_url="https://files.example.com/dump.txt",
+                    file_size=51200,
+                ),
+            ]
+        )
         card = to_adaptive_card(content)
         block = card["body"][0]
         assert block["type"] == "TextBlock"
@@ -169,38 +195,48 @@ class TestToAdaptiveCard:
         assert "https://files.example.com/dump.txt" in block["text"]
 
     def test_file_without_url(self):
-        content = MessageContent(sections=[
-            ContentSection(
-                type="file",
-                text="Generated report",
-            ),
-        ])
+        content = MessageContent(
+            sections=[
+                ContentSection(
+                    type="file",
+                    text="Generated report",
+                ),
+            ]
+        )
         card = to_adaptive_card(content)
         block = card["body"][0]
         assert block["type"] == "TextBlock"
         assert "Generated report" in block["text"]
 
     def test_list_ordered(self):
-        content = MessageContent(sections=[
-            ContentSection(type="list", items=["First", "Second", "Third"], style="ordered"),
-        ])
+        content = MessageContent(
+            sections=[
+                ContentSection(
+                    type="list", items=["First", "Second", "Third"], style="ordered"
+                ),
+            ]
+        )
         card = to_adaptive_card(content)
         block = card["body"][0]
         assert "1. First" in block["text"]
         assert "2. Second" in block["text"]
 
     def test_list_unordered(self):
-        content = MessageContent(sections=[
-            ContentSection(type="list", items=["Alpha", "Beta"], style="unordered"),
-        ])
+        content = MessageContent(
+            sections=[
+                ContentSection(type="list", items=["Alpha", "Beta"], style="unordered"),
+            ]
+        )
         card = to_adaptive_card(content)
         block = card["body"][0]
         assert "- Alpha" in block["text"]
 
     def test_progress_section(self):
-        content = MessageContent(sections=[
-            ContentSection(type="progress", text="Analyzing logs..."),
-        ])
+        content = MessageContent(
+            sections=[
+                ContentSection(type="progress", text="Analyzing logs..."),
+            ]
+        )
         card = to_adaptive_card(content)
         block = card["body"][0]
         assert block["type"] == "TextBlock"

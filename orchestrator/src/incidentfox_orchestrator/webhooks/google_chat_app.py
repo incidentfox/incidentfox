@@ -81,7 +81,11 @@ WELCOME_MESSAGE = (
     "- `@IncidentFox setup` — configure integrations\n\n"
     "I'll analyze logs, metrics, and infrastructure to help you "
     "triage incidents faster."
-    + (f"\n\nConfigure your team at: {WEB_UI_URL}/team/integrations" if WEB_UI_URL else "")
+    + (
+        f"\n\nConfigure your team at: {WEB_UI_URL}/team/integrations"
+        if WEB_UI_URL
+        else ""
+    )
 )
 
 HELP_MESSAGE = (
@@ -396,10 +400,16 @@ class GoogleChatIntegration:
             )
 
             # Set up investigation state for streaming progress
+            from incidentfox_orchestrator.message_builder import (
+                build_final_content,
+                build_progress_content,
+                build_question_content,
+            )
+            from incidentfox_orchestrator.message_builder.gchat_formatter import (
+                to_card_v2,
+            )
             from incidentfox_orchestrator.message_state import InvestigationState
             from incidentfox_orchestrator.stream_handler import handle_event
-            from incidentfox_orchestrator.message_builder import build_progress_content, build_final_content, build_question_content
-            from incidentfox_orchestrator.message_builder.gchat_formatter import to_card_v2
 
             state = InvestigationState(
                 session_id=session_id,
@@ -432,12 +442,14 @@ class GoogleChatIntegration:
                         thread_id=session_id,
                     )
                     card = to_card_v2(content)
-                    update_queue.put({
-                        "card": card,
-                        "text": "IncidentFox needs your input",
-                        "is_final": False,
-                        "is_question": True,
-                    })
+                    update_queue.put(
+                        {
+                            "card": card,
+                            "text": "IncidentFox needs your input",
+                            "is_final": False,
+                            "is_question": True,
+                        }
+                    )
                     return
 
                 # Question timeout — update the progress card
@@ -445,11 +457,13 @@ class GoogleChatIntegration:
                     state.last_update_time = now
                     content = build_progress_content(state)
                     card = to_card_v2(content)
-                    update_queue.put({
-                        "card": card,
-                        "text": "Agent continued without your response",
-                        "is_final": False,
-                    })
+                    update_queue.put(
+                        {
+                            "card": card,
+                            "text": "Agent continued without your response",
+                            "is_final": False,
+                        }
+                    )
                     return
 
                 if not is_final and (now - state.last_update_time) < UPDATE_INTERVAL:
@@ -464,11 +478,13 @@ class GoogleChatIntegration:
                 card = to_card_v2(content)
                 fallback = state.final_result or "Investigation in progress..."
 
-                update_queue.put({
-                    "card": card,
-                    "text": fallback,
-                    "is_final": is_final,
-                })
+                update_queue.put(
+                    {
+                        "card": card,
+                        "text": fallback,
+                        "is_final": is_final,
+                    }
+                )
 
             # Background task to drain update queue and update the "working" message
             async def _drain_updates() -> None:
@@ -492,7 +508,12 @@ class GoogleChatIntegration:
                                 thread_key=thread_key,
                                 effective_config=effective_config,
                                 correlation_id=correlation_id,
-                                cards_v2=[{"cardId": f"question-{run_id}", "card": item["card"]}],
+                                cards_v2=[
+                                    {
+                                        "cardId": f"question-{run_id}",
+                                        "card": item["card"],
+                                    }
+                                ],
                             )
                         except Exception as q_err:
                             _log(
@@ -507,7 +528,12 @@ class GoogleChatIntegration:
                                 text=item["text"],
                                 effective_config=effective_config,
                                 correlation_id=correlation_id,
-                                cards_v2=[{"cardId": f"progress-{run_id}", "card": item["card"]}],
+                                cards_v2=[
+                                    {
+                                        "cardId": f"progress-{run_id}",
+                                        "card": item["card"],
+                                    }
+                                ],
                             )
                         except Exception as update_err:
                             _log(
@@ -622,8 +648,8 @@ class GoogleChatIntegration:
         else:
             sa_key_info = sa_key_json
 
-        from google.oauth2 import service_account
         from google.auth.transport import requests as google_requests
+        from google.oauth2 import service_account
 
         credentials = service_account.Credentials.from_service_account_info(
             sa_key_info,
