@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
@@ -28,6 +29,9 @@ from .models import (
     K8sCommandResponse,
     ListClustersResponse,
 )
+
+# Configure stdlib logging so structlog output is visible
+logging.basicConfig(format="%(message)s", stream=None, level=logging.INFO)
 
 # Configure structured logging
 structlog.configure(
@@ -342,8 +346,15 @@ async def execute_command(
             error=f"Cluster not connected: {body.cluster_id}",
         )
 
-    # Verify team ownership
-    if conn.team_node_id != body.team_node_id:
+    # Verify ownership (org-scoped: any team in the same org can access)
+    if body.org_id:
+        if conn.org_id != body.org_id:
+            return ExecuteCommandResponse(
+                ok=False,
+                error="Cluster does not belong to this organization",
+            )
+    elif body.team_node_id and conn.team_node_id != body.team_node_id:
+        # Backward compat: fall back to team check if no org_id provided
         return ExecuteCommandResponse(
             ok=False,
             error="Cluster does not belong to this team",
@@ -386,12 +397,14 @@ async def execute_command(
 @app.get("/internal/clusters", response_model=ListClustersResponse)
 async def list_connected_clusters(
     team_node_id: Optional[str] = None,
+    org_id: Optional[str] = None,
     x_internal_service: Optional[str] = Header(default=None),
 ):
     """
     List connected clusters.
 
     Internal API for monitoring and debugging.
+    Supports filtering by org_id (preferred) or team_node_id (deprecated).
     """
     # Validate internal service header
     if not validate_internal_service(x_internal_service):
@@ -399,8 +412,10 @@ async def list_connected_clusters(
 
     connections = connection_manager.get_all_connections()
 
-    # Filter by team if specified
-    if team_node_id:
+    # Filter by org (preferred) or team
+    if org_id:
+        connections = [c for c in connections if c.org_id == org_id]
+    elif team_node_id:
         connections = [c for c in connections if c.team_node_id == team_node_id]
 
     clusters = [

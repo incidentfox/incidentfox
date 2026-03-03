@@ -59,7 +59,8 @@ class ExecuteCommandRequest(BaseModel):
     """Request from AI agent to execute a K8s command."""
 
     cluster_id: str
-    team_node_id: str
+    team_node_id: str = ""  # Deprecated: use org_id for ownership check
+    org_id: str = ""  # Org-level ownership check (clusters are org-scoped)
     command: str
     params: Dict[str, Any] = Field(default_factory=dict)
     timeout: float = 30.0

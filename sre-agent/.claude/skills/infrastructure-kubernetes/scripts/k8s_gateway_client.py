@@ -48,11 +48,11 @@ def execute_command(
         RuntimeError: On gateway errors (cluster not connected, timeout, etc.).
     """
     gateway_url = os.environ["K8S_GATEWAY_URL"]
-    team_node_id = os.environ.get("INCIDENTFOX_TEAM_ID", "")
+    org_id = os.environ.get("INCIDENTFOX_TENANT_ID", "")
 
-    if not team_node_id:
+    if not org_id:
         raise RuntimeError(
-            "INCIDENTFOX_TEAM_ID not set — cannot identify team for gateway request"
+            "INCIDENTFOX_TENANT_ID not set — cannot identify org for gateway request"
         )
 
     url = f"{gateway_url.rstrip('/')}/internal/execute"
@@ -67,7 +67,7 @@ def execute_command(
                 },
                 json={
                     "cluster_id": cluster_id,
-                    "team_node_id": team_node_id,
+                    "org_id": org_id,
                     "command": command,
                     "params": params,
                     "timeout": timeout,
@@ -105,11 +105,11 @@ def list_connected_clusters() -> list[dict]:
     if not gateway_url:
         return []
 
-    team_node_id = os.environ.get("INCIDENTFOX_TEAM_ID", "")
+    org_id = os.environ.get("INCIDENTFOX_TENANT_ID", "")
     url = f"{gateway_url.rstrip('/')}/internal/clusters"
     params = {}
-    if team_node_id:
-        params["team_node_id"] = team_node_id
+    if org_id:
+        params["org_id"] = org_id
 
     try:
         with httpx.Client(timeout=10.0) as client:
