@@ -611,7 +611,9 @@ static_resources:
                         # ClusterRole. When false, all k8s queries must go through k8s-gateway.
                         **(
                             {
-                                "serviceAccountName": os.getenv("SANDBOX_SERVICE_ACCOUNT", ""),
+                                "serviceAccountName": os.getenv(
+                                    "SANDBOX_SERVICE_ACCOUNT", ""
+                                ),
                                 "automountServiceAccountToken": True,
                             }
                             if os.getenv("SANDBOX_DIRECT_K8S", "").lower() == "true"
