@@ -250,7 +250,9 @@ def gchat_text(text: str | None) -> str:
     return result
 
 
-def truncate_text(text: str | None, max_length: int = GCHAT_MESSAGE_CHAR_LIMIT, suffix: str = "...") -> str:
+def truncate_text(
+    text: str | None, max_length: int = GCHAT_MESSAGE_CHAR_LIMIT, suffix: str = "..."
+) -> str:
     """
     Truncate text to max_length, breaking at a natural point.
     """
@@ -283,7 +285,9 @@ def truncate_text(text: str | None, max_length: int = GCHAT_MESSAGE_CHAR_LIMIT, 
     return text[:target_len] + suffix
 
 
-def split_message(text: str | None, max_length: int = GCHAT_MESSAGE_CHAR_LIMIT) -> list[str]:
+def split_message(
+    text: str | None, max_length: int = GCHAT_MESSAGE_CHAR_LIMIT
+) -> list[str]:
     """
     Split a long message into chunks that fit within Google Chat's limit.
 

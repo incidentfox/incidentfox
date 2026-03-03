@@ -1,6 +1,5 @@
 """Unit tests for Google Chat markdown conversion utilities."""
 
-import pytest
 from incidentfox_orchestrator.webhooks.gchat_markdown_utils import (
     GCHAT_MESSAGE_CHAR_LIMIT,
     gchat_text,
@@ -234,7 +233,9 @@ class TestSplitMessage:
 
     def test_realistic_long_output(self):
         """Simulate a realistic agent output that exceeds the limit."""
-        sections = [f"## Section {i}\n\nContent for section {i}. " * 10 for i in range(20)]
+        sections = [
+            f"## Section {i}\n\nContent for section {i}. " * 10 for i in range(20)
+        ]
         text = "\n\n".join(sections)
         chunks = split_message(text, GCHAT_MESSAGE_CHAR_LIMIT)
         assert len(chunks) > 1
