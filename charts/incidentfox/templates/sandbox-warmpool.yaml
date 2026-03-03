@@ -486,6 +486,8 @@ spec:
           value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/jaeger"
         - name: GITHUB_BASE_URL
           value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/github"
+        - name: GITLAB_BASE_URL
+          value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/gitlab"
         - name: DATADOG_BASE_URL
           value: "http://credential-resolver-svc.{{ .Values.namespace }}.svc.cluster.local:8002/datadog"
         - name: AMPLITUDE_BASE_URL
