@@ -15,6 +15,25 @@ Configuration environment variables you CAN check (non-secret):
 
 ---
 
+## Getting Started
+
+**Always start by listing the user's projects** to discover what repositories are accessible:
+
+```bash
+# List projects the user is a member of (default behavior)
+python .claude/skills/vcs-gitlab/scripts/list_projects.py
+
+# Search within the user's projects
+python .claude/skills/vcs-gitlab/scripts/list_projects.py --search "myrepo"
+
+# List only projects owned by the user
+python .claude/skills/vcs-gitlab/scripts/list_projects.py --owned
+```
+
+By default, `list_projects.py` only returns projects the authenticated user is a member of. Use `--no-membership` to search all visible projects on the GitLab instance.
+
+---
+
 ## Available Scripts
 
 All scripts are in `.claude/skills/vcs-gitlab/scripts/`
@@ -23,12 +42,27 @@ All scripts are in `.claude/skills/vcs-gitlab/scripts/`
 
 #### list_projects.py
 ```bash
-python .claude/skills/vcs-gitlab/scripts/list_projects.py [--search "query"] [--visibility private]
+python .claude/skills/vcs-gitlab/scripts/list_projects.py [--search "query"] [--owned] [--no-membership] [--visibility private]
 ```
+- Default: returns only projects the user is a member of
+- `--owned`: only projects owned by the user
+- `--no-membership`: include all visible projects (public + accessible)
 
 #### get_project.py
 ```bash
 python .claude/skills/vcs-gitlab/scripts/get_project.py --project "group/project"
+```
+
+### REPOSITORY BROWSING SCRIPTS
+
+#### get_repository_tree.py
+```bash
+python .claude/skills/vcs-gitlab/scripts/get_repository_tree.py --project "group/project" [--path "src/"] [--ref main] [--recursive]
+```
+
+#### get_file.py
+```bash
+python .claude/skills/vcs-gitlab/scripts/get_file.py --project "group/project" --path "src/main.py" [--ref main]
 ```
 
 ### CI/CD PIPELINE SCRIPTS
@@ -99,6 +133,14 @@ python .claude/skills/vcs-gitlab/scripts/create_issue.py --project "group/projec
 2. get_pipeline_jobs.py --project X --pipeline-id <id>
 3. get_commit.py --project X --sha <sha>
 4. get_mr.py --project X --mr-iid <iid>
+```
+
+### Repository Exploration
+```
+1. list_projects.py --search "name"
+2. get_repository_tree.py --project X
+3. get_repository_tree.py --project X --path "src/"
+4. get_file.py --project X --path "README.md"
 ```
 
 ### Deployment Correlation

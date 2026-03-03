@@ -18,12 +18,30 @@ def main():
     parser.add_argument(
         "--visibility", default="", help="Filter: public, internal, private"
     )
+    parser.add_argument(
+        "--membership",
+        action="store_true",
+        default=True,
+        help="Only projects the user is a member of (default: true)",
+    )
+    parser.add_argument(
+        "--no-membership",
+        action="store_true",
+        help="Include all visible projects, not just user's",
+    )
+    parser.add_argument(
+        "--owned", action="store_true", help="Only projects owned by the user"
+    )
     parser.add_argument("--max-results", type=int, default=20, help="Max results")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
     try:
         params = {"per_page": args.max_results}
+        if args.owned:
+            params["owned"] = "true"
+        elif not args.no_membership:
+            params["membership"] = "true"
         if args.search:
             params["search"] = args.search
         if args.visibility:
