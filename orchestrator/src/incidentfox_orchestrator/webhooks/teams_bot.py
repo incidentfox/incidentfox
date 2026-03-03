@@ -88,6 +88,8 @@ def _strip_mentions(activity: Activity) -> str:
     return text.strip()
 
 
+WEB_UI_URL = os.getenv("WEB_UI_URL", "").rstrip("/")
+
 WELCOME_MESSAGE = (
     "**Welcome to IncidentFox!**\n\n"
     "IncidentFox is an AI-powered incident investigation assistant "
@@ -95,9 +97,11 @@ WELCOME_MESSAGE = (
     "Get started by mentioning me with a question or issue:\n"
     "- `@IncidentFox investigate high error rate on checkout service`\n"
     "- `@IncidentFox why is pod X crashing in namespace Y?`\n"
-    "- `@IncidentFox help` \u2014 see all available commands\n\n"
-    "I\u2019ll analyze logs, metrics, and infrastructure to help you "
+    "- `@IncidentFox help` — see all available commands\n"
+    "- `@IncidentFox setup` — configure integrations\n\n"
+    "I'll analyze logs, metrics, and infrastructure to help you "
     "triage incidents faster."
+    + (f"\n\nConfigure your team at: {WEB_UI_URL}/team/integrations" if WEB_UI_URL else "")
 )
 
 HELP_MESSAGE = (
@@ -275,6 +279,30 @@ class TeamsIntegration:
                 channel_id=channel_id,
             )
             await turn_context.send_activity(HELP_MESSAGE)
+            return
+
+        # Setup command — link to web UI configuration
+        if text.lower() == "setup":
+            _log(
+                "teams_setup_requested",
+                correlation_id=correlation_id,
+                channel_id=channel_id,
+            )
+            if WEB_UI_URL:
+                setup_text = (
+                    "**IncidentFox Setup**\n\n"
+                    f"Configure your integrations and tools at:\n"
+                    f"- [Team Integrations]({WEB_UI_URL}/team/integrations)\n"
+                    f"- [Tools & Prompts]({WEB_UI_URL}/team/tools)\n"
+                    f"- [Dashboard]({WEB_UI_URL}/team)\n"
+                )
+            else:
+                setup_text = (
+                    "**IncidentFox Setup**\n\n"
+                    "Web UI is not configured. Contact your administrator to set up "
+                    "the WEB_UI_URL environment variable."
+                )
+            await turn_context.send_activity(setup_text)
             return
 
         # Send typing indicator
@@ -515,35 +543,191 @@ class TeamsIntegration:
                 destinations=[d.get("type") for d in output_destinations],
             )
 
-            # Run agent in thread pool — calls /investigate and streams SSE
-            # asyncio.wait_for is a safety net: even if the httpx/requests read
-            # timeout inside run_agent doesn't fire (e.g. proxy keepalives), we
-            # still bound the total wall-clock time.
-            agent_timeout = int(
-                os.getenv("ORCHESTRATOR_TEAMS_AGENT_TIMEOUT_SECONDS", "300")
+            # Set up investigation state for streaming progress
+            from incidentfox_orchestrator.message_state import InvestigationState
+            from incidentfox_orchestrator.stream_handler import handle_event
+            from incidentfox_orchestrator.message_builder import build_progress_content, build_final_content, build_question_content
+            from incidentfox_orchestrator.message_builder.teams_formatter import to_adaptive_card
+
+            state = InvestigationState(
+                session_id=session_id,
+                run_id=run_id,
+                correlation_id=correlation_id,
             )
-            result = await asyncio.wait_for(
-                asyncio.to_thread(
+
+            # Update queue for bridging sync callback → async message updates
+            import queue as _queue_mod
+            import time as _time_mod
+
+            update_queue: _queue_mod.Queue[dict | None] = _queue_mod.Queue()
+
+            # Rate-limited update interval (Teams rate limits are stricter than Slack)
+            UPDATE_INTERVAL = 2.0
+
+            def on_event(event: dict) -> None:
+                """SSE event callback — runs in thread pool."""
+                changed = handle_event(state, event)
+                if not changed:
+                    return
+
+                event_type = event.get("type", "")
+                now = _time_mod.time()
+                is_final = event_type in ("result", "error")
+
+                # Question events get sent immediately as a new card
+                if event_type == "question" and state.pending_questions:
+                    content = build_question_content(
+                        state.pending_questions,
+                        thread_id=session_id,
+                    )
+                    card_json = to_adaptive_card(content)
+                    update_queue.put({
+                        "card": card_json,
+                        "text": "IncidentFox needs your input",
+                        "is_final": False,
+                        "is_question": True,
+                    })
+                    return
+
+                # Question timeout — update the progress card
+                if event_type == "question_timeout":
+                    state.last_update_time = now
+                    content = build_progress_content(state)
+                    card_json = to_adaptive_card(content)
+                    update_queue.put({
+                        "card": card_json,
+                        "text": "Agent continued without your response",
+                        "is_final": False,
+                    })
+                    return
+
+                # Rate limit non-final updates
+                if not is_final and (now - state.last_update_time) < UPDATE_INTERVAL:
+                    return
+                state.last_update_time = now
+
+                # Build card from current state
+                if is_final:
+                    content = build_final_content(state, run_id=run_id)
+                else:
+                    content = build_progress_content(state)
+
+                card_json = to_adaptive_card(content)
+                fallback = state.final_result or "Investigation in progress..."
+
+                update_queue.put({
+                    "card": card_json,
+                    "text": fallback,
+                    "is_final": is_final,
+                })
+
+            # Background task to drain update queue and send Teams message updates
+            async def _drain_updates() -> None:
+                while True:
+                    try:
+                        item = await asyncio.to_thread(update_queue.get, timeout=1.0)
+                    except Exception:
+                        if state.is_complete:
+                            break
+                        continue
+
+                    if item is None:
+                        break
+
+                    try:
+                        card = item["card"]
+                        text = item["text"]
+
+                        if item.get("is_question"):
+                            # Question cards are sent as new messages (not updates)
+                            async def _send_question(tc: TurnContext) -> None:
+                                reply = Activity(
+                                    type=ActivityTypes.message,
+                                    text=text,
+                                    reply_to_id=initial_message_id,
+                                    attachments=[
+                                        {
+                                            "contentType": "application/vnd.microsoft.card.adaptive",
+                                            "content": card,
+                                        }
+                                    ],
+                                )
+                                await tc.send_activity(reply)
+
+                            await self.adapter.continue_conversation(
+                                conversation_ref, _send_question, self.app_id
+                            )
+                        else:
+                            # Progress/final updates replace the existing message
+                            async def _do_update(tc: TurnContext) -> None:
+                                update = Activity(
+                                    id=initial_message_id,
+                                    type=ActivityTypes.message,
+                                    text=text,
+                                    attachments=[
+                                        {
+                                            "contentType": "application/vnd.microsoft.card.adaptive",
+                                            "content": card,
+                                        }
+                                    ],
+                                )
+                                await tc.update_activity(update)
+
+                            await self.adapter.continue_conversation(
+                                conversation_ref, _do_update, self.app_id
+                            )
+                    except Exception as update_err:
+                        _log(
+                            "teams_progress_update_failed",
+                            correlation_id=correlation_id,
+                            error=str(update_err),
+                        )
+
+                    if item.get("is_final"):
+                        break
+
+            # Start the update drainer
+            drain_task = asyncio.create_task(_drain_updates())
+
+            # Run agent with streaming — SSE events dispatched to on_event
+            try:
+                result = await asyncio.to_thread(
                     partial(
-                        agent_api.run_agent,
+                        agent_api.run_agent_streaming,
                         team_token=team_token,
                         agent_name=entrance_agent_name,
                         message=text,
+                        on_event=on_event,
                         tenant_id=org_id,
                         team_id=team_node_id,
-                        timeout=agent_timeout,
+                        timeout=int(
+                            os.getenv("ORCHESTRATOR_TEAMS_AGENT_TIMEOUT_SECONDS", "300")
+                        ),
                         correlation_id=correlation_id,
                         agent_base_url=dedicated_agent_url,
                         session_id=session_id,
                     )
-                ),
-                timeout=agent_timeout + 60,  # 60s grace beyond agent timeout
-            )
+                )
+            except RuntimeError:
+                # Agent error — state.error already set by on_event
+                result = {"result": "", "success": False}
+            finally:
+                # Signal drain task to finish and wait
+                update_queue.put(None)
+                try:
+                    await asyncio.wait_for(drain_task, timeout=10.0)
+                except asyncio.TimeoutError:
+                    pass
 
-            # Send agent result back to Teams conversation
-            result_text = result.get("result", "")
+            # If no streaming updates were sent (e.g., on_event never fired a
+            # final update), send a fallback final result
+            result_text = result.get("result", "") or state.final_result or ""
 
-            if result_text:
+            if result_text and state.is_complete:
+                # Build final card with feedback buttons
+                content = build_final_content(state, run_id=run_id)
+                card_json = to_adaptive_card(content)
+
                 try:
                     _log(
                         "teams_sending_result",
@@ -565,6 +749,12 @@ class TeamsIntegration:
                             type=ActivityTypes.message,
                             text=result_text,
                             reply_to_id=initial_message_id,
+                            attachments=[
+                                {
+                                    "contentType": "application/vnd.microsoft.card.adaptive",
+                                    "content": card_json,
+                                }
+                            ],
                         )
                         send_response = await turn_context.send_activity(reply)
                         _log(
@@ -817,6 +1007,54 @@ class TeamsIntegration:
                                 "statusCode": 200,
                                 "type": "application/vnd.microsoft.activity.message",
                                 "value": "Thanks for your feedback!",
+                            },
+                        },
+                    )
+                )
+
+            elif action_type == "submit_answer":
+                # User submitted answers to AskUserQuestion
+                thread_id = action_data.get("thread_id", "")
+                # Collect answers from Input.ChoiceSet fields (q0, q1, ...)
+                answers = {}
+                for key, val in invoke_value.items():
+                    if key.startswith("q") and key[1:].isdigit():
+                        answers[key] = val
+                # Also check in action.data for nested inputs
+                for key, val in action_data.items():
+                    if key.startswith("q") and key[1:].isdigit():
+                        answers[key] = val
+
+                _log(
+                    "teams_answer_submitted",
+                    correlation_id=correlation_id,
+                    thread_id=thread_id,
+                    answer_count=len(answers),
+                )
+
+                if thread_id and answers:
+                    try:
+                        await asyncio.to_thread(
+                            self.agent_api.submit_answer,
+                            thread_id=thread_id,
+                            answers=answers,
+                        )
+                    except Exception as answer_err:
+                        _log(
+                            "teams_answer_submit_failed",
+                            correlation_id=correlation_id,
+                            error=str(answer_err),
+                        )
+
+                await turn_context.send_activity(
+                    Activity(
+                        type=ActivityTypes.invoke_response,
+                        value={
+                            "status": 200,
+                            "body": {
+                                "statusCode": 200,
+                                "type": "application/vnd.microsoft.activity.message",
+                                "value": "Your answers have been submitted!",
                             },
                         },
                     )

@@ -68,6 +68,8 @@ def generate_session_id(space_id: str, thread_key: str) -> str:
     return f"gchat-{sanitized_space}-{sanitized_thread}"
 
 
+WEB_UI_URL = os.getenv("WEB_UI_URL", "").rstrip("/")
+
 WELCOME_MESSAGE = (
     "*Welcome to IncidentFox!*\n\n"
     "IncidentFox is an AI-powered incident investigation assistant "
@@ -75,9 +77,11 @@ WELCOME_MESSAGE = (
     "Get started by mentioning me with a question or issue:\n"
     "- `@IncidentFox investigate high error rate on checkout service`\n"
     "- `@IncidentFox why is pod X crashing in namespace Y?`\n"
-    "- `@IncidentFox help` \u2014 see all available commands\n\n"
-    "I\u2019ll analyze logs, metrics, and infrastructure to help you "
+    "- `@IncidentFox help` — see all available commands\n"
+    "- `@IncidentFox setup` — configure integrations\n\n"
+    "I'll analyze logs, metrics, and infrastructure to help you "
     "triage incidents faster."
+    + (f"\n\nConfigure your team at: {WEB_UI_URL}/team/integrations" if WEB_UI_URL else "")
 )
 
 HELP_MESSAGE = (
@@ -195,6 +199,29 @@ class GoogleChatIntegration:
                 space_id=space_id,
             )
             return {"text": HELP_MESSAGE}
+
+        # Setup command — link to web UI configuration
+        if text.lower() == "setup":
+            _log(
+                "gchat_setup_requested",
+                correlation_id=correlation_id,
+                space_id=space_id,
+            )
+            if WEB_UI_URL:
+                setup_text = (
+                    "*IncidentFox Setup*\n\n"
+                    f"Configure your integrations and tools at:\n"
+                    f"- Team Integrations: {WEB_UI_URL}/team/integrations\n"
+                    f"- Tools & Prompts: {WEB_UI_URL}/team/tools\n"
+                    f"- Dashboard: {WEB_UI_URL}/team\n"
+                )
+            else:
+                setup_text = (
+                    "*IncidentFox Setup*\n\n"
+                    "Web UI is not configured. Contact your administrator to set up "
+                    "the WEB_UI_URL environment variable."
+                )
+            return {"text": setup_text}
 
         if not text:
             return {
@@ -327,7 +354,7 @@ class GoogleChatIntegration:
                 )
 
             # Send "working on it" in the thread via REST API
-            await self._send_message_to_space(
+            working_msg_name = await self._send_message_to_space(
                 space_name=space_name,
                 text="IncidentFox is working on it...",
                 thread_key=thread_key,
@@ -368,40 +395,173 @@ class GoogleChatIntegration:
                 destinations=[d.get("type") for d in output_destinations],
             )
 
-            # Run agent in thread pool — calls /investigate and streams SSE
-            # asyncio.wait_for is a safety net: even if the httpx/requests read
-            # timeout inside run_agent doesn't fire (e.g. proxy keepalives), we
-            # still bound the total wall-clock time.
-            agent_timeout = int(
-                os.getenv("ORCHESTRATOR_GCHAT_AGENT_TIMEOUT_SECONDS", "300")
+            # Set up investigation state for streaming progress
+            from incidentfox_orchestrator.message_state import InvestigationState
+            from incidentfox_orchestrator.stream_handler import handle_event
+            from incidentfox_orchestrator.message_builder import build_progress_content, build_final_content, build_question_content
+            from incidentfox_orchestrator.message_builder.gchat_formatter import to_card_v2
+
+            state = InvestigationState(
+                session_id=session_id,
+                run_id=run_id,
+                correlation_id=correlation_id,
             )
-            result = await asyncio.wait_for(
-                asyncio.to_thread(
+
+            import queue as _queue_mod
+            import time as _time_mod
+
+            update_queue: _queue_mod.Queue[dict | None] = _queue_mod.Queue()
+
+            # Rate-limited update interval (Google Chat is more restrictive)
+            UPDATE_INTERVAL = 3.0
+
+            def on_event(event: dict) -> None:
+                """SSE event callback — runs in thread pool."""
+                changed = handle_event(state, event)
+                if not changed:
+                    return
+
+                event_type = event.get("type", "")
+                now = _time_mod.time()
+                is_final = event_type in ("result", "error")
+
+                # Question events get sent immediately as a new card
+                if event_type == "question" and state.pending_questions:
+                    content = build_question_content(
+                        state.pending_questions,
+                        thread_id=session_id,
+                    )
+                    card = to_card_v2(content)
+                    update_queue.put({
+                        "card": card,
+                        "text": "IncidentFox needs your input",
+                        "is_final": False,
+                        "is_question": True,
+                    })
+                    return
+
+                # Question timeout — update the progress card
+                if event_type == "question_timeout":
+                    state.last_update_time = now
+                    content = build_progress_content(state)
+                    card = to_card_v2(content)
+                    update_queue.put({
+                        "card": card,
+                        "text": "Agent continued without your response",
+                        "is_final": False,
+                    })
+                    return
+
+                if not is_final and (now - state.last_update_time) < UPDATE_INTERVAL:
+                    return
+                state.last_update_time = now
+
+                if is_final:
+                    content = build_final_content(state, run_id=run_id)
+                else:
+                    content = build_progress_content(state)
+
+                card = to_card_v2(content)
+                fallback = state.final_result or "Investigation in progress..."
+
+                update_queue.put({
+                    "card": card,
+                    "text": fallback,
+                    "is_final": is_final,
+                })
+
+            # Background task to drain update queue and update the "working" message
+            async def _drain_updates() -> None:
+                while True:
+                    try:
+                        item = await asyncio.to_thread(update_queue.get, timeout=1.0)
+                    except Exception:
+                        if state.is_complete:
+                            break
+                        continue
+
+                    if item is None:
+                        break
+
+                    if item.get("is_question"):
+                        # Question cards are sent as new messages in the thread
+                        try:
+                            await self._send_message_to_space(
+                                space_name=space_name,
+                                text=item["text"],
+                                thread_key=thread_key,
+                                effective_config=effective_config,
+                                correlation_id=correlation_id,
+                                cards_v2=[{"cardId": f"question-{run_id}", "card": item["card"]}],
+                            )
+                        except Exception as q_err:
+                            _log(
+                                "gchat_question_send_failed",
+                                correlation_id=correlation_id,
+                                error=str(q_err),
+                            )
+                    elif working_msg_name:
+                        try:
+                            await self._update_message_in_space(
+                                message_name=working_msg_name,
+                                text=item["text"],
+                                effective_config=effective_config,
+                                correlation_id=correlation_id,
+                                cards_v2=[{"cardId": f"progress-{run_id}", "card": item["card"]}],
+                            )
+                        except Exception as update_err:
+                            _log(
+                                "gchat_progress_update_failed",
+                                correlation_id=correlation_id,
+                                error=str(update_err),
+                            )
+
+                    if item.get("is_final"):
+                        break
+
+            drain_task = asyncio.create_task(_drain_updates())
+
+            # Run agent with streaming
+            try:
+                result = await asyncio.to_thread(
                     partial(
-                        agent_api.run_agent,
+                        agent_api.run_agent_streaming,
                         team_token=team_token,
                         agent_name=entrance_agent_name,
                         message=text,
+                        on_event=on_event,
                         tenant_id=org_id,
                         team_id=team_node_id,
-                        timeout=agent_timeout,
+                        timeout=int(
+                            os.getenv("ORCHESTRATOR_GCHAT_AGENT_TIMEOUT_SECONDS", "300")
+                        ),
                         correlation_id=correlation_id,
                         agent_base_url=dedicated_agent_url,
                         session_id=session_id,
                     )
-                ),
-                timeout=agent_timeout + 60,  # 60s grace beyond agent timeout
-            )
+                )
+            except RuntimeError:
+                result = {"result": "", "success": False}
+            finally:
+                update_queue.put(None)
+                try:
+                    await asyncio.wait_for(drain_task, timeout=10.0)
+                except asyncio.TimeoutError:
+                    pass
 
-            # Send result back to Google Chat space
-            result_text = result.get("result", "")
-            if result_text:
+            # Send final result as a new message with rich card + feedback
+            result_text = result.get("result", "") or state.final_result or ""
+            if result_text and state.is_complete:
+                content = build_final_content(state, run_id=run_id)
+                card = to_card_v2(content)
+
                 await self._send_message_to_space(
                     space_name=space_name,
                     text=result_text,
                     thread_key=thread_key,
                     effective_config=effective_config,
                     correlation_id=correlation_id,
+                    cards_v2=[{"cardId": f"result-{run_id}", "card": card}],
                 )
 
             _log(
@@ -435,6 +595,43 @@ class GoogleChatIntegration:
             except Exception:
                 pass  # Best-effort error feedback
 
+    def _get_access_token(self, effective_config: Dict[str, Any]) -> Optional[str]:
+        """
+        Get an OAuth2 access token from service account credentials.
+
+        Credentials come from team config or environment.
+        """
+        sa_key_json = (
+            (effective_config or {})
+            .get("integrations", {})
+            .get("google_chat", {})
+            .get("service_account_key")
+        ) or os.getenv("GOOGLE_CHAT_SERVICE_ACCOUNT_KEY", "")
+
+        if not sa_key_json:
+            return None
+
+        # Parse key — may be raw JSON, base64-encoded JSON, or a dict
+        if isinstance(sa_key_json, str):
+            try:
+                sa_key_info = json.loads(sa_key_json)
+            except json.JSONDecodeError:
+                import base64
+
+                sa_key_info = json.loads(base64.b64decode(sa_key_json))
+        else:
+            sa_key_info = sa_key_json
+
+        from google.oauth2 import service_account
+        from google.auth.transport import requests as google_requests
+
+        credentials = service_account.Credentials.from_service_account_info(
+            sa_key_info,
+            scopes=["https://www.googleapis.com/auth/chat.bot"],
+        )
+        credentials.refresh(google_requests.Request())
+        return credentials.token
+
     async def _send_message_to_space(
         self,
         space_name: str,
@@ -442,67 +639,38 @@ class GoogleChatIntegration:
         thread_key: str,
         effective_config: Dict[str, Any],
         correlation_id: str,
-    ) -> None:
+        cards_v2: Optional[list] = None,
+    ) -> Optional[str]:
         """
         Send a message to a Google Chat space via REST API.
 
-        Uses service account credentials from team config or environment
-        to authenticate with the Google Chat API.
+        Returns the message name (e.g. "spaces/X/messages/Y") for later updates,
+        or None on failure.
         """
         try:
-            # Get service account credentials
-            sa_key_json = (
-                (effective_config or {})
-                .get("integrations", {})
-                .get("google_chat", {})
-                .get("service_account_key")
-            ) or os.getenv("GOOGLE_CHAT_SERVICE_ACCOUNT_KEY", "")
-
-            if not sa_key_json:
+            access_token = await asyncio.to_thread(
+                self._get_access_token, effective_config
+            )
+            if not access_token:
                 _log(
                     "gchat_send_no_credentials",
                     correlation_id=correlation_id,
                     space_name=space_name,
                 )
-                return
+                return None
 
-            # Parse key — may be raw JSON, base64-encoded JSON, or a dict
-            if isinstance(sa_key_json, str):
-                try:
-                    sa_key_info = json.loads(sa_key_json)
-                except json.JSONDecodeError:
-                    # Try base64 decode
-                    import base64
-
-                    sa_key_info = json.loads(base64.b64decode(sa_key_json))
-            else:
-                sa_key_info = sa_key_json
-
-            # Build access token from service account
-            from google.oauth2 import service_account
-
-            credentials = service_account.Credentials.from_service_account_info(
-                sa_key_info,
-                scopes=["https://www.googleapis.com/auth/chat.bot"],
-            )
-            # Refresh to get access token
-            from google.auth.transport import requests as google_requests
-
-            credentials.refresh(google_requests.Request())
-            access_token = credentials.token
-
-            # Build message payload
             url = f"https://chat.googleapis.com/v1/{space_name}/messages"
             payload: Dict[str, Any] = {"text": text}
+            if cards_v2:
+                payload["cardsV2"] = cards_v2
             if thread_key:
                 payload["thread"] = {"name": thread_key}
 
-            params = {}
+            params: Dict[str, str] = {}
             if thread_key:
                 params["messageReplyOption"] = "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
 
-            # Send message
-            resp = await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 self._post_gchat_message,
                 url=url,
                 access_token=access_token,
@@ -515,14 +683,61 @@ class GoogleChatIntegration:
                 correlation_id=correlation_id,
                 space_name=space_name,
                 result_length=len(text),
-                status_code=resp,
+                message_name=result.get("name") if isinstance(result, dict) else None,
             )
+
+            # Return message name for updates
+            if isinstance(result, dict):
+                return result.get("name")
+            return None
 
         except Exception as e:
             _log(
                 "gchat_send_failed",
                 correlation_id=correlation_id,
                 space_name=space_name,
+                error=str(e),
+            )
+            return None
+
+    async def _update_message_in_space(
+        self,
+        message_name: str,
+        text: str,
+        effective_config: Dict[str, Any],
+        correlation_id: str,
+        cards_v2: Optional[list] = None,
+    ) -> None:
+        """Update an existing message in Google Chat via PATCH."""
+        try:
+            access_token = await asyncio.to_thread(
+                self._get_access_token, effective_config
+            )
+            if not access_token:
+                return
+
+            url = f"https://chat.googleapis.com/v1/{message_name}"
+            payload: Dict[str, Any] = {"text": text}
+            if cards_v2:
+                payload["cardsV2"] = cards_v2
+
+            update_mask = "text"
+            if cards_v2:
+                update_mask = "text,cardsV2"
+
+            await asyncio.to_thread(
+                self._patch_gchat_message,
+                url=url,
+                access_token=access_token,
+                payload=payload,
+                update_mask=update_mask,
+            )
+
+        except Exception as e:
+            _log(
+                "gchat_update_failed",
+                correlation_id=correlation_id,
+                message_name=message_name,
                 error=str(e),
             )
 
@@ -532,8 +747,8 @@ class GoogleChatIntegration:
         access_token: str,
         payload: Dict[str, Any],
         params: Dict[str, str],
-    ) -> int:
-        """Sync helper to POST a message to Google Chat API. Returns status code."""
+    ) -> Dict[str, Any]:
+        """Sync helper to POST a message to Google Chat API. Returns response body."""
         with httpx.Client(timeout=15.0) as c:
             r = c.post(
                 url,
@@ -545,7 +760,28 @@ class GoogleChatIntegration:
                 params=params,
             )
             r.raise_for_status()
-            return r.status_code
+            return r.json()
+
+    @staticmethod
+    def _patch_gchat_message(
+        url: str,
+        access_token: str,
+        payload: Dict[str, Any],
+        update_mask: str,
+    ) -> Dict[str, Any]:
+        """Sync helper to PATCH (update) a message in Google Chat API."""
+        with httpx.Client(timeout=15.0) as c:
+            r = c.patch(
+                url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                params={"updateMask": update_mask},
+            )
+            r.raise_for_status()
+            return r.json()
 
     async def _auto_provision(
         self,
@@ -732,6 +968,47 @@ class GoogleChatIntegration:
                     "type": "UPDATE_MESSAGE",
                 },
                 "text": "Thanks for your feedback!",
+            }
+
+        # Handle answer submission (AskUserQuestion)
+        if action_method_name == "submit_answer":
+            thread_id = params.get("thread_id", "")
+            # Collect answers from common inputs in the action parameters
+            common_inputs = event_data.get("common", {}).get("formInputs", {})
+            answers: Dict[str, str] = {}
+            for key, val_obj in common_inputs.items():
+                if key.startswith("q") and key[1:].isdigit():
+                    # formInputs values are {"stringInputs": {"value": [...]}}
+                    string_inputs = val_obj.get("stringInputs", {})
+                    values = string_inputs.get("value", [])
+                    answers[key] = values[0] if len(values) == 1 else ",".join(values)
+
+            _log(
+                "gchat_answer_submitted",
+                correlation_id=correlation_id,
+                thread_id=thread_id,
+                answer_count=len(answers),
+            )
+
+            if thread_id and answers:
+                try:
+                    await asyncio.to_thread(
+                        self.agent_api.submit_answer,
+                        thread_id=thread_id,
+                        answers=answers,
+                    )
+                except Exception as answer_err:
+                    _log(
+                        "gchat_answer_submit_failed",
+                        correlation_id=correlation_id,
+                        error=str(answer_err),
+                    )
+
+            return {
+                "actionResponse": {
+                    "type": "UPDATE_MESSAGE",
+                },
+                "text": "Your answers have been submitted!",
             }
 
         return {}

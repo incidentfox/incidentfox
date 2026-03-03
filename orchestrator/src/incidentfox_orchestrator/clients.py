@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
@@ -669,6 +669,128 @@ class AgentApiClient:
             "result": result_text,
             "success": result_success,
         }
+
+    def run_agent_streaming(
+        self,
+        *,
+        team_token: str,
+        agent_name: str,
+        message: str,
+        on_event: Callable[[dict[str, Any]], None],
+        context: Optional[dict[str, Any]] = None,
+        timeout: Optional[int] = None,
+        max_turns: Optional[int] = None,
+        correlation_id: Optional[str] = None,
+        agent_base_url: Optional[str] = None,
+        output_destinations: Optional[list[dict[str, Any]]] = None,
+        trigger_source: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        team_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Call /investigate and invoke on_event for each SSE event.
+
+        Same as run_agent but dispatches every parsed SSE event to the
+        on_event callback, enabling progressive UI updates for Teams and
+        Google Chat integrations.
+
+        The callback runs synchronously in the calling thread (typically a
+        thread pool via asyncio.to_thread). Use a queue to bridge to the
+        event loop for async message updates.
+        """
+        base = agent_base_url.rstrip("/") if agent_base_url else self.base_url
+        if not base.startswith(("http://", "https://")):
+            raise ValueError(f"Invalid agent base URL scheme: {base[:30]}")
+        url = f"{base}/investigate"
+
+        payload: dict[str, Any] = {
+            "prompt": message,
+            "team_token": team_token,
+        }
+        if session_id:
+            payload["thread_id"] = session_id
+        elif correlation_id:
+            payload["thread_id"] = correlation_id
+        if tenant_id:
+            payload["tenant_id"] = tenant_id
+        if team_id:
+            payload["team_id"] = team_id
+
+        request_timeout = 600.0
+        try:
+            if timeout is not None:
+                request_timeout = max(60.0, float(timeout) + 30.0)
+        except Exception:
+            request_timeout = 600.0
+
+        headers: dict[str, str] = {}
+        auth_token = os.getenv("INVESTIGATE_AUTH_TOKEN", "")
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
+
+        result_text = ""
+        result_success = False
+        thread_id = correlation_id or ""
+
+        with httpx.Client(timeout=request_timeout) as c:
+            with c.stream("POST", url, json=payload, headers=headers) as r:
+                r.raise_for_status()
+                thread_id = r.headers.get("X-Thread-ID", thread_id)
+                for line in r.iter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    try:
+                        event = json.loads(line[6:])
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+
+                    # Dispatch to callback
+                    try:
+                        on_event(event)
+                    except Exception:
+                        pass  # Don't let callback errors break the stream
+
+                    event_type = event.get("type", "")
+                    if event_type == "result":
+                        result_text = event.get("data", {}).get("text", "")
+                        result_success = event.get("data", {}).get("success", False)
+                    elif event_type == "error":
+                        error_msg = event.get("data", {}).get(
+                            "message", "Unknown error"
+                        )
+                        # Still dispatch the error event before raising
+                        raise RuntimeError(f"Agent error: {error_msg}")
+
+        return {
+            "thread_id": thread_id,
+            "result": result_text,
+            "success": result_success,
+        }
+
+    def submit_answer(
+        self,
+        *,
+        thread_id: str,
+        answers: dict[str, Any],
+        agent_base_url: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Submit user answers to sre-agent for a pending AskUserQuestion."""
+        base = agent_base_url.rstrip("/") if agent_base_url else self.base_url
+        if not base.startswith(("http://", "https://")):
+            raise ValueError(f"Invalid agent base URL scheme: {base[:30]}")
+        url = f"{base}/answer"
+
+        payload = {"thread_id": thread_id, "answers": answers}
+        headers: dict[str, str] = {}
+        auth_token = os.getenv("INVESTIGATE_AUTH_TOKEN", "")
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
+
+        with httpx.Client(timeout=30.0) as c:
+            r = c.post(url, json=payload, headers=headers)
+            r.raise_for_status()
+            return dict(r.json())
 
 
 class AuditApiClient:
