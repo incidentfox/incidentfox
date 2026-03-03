@@ -234,6 +234,7 @@ services:
       image: "103002841599.dkr.ecr.us-west-2.amazonaws.com/incidentfox-agent:latest"
       namespace: ""  # Same namespace as agent
       useGvisor: true
+      directK8s: true  # Mount SA token for direct K8s API access (flagd, etc.)
     # Warm pool for instant sandbox provisioning (<2s)
     warmPool:
       enabled: true

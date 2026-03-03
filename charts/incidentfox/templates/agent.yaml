@@ -125,6 +125,10 @@ spec:
             # ServiceAccount for sandbox pods (K8s tools read-only access)
             - name: SANDBOX_SERVICE_ACCOUNT
               value: {{ .Release.Name }}-sandbox-pod
+            # When true, sandbox pods get direct K8s API access (SA token mounted).
+            # When false (default), all K8s queries go through k8s-gateway.
+            - name: SANDBOX_DIRECT_K8S
+              value: {{ .Values.services.agent.sandbox.directK8s | default false | quote }}
             # gVisor is mandatory by default (sandbox_manager.py).
             # Set DISABLE_GVISOR=true only for local dev where gVisor is unavailable.
             # Credential resolver namespace (for Envoy ext_authz)

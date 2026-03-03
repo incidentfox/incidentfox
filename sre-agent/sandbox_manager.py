@@ -605,9 +605,20 @@ static_resources:
                         }
                     },
                     "spec": {
-                        # Prevent sandbox from accessing the host cluster's K8s API.
-                        # All k8s queries must go through the k8s-gateway to customer clusters.
-                        "automountServiceAccountToken": False,
+                        # When SANDBOX_DIRECT_K8S=true, mount the SA token so the sandbox
+                        # can access the host cluster's K8s API directly (e.g. flagd
+                        # ConfigMap reads/patches). RBAC is scoped via the sandbox-pod-reader
+                        # ClusterRole. When false, all k8s queries must go through k8s-gateway.
+                        **(
+                            {
+                                "serviceAccountName": os.getenv("SANDBOX_SERVICE_ACCOUNT", ""),
+                                "automountServiceAccountToken": True,
+                            }
+                            if os.getenv("SANDBOX_DIRECT_K8S", "").lower() == "true"
+                            else {
+                                "automountServiceAccountToken": False,
+                            }
+                        ),
                         "containers": [
                             # Main agent container - NO SECRETS, only proxy config
                             {
