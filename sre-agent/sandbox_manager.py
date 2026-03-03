@@ -1165,13 +1165,16 @@ static_resources:
         try:
             # For streaming SSE, use tuple timeout: (connect_timeout, read_timeout)
             # connect_timeout: 30s to establish connection
-            # read_timeout: None - no timeout between SSE events (agent may think for minutes)
+            # read_timeout: 300s - max wait between SSE events (agent thinking time)
+            # Without a read timeout, if the sandbox pod dies mid-execution the
+            # connection hangs forever, blocking the orchestrator and leaving users
+            # stuck at "working on it..." in Teams/Google Chat.
             response = requests.post(
                 f"{router_url}/execute",
                 headers=headers,
                 json=payload,
                 stream=True,
-                timeout=(30, None),  # (connect, read) - no read timeout for streaming
+                timeout=(30, 300),  # (connect, read) - 5 min read timeout
             )
             response.raise_for_status()
             return response
@@ -1213,13 +1216,12 @@ static_resources:
         payload = {"thread_id": sandbox_info.thread_id}
 
         try:
-            # Same streaming timeout pattern as execute_in_sandbox
             response = requests.post(
                 f"{router_url}/interrupt",
                 headers=headers,
                 json=payload,
                 stream=True,
-                timeout=(30, None),  # (connect, read) - no read timeout for streaming
+                timeout=(30, 300),  # (connect, read) - 5 min read timeout
             )
             response.raise_for_status()
             return response

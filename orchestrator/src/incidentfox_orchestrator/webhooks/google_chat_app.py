@@ -369,21 +369,28 @@ class GoogleChatIntegration:
             )
 
             # Run agent in thread pool — calls /investigate and streams SSE
-            result = await asyncio.to_thread(
-                partial(
-                    agent_api.run_agent,
-                    team_token=team_token,
-                    agent_name=entrance_agent_name,
-                    message=text,
-                    tenant_id=org_id,
-                    team_id=team_node_id,
-                    timeout=int(
-                        os.getenv("ORCHESTRATOR_GCHAT_AGENT_TIMEOUT_SECONDS", "300")
-                    ),
-                    correlation_id=correlation_id,
-                    agent_base_url=dedicated_agent_url,
-                    session_id=session_id,
-                )
+            # asyncio.wait_for is a safety net: even if the httpx/requests read
+            # timeout inside run_agent doesn't fire (e.g. proxy keepalives), we
+            # still bound the total wall-clock time.
+            agent_timeout = int(
+                os.getenv("ORCHESTRATOR_GCHAT_AGENT_TIMEOUT_SECONDS", "300")
+            )
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    partial(
+                        agent_api.run_agent,
+                        team_token=team_token,
+                        agent_name=entrance_agent_name,
+                        message=text,
+                        tenant_id=org_id,
+                        team_id=team_node_id,
+                        timeout=agent_timeout,
+                        correlation_id=correlation_id,
+                        agent_base_url=dedicated_agent_url,
+                        session_id=session_id,
+                    )
+                ),
+                timeout=agent_timeout + 60,  # 60s grace beyond agent timeout
             )
 
             # Send result back to Google Chat space
@@ -413,6 +420,20 @@ class GoogleChatIntegration:
                 space_id=space_id,
                 error=str(e),
             )
+            # Send error feedback to user so they don't stare at "working on it" forever
+            try:
+                await self._send_message_to_space(
+                    space_name=space_name,
+                    text=(
+                        "Sorry, the investigation timed out or encountered an error. "
+                        "Please try again."
+                    ),
+                    thread_key=thread_key,
+                    effective_config=effective_config,
+                    correlation_id=correlation_id,
+                )
+            except Exception:
+                pass  # Best-effort error feedback
 
     async def _send_message_to_space(
         self,
