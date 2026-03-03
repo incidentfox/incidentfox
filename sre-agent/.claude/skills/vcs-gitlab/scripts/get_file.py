@@ -36,7 +36,9 @@ def main():
 
         content = ""
         if data.get("encoding") == "base64":
-            content = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+            content = base64.b64decode(data["content"]).decode(
+                "utf-8", errors="replace"
+            )
         else:
             content = data.get("content", "")
 
@@ -54,7 +56,9 @@ def main():
             print(json.dumps(result, indent=2))
         else:
             print(f"File: {result['file_path']} ({result.get('size', '?')} bytes)")
-            print(f"Ref: {result.get('ref', '?')} | Last commit: {result.get('last_commit_id', '?')[:12]}")
+            print(
+                f"Ref: {result.get('ref', '?')} | Last commit: {result.get('last_commit_id', '?')[:12]}"
+            )
             print("---")
             print(content)
 
