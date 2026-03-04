@@ -20,6 +20,7 @@ dependencies = [
   "slack-bolt>=1.18.0",  # Slack Bolt SDK for webhook handling
   "slack-sdk>=3.27.0",   # Slack SDK for API calls
   "google-auth>=2.37.0",  # Google Chat JWT verification
+  "mistune>=3.0.0",  # Markdown parser for Google Chat text formatting
   "botbuilder-core>=4.15.0",  # MS Teams Bot Framework
   "botbuilder-schema>=4.15.0",  # MS Teams message types
 ]

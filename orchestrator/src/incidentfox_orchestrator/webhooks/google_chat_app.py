@@ -21,6 +21,12 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import httpx
 
+from incidentfox_orchestrator.webhooks.gchat_markdown_utils import (
+    GCHAT_MESSAGE_CHAR_LIMIT,
+    gchat_text,
+    split_message,
+)
+
 if TYPE_CHECKING:
     from incidentfox_orchestrator.clients import (
         AgentApiClient,
@@ -265,6 +271,7 @@ class GoogleChatIntegration:
                             thread_key="",
                             effective_config={},
                             correlation_id=correlation_id,
+                            format_markdown=False,
                         )
                     except Exception:
                         pass
@@ -333,6 +340,7 @@ class GoogleChatIntegration:
                 thread_key=thread_key,
                 effective_config=effective_config,
                 correlation_id=correlation_id,
+                format_markdown=False,
             )
 
             run_id = uuid.uuid4().hex
@@ -431,6 +439,7 @@ class GoogleChatIntegration:
                     thread_key=thread_key,
                     effective_config=effective_config,
                     correlation_id=correlation_id,
+                    format_markdown=False,
                 )
             except Exception:
                 pass  # Best-effort error feedback
@@ -442,12 +451,20 @@ class GoogleChatIntegration:
         thread_key: str,
         effective_config: Dict[str, Any],
         correlation_id: str,
+        *,
+        format_markdown: bool = True,
     ) -> None:
         """
         Send a message to a Google Chat space via REST API.
 
-        Uses service account credentials from team config or environment
-        to authenticate with the Google Chat API.
+        Converts standard Markdown to Google Chat text format, splits long
+        messages into multiple posts, and authenticates with service account
+        credentials from team config or environment.
+
+        Args:
+            format_markdown: If True (default), convert standard markdown to
+                Google Chat text format. Set False for pre-formatted messages
+                (e.g. "working on it..." status text).
         """
         try:
             # Get service account credentials
@@ -491,32 +508,39 @@ class GoogleChatIntegration:
             credentials.refresh(google_requests.Request())
             access_token = credentials.token
 
-            # Build message payload
-            url = f"https://chat.googleapis.com/v1/{space_name}/messages"
-            payload: Dict[str, Any] = {"text": text}
-            if thread_key:
-                payload["thread"] = {"name": thread_key}
+            # Format markdown → Google Chat text
+            formatted = gchat_text(text) if format_markdown else text
 
+            # Split long messages into chunks
+            chunks = split_message(formatted, GCHAT_MESSAGE_CHAR_LIMIT)
+            if not chunks:
+                chunks = [formatted]
+
+            url = f"https://chat.googleapis.com/v1/{space_name}/messages"
             params = {}
             if thread_key:
                 params["messageReplyOption"] = "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
 
-            # Send message
-            resp = await asyncio.to_thread(
-                self._post_gchat_message,
-                url=url,
-                access_token=access_token,
-                payload=payload,
-                params=params,
-            )
+            for chunk in chunks:
+                payload: Dict[str, Any] = {"text": chunk}
+                if thread_key:
+                    payload["thread"] = {"name": thread_key}
 
-            _log(
-                "gchat_message_sent",
-                correlation_id=correlation_id,
-                space_name=space_name,
-                result_length=len(text),
-                status_code=resp,
-            )
+                resp = await asyncio.to_thread(
+                    self._post_gchat_message,
+                    url=url,
+                    access_token=access_token,
+                    payload=payload,
+                    params=params,
+                )
+
+                _log(
+                    "gchat_message_sent",
+                    correlation_id=correlation_id,
+                    space_name=space_name,
+                    result_length=len(chunk),
+                    status_code=resp,
+                )
 
         except Exception as e:
             _log(
