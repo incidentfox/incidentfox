@@ -73,10 +73,7 @@ python .claude/skills/observability-splunk/scripts/sample_logs.py --strategy all
 ### Basic Search
 
 ```spl
-# Simple keyword search
-error
-
-# Index specific search (ALWAYS specify index for performance)
+# ALWAYS specify index for performance
 index=main error
 
 # Multiple keywords (implicit AND)

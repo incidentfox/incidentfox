@@ -78,17 +78,17 @@ python .claude/skills/infrastructure-azure/scripts/get_nsg_rules.py --resource-g
 ## KQL Query Reference
 
 ```kql
-// Errors in last hour
+// Errors in last hour (always include | limit)
 AzureDiagnostics | where Level == "Error" | where TimeGenerated > ago(1h) | limit 50
 
-// CPU usage
+// CPU usage (summarize is bounded, no limit needed)
 Perf | where CounterName == "% Processor Time" | summarize avg(CounterValue) by bin(TimeGenerated, 5m), Computer
 
 // Heartbeat (availability)
 Heartbeat | summarize count() by Computer, bin(TimeGenerated, 1h)
 
-// Resource Graph - find VMs
-Resources | where type == "microsoft.compute/virtualmachines" | project name, location, properties.hardwareProfile.vmSize
+// Resource Graph - find VMs (always include | limit)
+Resources | where type == "microsoft.compute/virtualmachines" | project name, location, properties.hardwareProfile.vmSize | limit 100
 ```
 
 ---
