@@ -121,6 +121,9 @@ def get_headers() -> dict[str, str]:
     return headers
 
 
+_MAX_SEARCH_SIZE = 1000
+
+
 def search(
     query: dict[str, Any],
     index: str | None = None,
@@ -132,7 +135,7 @@ def search(
     Args:
         query: Elasticsearch query DSL (the "query" part)
         index: Index pattern (default: from config)
-        size: Maximum results to return (default: 100)
+        size: Maximum results to return (default: 100, capped at 1000)
         sort: Sort specification (default: @timestamp desc)
 
     Returns:
@@ -143,6 +146,9 @@ def search(
     """
     config = get_config()
     index = index or config.get("index_pattern", "logs-*")
+
+    # Cap size to prevent unbounded result sets that could OOM the cluster
+    size = min(size, _MAX_SEARCH_SIZE)
 
     url = get_api_url(f"/{index}/_search")
 

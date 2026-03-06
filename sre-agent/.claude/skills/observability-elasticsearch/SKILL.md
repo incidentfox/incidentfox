@@ -12,6 +12,14 @@ allowed-tools: Bash(python *)
 
 ---
 
+## Safety Constraints
+
+- **Result size cap**: Search results are capped at 1000 hits. Use aggregations (`size: 0` + `aggs`) for large datasets.
+- **Always use time filters**: Include `@timestamp` range in queries. Default scripts use 60-minute lookback.
+- **Use `.keyword` for aggregations**: Never aggregate on `text` fields — use `field.keyword` suffix.
+- **Avoid wildcard prefix queries**: `*error` is expensive. Prefer `error*` or exact match.
+- **Start with statistics**: `get_statistics.py` is MANDATORY before sampling raw logs.
+
 ## MANDATORY: Statistics-First Investigation
 
 **NEVER dump raw logs.** Always follow this pattern:

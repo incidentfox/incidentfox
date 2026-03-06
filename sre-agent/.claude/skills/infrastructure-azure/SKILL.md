@@ -16,6 +16,14 @@ Configuration environment variables you CAN check (non-secret):
 
 ---
 
+## Safety Constraints
+
+- **KQL result limits**: Queries are automatically capped at 1000 rows by default. Override with `--max-results` (max: 10000). Always include `| limit N` or `| take N` in KQL for explicit control.
+- **Always use time filters**: Default timespan is 24h. Use `--timespan PT1H` for shorter scans. Never query without a time range.
+- **Start with aggregations**: Use `| summarize count() by ...` before fetching raw rows to understand data shape.
+- **Resource Graph queries**: Always include `| limit N` to prevent returning all resources across subscriptions.
+- **Cost queries**: Always specify `--start` and `--end` date range.
+
 ## MANDATORY: Query-First Investigation
 
 **Start with Log Analytics or Monitor metrics, then drill into resources.**

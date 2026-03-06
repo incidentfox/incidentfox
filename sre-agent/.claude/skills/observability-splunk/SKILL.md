@@ -12,6 +12,14 @@ allowed-tools: Bash(python *)
 
 ---
 
+## Safety Constraints
+
+- **Always specify index**: Use `--index` to target a specific index. Querying `index=*` scans all data.
+- **Time range cap**: Maximum 24 hours per query (1440 minutes). Start with 60 minutes, expand if needed.
+- **Result limit**: Default 50 entries, maximum 500. Use aggregations (`stats`, `timechart`) instead of raw log dumps.
+- **Input validation**: Index, sourcetype, and host values are validated — only alphanumeric, underscore, hyphen, dot, and wildcard are allowed.
+- **Start with statistics**: `get_statistics.py` is MANDATORY before sampling raw logs.
+
 ## MANDATORY: Statistics-First Investigation
 
 **NEVER dump raw logs.** Always follow this pattern:

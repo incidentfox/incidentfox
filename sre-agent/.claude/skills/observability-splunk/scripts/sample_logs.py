@@ -20,9 +20,26 @@ Examples:
 
 import argparse
 import json
+import re
 import sys
 
 from splunk_client import execute_search, format_log_entry
+
+# Only allow safe characters in SPL field values to prevent query injection.
+_SAFE_SPL_FIELD = re.compile(r"^[a-zA-Z0-9_\-.*]+$")
+
+_MAX_TIME_RANGE_MINUTES = 1440
+_MAX_LIMIT = 500
+
+
+def _validate_spl_field(value: str, field_name: str) -> str:
+    """Validate a value used in SPL field filters to prevent injection."""
+    if not _SAFE_SPL_FIELD.match(value):
+        raise ValueError(
+            f"Invalid {field_name} value: '{value}'. "
+            f"Only alphanumeric, underscore, hyphen, dot, and wildcard (*) are allowed."
+        )
+    return value
 
 
 def main():
@@ -58,16 +75,23 @@ def main():
     args = parser.parse_args()
 
     try:
-        # Build base search
+        # Enforce safety limits
+        if args.time_range > _MAX_TIME_RANGE_MINUTES:
+            raise ValueError(
+                f"Time range {args.time_range}m exceeds maximum ({_MAX_TIME_RANGE_MINUTES}m / 24h)."
+            )
+        args.limit = min(args.limit, _MAX_LIMIT)
+
+        # Build base search with validated fields
         search_parts = []
         if args.index:
-            search_parts.append(f"index={args.index}")
+            search_parts.append(f"index={_validate_spl_field(args.index, 'index')}")
         else:
             search_parts.append("index=*")
         if args.sourcetype:
-            search_parts.append(f"sourcetype={args.sourcetype}")
+            search_parts.append(f"sourcetype={_validate_spl_field(args.sourcetype, 'sourcetype')}")
         if args.host:
-            search_parts.append(f"host={args.host}")
+            search_parts.append(f"host={_validate_spl_field(args.host, 'host')}")
 
         # Apply strategy filter
         if args.strategy == "errors_only":
@@ -102,9 +126,7 @@ def main():
             logs.append(
                 {
                     "timestamp": result.get("_time"),
-                    "level": result.get("log_level")
-                    or result.get("severity")
-                    or "INFO",
+                    "level": result.get("log_level") or result.get("severity") or "INFO",
                     "sourcetype": result.get("sourcetype"),
                     "host": result.get("host"),
                     "source": result.get("source"),
