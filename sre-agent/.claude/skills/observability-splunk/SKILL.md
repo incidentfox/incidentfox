@@ -1,6 +1,6 @@
 ---
 name: splunk-analysis
-description: Splunk log analysis using SPL (Search Processing Language). Use when investigating issues via Splunk logs, saved searches, or alerts.
+description: Splunk log analysis (SPL). Read-only, time-capped (max 24h), result-capped (max 500). ALWAYS run get_statistics.py before sampling logs.
 allowed-tools: Bash(python *)
 ---
 
@@ -73,10 +73,7 @@ python .claude/skills/observability-splunk/scripts/sample_logs.py --strategy all
 ### Basic Search
 
 ```spl
-# Simple keyword search
-error
-
-# Index specific search (ALWAYS specify index for performance)
+# ALWAYS specify index for performance
 index=main error
 
 # Multiple keywords (implicit AND)
@@ -242,8 +239,8 @@ index=main
 ## Anti-Patterns to Avoid
 
 1. ❌ **NEVER skip statistics** - `get_statistics.py` is MANDATORY first step
-2. ❌ **No index specified** - Always use `index=X` for performance
-3. ❌ **Unbounded time range** - Always specify time ranges
-4. ❌ **Fetching all logs** - Use sampling strategies, not unbounded searches
+2. ❌ **No index specified** - Always use `--index X`. `index=*` scans all data
+3. ❌ **Time range too wide** - Max 24h (1440 min). Start with `--time-range 60`, expand if needed
+4. ❌ **Too many raw logs** - Max 500 per query. Use `stats`/`timechart` for large volumes
 5. ❌ **Ignoring error rate** - High error rate means immediate investigation
 6. ❌ **Complex rex on all events** - Filter first, then extract

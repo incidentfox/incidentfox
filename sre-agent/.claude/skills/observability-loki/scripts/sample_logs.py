@@ -3,10 +3,37 @@
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 
 from loki_client import format_log_entry, query
+
+# Maximum lookback hours to prevent scanning excessive log history (7 days)
+_MAX_LOOKBACK_HOURS = 168
+
+# Maximum result limit
+_MAX_LIMIT = 1000
+
+# Characters that are safe in LogQL line filter patterns.
+# Allow alphanumeric, common log keywords, and basic regex alternation (|).
+# Block characters that could break out of the quoted context or inject LogQL.
+_SAFE_LOGQL_FILTER = re.compile(r"^[a-zA-Z0-9_\-.*|:/ ]+$")
+
+
+def _validate_logql_filter(pattern: str) -> str:
+    """Validate and escape a LogQL line filter pattern to prevent injection.
+
+    Only simple keyword/alternation patterns are allowed (e.g., 'error|exception').
+    Complex regex or LogQL syntax characters are rejected.
+    """
+    if not _SAFE_LOGQL_FILTER.match(pattern):
+        raise ValueError(
+            f"Invalid filter pattern: '{pattern}'. "
+            f"Only alphanumeric, underscore, hyphen, dot, pipe (|), colon, slash, "
+            f"and space are allowed. Use simple keywords like 'error|exception'."
+        )
+    return pattern
 
 
 def main():
@@ -39,10 +66,19 @@ def main():
     args = parser.parse_args()
 
     try:
-        # Build query
+        # Enforce safety limits
+        if args.lookback > _MAX_LOOKBACK_HOURS:
+            raise ValueError(
+                f"Lookback {args.lookback}h exceeds maximum ({_MAX_LOOKBACK_HOURS}h / 7 days). "
+                f"Use a shorter window."
+            )
+        args.limit = min(args.limit, _MAX_LIMIT)
+
+        # Build query with validated filter
         logql = args.selector
         if args.filter:
-            logql = f'{args.selector} |~ "{args.filter}"'
+            safe_filter = _validate_logql_filter(args.filter)
+            logql = f'{args.selector} |~ "{safe_filter}"'
 
         now = datetime.now(timezone.utc)
         start = now - timedelta(hours=args.lookback)
@@ -104,9 +140,7 @@ def main():
                 print()
 
             print("-" * 60)
-            print(
-                f"Showing {min(len(all_entries), args.limit)} of {len(all_entries)} entries"
-            )
+            print(f"Showing {min(len(all_entries), args.limit)} of {len(all_entries)} entries")
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

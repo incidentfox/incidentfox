@@ -1,5 +1,5 @@
 ---
-description: Query and analyze logs from Grafana Loki using LogQL
+description: Grafana Loki log analysis (LogQL). Results capped at 1000, lookback max 7 days. Always use stream selectors and get_statistics.py first.
 allowed-tools:
   - Bash
 ---
@@ -11,9 +11,11 @@ Query and analyze logs from Grafana Loki for incident investigation and debuggin
 ## Investigation Workflow
 
 1. **List available labels** to understand what's queryable
-2. **Get statistics** to understand log volume and error rates
-3. **Sample logs** to see representative entries
-4. **Query specific patterns** with LogQL
+2. **Get statistics** (`get_statistics.py`) to understand volume before sampling
+3. **Sample logs** with simple keyword filters like `error|exception`
+4. **Query specific patterns** with LogQL — always include a stream selector (`{app="..."}`)
+
+**Limits:** Default 20 entries (max 1000). Default lookback 1h (max 7 days). Start small, expand if needed.
 
 ## LogQL Quick Reference
 

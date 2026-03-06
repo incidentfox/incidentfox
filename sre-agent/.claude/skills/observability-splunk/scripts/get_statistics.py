@@ -18,10 +18,28 @@ Examples:
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter
 
 from splunk_client import execute_search
+
+# Only allow safe characters in SPL field values to prevent query injection.
+# Permits alphanumeric, underscore, hyphen, dot, and wildcard (*).
+_SAFE_SPL_FIELD = re.compile(r"^[a-zA-Z0-9_\-.*]+$")
+
+# Maximum time range in minutes to prevent unbounded scans (24 hours)
+_MAX_TIME_RANGE_MINUTES = 1440
+
+
+def _validate_spl_field(value: str, field_name: str) -> str:
+    """Validate a value used in SPL field filters to prevent injection."""
+    if not _SAFE_SPL_FIELD.match(value):
+        raise ValueError(
+            f"Invalid {field_name} value: '{value}'. "
+            f"Only alphanumeric, underscore, hyphen, dot, and wildcard (*) are allowed."
+        )
+    return value
 
 
 def main():
@@ -38,16 +56,23 @@ def main():
     args = parser.parse_args()
 
     try:
-        # Build base search
+        # Cap time range to prevent unbounded scans
+        if args.time_range > _MAX_TIME_RANGE_MINUTES:
+            raise ValueError(
+                f"Time range {args.time_range}m exceeds maximum ({_MAX_TIME_RANGE_MINUTES}m / 24h). "
+                f"Use a shorter range or narrow your search."
+            )
+
+        # Build base search with validated fields
         base_parts = []
         if args.index:
-            base_parts.append(f"index={args.index}")
+            base_parts.append(f"index={_validate_spl_field(args.index, 'index')}")
         else:
             base_parts.append("index=*")
         if args.sourcetype:
-            base_parts.append(f"sourcetype={args.sourcetype}")
+            base_parts.append(f"sourcetype={_validate_spl_field(args.sourcetype, 'sourcetype')}")
         if args.host:
-            base_parts.append(f"host={args.host}")
+            base_parts.append(f"host={_validate_spl_field(args.host, 'host')}")
 
         base_search = " ".join(base_parts)
 
@@ -80,12 +105,8 @@ def main():
             level_dist[level] = count
 
         # 3. Get top sourcetypes
-        sourcetype_query = (
-            f"{base_search} | stats count by sourcetype | sort -count | head 10"
-        )
-        sourcetype_results = execute_search(
-            sourcetype_query, args.time_range, max_results=10
-        )
+        sourcetype_query = f"{base_search} | stats count by sourcetype | sort -count | head 10"
+        sourcetype_results = execute_search(sourcetype_query, args.time_range, max_results=10)
 
         top_sourcetypes = [
             {"sourcetype": r.get("sourcetype"), "count": int(r.get("count", 0))}
@@ -96,13 +117,12 @@ def main():
         host_query = f"{base_search} | stats count by host | sort -count | head 10"
         host_results = execute_search(host_query, args.time_range, max_results=10)
 
-        top_hosts = [
-            {"host": r.get("host"), "count": int(r.get("count", 0))}
-            for r in host_results
-        ]
+        top_hosts = [{"host": r.get("host"), "count": int(r.get("count", 0))} for r in host_results]
 
         # 5. Get sample errors for pattern analysis
-        error_query = f"{base_search} (log_level=ERROR OR log_level=error OR severity=ERROR) | head 50"
+        error_query = (
+            f"{base_search} (log_level=ERROR OR log_level=error OR severity=ERROR) | head 50"
+        )
         error_results = execute_search(error_query, args.time_range, max_results=50)
 
         # Extract unique error patterns
@@ -117,9 +137,7 @@ def main():
                 "<UUID>",
                 str(msg),
             )
-            normalized = re.sub(
-                r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "<IP>", normalized
-            )
+            normalized = re.sub(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "<IP>", normalized)
             normalized = re.sub(r"\b\d+\b", "<NUM>", normalized)
             normalized = normalized[:100]
             error_patterns[normalized] += 1
@@ -133,17 +151,17 @@ def main():
         if total_count == 0:
             recommendation = "No logs found in the specified time range."
         elif error_rate > 10:
-            recommendation = f"HIGH error rate ({error_rate}%). Investigate top error patterns immediately."
+            recommendation = (
+                f"HIGH error rate ({error_rate}%). Investigate top error patterns immediately."
+            )
         elif error_rate > 5:
-            recommendation = (
-                f"Elevated error rate ({error_rate}%). Review error patterns."
-            )
+            recommendation = f"Elevated error rate ({error_rate}%). Review error patterns."
         elif total_count > 100000:
-            recommendation = f"Very high volume ({total_count:,} logs). Use targeted sourcetype/index filter."
-        else:
             recommendation = (
-                f"Normal volume ({total_count:,} logs). Error rate: {error_rate}%"
+                f"Very high volume ({total_count:,} logs). Use targeted sourcetype/index filter."
             )
+        else:
+            recommendation = f"Normal volume ({total_count:,} logs). Error rate: {error_rate}%"
 
         # Build result
         result = {

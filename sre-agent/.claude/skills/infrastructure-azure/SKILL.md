@@ -1,6 +1,6 @@
 ---
 name: azure-infrastructure
-description: Azure cloud infrastructure inspection. Use when investigating Azure VMs, AKS clusters, Log Analytics (KQL), Monitor metrics/alerts, Cost Management, or NSG rules.
+description: Azure infrastructure inspection (KQL, Monitor, Resource Graph). KQL results auto-capped at 1000 rows. Always use time filters and `| limit N`.
 allowed-tools: Bash(python *)
 ---
 
@@ -23,6 +23,8 @@ Configuration environment variables you CAN check (non-secret):
 ```
 LOG ANALYTICS / METRICS → IDENTIFY RESOURCE → DESCRIBE RESOURCE → CHECK ALERTS
 ```
+
+**Limits:** KQL results auto-capped at 1000 rows (override with `--max-results`, max 10000). Always include `| limit N` in KQL and `--timespan` for time control. Use `| summarize` before fetching raw rows.
 
 ## Available Scripts
 
@@ -76,17 +78,17 @@ python .claude/skills/infrastructure-azure/scripts/get_nsg_rules.py --resource-g
 ## KQL Query Reference
 
 ```kql
-// Errors in last hour
+// Errors in last hour (always include | limit)
 AzureDiagnostics | where Level == "Error" | where TimeGenerated > ago(1h) | limit 50
 
-// CPU usage
+// CPU usage (summarize is bounded, no limit needed)
 Perf | where CounterName == "% Processor Time" | summarize avg(CounterValue) by bin(TimeGenerated, 5m), Computer
 
 // Heartbeat (availability)
 Heartbeat | summarize count() by Computer, bin(TimeGenerated, 1h)
 
-// Resource Graph - find VMs
-Resources | where type == "microsoft.compute/virtualmachines" | project name, location, properties.hardwareProfile.vmSize
+// Resource Graph - find VMs (always include | limit)
+Resources | where type == "microsoft.compute/virtualmachines" | project name, location, properties.hardwareProfile.vmSize | limit 100
 ```
 
 ---

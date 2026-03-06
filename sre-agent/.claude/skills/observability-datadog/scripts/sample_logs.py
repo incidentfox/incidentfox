@@ -20,10 +20,30 @@ Examples:
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime, timedelta
 
 from datadog_client import format_log_entry, search_logs
+
+# Only allow safe characters in Datadog facet values to prevent query injection.
+_SAFE_DD_FACET = re.compile(r"^[a-zA-Z0-9_\-.*]+$")
+
+# Maximum time range in minutes (24 hours)
+_MAX_TIME_RANGE_MINUTES = 1440
+
+# Maximum result limit
+_MAX_LIMIT = 1000
+
+
+def _validate_dd_facet(value: str, facet_name: str) -> str:
+    """Validate a Datadog facet value to prevent query injection."""
+    if not _SAFE_DD_FACET.match(value):
+        raise ValueError(
+            f"Invalid {facet_name} value: '{value}'. "
+            f"Only alphanumeric, underscore, hyphen, dot, and wildcard (*) are allowed."
+        )
+    return value
 
 
 def main():
@@ -58,13 +78,20 @@ def main():
     args = parser.parse_args()
 
     try:
-        # Build query based on strategy
+        # Enforce safety limits
+        if args.time_range > _MAX_TIME_RANGE_MINUTES:
+            raise ValueError(
+                f"Time range {args.time_range}m exceeds maximum ({_MAX_TIME_RANGE_MINUTES}m / 24h)."
+            )
+        args.limit = min(args.limit, _MAX_LIMIT)
+
+        # Build query based on strategy with validated facets
         query_parts = []
 
         if args.service:
-            query_parts.append(f"service:{args.service}")
+            query_parts.append(f"service:{_validate_dd_facet(args.service, 'service')}")
         if args.host:
-            query_parts.append(f"host:{args.host}")
+            query_parts.append(f"host:{_validate_dd_facet(args.host, 'host')}")
 
         # Apply strategy filter
         if args.strategy == "errors_only":
@@ -104,10 +131,7 @@ def main():
                     if log.get("timestamp")
                     and abs(
                         (
-                            datetime.fromisoformat(
-                                log["timestamp"].replace("Z", "+00:00")
-                            )
-                            - target
+                            datetime.fromisoformat(log["timestamp"].replace("Z", "+00:00")) - target
                         ).total_seconds()
                     )
                     <= window.total_seconds()
