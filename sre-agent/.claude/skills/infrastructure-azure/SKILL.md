@@ -1,6 +1,6 @@
 ---
 name: azure-infrastructure
-description: Azure cloud infrastructure inspection. Use when investigating Azure VMs, AKS clusters, Log Analytics (KQL), Monitor metrics/alerts, Cost Management, or NSG rules.
+description: Azure infrastructure inspection (KQL, Monitor, Resource Graph). KQL results auto-capped at 1000 rows. Always use time filters and `| limit N`.
 allowed-tools: Bash(python *)
 ---
 
@@ -16,14 +16,6 @@ Configuration environment variables you CAN check (non-secret):
 
 ---
 
-## Safety Constraints
-
-- **KQL result limits**: Queries are automatically capped at 1000 rows by default. Override with `--max-results` (max: 10000). Always include `| limit N` or `| take N` in KQL for explicit control.
-- **Always use time filters**: Default timespan is 24h. Use `--timespan PT1H` for shorter scans. Never query without a time range.
-- **Start with aggregations**: Use `| summarize count() by ...` before fetching raw rows to understand data shape.
-- **Resource Graph queries**: Always include `| limit N` to prevent returning all resources across subscriptions.
-- **Cost queries**: Always specify `--start` and `--end` date range.
-
 ## MANDATORY: Query-First Investigation
 
 **Start with Log Analytics or Monitor metrics, then drill into resources.**
@@ -31,6 +23,8 @@ Configuration environment variables you CAN check (non-secret):
 ```
 LOG ANALYTICS / METRICS → IDENTIFY RESOURCE → DESCRIBE RESOURCE → CHECK ALERTS
 ```
+
+**Limits:** KQL results auto-capped at 1000 rows (override with `--max-results`, max 10000). Always include `| limit N` in KQL and `--timespan` for time control. Use `| summarize` before fetching raw rows.
 
 ## Available Scripts
 

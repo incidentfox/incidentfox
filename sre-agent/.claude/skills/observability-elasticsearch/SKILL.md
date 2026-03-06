@@ -1,6 +1,6 @@
 ---
 name: elasticsearch-analysis
-description: Elasticsearch/OpenSearch log analysis using Lucene query syntax and Query DSL. Use when investigating issues via ELK stack, OpenSearch, or any Elasticsearch-based logging.
+description: Elasticsearch/OpenSearch log analysis (Lucene/Query DSL). Results capped at 1000 hits. ALWAYS run get_statistics.py before sampling logs.
 allowed-tools: Bash(python *)
 ---
 
@@ -11,14 +11,6 @@ allowed-tools: Bash(python *)
 **IMPORTANT**: Credentials are injected automatically by a proxy layer. Do NOT check for `ELASTICSEARCH_URL`, `ES_USER`, or `ES_PASSWORD` in environment variables - they won't be visible to you. Just run the scripts directly; authentication is handled transparently.
 
 ---
-
-## Safety Constraints
-
-- **Result size cap**: Search results are capped at 1000 hits. Use aggregations (`size: 0` + `aggs`) for large datasets.
-- **Always use time filters**: Include `@timestamp` range in queries. Default scripts use 60-minute lookback.
-- **Use `.keyword` for aggregations**: Never aggregate on `text` fields — use `field.keyword` suffix.
-- **Avoid wildcard prefix queries**: `*error` is expensive. Prefer `error*` or exact match.
-- **Start with statistics**: `get_statistics.py` is MANDATORY before sampling raw logs.
 
 ## MANDATORY: Statistics-First Investigation
 
@@ -313,8 +305,8 @@ error NOT debug
 ## Anti-Patterns to Avoid
 
 1. ❌ **NEVER skip statistics** - `get_statistics.py` is MANDATORY first step
-2. ❌ **Unbounded queries** - Always specify time ranges and limits
-3. ❌ **Fetching all logs** - Use sampling strategies, not unbounded searches
+2. ❌ **Missing time filter** - Always include `@timestamp` range. Default lookback is 60 min
+3. ❌ **Too many hits** - Results capped at 1000. Use aggregations (`size: 0` + `aggs`) for large datasets
 4. ❌ **Ignoring error rate** - High error rate means immediate investigation
 5. ❌ **Text field in aggregation** - Use `.keyword` suffix for terms aggs
 6. ❌ **Wildcard prefix** - `*error` is expensive, prefer `error*` or exact match

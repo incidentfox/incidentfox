@@ -1,6 +1,6 @@
 ---
 name: datadog-analysis
-description: Datadog log and metrics analysis. Use when querying Datadog logs, metrics, or APM data. Provides scripts and query syntax reference.
+description: Datadog log and metrics analysis. Time-capped (max 24h), result-capped (max 1000). ALWAYS run get_statistics.py before sampling logs.
 allowed-tools: Bash(python *)
 ---
 
@@ -203,7 +203,7 @@ p95:trace.http.request.duration{service:X}
 ## Anti-Patterns to Avoid
 
 1. ❌ **NEVER skip statistics** - `get_statistics.py` is MANDATORY first step
-2. ❌ **Unbounded queries** - Always specify time ranges and limits
-3. ❌ **Fetching all logs** - Use sampling strategies, not unbounded searches
+2. ❌ **Time range too wide** - Max 24h (1440 min). Start with `--time-range 60`, expand if needed
+3. ❌ **Too many raw logs** - Max 1000 per query. Use strategies like `errors_only` to narrow scope
 4. ❌ **Ignoring error rate** - High error rate means immediate investigation
-5. ❌ **Missing service filter** - For multi-service apps, always filter by service
+5. ❌ **Missing service filter** - Always use `--service X` for multi-service apps
