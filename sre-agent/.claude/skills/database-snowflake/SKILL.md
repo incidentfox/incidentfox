@@ -26,6 +26,13 @@ Configuration environment variables you CAN check (non-secret):
 GET SCHEMA / LIST TABLES → DESCRIBE TABLE → EXECUTE QUERY
 ```
 
+## Safety Constraints
+
+- **Read-only**: Only SELECT, SHOW, DESCRIBE, LIST, WITH are allowed. DML/DDL (INSERT, UPDATE, DELETE, DROP, etc.) is blocked.
+- **ALWAYS add LIMIT**: Default is 100 rows. Increase only when initial results are insufficient.
+- **Use time filters**: For time-series tables, always include a WHERE clause on the timestamp/date column to avoid scanning full history.
+- **Start with aggregations**: Use COUNT/GROUP BY to understand data shape before fetching raw rows.
+
 ## Available Scripts
 
 All scripts are in `.claude/skills/database-snowflake/scripts/`
@@ -45,10 +52,12 @@ python .claude/skills/database-snowflake/scripts/list_tables.py [--database DB] 
 python .claude/skills/database-snowflake/scripts/describe_table.py --table TABLE_NAME [--database DB] [--schema SCHEMA]
 ```
 
-### execute_query.py - Run SQL Queries
+### execute_query.py - Run SQL Queries (read-only)
 ```bash
 python .claude/skills/database-snowflake/scripts/execute_query.py --query "SELECT * FROM fact_incident ORDER BY started_at DESC LIMIT 10" [--limit 100]
 ```
+
+**IMPORTANT**: Only read-only queries (SELECT, SHOW, DESCRIBE, LIST, WITH) are allowed. DML/DDL is blocked.
 
 ---
 
