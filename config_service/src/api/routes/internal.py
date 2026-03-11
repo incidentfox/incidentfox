@@ -676,6 +676,50 @@ def create_pending_change_internal(
     )
 
 
+@router.get("/pending-changes", response_model=List[PendingChangeResponse])
+def list_pending_changes_internal(
+    org_id: str,
+    node_id: Optional[str] = None,
+    change_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    session: Session = Depends(get_db),
+    service: str = Depends(require_internal_service),
+):
+    """
+    List pending changes (for AI pipeline dedup checks).
+
+    Used by the AI pipeline to check for existing recommendations
+    before creating duplicates.
+    """
+    from src.db.models import PendingConfigChange
+
+    query = session.query(PendingConfigChange).filter(
+        PendingConfigChange.org_id == org_id,
+    )
+    if node_id:
+        query = query.filter(PendingConfigChange.node_id == node_id)
+    if change_type:
+        query = query.filter(PendingConfigChange.change_type == change_type)
+    if status:
+        query = query.filter(PendingConfigChange.status == status)
+
+    changes = query.order_by(PendingConfigChange.requested_at.desc()).limit(limit).all()
+
+    return [
+        PendingChangeResponse(
+            id=c.id,
+            org_id=c.org_id,
+            node_id=c.node_id,
+            change_type=c.change_type,
+            status=c.status,
+            requested_by=c.requested_by,
+            requested_at=c.requested_at,
+        )
+        for c in changes
+    ]
+
+
 # ==================== Integration Credentials ====================
 
 

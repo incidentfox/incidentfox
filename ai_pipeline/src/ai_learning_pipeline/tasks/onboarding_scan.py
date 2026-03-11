@@ -13,9 +13,9 @@ Triggered by:
 """
 
 import asyncio
+import hashlib
 import json
 import os
-import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
@@ -312,6 +312,10 @@ class IntegrationRecommender:
     ) -> List[str]:
         """Submit recommendations as PendingConfigChange records.
 
+        Uses deterministic change IDs based on (org_id, node_id,
+        integration_id) so the config-service's ID-based idempotency
+        prevents duplicate recommendations across multiple scan runs.
+
         Returns list of created change IDs.
         """
         change_ids = []
@@ -338,11 +342,20 @@ class IntegrationRecommender:
         team_node_id: str,
         recommendation: Recommendation,
     ) -> Optional[str]:
-        """Create a single PendingConfigChange for an integration recommendation."""
+        """Create a single PendingConfigChange for an integration recommendation.
+
+        Uses a deterministic change_id derived from (org_id, node_id,
+        integration_id) so the config-service returns the existing record
+        instead of creating a duplicate if a recommendation for this
+        integration already exists.
+        """
         display_name = INTEGRATION_DISPLAY_NAMES.get(
             recommendation.integration_id, recommendation.integration_id
         )
-        change_id = f"rec_{uuid.uuid4().hex[:12]}"
+        # Deterministic ID: same integration for same team always maps to same ID.
+        # The config-service POST endpoint is idempotent on ID — returns existing.
+        id_seed = f"{org_id}:{team_node_id}:{recommendation.integration_id}"
+        change_id = f"rec_{hashlib.sha256(id_seed.encode()).hexdigest()[:12]}"
 
         evidence = [
             {
