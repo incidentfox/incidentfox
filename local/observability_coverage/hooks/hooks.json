@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SCANNER=$(find . -path '*/observability_coverage/analyzers/scan.py' -print -quit 2>/dev/null); if [ -z \"$SCANNER\" ]; then exit 0; fi; TOOL_INPUT=$(cat); FILE_PATH=$(echo \"$TOOL_INPUT\" | jq -r '.tool_input.file_path // .tool_input.filePath // empty' 2>/dev/null); if [ -z \"$FILE_PATH\" ] || ! echo \"$FILE_PATH\" | grep -qE '\\.(ts|tsx|js|jsx|py|go|java|rb|rs)$'; then exit 0; fi; if echo \"$FILE_PATH\" | grep -qiE '(test_|_test\\.|spec\\.|__tests__)'; then exit 0; fi; RESULT=$(python3 \"$SCANNER\" \"$FILE_PATH\" --json 2>/dev/null); if [ $? -ne 0 ]; then exit 0; fi; CRIT=$(echo \"$RESULT\" | jq -r '.critical // 0' 2>/dev/null); HIGH=$(echo \"$RESULT\" | jq -r '.high // 0' 2>/dev/null); TOTAL=$((CRIT + HIGH)); if [ \"$TOTAL\" -eq 0 ]; then exit 0; fi; echo ''; echo \"[observability] $CRIT critical, $HIGH high gaps in $(basename $FILE_PATH):\"; echo \"$RESULT\" | jq -r '[.files[].gaps[] | select(.severity==\"critical\" or .severity==\"high\")] | sort_by(if .severity==\"critical\" then 0 else 1 end) | .[0:3][] | \"  Line \\(.line): \\(.description)\"' 2>/dev/null; echo 'Fix these — add structured logging with error context.'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "TOOL_INPUT=$(cat); CMD=$(echo \"$TOOL_INPUT\" | jq -r '.tool_input.command // empty' 2>/dev/null); if ! echo \"$CMD\" | grep -qE 'git\\s+(commit|push)'; then exit 0; fi; SCANNER=$(find . -path '*/observability_coverage/analyzers/scan.py' -print -quit 2>/dev/null); if [ -z \"$SCANNER\" ]; then exit 0; fi; FILES=$(git diff --cached --name-only 2>/dev/null | grep -E '\\.(ts|tsx|js|jsx|py|go|java|rb|rs)$' | grep -viE '(test_|_test\\.)' | head -15); if [ -z \"$FILES\" ]; then FILES=$(git diff --name-only 2>/dev/null | grep -E '\\.(ts|tsx|js|jsx|py|go|java|rb|rs)$' | grep -viE '(test_|_test\\.)' | head -15); fi; if [ -z \"$FILES\" ]; then exit 0; fi; TC=0; TH=0; MSGS=''; for F in $FILES; do [ -f \"$F\" ] || continue; R=$(python3 \"$SCANNER\" \"$F\" --json 2>/dev/null); [ $? -eq 0 ] || continue; C=$(echo \"$R\" | jq -r '.critical // 0' 2>/dev/null); H=$(echo \"$R\" | jq -r '.high // 0' 2>/dev/null); TC=$((TC+C)); TH=$((TH+H)); if [ $((C+H)) -gt 0 ]; then G=$(echo \"$R\" | jq -r '[.files[].gaps[] | select(.severity==\"critical\" or .severity==\"high\")] | .[0:2][] | \"  \\(.file | split(\"/\") | last):\\(.line) \\(.description)\"' 2>/dev/null); MSGS=\"$MSGS\\n$G\"; fi; done; if [ $((TC+TH)) -eq 0 ]; then exit 0; fi; echo ''; echo \"[observability pre-commit] $TC critical, $TH high gaps in staged files:\"; echo -e \"$MSGS\" | head -8; echo 'Consider fixing observability gaps before committing.'"
+          }
+        ]
+      }
+    ]
+  }
+}

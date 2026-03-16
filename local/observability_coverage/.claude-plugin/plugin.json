@@ -1,0 +1,19 @@
+{
+  "name": "observability-coverage",
+  "description": "Auto-detect missing logging, metrics, and tracing in your codebase. Suggests structured observability at the right code paths with justification — so 'we have no logs for this' never happens again.",
+  "version": "0.1.0",
+  "author": {
+    "name": "IncidentFox"
+  },
+  "keywords": [
+    "observability",
+    "logging",
+    "metrics",
+    "tracing",
+    "code-review",
+    "telemetry",
+    "structured-logging"
+  ],
+  "homepage": "https://incidentfox.com",
+  "repository": "https://github.com/incidentfox/observability-coverage"
+}
