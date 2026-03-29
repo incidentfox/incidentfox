@@ -78,6 +78,12 @@ spec:
                   name: {{ .Values.externalSecrets.contract.orchestratorInternal.secretName | quote }}
                   key: {{ .Values.externalSecrets.contract.orchestratorInternal.internalTokenKey | quote }}
             {{- end }}
+            # Service-to-service auth for sre-agent /investigate (must match agent's INVESTIGATE_AUTH_TOKEN)
+            - name: INVESTIGATE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.contract.jwtSecret.secretName | default "incidentfox-jwt-secret" }}
+                  key: {{ .Values.externalSecrets.contract.jwtSecret.investigateAuthTokenKey | default "INVESTIGATE_AUTH_TOKEN" }}
             {{- if .Values.externalSecrets.contract.slack.enabled }}
             # DEPRECATED: Signing secret loaded from slack_apps DB table.
             # Kept as fallback when no apps are configured in config service.
