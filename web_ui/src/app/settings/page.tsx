@@ -49,6 +49,33 @@ import {
 // Tab type
 type SettingsTab = 'general' | 'routing' | 'notifications' | 'telemetry' | 'features' | 'advanced';
 
+interface OutputDestination {
+  type: string;
+  channel_id?: string;
+  channel_name?: string;
+  repo?: string;
+  config?: unknown;
+}
+
+interface OutputConfig {
+  default_destinations: OutputDestination[];
+  trigger_overrides: { [key: string]: string };
+}
+
+const EMPTY_OUTPUT_CONFIG: OutputConfig = {
+  default_destinations: [],
+  trigger_overrides: {},
+};
+
+function normalizeOutputConfig(config: Partial<OutputConfig> | null | undefined): OutputConfig {
+  return {
+    default_destinations: Array.isArray(config?.default_destinations)
+      ? config.default_destinations
+      : [],
+    trigger_overrides: config?.trigger_overrides ?? {},
+  };
+}
+
 // Feature configs
 interface IngestorSourceConfig {
   slack: {
@@ -148,20 +175,12 @@ export default function SettingsPage() {
   const [showTelemetryInfo, setShowTelemetryInfo] = useState(false);
 
   // Output configuration (Delivery & Notifications)
-  const [outputConfig, setOutputConfig] = useState<{
-    default_destinations: Array<{
-      type: string;
-      channel_id?: string;
-      channel_name?: string;
-      repo?: string;
-      config?: any;
-    }>;
-    trigger_overrides: { [key: string]: string };
-  }>({ default_destinations: [], trigger_overrides: {} });
+  const [outputConfig, setOutputConfig] = useState<OutputConfig>(EMPTY_OUTPUT_CONFIG);
   const [outputConfigLoading, setOutputConfigLoading] = useState(false);
   const [showAddDestination, setShowAddDestination] = useState(false);
   const [newDestinationType, setNewDestinationType] = useState('slack');
   const [newDestinationConfig, setNewDestinationConfig] = useState({ channel_name: '', channel_id: '' });
+  const defaultDestinations = outputConfig.default_destinations ?? [];
 
   // Feature configs (AI Pipeline & Dependency Discovery)
   const [pipelineConfig, setPipelineConfig] = useState<PipelineConfig>({
@@ -274,7 +293,7 @@ export default function SettingsPage() {
       try {
         const res = await apiFetch('/api/v1/team/output-config');
         const data = await res.json();
-        setOutputConfig(data);
+        setOutputConfig(normalizeOutputConfig(data));
       } catch (e) {
         console.error('Failed to load output config', e);
       }
@@ -293,7 +312,7 @@ export default function SettingsPage() {
       });
       if (!res.ok) throw new Error('Failed to update');
       const data = await res.json();
-      setOutputConfig(data);
+      setOutputConfig(normalizeOutputConfig(data));
       alert('Output configuration saved successfully!');
     } catch (e: any) {
       console.error('Failed to save output config', e);
@@ -305,14 +324,14 @@ export default function SettingsPage() {
 
   // Add destination
   const addDestination = () => {
-    const newDest: any = { type: newDestinationType };
+    const newDest: OutputDestination = { type: newDestinationType };
     if (newDestinationType === 'slack') {
       newDest.channel_id = newDestinationConfig.channel_id;
       newDest.channel_name = newDestinationConfig.channel_name;
     }
     setOutputConfig({
       ...outputConfig,
-      default_destinations: [...outputConfig.default_destinations, newDest],
+      default_destinations: [...defaultDestinations, newDest],
     });
     setShowAddDestination(false);
     setNewDestinationConfig({ channel_name: '', channel_id: '' });
@@ -322,7 +341,7 @@ export default function SettingsPage() {
   const removeDestination = (index: number) => {
     setOutputConfig({
       ...outputConfig,
-      default_destinations: outputConfig.default_destinations.filter((_, i) => i !== index),
+      default_destinations: defaultDestinations.filter((_, i) => i !== index),
     });
   };
 
@@ -901,13 +920,13 @@ export default function SettingsPage() {
                       Agent results will be posted to these destinations by default
                     </p>
 
-                    {outputConfig.default_destinations.length === 0 ? (
+                    {defaultDestinations.length === 0 ? (
                       <div className="text-sm text-gray-500 py-8 text-center border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-lg">
                         No default destinations configured. Results will only be posted to trigger-specific locations.
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {outputConfig.default_destinations.map((dest, idx) => (
+                        {defaultDestinations.map((dest, idx) => (
                           <div
                             key={idx}
                             className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
